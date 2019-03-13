@@ -1,5 +1,6 @@
 
 #include <stdint.h>
+#include <math.h>
 #include <malloc.h>
 #include <assert.h>
 
@@ -43,6 +44,7 @@ struct Foliage
 
 struct QuadItem
 {
+	QuadItem* parent;
 	uint16_t lo, hi;
 };
 
@@ -67,25 +69,34 @@ struct Terrain
 	QuadItem* root;  // Node or Patch or NULL
 };
 
-Terrain* CreateTerrain(int water)
+Terrain* CreateTerrain(int z)
 {
 	Terrain* t = (Terrain*)malloc(sizeof(Terrain));
 	t->x = 0;
 	t->y = 0;
-	t->level = 0;
 
-	int flat = water + 1;
+	if (z >= 0)
+	{
+		t->level = 0;
 
-	Patch* p = (Patch*)malloc(sizeof(Patch));
-	p->lo = 0; // (no neighbor)
-	p->hi = flat;
-	p->flags = 0;
+		Patch* p = (Patch*)malloc(sizeof(Patch));
+		p->parent = 0;
+		p->lo = 0; // (no neighbor)
+		p->hi = z;
+		p->flags = 0;
 
-	for (int y = 0; y < HEIGHT_CELLS + 1; y++)
-		for (int x = 0; x < HEIGHT_CELLS + 1; x++)
-			p->height[y][x] = flat;
+		for (int y = 0; y <= HEIGHT_CELLS; y++)
+			for (int x = 0; x <= HEIGHT_CELLS; x++)
+				p->height[y][x] = z;
 
-	t->root = p;
+		t->root = p;
+	}
+	else
+	{
+		t->level = -1;
+		t->root = 0;
+	}
+
 	return t;
 }
 
@@ -120,7 +131,7 @@ void DeleteTerrain(Terrain* t)
 	Recurse::Delete(t->root, t->level);
 }
 
-Patch* GetPatch(Terrain* t, int x, int y)
+Patch* GetTerrainPatch(Terrain* t, int x, int y)
 {
 	if (!t->root)
 		return 0;
@@ -152,25 +163,32 @@ Patch* GetPatch(Terrain* t, int x, int y)
 	return 0;
 }
 
-
-Patch* AddTerrainPatch(Terrain* t, int x, int y, int water)
+void UpdateNodes(Terrain* t, int x, int y)
 {
+	// update limits for nodes containing {x,y} patch (patch is already updated)
+	// ...
+}
+
+Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
+{
+	if (z < 0)
+		return 0;
+
 	if (!t->root)
 	{
 		t->x = -x;
 		t->y = -y;
 		t->level = 0;
 
-		int flat = water + 1;
-
 		Patch* p = (Patch*)malloc(sizeof(Patch));
+		p->parent = 0;
 		p->lo = 0; // no neighbor
-		p->hi = flat;
+		p->hi = z;
 		p->flags = 0;
 
-		for (int y = 0; y < HEIGHT_CELLS + 1; y++)
-			for (int x = 0; x < HEIGHT_CELLS + 1; x++)
-				p->height[y][x] = flat;
+		for (int y = 0; y <= HEIGHT_CELLS; y++)
+			for (int x = 0; x <= HEIGHT_CELLS; x++)
+				p->height[y][x] = z;
 
 		t->root = p;
 		return p;
@@ -222,6 +240,10 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int water)
 		}
 
 		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
 	}
 
 	while (y < 0)
@@ -263,6 +285,10 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int water)
 		}
 
 		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
 	}
 
 	while (x >= range)
@@ -298,6 +324,10 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int water)
 		}
 
 		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
 	}
 
 	while (y >= range)
@@ -333,6 +363,10 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int water)
 		}
 
 		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
 	}
 
 	// create children from root to x,y
@@ -349,6 +383,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int water)
 			if (!(Node*)n->quad[i])
 			{
 				Node* c = (Node*)malloc(sizeof(Node*));
+				c->parent = n;
 				c->quad[0] = c->quad[1] = c->quad[2] = c->quad[3] = 0;
 				n->quad[i] = c;
 			}
@@ -361,18 +396,120 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int water)
 				return (Patch*)n->quad[i];
 
 			Patch* p = (Patch*)malloc(sizeof(Patch));
+			p->parent = n;
+			p->flags = 0;
 
-			// first of all check neighbors and adjust our and their flags!
-			// ...
+			for (int e = 0; e < HEIGHT_CELLS; x++)
+			{
+				p->height[0][e] = z;
+				p->height[e][HEIGHT_CELLS] = z;
+				p->height[HEIGHT_CELLS][HEIGHT_CELLS-e] = z;
+				p->height[HEIGHT_CELLS - e][0] = z;
+			}
 
-			// interpolate / extrapolate our coords with neighbours and accum lo,hi
-			// ...
+			int nx = x - t->x, ny = y - t->y;
 
-			// if we have any edge open, overwrite lo = 0
-			// ...
+			Patch* np[4] =
+			{
+				GetTerrainPatch(t, nx - 1, ny - 1),
+				GetTerrainPatch(t, nx + 1, ny - 1),
+				GetTerrainPatch(t, nx - 1, ny + 1),
+				GetTerrainPatch(t, nx + 1, ny + 1)
+			};
 
-			// at last, propagate our lo,hi to descendants down to the root
-			// ...
+			if (np[0])
+			{
+				np[0]->flags |= 2;
+				p->flags |= 1;
+
+				if (np[0]->flags == 0xF)
+					UpdateNodes(t, nx - 1, ny - 1);
+
+				for (int y = 0; y <= HEIGHT_CELLS; y++)
+					p->height[y][0] = np[0]->height[y][HEIGHT_CELLS];
+			}
+			if (np[1])
+			{
+				np[0]->flags |= 1;
+				p->flags |= 2;
+
+				if (np[1]->flags == 0xF)
+					UpdateNodes(t, nx + 1, ny - 1);
+
+				for (int y = 0; y <= HEIGHT_CELLS; y++)
+					p->height[y][HEIGHT_CELLS] = np[0]->height[y][0];
+			}
+			if (np[2])
+			{
+				np[0]->flags |= 8;
+				p->flags |= 4;
+
+				if (np[2]->flags == 0xF)
+					UpdateNodes(t, nx - 1, ny + 1);
+
+				for (int x = 0; x <= HEIGHT_CELLS; x++)
+					p->height[0][x] = np[0]->height[HEIGHT_CELLS][x];
+			}
+			if (np[3])
+			{
+				np[0]->flags |= 4;
+				p->flags |= 8;
+
+				if (np[3]->flags == 0xF)
+					UpdateNodes(t, nx + 1, ny + 1);
+
+				for (int x = 0; x <= HEIGHT_CELLS; x++)
+					p->height[HEIGHT_CELLS][x] = np[0]->height[0][x];
+			}
+
+			for (int y = 1; y < HEIGHT_CELLS; y++)
+			{
+				for (int x = 1; x < HEIGHT_CELLS; y++)
+				{
+					double avr = 0;
+					double nrm = 0;
+
+					for (int e = 0; e < HEIGHT_CELLS; x++)
+					{
+						double w;
+
+						w = 1.0 / ((x - e)*(x - e) + y * y);
+						nrm += w;
+						avr += p->height[0][e] * w;
+
+						w = 1.0 / ((x - HEIGHT_CELLS) * (x - HEIGHT_CELLS) + (y - e)*(y - e));
+						nrm += w;
+						avr += p->height[e][HEIGHT_CELLS] * w;
+
+						w = 1.0 / ((x - HEIGHT_CELLS + e)*(x - HEIGHT_CELLS + e) + (y - HEIGHT_CELLS)*(y - HEIGHT_CELLS));
+						nrm += w;
+						avr += p->height[HEIGHT_CELLS][HEIGHT_CELLS - e] * w;
+
+						w = 1.0 / (x * x + (y - HEIGHT_CELLS + e)*(y - HEIGHT_CELLS + e));
+						nrm += w;
+						avr += p->height[HEIGHT_CELLS - e][0] * w;
+					}
+
+					p->height[y][x] = (int)round(avr / nrm);
+				}
+			}
+
+			p->lo = 0xffff;
+			p->hi = 0x0000;
+			for (int y = 0; y <= HEIGHT_CELLS; y++)
+			{
+				for (int x = 0; x <= HEIGHT_CELLS; x++)
+				{
+					p->lo = p->height[y][x] < p->lo ? p->height[y][x] : p->lo;
+					p->hi = p->height[y][x] > p->hi ? p->height[y][x] : p->hi;
+				}
+			}
+
+			if ((p->flags & 0xf) != 0xF)
+				p->lo = 0;
+
+			UpdateNodes(t, nx, ny);
+			return p;
 		}
 	}
 

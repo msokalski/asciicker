@@ -11,6 +11,8 @@
 #include "imgui_impl_freeglut.h"
 #include "imgui_impl_opengl3.h"
 
+int mouse_in = 0;
+
 void displayCall()
 {
 	// THINGZ
@@ -66,10 +68,8 @@ void displayCall()
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 	glClear(GL_COLOR_BUFFER_BIT);
-	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-	if (!io.WantCaptureMouse)
+	if (!io.WantCaptureMouse && mouse_in)
 	{
 		int rect[4] =
 		{
@@ -78,17 +78,28 @@ void displayCall()
 			(int)(io.MousePos.x) + 16,
 			(int)(io.DisplaySize.y - io.MousePos.y) + 16
 		};
-									// we are free to use mouse
+		// we are free to use mouse
 		glEnable(GL_SCISSOR_TEST);
 		glScissor(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
-		glClearColor(1,1,1,1);
+		glClearColor(1, 1, 1, 1);
 		glClear(GL_COLOR_BUFFER_BIT);
 		glDisable(GL_SCISSOR_TEST);
 	}
 
+	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 	glutSwapBuffers();
 	glutPostRedisplay();
+}
+
+void entryCall(int msg)
+{
+	if (msg == GLUT_LEFT)
+		mouse_in = 0;
+	else
+	if (msg == GLUT_ENTERED)
+		mouse_in = 1;
 }
 
 void glutErrorCall(const char *fmt, va_list ap)
@@ -183,6 +194,7 @@ int main(int argc, char *argv[])
 
 	int wnd = glutCreateWindow("AscIIId");
 	glutDisplayFunc(displayCall);
+	glutEntryFunc(entryCall);
 
 	bool glutInitialised = glutGet(GLUT_INIT_STATE) == 1;
 
