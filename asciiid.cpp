@@ -14,13 +14,14 @@
 void displayCall()
 {
 	// THINGZ
+	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
 	{
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplFreeGLUT_NewFrame();
 
 		static bool show_demo_window = true;
 		static bool show_another_window = false;
-		static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
 		if (show_demo_window)
@@ -63,10 +64,27 @@ void displayCall()
 	ImGui::Render();
 	ImGuiIO& io = ImGui::GetIO();
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
-	glClearColor(.1f,.2f,.3f,1.0f);
+	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 	glClear(GL_COLOR_BUFFER_BIT);
 	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+	if (!io.WantCaptureMouse)
+	{
+		int rect[4] =
+		{
+			(int)(io.MousePos.x) - 16,
+			(int)(io.DisplaySize.y - io.MousePos.y) - 16,
+			(int)(io.MousePos.x) + 16,
+			(int)(io.DisplaySize.y - io.MousePos.y) + 16
+		};
+									// we are free to use mouse
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
+		glClearColor(1,1,1,1);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glDisable(GL_SCISSOR_TEST);
+	}
 
 
 	glutSwapBuffers();
@@ -146,6 +164,7 @@ void glutCloseCall()
 
 int main(int argc, char *argv[]) 
 {
+
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_ALPHA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
 	glutInitContextVersion(4, 5);
