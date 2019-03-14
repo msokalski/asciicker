@@ -4,8 +4,7 @@
 #include <malloc.h>
 #include <assert.h>
 
-#define HEIGHT_CELLS 4 // num of verts -1 along patch X and Y axis
-#define VISUAL_CELLS (HEIGHT_CELLS*4)
+#include "terrain.h"
 
 #if 0
 #define TERRAIN_MATERIALS 64
@@ -42,9 +41,11 @@ struct Foliage
 };
 #endif
 
+struct Node;
+
 struct QuadItem
 {
-	QuadItem* parent;
+	Node* parent;
 	uint16_t lo, hi;
 };
 
@@ -59,7 +60,7 @@ struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 	// 1bit elevation, 1bit optic_flag, 6bits material_idx, 4bits_shade, 4bits_light
 	// uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
-	uint16_t flags; // 0x1-has neighbor on -X, 0x2-has neighbor on +X, 0x4-has neighbor on -Y, 0x8-has neighbor on +Y
+	uint16_t flags; // 8 bits of neighbors, bit0 is on (-,-), bit7 is on (-,0)
 };
 
 struct Terrain
@@ -100,35 +101,83 @@ Terrain* CreateTerrain(int z)
 	return t;
 }
 
+
 void DeleteTerrain(Terrain* t)
 {
-	if (!t->root)
+	if (!t)
 		return;
 
-	struct Recurse
+	if (!t->root)
 	{
-		static void Delete(QuadItem* q, int l)
-		{
-			if (l == 0)
-			{
-				Patch* p = (Patch*)q;
-				free(p);
-				return;
-			}
-			else
-			{
-				Node* n = (Node*)q;
-				l--;
+		free(t);
+		return;
+	}
 
-				for (int i=0; i<4; i++)
-					if (n->quad[i])
-						Delete(n->quad[i], l);
-				free(n);
+	if (t->level == 0)
+	{
+		Patch* p = (Patch*)t->root;
+		free(p);
+		free(t);
+		return;
+	}
+
+	int lev = t->level;
+	int xy = 0;
+	Node* n = (Node*)t->root;
+	free(t);
+
+	while (true)
+	{
+		// __label__ recurse;
+
+	recurse:
+		lev--;
+
+		if (!lev)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				Patch* p = (Patch*)n->quad[i];
+				if (p)
+					free(p);
 			}
 		}
-	};
+		else
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				if (n->quad[i])
+				{
+					xy = (xy << 2) + i;
+					n = (Node*)n->quad[i];
+					goto recurse;
+				}
+			}
+		}
 
-	Recurse::Delete(t->root, t->level);
+		while (true)
+		{
+			Node* p = n->parent;
+			free(n);
+
+			if (!p)
+				return;
+
+			while ((xy & 3) < 3)
+			{
+				xy++;
+				if (p->quad[xy & 3])
+				{
+					n = (Node*)p->quad[xy & 3];
+					goto recurse;
+				}
+			}
+
+			xy <<= 2;
+			n = p;
+			lev++;
+		}
+	}
 }
 
 Patch* GetTerrainPatch(Terrain* t, int x, int y)
@@ -163,10 +212,125 @@ Patch* GetTerrainPatch(Terrain* t, int x, int y)
 	return 0;
 }
 
-void UpdateNodes(Terrain* t, int x, int y)
+static void UpdateNodes(Patch* p)
 {
-	// update limits for nodes containing {x,y} patch (patch is already updated)
-	// ...
+	QuadItem* q = p;
+	Node* n = p->parent;
+
+	while (n)
+	{
+		int lo = 0xffff;
+		int hi = 0x0000;
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (n->quad[i])
+			{
+				lo = n->quad[i]->lo < lo ? n->quad[i]->lo : lo;
+				hi = n->quad[i]->hi > hi ? n->quad[i]->hi : hi;
+			}
+		}
+
+		n->lo = lo;
+		n->hi = hi;
+
+		n = n->parent;
+	}
+}
+
+bool DelTerrainPatch(Terrain* t, int x, int y)
+{
+	Patch* p = GetTerrainPatch(t, x, y);
+	if (!p)
+		return false;
+
+	int flags = p->flags;
+	Node* n = p->parent;
+	free(p);
+
+	if (!n)
+	{
+		t->level = -1;
+		t->root = 0;
+		return true;
+	}
+
+	// leaf trim
+
+	QuadItem* q = p;
+
+	while (n)
+	{
+		int c = 0;
+		for (int i = 0; i < 4; i++)
+		{
+			if (n->quad[i] == q)
+				n->quad[i] = 0;
+			else
+			if (n->quad[i])
+				c++;
+		}
+
+		if (!c)
+		{
+			q = n;
+			n = n->parent;
+			free((Node*)q);
+		}
+	}
+
+	// root trim
+
+	n = (Node*)t->root;
+	while (t->level)
+	{
+		int c = 0;
+		int j = 0;
+		for (int i = 0; i < 4; i++)
+		{
+			if (n->quad[i])
+			{
+				j = i;
+				c++;
+			}
+		}
+
+		if (c > 1)
+			break;
+
+		t->level--;
+
+		if (j & 1)
+			t->x -= 1 << t->level;
+		if (j & 2)
+			t->y -= 1 << t->level;
+	}
+
+	Patch* np[8] =
+	{
+		flags & 0x01 ? GetTerrainPatch(t, x - 1, y - 1) : 0,
+		flags & 0x02 ? GetTerrainPatch(t, x, y - 1) : 0,
+		flags & 0x04 ? GetTerrainPatch(t, x + 1, y - 1) : 0,
+		flags & 0x08 ? GetTerrainPatch(t, x + 1, y) : 0,
+		flags & 0x10 ? GetTerrainPatch(t, x + 1, y + 1) : 0,
+		flags & 0x20 ? GetTerrainPatch(t, x, y + 1) : 0,
+		flags & 0x40 ? GetTerrainPatch(t, x - 1, y + 1) : 0,
+		flags & 0x80 ? GetTerrainPatch(t, x - 1, y) : 0,
+	};
+
+	for (int i = 0; i < 8; i++)
+	{
+		if (np[i])
+		{
+			int j = (i + 4) & 7;
+			np[i]->flags &= ~(1 << j);
+			if (np[i]->lo)
+			{
+				np[i]->lo = 0;
+				UpdateNodes(np[i]);
+			}
+		}
+	}
 }
 
 Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
@@ -409,58 +573,140 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 
 			int nx = x - t->x, ny = y - t->y;
 
-			Patch* np[4] =
+			Patch* np[8] =
 			{
 				GetTerrainPatch(t, nx - 1, ny - 1),
+				GetTerrainPatch(t, nx, ny - 1),
 				GetTerrainPatch(t, nx + 1, ny - 1),
+				GetTerrainPatch(t, nx + 1, ny),
+				GetTerrainPatch(t, nx + 1, ny + 1),
+				GetTerrainPatch(t, nx, ny + 1),
 				GetTerrainPatch(t, nx - 1, ny + 1),
-				GetTerrainPatch(t, nx + 1, ny + 1)
+				GetTerrainPatch(t, nx - 1, ny),
 			};
 
-			if (np[0])
+			for (int i = 0; i < 8; i++)
 			{
-				np[0]->flags |= 2;
-				p->flags |= 1;
+				if (np[i])
+				{
+					int j = (i + 4) & 7;
+					np[i]->flags |= 1 << j;
+					p->flags |= 1 << i;
 
-				if (np[0]->flags == 0xF)
-					UpdateNodes(t, nx - 1, ny - 1);
+					if ((np[i]->flags & 0xAA) == 0xAA && np[i]->lo==0)
+					{
+						int lo = 0xffff;
+						for (int y = 1; y < HEIGHT_CELLS; y++)
+							for (int x = 1; x < HEIGHT_CELLS; y++)
+								lo = np[i]->height[y][x] < lo ? np[i]->height[y][x] : lo;
+						np[i]->lo = lo;
+						UpdateNodes(np[i]);
+					}
 
-				for (int y = 0; y <= HEIGHT_CELLS; y++)
-					p->height[y][0] = np[0]->height[y][HEIGHT_CELLS];
+					// fill shared vertices
+
+					switch (i)
+					{
+						case 0:
+							p->height[0][0] = np[i]->height[HEIGHT_CELLS][HEIGHT_CELLS];
+							break;
+
+						case 1:
+							for (int x=0; x<= HEIGHT_CELLS; x++)
+								p->height[0][x] = np[i]->height[HEIGHT_CELLS][x];
+							break;
+
+						case 2:
+							p->height[0][HEIGHT_CELLS] = np[i]->height[HEIGHT_CELLS][0];
+							break;
+
+						case 3:
+							for (int y = 0; y <= HEIGHT_CELLS; y++)
+								p->height[y][HEIGHT_CELLS] = np[i]->height[y][0];
+							break;
+
+						case 4:
+							p->height[HEIGHT_CELLS][HEIGHT_CELLS] = np[i]->height[0][0];
+							break;
+
+						case 5:
+							for (int x = 0; x <= HEIGHT_CELLS; x++)
+								p->height[HEIGHT_CELLS][x] = np[i]->height[0][x];
+							break;
+
+						case 6:
+							p->height[HEIGHT_CELLS][0] = np[i]->height[0][HEIGHT_CELLS];
+							break;
+
+						case 7:
+							for (int y = 0; y <= HEIGHT_CELLS; y++)
+								p->height[y][0] = np[i]->height[y][HEIGHT_CELLS];
+							break;
+					}
+				}
 			}
-			if (np[1])
+
+			// set free corners
+
+			if (!(p->flags & 0x83))
+				p->height[0][0] = z;
+
+			if (!(p->flags & 0x0E))
+				p->height[0][HEIGHT_CELLS] = z;
+
+			if (!(p->flags & 0x38))
+				p->height[HEIGHT_CELLS][HEIGHT_CELLS] = z;
+
+			if (!(p->flags & 0x70))
+				p->height[HEIGHT_CELLS][0] = z;
+
+			// interpolate free edges
+
+			if (!(p->flags & 0x02))
 			{
-				np[0]->flags |= 1;
-				p->flags |= 2;
-
-				if (np[1]->flags == 0xF)
-					UpdateNodes(t, nx + 1, ny - 1);
-
-				for (int y = 0; y <= HEIGHT_CELLS; y++)
-					p->height[y][HEIGHT_CELLS] = np[0]->height[y][0];
+				// bottom
+				int y = 0;
+				int h0 = p->height[y][0];
+				int h1 = p->height[y][HEIGHT_CELLS];
+				for (int x = 1; x < HEIGHT_CELLS; x++)
+					p->height[y][x] = 
+						(h0 * (HEIGHT_CELLS - x) + h1 * x + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS-1));
 			}
-			if (np[2])
+
+			if (!(p->flags & 0x08))
 			{
-				np[0]->flags |= 8;
-				p->flags |= 4;
-
-				if (np[2]->flags == 0xF)
-					UpdateNodes(t, nx - 1, ny + 1);
-
-				for (int x = 0; x <= HEIGHT_CELLS; x++)
-					p->height[0][x] = np[0]->height[HEIGHT_CELLS][x];
+				// right
+				int x = HEIGHT_CELLS;
+				int h0 = p->height[0][x];
+				int h1 = p->height[HEIGHT_CELLS][x];
+				for (int y = 1; y < HEIGHT_CELLS; y++)
+					p->height[y][x] =
+						(h0 * (HEIGHT_CELLS - y) + h1 * y + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS - 1));
 			}
-			if (np[3])
+
+			if (!(p->flags & 0x20))
 			{
-				np[0]->flags |= 4;
-				p->flags |= 8;
-
-				if (np[3]->flags == 0xF)
-					UpdateNodes(t, nx + 1, ny + 1);
-
-				for (int x = 0; x <= HEIGHT_CELLS; x++)
-					p->height[HEIGHT_CELLS][x] = np[0]->height[0][x];
+				// top
+				int y = HEIGHT_CELLS;
+				int h0 = p->height[y][0];
+				int h1 = p->height[y][HEIGHT_CELLS];
+				for (int x = 1; x < HEIGHT_CELLS; x++)
+					p->height[y][x] =
+						(h0 * (HEIGHT_CELLS - x) + h1 * x + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS - 1));
 			}
+
+			if (!(p->flags & 0x80))
+			{
+				// left
+				int x = 0;
+				int h0 = p->height[0][x];
+				int h1 = p->height[HEIGHT_CELLS][x];
+				for (int y = 1; y < HEIGHT_CELLS; y++)
+					p->height[y][x] =
+						(h0 * (HEIGHT_CELLS - y) + h1 * y + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS - 1));
+			}
+
+			// interpolate inter-patch vertices
 
 			for (int y = 1; y < HEIGHT_CELLS; y++)
 			{
@@ -473,19 +719,19 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 					{
 						double w;
 
-						w = 1.0 / ((x - e)*(x - e) + y * y);
+						w = 1.0 / sqrt((x - e)*(x - e) + y * y);
 						nrm += w;
 						avr += p->height[0][e] * w;
 
-						w = 1.0 / ((x - HEIGHT_CELLS) * (x - HEIGHT_CELLS) + (y - e)*(y - e));
+						w = 1.0 / sqrt((x - HEIGHT_CELLS) * (x - HEIGHT_CELLS) + (y - e)*(y - e));
 						nrm += w;
 						avr += p->height[e][HEIGHT_CELLS] * w;
 
-						w = 1.0 / ((x - HEIGHT_CELLS + e)*(x - HEIGHT_CELLS + e) + (y - HEIGHT_CELLS)*(y - HEIGHT_CELLS));
+						w = 1.0 / sqrt((x - HEIGHT_CELLS + e)*(x - HEIGHT_CELLS + e) + (y - HEIGHT_CELLS)*(y - HEIGHT_CELLS));
 						nrm += w;
 						avr += p->height[HEIGHT_CELLS][HEIGHT_CELLS - e] * w;
 
-						w = 1.0 / (x * x + (y - HEIGHT_CELLS + e)*(y - HEIGHT_CELLS + e));
+						w = 1.0 / sqrt(x * x + (y - HEIGHT_CELLS + e)*(y - HEIGHT_CELLS + e));
 						nrm += w;
 						avr += p->height[HEIGHT_CELLS - e][0] * w;
 					}
@@ -505,10 +751,10 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				}
 			}
 
-			if ((p->flags & 0xf) != 0xF)
+			if ((p->flags & 0xAA) != 0xAA)
 				p->lo = 0;
 
-			UpdateNodes(t, nx, ny);
+			UpdateNodes(p);
 			return p;
 		}
 	}
@@ -516,3 +762,8 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 	assert(0); // should never reach here
 	return 0;
 }
+
+void QueryTerrain(Terrain* t, int planes, float plane[][4], void(*cb)(Patch* p, void* cookie), void* cookie)
+{
+}
+

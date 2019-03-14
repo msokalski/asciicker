@@ -2,16 +2,44 @@
 //
 
 #include <stdio.h>
+#include <math.h>
 
 #include "gl.h"
 #include "GL/freeglut.h"
+
 #pragma comment(lib,"freeglut.lib")
 
 #include "imgui/imgui.h"
 #include "imgui_impl_freeglut.h"
 #include "imgui_impl_opengl3.h"
 
+#include "terrain.h"
+#include "matrix.h"
+
+Terrain* terrain = 0;
+float pos_x, pos_y, pos_z;
+float rot_yaw = 45;
+float rot_pitch = 30;
+
 int mouse_in = 0;
+
+struct RenderContext
+{
+	float tm[16];
+
+	float* map;
+
+	// 2 vbos
+	// 1 is mapped
+	// mapped vbo, etc
+	// ...
+};
+
+void RenderPatch(Patch* p, void* cookie)
+{
+	RenderContext* rc = (RenderContext*)cookie;
+
+}
 
 void displayCall()
 {
@@ -67,7 +95,47 @@ void displayCall()
 	ImGuiIO& io = ImGui::GetIO();
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+	RenderContext rc;
+
+	float* tm = rc.tm;
+
+	float font_size = 16; // so every visual cell appears as 16px
+	float z_scale = 1.0 / 16.0; // this is a constant
+
+	float rx = 0.5 * io.DisplaySize.x / font_size;
+	float ry = 0.5 * io.DisplaySize.y / font_size;
+
+	tm[0] = +cos(rot_yaw)/rx;
+	tm[1] = -sin(rot_yaw)*sin(rot_pitch)/ry;
+	tm[4] = +sin(rot_yaw)/rx;
+	tm[5] = +cos(rot_yaw)*sin(rot_pitch)/ry;
+	tm[9] = +cos(rot_pitch)*z_scale/ry;
+	tm[10] = +2./0xffff;
+	tm[12] = -pos_x;
+	tm[13] = -pos_y;
+	tm[14] = -1./0xffff;
+	tm[15] = 1.0;
+
+
+	// 4 clip planes in clip-space
+
+	float clip_left[4] =   { 1, 0, 0,+1 };
+	float clip_right[4] =  {-1, 0, 0, 0 };
+	float clip_top[4] =    { 0, 1, 0,+1 };
+	float clip_bottom[4] = { 0,-1, 0, 0 };
+
+	// transform them to world-space (mul by tm^-1)
+
+	float clip_world[4][4];
+
+	Product(tm, clip_left, clip_world[0]);
+	Product(tm, clip_left, clip_world[1]);
+	Product(tm, clip_left, clip_world[2]);
+	Product(tm, clip_left, clip_world[3]);
+
+	QueryTerrain(terrain, 4, clip_world, RenderPatch, &rc);
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -175,7 +243,17 @@ void glutCloseCall()
 
 int main(int argc, char *argv[]) 
 {
+	terrain = CreateTerrain();
 
+	AddTerrainPatch(terrain, 0x7F, 0x7F, 0x0F);
+
+	for (int i = 0; i < 10000; i++)
+		AddTerrainPatch(terrain, rand() & 0xFF, rand() & 0xFF, rand() & 0x1F);
+
+	pos_x = 0x7F * VISUAL_CELLS + VISUAL_CELLS / 2;
+	pos_y = 0x7F * VISUAL_CELLS + VISUAL_CELLS / 2;
+	pos_z = 0x0F;
+	
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_ALPHA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
 	glutInitContextVersion(4, 5);

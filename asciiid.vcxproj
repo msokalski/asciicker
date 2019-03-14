@@ -175,6 +175,7 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="imgui_impl_freeglut.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
+    <ClInclude Include="matrix.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="terrain.h" />
