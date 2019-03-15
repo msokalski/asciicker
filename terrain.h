@@ -13,4 +13,8 @@ Patch* GetTerrainPatch(Terrain* t, int x, int y);
 Patch* AddTerrainPatch(Terrain* t, int x, int y, int z);
 bool DelTerrainPatch(Terrain* t, int x, int y);
 
-void QueryTerrain(Terrain* t, int planes, float plane[][4], void (*cb)(Patch* p, void* cookie), void* cookie);
+int GetTerrainPatches(Terrain* t);
+
+template <typename P>
+void QueryTerrain(Terrain* t, int planes, P plane[][4], void (*cb)(Patch* p, int x, int y, void* cookie), void* cookie);
+

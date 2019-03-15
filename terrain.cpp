@@ -1,10 +1,15 @@
 
 #include <stdint.h>
+
+#define _USE_MATH_DEFINES
 #include <math.h>
+
 #include <malloc.h>
+#include <string.h>
 #include <assert.h>
 
 #include "terrain.h"
+#include "matrix.h"
 
 #if 0
 #define TERRAIN_MATERIALS 64
@@ -68,6 +73,8 @@ struct Terrain
 	int x, y; // worldspace origin from tree origin
 	int level; // 0 -> root is patch, -1 -> empty
 	QuadItem* root;  // Node or Patch or NULL
+	int nodes;
+	int patches;
 };
 
 Terrain* CreateTerrain(int z)
@@ -75,6 +82,7 @@ Terrain* CreateTerrain(int z)
 	Terrain* t = (Terrain*)malloc(sizeof(Terrain));
 	t->x = 0;
 	t->y = 0;
+	t->nodes = 0;
 
 	if (z >= 0)
 	{
@@ -91,11 +99,13 @@ Terrain* CreateTerrain(int z)
 				p->height[y][x] = z;
 
 		t->root = p;
+		t->patches = 1;
 	}
 	else
 	{
 		t->level = -1;
 		t->root = 0;
+		t->patches = 0;
 	}
 
 	return t;
@@ -247,6 +257,7 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 	int flags = p->flags;
 	Node* n = p->parent;
 	free(p);
+	t->patches--;
 
 	if (!n)
 	{
@@ -259,7 +270,7 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 
 	QuadItem* q = p;
 
-	while (n)
+	while (true)
 	{
 		int c = 0;
 		for (int i = 0; i < 4; i++)
@@ -276,16 +287,19 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 			q = n;
 			n = n->parent;
 			free((Node*)q);
+			t->nodes--;
 		}
+		else
+			break;
 	}
 
 	// root trim
 
 	n = (Node*)t->root;
-	while (t->level)
+	while (true)
 	{
 		int c = 0;
-		int j = 0;
+		int j = -1;
 		for (int i = 0; i < 4; i++)
 		{
 			if (n->quad[i])
@@ -294,6 +308,9 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 				c++;
 			}
 		}
+
+		// lost ...
+		assert(j >= 0);
 
 		if (c > 1)
 			break;
@@ -304,6 +321,16 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 			t->x -= 1 << t->level;
 		if (j & 2)
 			t->y -= 1 << t->level;
+
+		t->root = n->quad[j];
+		t->root->parent = 0;
+		free(n);
+		t->nodes--;
+
+		if (t->level)
+			n = (Node*)n->quad[j];
+		else
+			break;
 	}
 
 	Patch* np[8] =
@@ -357,6 +384,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				p->height[y][x] = z;
 
 		t->root = p;
+		t->patches = 1;
 		return p;
 	}
 
@@ -370,6 +398,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 	while (x < 0)
 	{
 		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
 
 		if (2 * y < range)
 		{
@@ -415,6 +444,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 	while (y < 0)
 	{
 		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
 
 		if (2 * x < range)
 		{
@@ -460,6 +490,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 	while (x >= range)
 	{
 		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
 
 		if (2 * y > range)
 		{
@@ -499,6 +530,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 	while (y >= range)
 	{
 		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
 
 		if (2 * x > range)
 		{
@@ -535,8 +567,15 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 		t->root = n;
 	}
 
-	// create children from root to x,y
 	int lev = t->level;
+
+	if (lev == 0)
+	{
+		// already exist
+		return (Patch*)t->root;
+	}
+
+	// create children from root to x,y
 
 	Node* n = (Node*)t->root;
 	while (n)
@@ -548,7 +587,9 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 		{
 			if (!(Node*)n->quad[i])
 			{
-				Node* c = (Node*)malloc(sizeof(Node*));
+				Node* c = (Node*)malloc(sizeof(Node));
+				t->nodes++;
+
 				c->parent = n;
 				c->quad[0] = c->quad[1] = c->quad[2] = c->quad[3] = 0;
 				n->quad[i] = c;
@@ -559,19 +600,17 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 		else
 		{
 			if (n->quad[i])
+			{
+				// already exist
 				return (Patch*)n->quad[i];
+			}
 
 			Patch* p = (Patch*)malloc(sizeof(Patch));
+			t->patches++;
+
+			n->quad[i] = p;
 			p->parent = n;
 			p->flags = 0;
-
-			for (int e = 0; e < HEIGHT_CELLS; x++)
-			{
-				p->height[0][e] = z;
-				p->height[e][HEIGHT_CELLS] = z;
-				p->height[HEIGHT_CELLS][HEIGHT_CELLS-e] = z;
-				p->height[HEIGHT_CELLS - e][0] = z;
-			}
 
 			int nx = x - t->x, ny = y - t->y;
 
@@ -599,7 +638,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 					{
 						int lo = 0xffff;
 						for (int y = 1; y < HEIGHT_CELLS; y++)
-							for (int x = 1; x < HEIGHT_CELLS; y++)
+							for (int x = 1; x < HEIGHT_CELLS; x++)
 								lo = np[i]->height[y][x] < lo ? np[i]->height[y][x] : lo;
 						np[i]->lo = lo;
 						UpdateNodes(np[i]);
@@ -659,7 +698,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			if (!(p->flags & 0x38))
 				p->height[HEIGHT_CELLS][HEIGHT_CELLS] = z;
 
-			if (!(p->flags & 0x70))
+			if (!(p->flags & 0xE0))
 				p->height[HEIGHT_CELLS][0] = z;
 
 			// interpolate free edges
@@ -671,8 +710,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				int h0 = p->height[y][0];
 				int h1 = p->height[y][HEIGHT_CELLS];
 				for (int x = 1; x < HEIGHT_CELLS; x++)
-					p->height[y][x] = 
-						(h0 * (HEIGHT_CELLS - x) + h1 * x + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS-1));
+					p->height[y][x] = (h0 * (HEIGHT_CELLS - x) + h1 * x + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
 			}
 
 			if (!(p->flags & 0x08))
@@ -682,8 +720,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				int h0 = p->height[0][x];
 				int h1 = p->height[HEIGHT_CELLS][x];
 				for (int y = 1; y < HEIGHT_CELLS; y++)
-					p->height[y][x] =
-						(h0 * (HEIGHT_CELLS - y) + h1 * y + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS - 1));
+					p->height[y][x] = (h0 * (HEIGHT_CELLS - y) + h1 * y + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
 			}
 
 			if (!(p->flags & 0x20))
@@ -693,8 +730,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				int h0 = p->height[y][0];
 				int h1 = p->height[y][HEIGHT_CELLS];
 				for (int x = 1; x < HEIGHT_CELLS; x++)
-					p->height[y][x] =
-						(h0 * (HEIGHT_CELLS - x) + h1 * x + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS - 1));
+					p->height[y][x] = (h0 * (HEIGHT_CELLS - x) + h1 * x + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
 			}
 
 			if (!(p->flags & 0x80))
@@ -704,20 +740,19 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				int h0 = p->height[0][x];
 				int h1 = p->height[HEIGHT_CELLS][x];
 				for (int y = 1; y < HEIGHT_CELLS; y++)
-					p->height[y][x] =
-						(h0 * (HEIGHT_CELLS - y) + h1 * y + (HEIGHT_CELLS * (HEIGHT_CELLS - 1)) / 2) / (HEIGHT_CELLS * (HEIGHT_CELLS - 1));
+					p->height[y][x] = (h0 * (HEIGHT_CELLS - y) + h1 * y + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
 			}
 
 			// interpolate inter-patch vertices
 
 			for (int y = 1; y < HEIGHT_CELLS; y++)
 			{
-				for (int x = 1; x < HEIGHT_CELLS; y++)
+				for (int x = 1; x < HEIGHT_CELLS; x++)
 				{
 					double avr = 0;
 					double nrm = 0;
 
-					for (int e = 0; e < HEIGHT_CELLS; x++)
+					for (int e = 0; e < HEIGHT_CELLS; e++)
 					{
 						double w;
 
@@ -765,50 +800,65 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 	return 0;
 }
 
-inline int ProductSign(float l[4], int r[4])
+int GetTerrainPatches(Terrain* t)
 {
-	return ((int)floorf(l[0] * r[0] + l[1] * r[1] + l[2] * r[2] + l[3] * r[3])) >> (sizeof(int)*8-1);
+	return t->patches;
 }
 
-void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, float* plane[], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
+static inline void QueryTerrain(QuadItem* q, int x, int y, int range, void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
 {
-	int c[4] = { x, y, q->lo };
+	if (range == VISUAL_CELLS)
+		cb((Patch*)q, x, y, cookie);
+	else
+	{
+		Node* n = (Node*)q;
+
+		range >>= 1;
+
+		if (n->quad[0])
+			QueryTerrain(n->quad[0], x, y, range, cb, cookie);
+		if (n->quad[1])
+			QueryTerrain(n->quad[1], x + range, y, range, cb, cookie);
+		if (n->quad[2])
+			QueryTerrain(n->quad[2], x, y + range, range, cb, cookie);
+		if (n->quad[3])
+			QueryTerrain(n->quad[3], x + range, y + range, range, cb, cookie);
+	}
+}
+
+template <typename P>
+void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
+{
+	int c[4] = { x, y, q->lo, 1 }; // 0,0,0
 
 	for (int i = 0; i < planes; i++)
 	{
 		int neg_pos[2] = { 0,0 };
 
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 0,0,0
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		c[0] += range;
+		c[0] += range; // 1,0,0
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 1,0,0
+		c[1] += range; // 1,1,0
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		c[1] += range;
+		c[0] -= range; // 0,1,0
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 1,1,0
+		c[2] = q->hi; // 0,1,1
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		c[0] -= range;
+		c[0] += range; // 1,1,1
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 0,1,0
+		c[1] -= range; // 1,0,1
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		c[2] = q->hi;
+		c[0] -= range; // 0,0,1
+		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 0,1,1
-
-		c[0] += range;
-
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 1,1,1
-
-		c[1] -= range;
-
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 1,0,1
-
-		c[0] -= range;
-
-		neg_pos[1 + ProductSign(plane[i], c)] ++; // 0,0,1
-
-		c[2] = q->lo;
+		c[2] = q->lo; // 0,0,0
 
 		if (neg_pos[0] == 8)
 			return;
@@ -817,7 +867,11 @@ void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, float* plane
 		{
 			planes--;
 			if (i < planes)
+			{
+				P* swap = plane[i];
 				plane[i] = plane[planes];
+				plane[planes] = swap;
+			}
 			i--;
 		}
 	}
@@ -830,24 +884,45 @@ void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, float* plane
 		
 		range >>= 1;
 
-		if (n->quad[0])
-			QueryTerrain(n->quad[0], x, y, range, planes, plane, cb, cookie);
-		if (n->quad[1])
-			QueryTerrain(n->quad[1], x + range, y, range, planes, plane, cb, cookie);
-		if (n->quad[2])
-			QueryTerrain(n->quad[2], x, y + range, range, planes, plane, cb, cookie);
-		if (n->quad[3])
-			QueryTerrain(n->quad[3], x + range, y + range, range, planes, plane, cb, cookie);
+		if (!planes)
+		{
+			if (n->quad[0])
+				QueryTerrain(n->quad[0], x, y, range, cb, cookie);
+			if (n->quad[1])
+				QueryTerrain(n->quad[1], x + range, y, range, cb, cookie);
+			if (n->quad[2])
+				QueryTerrain(n->quad[2], x, y + range, range, cb, cookie);
+			if (n->quad[3])
+				QueryTerrain(n->quad[3], x + range, y + range, range, cb, cookie);
+		}
+		else
+		{
+			if (n->quad[0])
+				QueryTerrain(n->quad[0], x, y, range, planes, plane, cb, cookie);
+			if (n->quad[1])
+				QueryTerrain(n->quad[1], x + range, y, range, planes, plane, cb, cookie);
+			if (n->quad[2])
+				QueryTerrain(n->quad[2], x, y + range, range, planes, plane, cb, cookie);
+			if (n->quad[3])
+				QueryTerrain(n->quad[3], x + range, y + range, range, planes, plane, cb, cookie);
+		}
 	}
 }
 
-void QueryTerrain(Terrain* t, int planes, float plane[][4], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
+template <typename P>
+void QueryTerrain(Terrain* t, int planes, P plane[][4], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
 {
 	if (!t || !t->root)
 		return;
 
-	float* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
-
-	QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, planes, pp, cb, cookie);
+	if (planes<=0)
+		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, cb, cookie);
+	else
+	{
+		P* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, planes, pp, cb, cookie);
+	}
 }
 
+template void QueryTerrain<>(Terrain* t, int planes, float plane[][4], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie);
+template void QueryTerrain<>(Terrain* t, int planes, double plane[][4], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie);
