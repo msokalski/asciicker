@@ -9,14 +9,11 @@
 #include <string.h>
 
 #include "gl.h"
-#include "GL/freeglut.h"
-
-#pragma comment(lib,"freeglut.lib")
 
 #include "imgui/imgui.h"
-#include "imgui_impl_freeglut.h"
 #include "imgui_impl_opengl3.h"
 
+#include "asciiid_platform.h"
 #include "terrain.h"
 #include "matrix.h"
 
@@ -26,6 +23,56 @@ float rot_yaw = 0;
 float rot_pitch = 90;
 
 int mouse_in = 0;
+int g_Time;
+
+
+void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
+{
+	static const char* source_str[] = // 0x8246 - 0x824B
+	{
+		"API",
+		"WINDOW_SYSTEM",
+		"SHADER_COMPILER",
+		"THIRD_PARTY",
+		"APPLICATION",
+		"OTHER"
+	};
+
+	const char* src = "?";
+	if (source >= 0x8246 && source <= 0x824B)
+		src = source_str[source - 0x8246];
+
+	static const char* type_str[] = // 0x824C - 0x8251
+	{
+		"ERROR",
+		"DEPRECATED_BEHAVIOR",
+		"UNDEFINED_BEHAVIOR",
+		"PORTABILITY",
+		"PERFORMANCE",
+		"OTHER"
+	};
+
+	const char* typ = "?";
+	if (type >= 0x824C && type <= 0x8251)
+		typ = type_str[type - 0x824C];
+
+	static const char* severity_str[] = // 0x9146 - 0x9148 , 0x826B
+	{
+		"HIGH",
+		"MEDIUM",
+		"LOW",
+		"NOTIFICATION",
+	};
+
+	const char* sev = "?";
+	if (severity >= 0x9146 && severity <= 0x9148)
+		sev = severity_str[severity - 0x9146];
+	else
+		if (severity == 0x826B)
+			sev = severity_str[3];
+
+	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
+}
 
 struct RenderContext
 {
@@ -41,21 +88,29 @@ struct RenderContext
 	// ...
 };
 
-void RenderPatch(Patch* p, int x, int y, void* cookie)
+void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie)
 {
 	RenderContext* rc = (RenderContext*)cookie;
 
 	rc->patches++;
 }
 
-void displayCall()
+void my_render()
 {
 	// THINGZ
 	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
 	{
 		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplFreeGLUT_NewFrame();
+		{
+			// Setup time step
+			ImGuiIO& io = ImGui::GetIO();
+			int current_time = a3dGetTime();
+
+			io.DeltaTime = 10; // (current_time - g_Time) / 1000.0f;
+			g_Time = current_time;
+			// Start the frame
+			ImGui::NewFrame();
+		}
 
 		static bool show_demo_window = true;
 		static bool show_another_window = false;
@@ -99,6 +154,7 @@ void displayCall()
 	}
 
 	ImGui::Render();
+
 	ImGuiIO& io = ImGui::GetIO();
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
@@ -153,7 +209,9 @@ void displayCall()
 	TransposeProduct(tm, clip_top, clip_world[3]);
 
 	int planes = 4;
-	QueryTerrain(terrain, planes, clip_world, RenderPatch, &rc);
+	int view_flags = 0xAA; // should contain only bits that face viewing direction
+
+	QueryTerrain(terrain, planes, clip_world, view_flags, RenderPatch, &rc);
 	printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 
 	if (!io.WantCaptureMouse && mouse_in)
@@ -174,157 +232,168 @@ void displayCall()
 	}
 
 	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
+	
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-	glutSwapBuffers();
-	glutPostRedisplay();
+	a3dSwapBuffers();
 }
 
-void entryCall(int msg)
+void my_mouse(int x, int y, MouseInfo mi)
 {
-	if (msg == GLUT_LEFT)
+	if ((mi & 0xF) == MouseInfo::LEAVE)
+	{
 		mouse_in = 0;
+		return;
+	}
 	else
-	if (msg == GLUT_ENTERED)
+	if ((mi & 0xF) == MouseInfo::ENTER)
 		mouse_in = 1;
-}
 
-void glutErrorCall(const char *fmt, va_list ap)
-{
-	vprintf(fmt, ap);
-}
+	ImGuiIO& io = ImGui::GetIO();
 
-void glutWarningCall(const char *fmt, va_list ap)
-{
-	vprintf(fmt, ap);
-}
+	io.MousePos = ImVec2((float)x, (float)y);
 
-void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
-{
-	static const char* source_str[] = // 0x8246 - 0x824B
+	switch (mi & 0xF)
 	{
-		"API",
-		"WINDOW_SYSTEM",
-		"SHADER_COMPILER",
-		"THIRD_PARTY",
-		"APPLICATION",
-		"OTHER"
-	};
-
-	const char* src = "?";
-	if (source >= 0x8246 && source <= 0x824B)
-		src = source_str[source - 0x8246];
-
-	static const char* type_str[] = // 0x824C - 0x8251
-	{
-		"ERROR",
-		"DEPRECATED_BEHAVIOR",
-		"UNDEFINED_BEHAVIOR",
-		"PORTABILITY",
-		"PERFORMANCE",
-		"OTHER"
-	};
-
-	const char* typ = "?";
-	if (type >= 0x824C && type <= 0x8251)
-		typ = type_str[type - 0x824C];
-
-	static const char* severity_str[] = // 0x9146 - 0x9148 , 0x826B
-	{
-		"HIGH",
-		"MEDIUM",
-		"LOW",
-		"NOTIFICATION",
-	};
-
-	const char* sev = "?";
-	if (severity >= 0x9146 && severity <= 0x9148)
-		sev = severity_str[severity - 0x9146];
-	else
-		if (severity == 0x826B)
-			sev = severity_str[3];
-
-	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
+		case MouseInfo::WHEEL_DN:
+			io.MouseWheel += 1.0;
+			break;
+		case MouseInfo::WHEEL_UP:
+			io.MouseWheel -= 1.0;
+			break;
+		case MouseInfo::LEFT_DN:
+			io.MouseDown[0] = true;
+			break;
+		case MouseInfo::LEFT_UP:
+			io.MouseDown[0] = false;
+			break;
+		case MouseInfo::RIGHT_DN:
+			io.MouseDown[1] = true;
+			break;
+		case MouseInfo::RIGHT_UP:
+			io.MouseDown[1] = false;
+			break;
+		case MouseInfo::MIDDLE_DN:
+			io.MouseDown[2] = true;
+			break;
+		case MouseInfo::MIDDLE_UP:
+			io.MouseDown[2] = false;
+			break;
+	}
 }
 
-void glutCloseCall()
+void my_resize(int w, int h)
 {
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplFreeGLUT_Shutdown();
-	ImGui::DestroyContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.DisplaySize = ImVec2((float)w, (float)h);
 }
 
-#ifdef _WIN32
-#define GL_CHECK_CURRENT_CONTEXT() (wglGetCurrentContext()!=0)
-#else
-#define GL_CHECK_CTX() (glXGetCurrentContext()!=0)
-#endif
-
-int main(int argc, char *argv[]) 
+void my_init()
 {
+	g_Time = a3dGetTime();
+
+	glDebugMessageCallback(glDebugCall, 0/*cookie*/);
+
+	// Setup Dear ImGui context
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.BackendPlatformName = "imgui_impl_a3d";
+
+	io.KeyMap[ImGuiKey_Tab] = A3D_TAB;
+	io.KeyMap[ImGuiKey_LeftArrow] = A3D_LEFT;
+	io.KeyMap[ImGuiKey_RightArrow] = A3D_RIGHT;
+	io.KeyMap[ImGuiKey_UpArrow] = A3D_UP;
+	io.KeyMap[ImGuiKey_DownArrow] = A3D_DOWN;
+	io.KeyMap[ImGuiKey_PageUp] = A3D_PAGEUP;
+	io.KeyMap[ImGuiKey_PageDown] = A3D_PAGEDOWN;
+	io.KeyMap[ImGuiKey_Home] = A3D_HOME;
+	io.KeyMap[ImGuiKey_End] = A3D_END;
+	io.KeyMap[ImGuiKey_Insert] = A3D_INSERT;
+	io.KeyMap[ImGuiKey_Delete] = A3D_DELETE;
+	io.KeyMap[ImGuiKey_Backspace] = A3D_BACKSPACE;
+	io.KeyMap[ImGuiKey_Space] = A3D_SPACE;
+	io.KeyMap[ImGuiKey_Enter] = A3D_ENTER;
+	io.KeyMap[ImGuiKey_Escape] = A3D_ESCAPE;
+	io.KeyMap[ImGuiKey_A] = A3D_A;
+	io.KeyMap[ImGuiKey_C] = A3D_C;
+	io.KeyMap[ImGuiKey_V] = A3D_V;
+	io.KeyMap[ImGuiKey_X] = A3D_X;
+	io.KeyMap[ImGuiKey_Y] = A3D_Y;
+	io.KeyMap[ImGuiKey_Z] = A3D_Z;
+
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
+	//ImGui::StyleColorsClassic();
+
+	ImGui_ImplOpenGL3_Init();
+
 	terrain = CreateTerrain();
 
-	/*
-	AddTerrainPatch(terrain, 0x7F, 0x7F, 0x0F);
-	for (int i = 0; i < 10000; i++)
-		AddTerrainPatch(terrain, rand() & 0xFF, rand() & 0xFF, rand() & 0x1F);
-	*/
 	for (int y = 0; y < 256; y++)
 		for (int x = 0; x < 256; x++)
-			AddTerrainPatch(terrain, x,y, 15);
+			AddTerrainPatch(terrain, x, y, 15);
 
 	pos_x = 0x80 * VISUAL_CELLS;
 	pos_y = 0x80 * VISUAL_CELLS;
 	pos_z = 0x0F;
-	
-	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_RGB | GLUT_ALPHA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
-	glutInitContextVersion(4, 5);
-	glutInitContextFlags(/*GLUT_DEBUG |*/ GLUT_FORWARD_COMPATIBLE);
-	glutInitContextProfile(GLUT_CORE_PROFILE);
-	glutInitErrorFunc(glutErrorCall);
-	glutInitWarningFunc(glutWarningCall);
 
-	glutSetOption(
-		GLUT_ACTION_ON_WINDOW_CLOSE,
-		GLUT_ACTION_GLUTMAINLOOP_RETURNS
-	);
+	a3dSetTitle(L"ASCIIID");
+	a3dShow(true);
+}
 
-	glutInitWindowSize(512, 512);
-	glutInitWindowPosition(300, 200);
+void my_idle()
+{
+	my_render();
+}
 
-	int wnd = glutCreateWindow("AscIIId");
-	glutDisplayFunc(displayCall);
-	glutEntryFunc(entryCall);
+void my_keyb_char(wchar_t chr)
+{
+}
 
-	bool glutInitialised = glutGet(GLUT_INIT_STATE) == 1;
+void my_keyb_key(KeyInfo ki, bool down)
+{
+	ImGuiIO& io = ImGui::GetIO();
+	if (ki < IM_ARRAYSIZE(io.KeysDown))
+		io.KeysDown[ki] = down;
+}
 
-	if (!GL_CHECK_CURRENT_CONTEXT())
-		glutDestroyWindow(wnd);
-	else
-	{
-		glDebugMessageCallback(glDebugCall, 0/*cookie*/);
+void my_keyb_focus(bool set)
+{
+}
 
-		// Setup Dear ImGui context
-		ImGui::CreateContext();
-		ImGuiIO& io = ImGui::GetIO(); (void)io;
-		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+void my_close()
+{
+	a3dClose();
 
-		// Setup Dear ImGui style
-		ImGui::StyleColorsDark();
-		//ImGui::StyleColorsClassic();
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui::DestroyContext();
+}
 
-		// Setup Platform/Renderer bindings
-		ImGui_ImplFreeGLUT_Init();
-		ImGui_ImplFreeGLUT_InstallFuncs();
-		ImGui_ImplOpenGL3_Init();
-//		ImGui_ImplOpenGL3_CreateFontsTexture();
 
-		glutCloseFunc(glutCloseCall);
 
-		glutShowWindow();
-		glutMainLoop();
-	}
+int main(int argc, char *argv[]) 
+{
+	PlatformInterface pi;
+	pi.close = my_close;
+	pi.render = my_render;
+	pi.resize = my_resize;
+	pi.idle = my_idle;
+	pi.init = my_init;
+	pi.keyb_char = my_keyb_char;
+	pi.keyb_key = my_keyb_key;
+	pi.keyb_focus = my_keyb_focus;
+	pi.mouse = my_mouse;
+
+	GraphicsDesc gd;
+	gd.color_bits = 32;
+	gd.alpha_bits = 8;
+	gd.depth_bits = 24;
+	gd.stencil_bits = 8;
+	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
+
+	a3dOpen(&pi, &gd);
 
 	return 0;
 }

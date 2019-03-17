@@ -52,6 +52,7 @@ struct QuadItem
 {
 	Node* parent;
 	uint16_t lo, hi;
+	uint16_t flags; // 8 bits of neighbors, bit0 is on (-,-), bit7 is on (-,0)
 };
 
 struct Node : QuadItem
@@ -65,7 +66,6 @@ struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 	// 1bit elevation, 1bit optic_flag, 6bits material_idx, 4bits_shade, 4bits_light
 	// uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
-	uint16_t flags; // 8 bits of neighbors, bit0 is on (-,-), bit7 is on (-,0)
 };
 
 struct Terrain
@@ -90,9 +90,9 @@ Terrain* CreateTerrain(int z)
 
 		Patch* p = (Patch*)malloc(sizeof(Patch));
 		p->parent = 0;
-		p->lo = 0; // (no neighbor)
+		p->lo = z;
 		p->hi = z;
-		p->flags = 0;
+		p->flags = 0; // (no neighbor)
 
 		for (int y = 0; y <= HEIGHT_CELLS; y++)
 			for (int x = 0; x <= HEIGHT_CELLS; x++)
@@ -231,6 +231,7 @@ static void UpdateNodes(Patch* p)
 	{
 		int lo = 0xffff;
 		int hi = 0x0000;
+		int fl = 0xFF;
 
 		for (int i = 0; i < 4; i++)
 		{
@@ -238,11 +239,13 @@ static void UpdateNodes(Patch* p)
 			{
 				lo = n->quad[i]->lo < lo ? n->quad[i]->lo : lo;
 				hi = n->quad[i]->hi > hi ? n->quad[i]->hi : hi;
+				fl = fl & n->quad[i]->flags;
 			}
 		}
 
 		n->lo = lo;
 		n->hi = hi;
+		n->flags = fl;
 
 		n = n->parent;
 	}
@@ -351,11 +354,6 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 		{
 			int j = (i + 4) & 7;
 			np[i]->flags &= ~(1 << j);
-			if (np[i]->lo)
-			{
-				np[i]->lo = 0;
-				UpdateNodes(np[i]);
-			}
 		}
 	}
 
@@ -375,9 +373,9 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 
 		Patch* p = (Patch*)malloc(sizeof(Patch));
 		p->parent = 0;
-		p->lo = 0; // no neighbor
+		p->lo = z;
 		p->hi = z;
-		p->flags = 0;
+		p->flags = 0; // no neighbor
 
 		for (int y = 0; y <= HEIGHT_CELLS; y++)
 			for (int x = 0; x <= HEIGHT_CELLS; x++)
@@ -630,19 +628,13 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			{
 				if (np[i])
 				{
+					int f = np[i]->flags;
 					int j = (i + 4) & 7;
 					np[i]->flags |= 1 << j;
 					p->flags |= 1 << i;
 
-					if ((np[i]->flags & 0xAA) == 0xAA && np[i]->lo==0)
-					{
-						int lo = 0xffff;
-						for (int y = 1; y < HEIGHT_CELLS; y++)
-							for (int x = 1; x < HEIGHT_CELLS; x++)
-								lo = np[i]->height[y][x] < lo ? np[i]->height[y][x] : lo;
-						np[i]->lo = lo;
+					if (f!=np[i]->flags)
 						UpdateNodes(np[i]);
-					}
 
 					// fill shared vertices
 
@@ -788,9 +780,6 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				}
 			}
 
-			if ((p->flags & 0xAA) != 0xAA)
-				p->lo = 0;
-
 			UpdateNodes(p);
 			return p;
 		}
@@ -805,10 +794,12 @@ int GetTerrainPatches(Terrain* t)
 	return t->patches;
 }
 
-static inline void QueryTerrain(QuadItem* q, int x, int y, int range, void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
+static inline void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	if (range == VISUAL_CELLS)
-		cb((Patch*)q, x, y, cookie);
+	{
+		cb((Patch*)q, x, y, view_flags & ~q->flags, cookie);
+	}
 	else
 	{
 		Node* n = (Node*)q;
@@ -816,20 +807,27 @@ static inline void QueryTerrain(QuadItem* q, int x, int y, int range, void(*cb)(
 		range >>= 1;
 
 		if (n->quad[0])
-			QueryTerrain(n->quad[0], x, y, range, cb, cookie);
+			QueryTerrain(n->quad[0], x, y, range, view_flags, cb, cookie);
 		if (n->quad[1])
-			QueryTerrain(n->quad[1], x + range, y, range, cb, cookie);
+			QueryTerrain(n->quad[1], x + range, y, range, view_flags, cb, cookie);
 		if (n->quad[2])
-			QueryTerrain(n->quad[2], x, y + range, range, cb, cookie);
+			QueryTerrain(n->quad[2], x, y + range, range, view_flags, cb, cookie);
 		if (n->quad[3])
-			QueryTerrain(n->quad[3], x + range, y + range, range, cb, cookie);
+			QueryTerrain(n->quad[3], x + range, y + range, range, view_flags, cb, cookie);
 	}
 }
 
 template <typename P>
-void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
+void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
-	int c[4] = { x, y, q->lo, 1 }; // 0,0,0
+	int hi = q->hi;
+	int lo = q->lo;
+	int fl = view_flags & ~q->flags;
+
+	if (fl)
+		lo = 0;
+
+	int c[4] = { x, y, lo, 1 }; // 0,0,0
 
 	for (int i = 0; i < planes; i++)
 	{
@@ -846,7 +844,7 @@ void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], 
 		c[0] -= range; // 0,1,0
 		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		c[2] = q->hi; // 0,1,1
+		c[2] = hi; // 0,1,1
 		neg_pos[PositiveProduct(plane[i], c)] ++;
 
 		c[0] += range; // 1,1,1
@@ -858,7 +856,7 @@ void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], 
 		c[0] -= range; // 0,0,1
 		neg_pos[PositiveProduct(plane[i], c)] ++;
 
-		c[2] = q->lo; // 0,0,0
+		c[2] = lo; // 0,0,0
 
 		if (neg_pos[0] == 8)
 			return;
@@ -877,7 +875,9 @@ void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], 
 	}
 
 	if (range == VISUAL_CELLS)
-		cb((Patch*)q, x, y, cookie);
+	{
+		cb((Patch*)q, x, y, fl, cookie);
+	}
 	else
 	{
 		Node* n = (Node*)q;
@@ -887,42 +887,42 @@ void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], 
 		if (!planes)
 		{
 			if (n->quad[0])
-				QueryTerrain(n->quad[0], x, y, range, cb, cookie);
+				QueryTerrain(n->quad[0], x, y, range, view_flags, cb, cookie);
 			if (n->quad[1])
-				QueryTerrain(n->quad[1], x + range, y, range, cb, cookie);
+				QueryTerrain(n->quad[1], x + range, y, range, view_flags, cb, cookie);
 			if (n->quad[2])
-				QueryTerrain(n->quad[2], x, y + range, range, cb, cookie);
+				QueryTerrain(n->quad[2], x, y + range, range, view_flags, cb, cookie);
 			if (n->quad[3])
-				QueryTerrain(n->quad[3], x + range, y + range, range, cb, cookie);
+				QueryTerrain(n->quad[3], x + range, y + range, range, view_flags, cb, cookie);
 		}
 		else
 		{
 			if (n->quad[0])
-				QueryTerrain(n->quad[0], x, y, range, planes, plane, cb, cookie);
+				QueryTerrain(n->quad[0], x, y, range, planes, plane, view_flags, cb, cookie);
 			if (n->quad[1])
-				QueryTerrain(n->quad[1], x + range, y, range, planes, plane, cb, cookie);
+				QueryTerrain(n->quad[1], x + range, y, range, planes, plane, view_flags, cb, cookie);
 			if (n->quad[2])
-				QueryTerrain(n->quad[2], x, y + range, range, planes, plane, cb, cookie);
+				QueryTerrain(n->quad[2], x, y + range, range, planes, plane, view_flags, cb, cookie);
 			if (n->quad[3])
-				QueryTerrain(n->quad[3], x + range, y + range, range, planes, plane, cb, cookie);
+				QueryTerrain(n->quad[3], x + range, y + range, range, planes, plane, view_flags, cb, cookie);
 		}
 	}
 }
 
 template <typename P>
-void QueryTerrain(Terrain* t, int planes, P plane[][4], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie)
+void QueryTerrain(Terrain* t, int planes, P plane[][4], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	if (!t || !t->root)
 		return;
 
 	if (planes<=0)
-		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, cb, cookie);
+		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, view_flags & 0xAA, cb, cookie);
 	else
 	{
 		P* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
-		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, planes, pp, cb, cookie);
+		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, planes, pp, view_flags & 0xAA, cb, cookie);
 	}
 }
 
-template void QueryTerrain<>(Terrain* t, int planes, float plane[][4], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie);
-template void QueryTerrain<>(Terrain* t, int planes, double plane[][4], void(*cb)(Patch* p, int x, int y, void* cookie), void* cookie);
+template void QueryTerrain<>(Terrain* t, int planes, float plane[][4], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
+template void QueryTerrain<>(Terrain* t, int planes, double plane[][4], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);

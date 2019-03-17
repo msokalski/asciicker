@@ -16,5 +16,5 @@ bool DelTerrainPatch(Terrain* t, int x, int y);
 int GetTerrainPatches(Terrain* t);
 
 template <typename P>
-void QueryTerrain(Terrain* t, int planes, P plane[][4], void (*cb)(Patch* p, int x, int y, void* cookie), void* cookie);
+void QueryTerrain(Terrain* t, int planes, P plane[][4], int view_flags, void (*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
 
