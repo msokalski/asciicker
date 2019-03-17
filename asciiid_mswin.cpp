@@ -15,6 +15,7 @@ static int mouse_x = 0;
 static int mouse_y = 0;
 static bool track = false;
 static bool closing = false;
+static bool dirty = true;
 
 static const unsigned char ki_to_vk[256] =
 {
@@ -438,8 +439,9 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 		case WM_SIZE:
 			if (platform_api.resize)
 				platform_api.resize(LOWORD(l),HIWORD(l));
-			if (platform_api.render)
-				platform_api.render();
+			dirty = true;
+			//if (platform_api.render)
+			//	platform_api.render();
 			return 0;
 
 		case WM_ERASEBKGND:
@@ -447,8 +449,9 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 
 		case WM_PAINT:
 			ValidateRect(h, 0);
-			if (platform_api.render)
-				platform_api.render();
+			dirty = true;
+			//if (platform_api.render)
+			//	platform_api.render();
 			return 0;
 
 		case WM_MOUSEWHEEL:
@@ -617,7 +620,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	memset(&platform_api, 0, sizeof(PlatformInterface));
 
-	DWORD styles = WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
+	DWORD styles = WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+	styles |= WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
+
 	HWND h = CreateWindow(wc.lpszClassName, L"", styles,
 		CW_USEDEFAULT, CW_USEDEFAULT, 640, 480, 
 		0, 0, wc.hInstance, 0);
@@ -732,8 +737,13 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			DispatchMessage(&msg);
 		}
 
+		if (dirty && platform_api.render)
+			platform_api.render();
+		else
 		if (platform_api.idle)
 			platform_api.idle();
+
+		dirty = false;
 	}
 
 	wglMakeCurrent(0, 0);
