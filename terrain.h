@@ -13,6 +13,8 @@ Patch* GetTerrainPatch(Terrain* t, int x, int y);
 Patch* AddTerrainPatch(Terrain* t, int x, int y, int z);
 bool DelTerrainPatch(Terrain* t, int x, int y);
 
+uint16_t* GetTerrainHeightMap(Patch* p);
+
 int GetTerrainPatches(Terrain* t);
 
 template <typename P>

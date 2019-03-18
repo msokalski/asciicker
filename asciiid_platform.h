@@ -187,7 +187,6 @@ enum KeyInfo
 struct PlatformInterface
 {
 	void(*init)();
-	void(*idle)();
 	void(*render)();
 	void(*resize)(int w, int h);
 	void(*close)();
@@ -201,13 +200,17 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 void a3dClose(); // if PlatformInterface::close==null it is called automaticaly when user closes window
 
 void a3dSwapBuffers();
-int a3dGetTime();
+uint64_t a3dGetTime(); // in microsecs, wraps every 584542 years
 
 void a3dSetTitle(const wchar_t* name);
-void a3dShow(bool visible);
+int a3dGetTitle(wchar_t* name, int size);
+
+void a3dSetVisible(bool set);
+bool a3dGetVisible();
 
 // resize
-void a3dGetSize(int* w, int* h);
+bool a3dGetRect(int* xywh); // returns wnd_mode
+void a3dSetRect(const int* xywh, bool wnd_mode);
 
 // mouse
 MouseInfo a3dGetMouse(int* x, int* y); // returns but flags, mouse wheel has no state

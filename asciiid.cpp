@@ -5,6 +5,8 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 #include <string.h>
 
@@ -17,13 +19,224 @@
 #include "terrain.h"
 #include "matrix.h"
 
+#define CODE(...) #__VA_ARGS__
+
+struct RenderContext
+{
+	void Create()
+	{
+		int err = glGetError();
+		glGenBuffers(1, &e_vbo);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, e_vbo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, HEIGHT_CELLS*HEIGHT_CELLS*2*3*sizeof(GLuint), 0, GL_STATIC_DRAW);
+		GLuint* e = (GLuint*)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+		for (int y = 0; y < HEIGHT_CELLS; y++)
+		{
+			for (int x = 0; x < HEIGHT_CELLS; x++, e+=2*3)
+			{
+				GLuint v = x + y * (HEIGHT_CELLS + 1);
+				e[0] = v + 0;
+				e[1] = v + 1;
+				e[2] = v + (HEIGHT_CELLS + 1);
+				e[3] = v + (HEIGHT_CELLS + 1) + 1;
+				e[4] = v + (HEIGHT_CELLS + 1);
+				e[5] = v + 1;
+			}
+		}
+		glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+		glGenBuffers(1, &xy_vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, xy_vbo);
+		glBufferData(GL_ARRAY_BUFFER, (HEIGHT_CELLS + 1)*(HEIGHT_CELLS + 1) * sizeof(GLubyte[2]), 0, GL_STATIC_DRAW);
+		GLubyte* xy = (GLubyte*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+		for (int y = 0; y <= HEIGHT_CELLS; y++)
+		{
+			for (int x = 0; x <= HEIGHT_CELLS; x++, xy+=2)
+			{
+				xy[0] = x;
+				xy[1] = y;
+			}
+		}
+		glUnmapBuffer(GL_ARRAY_BUFFER);
+
+		glGenBuffers(1, &z_vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, z_vbo);
+		glBufferData(GL_ARRAY_BUFFER, (HEIGHT_CELLS + 1)*(HEIGHT_CELLS + 1) * sizeof(GLushort), 0, GL_STREAM_DRAW);
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+
+		glBindBuffer(GL_ARRAY_BUFFER, xy_vbo);
+		glVertexAttribIPointer(0,2,GL_UNSIGNED_BYTE, 0, 0);
+		glEnableVertexAttribArray(0);
+
+		glBindBuffer(GL_ARRAY_BUFFER, z_vbo); // we leave it bound!
+		glVertexAttribIPointer(1, 2, GL_UNSIGNED_SHORT, 0, 0);
+		glEnableVertexAttribArray(1);
+
+		// note, there is also xy_trans (in visual cells) attrib @ location 2
+		// but values are provided with glVertexAttib2I(); prior to patch rendering
+
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, e_vbo);
+
+		glBindVertexArray(0);
+
+		const char* vs_src = CODE(
+			#version 450\n
+			in ivec2 xy;
+			in int z;
+			in ivec2 xy_offs;
+			out vec3 worldspace;
+			uniform int xy_scale;
+
+			void main()
+			{
+				worldspace = vec3(xy*xy_scale + xy_offs, z);
+			}
+		);
+
+		const char* gs_src = CODE(
+			#version 450\n
+
+			layout(triangles) in;
+			layout(triangle_strip, max_vertices = 3) out;
+
+			uniform mat4 tm;
+			uniform float z_scale;
+			in vec3 worldspace[];
+			flat out vec3 normal;
+			
+			void main()
+			{
+				normal = cross(worldspace[1] - worldspace[0], worldspace[2] - worldspace[0]);
+				normal.xy *= z_scale;
+				gl_Position = tm * vec4(worldspace[0], 1.0);
+				EmitVertex();
+				gl_Position = tm * vec4(worldspace[1], 1.0);
+				EmitVertex();
+				gl_Position = tm * vec4(worldspace[2], 1.0);
+				EmitVertex();
+			}
+		);
+
+		const char* fs_src = CODE(
+			#version 450\n
+			flat in vec3 normal;
+			out vec4 color;
+			
+			void main()
+			{
+				vec3 light_pos = vec3(1, 1, 1);
+				float light = dot(normalize(light_pos), normalize(normal));
+				color = vec4(vec3(light),1.0);
+			}
+		);
+
+		err = glGetError();
+		prg = glCreateProgram();
+
+		GLenum st[3] = { GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER };
+		const char* src[3] = { vs_src, gs_src, fs_src };
+		GLuint shader[3];
+
+		GLsizei loglen = 999;
+		char logstr[1000];
+
+		for (int i = 0; i < 3; i++)
+		{
+			shader[i] = glCreateShader(st[i]);
+			GLint len = (GLint)strlen(src[i]);
+			glShaderSource(shader[i], 1, &(src[i]), &len);
+			glCompileShader(shader[i]);
+
+			loglen = 999;
+			glGetShaderInfoLog(shader[i], loglen, &loglen, logstr);
+			logstr[loglen] = 0;
+
+			if (loglen)
+				printf("%s", logstr);
+
+			glAttachShader(prg, shader[i]);
+		}
+
+		glBindAttribLocation(prg, 0, "xy");
+		glBindAttribLocation(prg, 1, "z");
+		glBindAttribLocation(prg, 2, "xy_offs");
+
+		glLinkProgram(prg);
+
+		for (int i = 0; i < 3; i++)
+			glDeleteShader(shader[i]);
+
+		loglen = 999;
+		glGetProgramInfoLog(prg, loglen, &loglen, logstr);
+		logstr[loglen] = 0;
+
+		if (loglen)
+			printf("%s", logstr);
+
+		tm_loc = glGetUniformLocation(prg, "tm");
+		xy_scale_loc = glGetUniformLocation(prg, "xy_scale");
+		z_scale_loc = glGetUniformLocation(prg, "z_scale");
+	}
+
+	void Delete()
+	{
+		glDeleteVertexArrays(1, &vao);
+		glDeleteBuffers(1, &e_vbo);
+		glDeleteBuffers(1, &xy_vbo);
+		glDeleteBuffers(1, &z_vbo);
+		glDeleteProgram(prg);
+	}
+
+	void BeginPatches(double* tm, double z_scale, int xy_scale)
+	{
+		glUseProgram(prg);
+		glUniformMatrix4dv(tm_loc, 1, GL_FALSE, tm);
+		glUniform1i(xy_scale_loc, xy_scale);
+		glUniform1d(z_scale_loc, z_scale);
+		glBindVertexArray(vao);
+	}
+
+	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie)
+	{
+		RenderContext* rc = (RenderContext*)cookie;
+		glBufferData(GL_ARRAY_BUFFER, (HEIGHT_CELLS + 1)*(HEIGHT_CELLS + 1) * sizeof(GLushort), GetTerrainHeightMap(p), GL_STREAM_DRAW);
+		glVertexAttribI2i(2, x, y);
+		glDrawElements(GL_TRIANGLES, HEIGHT_CELLS*HEIGHT_CELLS * 2 * 3, GL_UNSIGNED_INT, 0);
+	}
+
+	void EndPatches()
+	{
+		glBindVertexArray(0);
+		glUseProgram(0);
+	}
+
+	GLint tm_loc; // uniform
+	GLint xy_scale_loc;
+	GLint z_scale_loc;
+
+	GLuint prg;
+	GLuint vao;
+	GLuint e_vbo;
+	GLuint xy_vbo;
+	GLuint z_vbo;
+
+	int patches; // rendered stats
+};
+
+RenderContext render_context;
+
 Terrain* terrain = 0;
 float pos_x = 0, pos_y = 0, pos_z = 0;
 float rot_yaw = 0;
 float rot_pitch = 90;
 
 int mouse_in = 0;
-int g_Time;
+uint64_t g_Time; // in microsecs
 
 
 void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
@@ -74,20 +287,6 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
 }
 
-struct RenderContext
-{
-	double tm[16];
-
-	float* map;
-
-	int patches;
-
-	// 2 vbos
-	// 1 is mapped
-	// mapped vbo, etc
-	// ...
-};
-
 void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie)
 {
 	RenderContext* rc = (RenderContext*)cookie;
@@ -104,9 +303,9 @@ void my_render()
 		{
 			// Setup time step
 			ImGuiIO& io = ImGui::GetIO();
-			int current_time = a3dGetTime();
-
-			io.DeltaTime = 10; // (current_time - g_Time) / 1000.0f;
+			uint64_t current_time = a3dGetTime();
+			uint64_t delta = current_time - g_Time;
+			io.DeltaTime = delta>0 ? delta / 1000000.0f : FLT_MIN;
 			g_Time = current_time;
 			// Start the frame
 			ImGui::NewFrame();
@@ -139,6 +338,7 @@ void my_render()
 			ImGui::Text("counter = %d", counter);
 
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
 			ImGui::End();
 		}
 
@@ -160,10 +360,8 @@ void my_render()
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-	RenderContext rc;
-	memset(&rc, 0, sizeof(RenderContext));
-
-	double* tm = rc.tm;
+	RenderContext* rc = &render_context;
+	double tm[16];
 
 	// currently we're assuming: 1 visual cell = 1 font_size
 
@@ -211,8 +409,10 @@ void my_render()
 	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
-	QueryTerrain(terrain, planes, clip_world, view_flags, RenderPatch, &rc);
-	printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
+	rc->BeginPatches(tm, z_scale, VISUAL_CELLS/HEIGHT_CELLS);
+	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
+	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
+	rc->EndPatches();
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -256,10 +456,10 @@ void my_mouse(int x, int y, MouseInfo mi)
 	switch (mi & 0xF)
 	{
 		case MouseInfo::WHEEL_DN:
-			io.MouseWheel += 1.0;
+			io.MouseWheel -= 1.0;
 			break;
 		case MouseInfo::WHEEL_UP:
-			io.MouseWheel -= 1.0;
+			io.MouseWheel += 1.0;
 			break;
 		case MouseInfo::LEFT_DN:
 			io.MouseDown[0] = true;
@@ -290,6 +490,7 @@ void my_resize(int w, int h)
 
 void my_init()
 {
+	render_context.Create();
 	g_Time = a3dGetTime();
 
 	glDebugMessageCallback(glDebugCall, 0/*cookie*/);
@@ -333,23 +534,24 @@ void my_init()
 
 	for (int y = 0; y < 256; y++)
 		for (int x = 0; x < 256; x++)
-			AddTerrainPatch(terrain, x, y, 15);
+			AddTerrainPatch(terrain, x, y, rand()&0xff);
 
 	pos_x = 0x80 * VISUAL_CELLS;
 	pos_y = 0x80 * VISUAL_CELLS;
 	pos_z = 0x0F;
 
 	a3dSetTitle(L"ASCIIID");
-	a3dShow(true);
-}
 
-void my_idle()
-{
-	my_render();
+	//int full[] = { 0,0,1920,1080 };
+	//a3dSetRect(full, false);
+
+	a3dSetVisible(true);
 }
 
 void my_keyb_char(wchar_t chr)
 {
+	ImGuiIO& io = ImGui::GetIO();
+	io.AddInputCharacter((unsigned short)chr);
 }
 
 void my_keyb_key(KeyInfo ki, bool down)
@@ -357,6 +559,11 @@ void my_keyb_key(KeyInfo ki, bool down)
 	ImGuiIO& io = ImGui::GetIO();
 	if (ki < IM_ARRAYSIZE(io.KeysDown))
 		io.KeysDown[ki] = down;
+	
+	io.KeysDown[A3D_ENTER] = a3dGetKeyb(A3D_ENTER) || a3dGetKeyb(A3D_NUMPAD_ENTER);
+	io.KeyAlt = a3dGetKeyb(A3D_LALT) || a3dGetKeyb(A3D_RALT);
+	io.KeyCtrl = a3dGetKeyb(A3D_LCTRL) || a3dGetKeyb(A3D_RCTRL);
+	io.KeyShift = a3dGetKeyb(A3D_LSHIFT) || a3dGetKeyb(A3D_RSHIFT);
 }
 
 void my_keyb_focus(bool set)
@@ -369,6 +576,8 @@ void my_close()
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui::DestroyContext();
+
+	render_context.Delete();
 }
 
 
@@ -379,7 +588,6 @@ int main(int argc, char *argv[])
 	pi.close = my_close;
 	pi.render = my_render;
 	pi.resize = my_resize;
-	pi.idle = my_idle;
 	pi.init = my_init;
 	pi.keyb_char = my_keyb_char;
 	pi.keyb_key = my_keyb_key;

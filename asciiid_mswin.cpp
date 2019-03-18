@@ -1,8 +1,10 @@
 
-// PLATFORM: MS WINDOWS 
+// PLATFORM: MS-WINDOWS 
 
 #include <Windows.h>
 #pragma comment(lib,"OpenGL32.lib")
+
+#include <stdint.h>
 
 #include "gl.h"
 #include "wglext.h"
@@ -15,7 +17,9 @@ static int mouse_x = 0;
 static int mouse_y = 0;
 static bool track = false;
 static bool closing = false;
-static bool dirty = true;
+
+static LARGE_INTEGER coarse_perf, timer_freq;
+static uint64_t coarse_micro;
 
 static const unsigned char ki_to_vk[256] =
 {
@@ -424,7 +428,59 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 			closing = false;
 			track = false;
 			mouse_b = 0;
+
+			QueryPerformanceFrequency(&timer_freq);
+			QueryPerformanceCounter(&coarse_perf);
+			coarse_micro = 0;
+
+			// set timer to refresh coarse_perf & coarse_micro every minute
+			// to prevent overflows in a3dGetTIme 
+			SetTimer(h, 1, 60000, 0);
 			return TRUE;
+
+		case WM_ENTERMENULOOP:
+		{
+			SetTimer(h, 2, 0, 0);
+			break;
+		}
+
+		case WM_ENTERSIZEMOVE:
+		{
+			SetTimer(h, 3, 0, 0);
+			break;
+		}
+
+		case WM_EXITSIZEMOVE:
+		{
+			KillTimer(h, 3);
+			break;
+		}
+
+		case WM_EXITMENULOOP:
+		{
+			KillTimer(h, 2);
+			break;
+		}
+
+		case WM_TIMER:
+		{
+			if (w == 1)
+			{
+				LARGE_INTEGER c;
+				QueryPerformanceCounter(&c);
+				uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
+				uint64_t seconds = diff / timer_freq.QuadPart;
+				coarse_perf.QuadPart += seconds * timer_freq.QuadPart;
+				coarse_micro += seconds * 1000000;
+			}
+			else
+			if (w == 2 || w == 3)
+			{
+				if (platform_api.render)
+					platform_api.render();
+			}
+			break;
+		}
 		
 		case WM_CLOSE:
 			if (platform_api.close)
@@ -439,9 +495,6 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 		case WM_SIZE:
 			if (platform_api.resize)
 				platform_api.resize(LOWORD(l),HIWORD(l));
-			dirty = true;
-			//if (platform_api.render)
-			//	platform_api.render();
 			return 0;
 
 		case WM_ERASEBKGND:
@@ -449,13 +502,10 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 
 		case WM_PAINT:
 			ValidateRect(h, 0);
-			dirty = true;
-			//if (platform_api.render)
-			//	platform_api.render();
 			return 0;
 
 		case WM_MOUSEWHEEL:
-			rep = HIWORD(w) / WHEEL_DELTA;
+			rep = GET_WHEEL_DELTA_WPARAM(w) / WHEEL_DELTA;
 			if (rep > 0)
 				mi = MouseInfo::WHEEL_UP;
 			else
@@ -690,6 +740,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)(wglGetProcAddress("wglCreateContextAttribsARB"));
 
 	int  contextAttribs[] = {
+		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_DEBUG_BIT_ARB,
 		WGL_CONTEXT_MAJOR_VERSION_ARB, GALOGEN_API_VER_MAJ,
 		WGL_CONTEXT_MINOR_VERSION_ARB, GALOGEN_API_VER_MIN,
 		WGL_CONTEXT_PROFILE_MASK_ARB, strcmp(GALOGEN_API_PROFILE,"core")==0 ? WGL_CONTEXT_CORE_PROFILE_BIT_ARB : 0,
@@ -737,13 +788,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			DispatchMessage(&msg);
 		}
 
-		if (dirty && platform_api.render)
+		if (platform_api.render)
 			platform_api.render();
-		else
-		if (platform_api.idle)
-			platform_api.idle();
-
-		dirty = false;
 	}
 
 	wglMakeCurrent(0, 0);
@@ -761,9 +807,14 @@ void a3dClose()
 	closing = true;
 }
 
-int a3dGetTime()
+uint64_t a3dGetTime()
 {
-	return (int)GetTickCount();
+	LARGE_INTEGER c;
+	QueryPerformanceCounter(&c);
+	uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
+	return coarse_micro + diff * 1000000 / timer_freq.QuadPart;
+	// we can handle diff upto 3 minutes @ 100GHz clock
+	// this is why we refresh coarse time every minute on WM_TIMER
 }
 
 void a3dSwapBuffers()
@@ -782,23 +833,84 @@ void a3dSetTitle(const wchar_t* name)
 	SetWindowText(hWnd, name);
 }
 
-void a3dShow(bool visible)
+int a3dGetTitle(wchar_t* name, int size)
+{
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	if (name)
+		GetWindowText(hWnd, name, size);
+	return GetWindowTextLength(hWnd)+1;
+}
+
+void a3dSetVisible(bool visible)
 {
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
 	ShowWindow(hWnd, visible ? SW_SHOW : SW_HIDE);
 }
 
+bool a3dGetVisible()
+{
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	if (GetWindowLong(hWnd, GWL_STYLE) & WS_VISIBLE)
+		return true;
+	return false;
+}
+
 // resize
-void a3dGetSize(int* w, int* h)
+bool a3dGetRect(int* xywh)
 {
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
 	RECT r;
-	GetClientRect(hWnd, &r);
-	if (w)
-		*w = r.right;
-	if (h)
-		*h = r.bottom;
+	GetWindowRect(hWnd, &r);
+	if (xywh)
+	{
+		xywh[0] = r.left;
+		xywh[1] = r.top;
+		xywh[2] = r.right - r.left;
+		xywh[3] = r.bottom - r.top;
+	}
+
+	if (GetWindowLong(hWnd, GWL_STYLE) & WS_CAPTION)
+		return true;
+	return false;
 }
+
+void a3dSetRect(const int* xywh, bool wnd_mode)
+{
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	DWORD s = GetWindowLong(hWnd, GWL_STYLE);
+	DWORD ns = s;
+
+	RECT r;
+	RECT nr;
+	GetWindowRect(hWnd, &r);
+
+	nr.left = xywh[0];
+	nr.top = xywh[1];
+	nr.right = xywh[2] + xywh[0];
+	nr.bottom = xywh[3] + xywh[1];
+
+	if (wnd_mode)
+		ns |= WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
+	else
+		ns &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
+
+	if (r.left != nr.left || r.top != nr.top ||
+		r.right != nr.right || r.bottom != nr.bottom)
+	{
+		if (ns != s)
+		{
+			SetWindowLong(hWnd, GWL_STYLE, ns);
+			SetWindowPos(hWnd, 0, nr.left, nr.top, nr.right - nr.left, nr.bottom - nr.top,
+				SWP_NOZORDER | SWP_FRAMECHANGED | SWP_DRAWFRAME);
+		}
+		else
+			SetWindowPos(hWnd, 0, nr.left, nr.top, nr.right - nr.left, nr.bottom - nr.top, SWP_NOZORDER);
+	}
+	else
+	if (ns != s)
+		SetWindowPos(hWnd, 0, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_DRAWFRAME);
+}
+
 
 // mouse
 MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no state

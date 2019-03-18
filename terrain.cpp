@@ -794,6 +794,11 @@ int GetTerrainPatches(Terrain* t)
 	return t->patches;
 }
 
+uint16_t* GetTerrainHeightMap(Patch* p)
+{
+	return (uint16_t*)p->height;
+}
+
 static inline void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	if (range == VISUAL_CELLS)
