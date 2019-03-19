@@ -76,7 +76,9 @@ TexAlloc* TexHeap::Alloc(GLenum format, GLenum type, void* data)
 
 	allocs++;
 
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTextureSubImage2D(page->tex, 0, a->x * item_w, a->y * item_h, item_w, item_h, format, type, data);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 	return a;
 }
 
@@ -119,5 +121,7 @@ void TexAlloc::Free()
 void TexAlloc::Update(GLenum format, GLenum type, void* data)
 {
 	TexHeap* h = page->heap;
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTextureSubImage2D(page->tex, 0, x * h->item_w, y * h->item_h, h->item_w, h->item_h, format, type, data);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }

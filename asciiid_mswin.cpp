@@ -476,8 +476,10 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 			else
 			if (w == 2 || w == 3)
 			{
+				/*
 				if (platform_api.render)
 					platform_api.render();
+				*/
 			}
 			break;
 		}
@@ -740,7 +742,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)(wglGetProcAddress("wglCreateContextAttribsARB"));
 
 	int  contextAttribs[] = {
-		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_DEBUG_BIT_ARB,
+	//	WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_DEBUG_BIT_ARB,
 		WGL_CONTEXT_MAJOR_VERSION_ARB, GALOGEN_API_VER_MAJ,
 		WGL_CONTEXT_MINOR_VERSION_ARB, GALOGEN_API_VER_MIN,
 		WGL_CONTEXT_PROFILE_MASK_ARB, strcmp(GALOGEN_API_PROFILE,"core")==0 ? WGL_CONTEXT_CORE_PROFILE_BIT_ARB : 0,

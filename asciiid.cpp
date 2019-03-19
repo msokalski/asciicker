@@ -50,7 +50,9 @@ struct RenderContext
 
 			void main()
 			{
+				int duv = 5;
 				xyuv = in_xyuv;
+				xyuv.zw *= duv;
 			}
 		);
 
@@ -267,7 +269,7 @@ RenderContext render_context;
 
 Terrain* terrain = 0;
 float pos_x = 0, pos_y = 0, pos_z = 0;
-float rot_yaw = 0;
+float rot_yaw = 45;
 float rot_pitch = 30;//90;
 
 int mouse_in = 0;
@@ -388,6 +390,7 @@ void my_render()
 	ImGuiIO& io = ImGui::GetIO();
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+	glClearDepth(0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	RenderContext* rc = &render_context;
@@ -395,14 +398,16 @@ void my_render()
 
 	// currently we're assuming: 1 visual cell = 1 font_size
 
-	double font_size = 16; // so every visual cell appears as 16px
+	double font_size = 4;// 16; // so every visual cell appears as 16px
 	double z_scale = 1.0 / 16.0; // this is a constant, (what fraction of font_size is produced by +1 height_map)
 
 	double rx = 0.5 * io.DisplaySize.x / font_size;
 	double ry = 0.5 * io.DisplaySize.y / font_size;
 
+	static double anim = 0;
+	anim += 1;
 	double pitch = rot_pitch * (M_PI / 180);
-	double yaw = rot_yaw * (M_PI / 180);
+	double yaw = (rot_yaw + anim) * (M_PI / 180);
 
 	tm[0] = +cos(yaw)/rx;
 	tm[1] = -sin(yaw)*sin(pitch)/ry;
@@ -439,10 +444,13 @@ void my_render()
 	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_GREATER);
 	rc->BeginPatches(tm);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 	rc->EndPatches();
+	glDisable(GL_DEPTH_TEST);
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -562,9 +570,19 @@ void my_init()
 
 	terrain = CreateTerrain();
 
-	for (int y = 0; y < 256; y++)
-		for (int x = 0; x < 256; x++)
-			AddTerrainPatch(terrain, x, y, rand()&0xff);
+	uint16_t rnd[65536];
+	int n = 65536;
+	for (int i = 0; i < 65536; i++)
+		rnd[i] = i;
+
+	for (int i = 0; i < 65536; i++)
+	{
+		uint16_t k = rnd[rand()%n];
+		uint16_t u = k & 0xFF;
+		uint16_t v = k >> 8;
+		rnd[k] = rnd[n--];
+		AddTerrainPatch(terrain, u, v, rand() & 0xff);
+	}
 
 	pos_x = 0x80 * VISUAL_CELLS;
 	pos_y = 0x80 * VISUAL_CELLS;
