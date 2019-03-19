@@ -1,7 +1,9 @@
 #pragma once
 
 #define HEIGHT_CELLS 4 // num of verts -1 along patch X and Y axis
-#define VISUAL_CELLS (HEIGHT_CELLS*4)
+#define VISUAL_PER_HEIGHT_CELLS 4
+
+#define VISUAL_CELLS (HEIGHT_CELLS*VISUAL_PER_HEIGHT_CELLS)
 
 struct Terrain;
 
@@ -14,6 +16,10 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z);
 bool DelTerrainPatch(Terrain* t, int x, int y);
 
 uint16_t* GetTerrainHeightMap(Patch* p);
+
+#ifdef TEXHEAP
+TexAlloc* GetTerrainTexAlloc(Patch* p);
+#endif
 
 int GetTerrainPatches(Terrain* t);
 

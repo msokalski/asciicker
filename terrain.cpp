@@ -8,6 +8,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include "texheap.h"
 #include "terrain.h"
 #include "matrix.h"
 
@@ -66,6 +67,10 @@ struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 	// 1bit elevation, 1bit optic_flag, 6bits material_idx, 4bits_shade, 4bits_light
 	// uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
+
+#ifdef TEXHEAP
+	TexAlloc* ta;
+#endif
 };
 
 struct Terrain
@@ -75,6 +80,10 @@ struct Terrain
 	QuadItem* root;  // Node or Patch or NULL
 	int nodes;
 	int patches;
+
+#ifdef TEXHEAP
+	TexHeap th;
+#endif
 };
 
 Terrain* CreateTerrain(int z)
@@ -83,6 +92,11 @@ Terrain* CreateTerrain(int z)
 	t->x = 0;
 	t->y = 0;
 	t->nodes = 0;
+
+#ifdef TEXHEAP
+	int cap = 1024 / (HEIGHT_CELLS + 1);
+	t->th.Create(cap,cap, HEIGHT_CELLS+1, HEIGHT_CELLS+1, GL_R16UI);
+#endif
 
 	if (z >= 0)
 	{
@@ -100,6 +114,10 @@ Terrain* CreateTerrain(int z)
 
 		t->root = p;
 		t->patches = 1;
+
+#ifdef TEXHEAP
+		p->ta = t->th.Alloc(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height);
+#endif
 	}
 	else
 	{
@@ -116,6 +134,10 @@ void DeleteTerrain(Terrain* t)
 {
 	if (!t)
 		return;
+
+#ifdef TEXHEAP
+	t->th.Destroy();
+#endif
 
 	if (!t->root)
 	{
@@ -138,8 +160,6 @@ void DeleteTerrain(Terrain* t)
 
 	while (true)
 	{
-		// __label__ recurse;
-
 	recurse:
 		lev--;
 
@@ -383,6 +403,11 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 
 		t->root = p;
 		t->patches = 1;
+
+#ifdef TEXHEAP
+		p->ta = t->th.Alloc(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height);
+#endif
+
 		return p;
 	}
 
@@ -781,6 +806,11 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			}
 
 			UpdateNodes(p);
+
+#ifdef TEXHEAP
+			p->ta = t->th.Alloc(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height);
+#endif
+
 			return p;
 		}
 	}
@@ -798,6 +828,13 @@ uint16_t* GetTerrainHeightMap(Patch* p)
 {
 	return (uint16_t*)p->height;
 }
+
+#ifdef TEXHEAP
+TexAlloc* GetTerrainTexAlloc(Patch* p)
+{
+	return p->ta;
+}
+#endif
 
 static inline void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {

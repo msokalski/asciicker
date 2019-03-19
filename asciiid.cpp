@@ -16,7 +16,10 @@
 #include "imgui_impl_opengl3.h"
 
 #include "asciiid_platform.h"
+
+#include "texheap.h"
 #include "terrain.h"
+
 #include "matrix.h"
 
 #define CODE(...) #__VA_ARGS__
@@ -26,111 +29,103 @@ struct RenderContext
 	void Create()
 	{
 		int err = glGetError();
-		glGenBuffers(1, &e_vbo);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, e_vbo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, HEIGHT_CELLS*HEIGHT_CELLS*2*3*sizeof(GLuint), 0, GL_STATIC_DRAW);
-		GLuint* e = (GLuint*)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-		for (int y = 0; y < HEIGHT_CELLS; y++)
-		{
-			for (int x = 0; x < HEIGHT_CELLS; x++, e+=2*3)
-			{
-				GLuint v = x + y * (HEIGHT_CELLS + 1);
-				e[0] = v + 0;
-				e[1] = v + 1;
-				e[2] = v + (HEIGHT_CELLS + 1);
-				e[3] = v + (HEIGHT_CELLS + 1) + 1;
-				e[4] = v + (HEIGHT_CELLS + 1);
-				e[5] = v + 1;
-			}
-		}
-		glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glCreateBuffers(1, &vbo);
+		err = glGetError();
+		int max_batch_size = 256; // of patches (each 16 quads), each batch item (single patch), is stored as x,y,u,v
+		glNamedBufferStorage(vbo, max_batch_size * sizeof(GLint[4]), 0, GL_DYNAMIC_STORAGE_BIT);
+		err = glGetError();
 
-		glGenBuffers(1, &xy_vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, xy_vbo);
-		glBufferData(GL_ARRAY_BUFFER, (HEIGHT_CELLS + 1)*(HEIGHT_CELLS + 1) * sizeof(GLubyte[2]), 0, GL_STATIC_DRAW);
-		GLubyte* xy = (GLubyte*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-		for (int y = 0; y <= HEIGHT_CELLS; y++)
-		{
-			for (int x = 0; x <= HEIGHT_CELLS; x++, xy+=2)
-			{
-				xy[0] = x;
-				xy[1] = y;
-			}
-		}
-		glUnmapBuffer(GL_ARRAY_BUFFER);
-
-		glGenBuffers(1, &z_vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, z_vbo);
-		glBufferData(GL_ARRAY_BUFFER, (HEIGHT_CELLS + 1)*(HEIGHT_CELLS + 1) * sizeof(GLushort), 0, GL_STREAM_DRAW);
-
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-		glGenVertexArrays(1, &vao);
+		glCreateVertexArrays(1, &vao);
 		glBindVertexArray(vao);
-
-		glBindBuffer(GL_ARRAY_BUFFER, xy_vbo);
-		glVertexAttribIPointer(0,2,GL_UNSIGNED_BYTE, 0, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glVertexAttribIPointer(0, 4, GL_UNSIGNED_INT, 0, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glEnableVertexAttribArray(0);
-
-		glBindBuffer(GL_ARRAY_BUFFER, z_vbo); // we leave it bound!
-		glVertexAttribIPointer(1, 2, GL_UNSIGNED_SHORT, 0, 0);
-		glEnableVertexAttribArray(1);
-
-		// note, there is also xy_trans (in visual cells) attrib @ location 2
-		// but values are provided with glVertexAttib2I(); prior to patch rendering
-
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, e_vbo);
-
 		glBindVertexArray(0);
 
 		const char* vs_src = CODE(
 			#version 450\n
-			in ivec2 xy;
-			in int z;
-			in ivec2 xy_offs;
-			out vec3 worldspace;
-			uniform int xy_scale;
+			layout(location = 0) in ivec4 in_xyuv;
+			out ivec4 xyuv;
 
 			void main()
 			{
-				worldspace = vec3(xy*xy_scale + xy_offs, z);
+				xyuv = in_xyuv;
 			}
 		);
 
 		const char* gs_src = CODE(
 			#version 450\n
 
-			layout(triangles) in;
-			layout(triangle_strip, max_vertices = 3) out;
+			layout(points) in;
+			layout(triangle_strip, max_vertices = 64) out;
 
+			uniform isampler2D z_tex;
 			uniform mat4 tm;
-			uniform float z_scale;
-			in vec3 worldspace[];
+
+			in ivec4 xyuv[];
+			out vec3 uv_h;
 			flat out vec3 normal;
 			
 			void main()
 			{
-				normal = cross(worldspace[1] - worldspace[0], worldspace[2] - worldspace[0]);
-				normal.xy *= z_scale;
-				gl_Position = tm * vec4(worldspace[0], 1.0);
-				EmitVertex();
-				gl_Position = tm * vec4(worldspace[1], 1.0);
-				EmitVertex();
-				gl_Position = tm * vec4(worldspace[2], 1.0);
-				EmitVertex();
+				int z;
+				vec4 v;
+				ivec2 xy;
+
+				ivec3 xyz[4];
+
+				int dxy = 4;
+
+				for (int y = 0; y < 4; y++)
+				{
+					for (int x = 0; x < 4; x++)
+					{
+						xy = ivec2(x, y + 1);
+						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						xyz[0] = ivec3(xyuv[0].xy + xy*dxy, z);
+
+						xy = ivec2(x, y);
+						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						xyz[1] = ivec3(xyuv[0].xy + xy*dxy, z);
+
+						xy = ivec2(x + 1, y + 1);
+						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						xyz[2] = ivec3(xyuv[0].xy + xy*dxy, z);
+
+						xy = ivec2(x + 1, y);
+						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						xyz[3] = ivec3(xyuv[0].xy + xy*dxy, z);
+
+						normal = cross(vec3(xyz[3] - xyz[0]), vec3(xyz[3] - xyz[1]));
+						normal.xy *= 1.0 / 16.0; // zscale
+
+						for (int i = 0; i < 4; i++)
+						{
+							uv_h = vec3(4*x + (i&1), 4*y + (i>>1), xyz[i].z);
+							uv_h *= vec3(0.25, 0.25, 1.0 / 16.0);
+							gl_Position = tm * vec4(xyz[i], 1.0);
+							EmitVertex();
+						}
+
+						EndPrimitive();
+					}
+				}
 			}
 		);
 
 		const char* fs_src = CODE(
 			#version 450\n
+		
+			layout(location = 0) out vec4 color;
+
 			flat in vec3 normal;
-			out vec4 color;
+			in vec3 uv_h;
 			
 			void main()
 			{
-				vec3 light_pos = vec3(1, 1, 1);
-				float light = dot(normalize(light_pos), normalize(normal));
+				vec3 light_pos = normalize(vec3(1, 1, 1));
+				float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
 				color = vec4(vec3(light),1.0);
 			}
 		);
@@ -162,10 +157,6 @@ struct RenderContext
 			glAttachShader(prg, shader[i]);
 		}
 
-		glBindAttribLocation(prg, 0, "xy");
-		glBindAttribLocation(prg, 1, "z");
-		glBindAttribLocation(prg, 2, "xy_offs");
-
 		glLinkProgram(prg);
 
 		for (int i = 0; i < 3; i++)
@@ -179,51 +170,95 @@ struct RenderContext
 			printf("%s", logstr);
 
 		tm_loc = glGetUniformLocation(prg, "tm");
-		xy_scale_loc = glGetUniformLocation(prg, "xy_scale");
-		z_scale_loc = glGetUniformLocation(prg, "z_scale");
+		z_tex_loc = glGetUniformLocation(prg, "z_tex");
 	}
 
 	void Delete()
 	{
 		glDeleteVertexArrays(1, &vao);
-		glDeleteBuffers(1, &e_vbo);
-		glDeleteBuffers(1, &xy_vbo);
-		glDeleteBuffers(1, &z_vbo);
+		glDeleteBuffers(1, &vbo);
 		glDeleteProgram(prg);
 	}
 
-	void BeginPatches(double* tm, double z_scale, int xy_scale)
+	void BeginPatches(double* tm)
 	{
+		float ftm[16];// NV bug! workaround
+		for (int i = 0; i < 16; i++)
+			ftm[i] = (float)tm[i];
+		int err = glGetError();
 		glUseProgram(prg);
-		glUniformMatrix4dv(tm_loc, 1, GL_FALSE, tm);
-		glUniform1i(xy_scale_loc, xy_scale);
-		glUniform1d(z_scale_loc, z_scale);
+		//glUniformMatrix4dv(tm_loc, 1, GL_FALSE, tm);
+		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
+		glUniform1i(z_tex_loc, 0);
 		glBindVertexArray(vao);
+		page_tex = 0;
+		stream_size = 0;
+		patches = 0;
 	}
 
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
-		glBufferData(GL_ARRAY_BUFFER, (HEIGHT_CELLS + 1)*(HEIGHT_CELLS + 1) * sizeof(GLushort), GetTerrainHeightMap(p), GL_STREAM_DRAW);
-		glVertexAttribI2i(2, x, y);
-		glDrawElements(GL_TRIANGLES, HEIGHT_CELLS*HEIGHT_CELLS * 2 * 3, GL_UNSIGNED_INT, 0);
+		TexAlloc* ta = GetTerrainTexAlloc(p);
+
+		rc->patches++;
+
+		if (rc->page_tex != ta->page->tex)
+		{
+			if (rc->stream_size)
+			{
+				glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[4]) * rc->stream_size, rc->stream_data);
+				glDrawArrays(GL_POINTS, 0, rc->stream_size);
+			}
+
+			rc->stream_size = 0;
+			rc->page_tex = ta->page->tex;
+			glBindTextureUnit(0, rc->page_tex);
+		}
+
+		GLint* patch = rc->stream_data + 4*rc->stream_size;
+
+		patch[0] = x;
+		patch[1] = y;
+		patch[2] = ta->x;
+		patch[3] = ta->y;
+
+		rc->stream_size++;
+
+		if (rc->stream_size == 256)
+		{
+			glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[4]) * rc->stream_size, rc->stream_data);
+			glDrawArrays(GL_POINTS, 0, rc->stream_size);
+			rc->stream_size = 0;
+		}
 	}
 
 	void EndPatches()
 	{
+		if (stream_size)
+		{
+			glNamedBufferSubData(vbo, 0, sizeof(GLint[4]) * stream_size, stream_data);
+			glDrawArrays(GL_POINTS, 0, stream_size);
+			stream_size = 0;
+		}
+
+		page_tex = 0;
+
+		glBindTextureUnit(0,0);
 		glBindVertexArray(0);
 		glUseProgram(0);
 	}
 
 	GLint tm_loc; // uniform
-	GLint xy_scale_loc;
-	GLint z_scale_loc;
+	GLint z_tex_loc;
 
 	GLuint prg;
 	GLuint vao;
-	GLuint e_vbo;
-	GLuint xy_vbo;
-	GLuint z_vbo;
+	GLuint vbo;
+
+	GLint stream_data[4 * 256];
+	int stream_size; // num of patches added to vbo (upto 256)
+	GLuint page_tex; // we can push patches to vbo till they share same page_tex
 
 	int patches; // rendered stats
 };
@@ -233,7 +268,7 @@ RenderContext render_context;
 Terrain* terrain = 0;
 float pos_x = 0, pos_y = 0, pos_z = 0;
 float rot_yaw = 0;
-float rot_pitch = 90;
+float rot_pitch = 30;//90;
 
 int mouse_in = 0;
 uint64_t g_Time; // in microsecs
@@ -287,13 +322,6 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
 }
 
-void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie)
-{
-	RenderContext* rc = (RenderContext*)cookie;
-
-	rc->patches++;
-}
-
 void my_render()
 {
 	// THINGZ
@@ -338,6 +366,8 @@ void my_render()
 			ImGui::Text("counter = %d", counter);
 
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
+			ImGui::Text("PATCHES: %d", render_context.patches);
 
 			ImGui::End();
 		}
@@ -409,7 +439,7 @@ void my_render()
 	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
-	rc->BeginPatches(tm, z_scale, VISUAL_CELLS/HEIGHT_CELLS);
+	rc->BeginPatches(tm);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 	rc->EndPatches();
@@ -490,8 +520,8 @@ void my_resize(int w, int h)
 
 void my_init()
 {
-	render_context.Create();
 	g_Time = a3dGetTime();
+	render_context.Create();
 
 	glDebugMessageCallback(glDebugCall, 0/*cookie*/);
 
