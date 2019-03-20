@@ -23,6 +23,7 @@ struct TexAlloc
 struct TexPage
 {
 	// read only
+	void* user; // data at the pointer can be modified
 	TexHeap* heap;
 	TexPage* next;
 	TexPage* prev;
@@ -32,7 +33,7 @@ struct TexPage
 
 struct TexHeap
 {
-	void Create(int page_cap_x, int page_cap_y, int alloc_w, int alloc_h, GLenum internal_format);
+	void Create(int page_cap_x, int page_cap_y, int alloc_w, int alloc_h, GLenum internal_format, int page_user_bytes);
 	void Destroy();
 
 	TexAlloc* Alloc(GLenum format, GLenum type, void* data);
@@ -48,6 +49,7 @@ struct TexHeap
 	int cap_y;
 
 	// read only
+	int user; // num of extra bytes allocated with every page for user
 	int allocs;
 	GLenum ifmt;
 	TexPage* head;

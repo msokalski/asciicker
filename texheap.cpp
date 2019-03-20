@@ -2,7 +2,7 @@
 #include <malloc.h>
 #include "texheap.h"
 
-void TexHeap::Create(int page_cap_x, int page_cap_y, int alloc_w, int alloc_h, GLenum internal_format)
+void TexHeap::Create(int page_cap_x, int page_cap_y, int alloc_w, int alloc_h, GLenum internal_format, int page_user_bytes)
 {
 	allocs = 0;
 	item_w = alloc_w;
@@ -10,6 +10,7 @@ void TexHeap::Create(int page_cap_x, int page_cap_y, int alloc_w, int alloc_h, G
 	cap_x = page_cap_x;
 	cap_y = page_cap_y;
 	ifmt = internal_format;
+	user = page_user_bytes;
 	head = 0;
 	tail = 0;
 }
@@ -44,10 +45,14 @@ TexAlloc* TexHeap::Alloc(GLenum format, GLenum type, void* data)
 	TexPage* page = tail;
 	if (allocs % cap == 0)
 	{
-		int page_bytes = (sizeof(TexPage) + sizeof(TexAlloc*)*(cap - 1));
+		int alloc_bytes = sizeof(TexPage) + sizeof(TexAlloc*)*(cap - 1);
+		int page_bytes = alloc_bytes + user;
 		page = (TexPage*)malloc(page_bytes);
 		if (!page)
 			return 0;
+
+		page->user = (char*)page + alloc_bytes;
+		memset(page->user, 0, user);
 
 		page->heap = this;
 		page->prev = tail;

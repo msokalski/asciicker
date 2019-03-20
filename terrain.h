@@ -18,7 +18,17 @@ bool DelTerrainPatch(Terrain* t, int x, int y);
 uint16_t* GetTerrainHeightMap(Patch* p);
 
 #ifdef TEXHEAP
+TexHeap* GetTerrainTexHeap(Terrain* t);
 TexAlloc* GetTerrainTexAlloc(Patch* p);
+
+struct TexPageBuffer
+{
+	TexPage* prev;
+	TexPage* next;
+	int size;
+	GLint data[4 * 1000];
+};
+
 #endif
 
 int GetTerrainPatches(Terrain* t);

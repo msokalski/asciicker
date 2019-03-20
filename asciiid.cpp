@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include <string.h>
 
@@ -22,6 +23,12 @@
 
 #include "matrix.h"
 
+Terrain* terrain = 0;
+float pos_x = 0, pos_y = 0, pos_z = 0;
+float rot_yaw = 45;
+float rot_pitch = 30;//90;
+
+
 #define CODE(...) #__VA_ARGS__
 
 struct RenderContext
@@ -31,7 +38,7 @@ struct RenderContext
 		int err = glGetError();
 		glCreateBuffers(1, &vbo);
 		err = glGetError();
-		int max_batch_size = 256; // of patches (each 16 quads), each batch item (single patch), is stored as x,y,u,v
+		int max_batch_size = 1000; // of patches (each 16 quads), each batch item (single patch), is stored as x,y,u,v
 		glNamedBufferStorage(vbo, max_batch_size * sizeof(GLint[4]), 0, GL_DYNAMIC_STORAGE_BIT);
 		err = glGetError();
 
@@ -62,7 +69,7 @@ struct RenderContext
 			layout(points) in;
 			layout(triangle_strip, max_vertices = 64) out;
 
-			uniform isampler2D z_tex;
+			uniform usampler2D z_tex;
 			uniform mat4 tm;
 
 			in ivec4 xyuv[];
@@ -71,7 +78,7 @@ struct RenderContext
 			
 			void main()
 			{
-				int z;
+				uint z;
 				vec4 v;
 				ivec2 xy;
 
@@ -193,9 +200,12 @@ struct RenderContext
 		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
 		glUniform1i(z_tex_loc, 0);
 		glBindVertexArray(vao);
-		page_tex = 0;
-		stream_size = 0;
+
+		head = 0;
 		patches = 0;
+		draws = 0;
+		changes = 0;
+		page_tex = 0;
 	}
 
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie)
@@ -205,46 +215,81 @@ struct RenderContext
 
 		rc->patches++;
 
-		if (rc->page_tex != ta->page->tex)
-		{
-			if (rc->stream_size)
-			{
-				glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[4]) * rc->stream_size, rc->stream_data);
-				glDrawArrays(GL_POINTS, 0, rc->stream_size);
-			}
+		TexPageBuffer* buf = (TexPageBuffer*)ta->page->user;
 
-			rc->stream_size = 0;
-			rc->page_tex = ta->page->tex;
-			glBindTextureUnit(0, rc->page_tex);
+		if (buf->size == 0)
+		{
+			if (rc->head)
+				((TexPageBuffer*)rc->head->user)->prev = ta->page;
+			buf->prev = 0;
+			buf->next = rc->head;
+			rc->head = ta->page;
 		}
 
-		GLint* patch = rc->stream_data + 4*rc->stream_size;
+		GLint* patch = buf->data + 4 * buf->size;
 
 		patch[0] = x;
 		patch[1] = y;
 		patch[2] = ta->x;
 		patch[3] = ta->y;
 
-		rc->stream_size++;
+		buf->size++;
 
-		if (rc->stream_size == 256)
+		if (buf->size == 1000)
 		{
-			glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[4]) * rc->stream_size, rc->stream_data);
-			glDrawArrays(GL_POINTS, 0, rc->stream_size);
-			rc->stream_size = 0;
+			rc->draws++;
+			
+			if (rc->page_tex != ta->page->tex)
+			{
+				rc->changes++;
+				rc->page_tex = ta->page->tex;
+				glBindTextureUnit(0, rc->page_tex);
+			}
+
+			glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[4]) * buf->size, buf->data);
+			glDrawArrays(GL_POINTS, 0, buf->size);
+
+			if (buf->prev)
+				((TexPageBuffer*)buf->prev->user)->next = buf->next;
+			else
+				rc->head = buf->next;
+
+			if (buf->next)
+				((TexPageBuffer*)buf->next->user)->prev = buf->prev;
+
+			buf->size = 0;
+			buf->next = 0;
+			buf->prev = 0;
 		}
+
 	}
 
 	void EndPatches()
 	{
-		if (stream_size)
+		TexPage* tp = head;
+		while (tp)
 		{
-			glNamedBufferSubData(vbo, 0, sizeof(GLint[4]) * stream_size, stream_data);
-			glDrawArrays(GL_POINTS, 0, stream_size);
-			stream_size = 0;
+			TexPageBuffer* buf = (TexPageBuffer*)tp->user;
+
+			if (page_tex != tp->tex)
+			{
+				changes++;
+				page_tex = tp->tex;
+				glBindTextureUnit(0, page_tex);
+			}
+
+			draws++;
+			glNamedBufferSubData(vbo, 0, sizeof(GLint[4]) * buf->size, buf->data);
+			glDrawArrays(GL_POINTS, 0, buf->size);
+
+			tp = buf->next;
+			buf->size = 0;
+			buf->next = 0;
+			buf->prev = 0;
 		}
 
 		page_tex = 0;
+		head = 0;
 
 		glBindTextureUnit(0,0);
 		glBindVertexArray(0);
@@ -258,19 +303,15 @@ struct RenderContext
 	GLuint vao;
 	GLuint vbo;
 
-	GLint stream_data[4 * 256];
-	int stream_size; // num of patches added to vbo (upto 256)
-	GLuint page_tex; // we can push patches to vbo till they share same page_tex
+	GLuint page_tex;
+	TexPage* head;
 
 	int patches; // rendered stats
+	int draws;
+	int changes;
 };
 
 RenderContext render_context;
-
-Terrain* terrain = 0;
-float pos_x = 0, pos_y = 0, pos_z = 0;
-float rot_yaw = 45;
-float rot_pitch = 30;//90;
 
 int mouse_in = 0;
 uint64_t g_Time; // in microsecs
@@ -319,7 +360,10 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 		sev = severity_str[severity - 0x9146];
 	else
 		if (severity == 0x826B)
+		{
+			return;
 			sev = severity_str[3];
+		}
 
 	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
 }
@@ -369,7 +413,7 @@ void my_render()
 
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
-			ImGui::Text("PATCHES: %d", render_context.patches);
+			ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
 
 			ImGui::End();
 		}
@@ -398,7 +442,7 @@ void my_render()
 
 	// currently we're assuming: 1 visual cell = 1 font_size
 
-	double font_size = 4;// 16; // so every visual cell appears as 16px
+	double font_size = 0.125;// 0.125;// 16; // so every visual cell appears as 16px
 	double z_scale = 1.0 / 16.0; // this is a constant, (what fraction of font_size is produced by +1 height_map)
 
 	double rx = 0.5 * io.DisplaySize.x / font_size;
@@ -423,7 +467,7 @@ void my_render()
 	tm[11] = 0;
 	tm[12] = -(pos_x * tm[0] + pos_y * tm[4] + pos_z * tm[8]);
 	tm[13] = -(pos_x * tm[1] + pos_y * tm[5] + pos_z * tm[9]);
-	tm[14] = -1.0;
+	tm[14] = -1.0 + .1;
 	tm[15] = 1.0;
 
 	// 4 clip planes in clip-space
@@ -445,7 +489,7 @@ void my_render()
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_GREATER);
+	glDepthFunc(GL_GEQUAL);
 	rc->BeginPatches(tm);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
@@ -570,28 +614,44 @@ void my_init()
 
 	terrain = CreateTerrain();
 
-	uint16_t rnd[65536];
-	int n = 65536;
-	for (int i = 0; i < 65536; i++)
+	const int num1 = 256;// 256;
+	const int num2 = num1*num1;
+
+//	AddTerrainPatch(terrain, 0, 0, rand() & 0xFF);
+//	AddTerrainPatch(terrain, 0xFF, 0xFF, rand() & 0xFF);
+
+	uint32_t rnd[num2];
+	int n = num2;
+	for (int i = 0; i < num2; i++)
 		rnd[i] = i;
 
-	for (int i = 0; i < 65536; i++)
+	for (int i = 0; i < num2; i++)
 	{
-		uint16_t k = rnd[rand()%n];
-		uint16_t u = k & 0xFF;
-		uint16_t v = k >> 8;
-		rnd[k] = rnd[n--];
-		AddTerrainPatch(terrain, u, v, rand() & 0xff);
+		int r = (rand() + rand()*(RAND_MAX+1)) % n;
+		uint32_t uv = rnd[r];
+		rnd[r] = rnd[--n];
+		uint32_t u = uv % num1;
+		uint32_t v = uv / num1;
+		AddTerrainPatch(terrain, u, v, rand()&0xFF);
 	}
 
-	pos_x = 0x80 * VISUAL_CELLS;
-	pos_y = 0x80 * VISUAL_CELLS;
-	pos_z = 0x0F;
+	/*
+	for (int i = 0; i < num2; i++)
+	{
+		uint32_t u = i % num1;
+		uint32_t v = i / num1;
+		AddTerrainPatch(terrain, u, v, rand() & 0xFF);
+	}
+	*/
+
+	pos_x = num1 * VISUAL_CELLS / 2;
+	pos_y = num1 * VISUAL_CELLS / 2;
+	pos_z = 0x7F;
 
 	a3dSetTitle(L"ASCIIID");
 
-	//int full[] = { 0,0,1920,1080 };
-	//a3dSetRect(full, false);
+	int full[] = { -1280,0,800,600 };
+	a3dSetRect(full, true);
 
 	a3dSetVisible(true);
 }

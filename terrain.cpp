@@ -95,7 +95,7 @@ Terrain* CreateTerrain(int z)
 
 #ifdef TEXHEAP
 	int cap = 1024 / (HEIGHT_CELLS + 1);
-	t->th.Create(cap,cap, HEIGHT_CELLS+1, HEIGHT_CELLS+1, GL_R16UI);
+	t->th.Create(cap,cap, HEIGHT_CELLS+1, HEIGHT_CELLS+1, GL_R16UI, sizeof(TexPageBuffer));
 #endif
 
 	if (z >= 0)
@@ -830,6 +830,11 @@ uint16_t* GetTerrainHeightMap(Patch* p)
 }
 
 #ifdef TEXHEAP
+TexHeap* GetTerrainTexHeap(Terrain* t)
+{
+	return &t->th;
+}
+
 TexAlloc* GetTerrainTexAlloc(Patch* p)
 {
 	return p->ta;
