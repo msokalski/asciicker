@@ -38,7 +38,7 @@ struct RenderContext
 		int err = glGetError();
 		glCreateBuffers(1, &vbo);
 		err = glGetError();
-		int max_batch_size = 1000; // of patches (each 16 quads), each batch item (single patch), is stored as x,y,u,v
+		int max_batch_size = 789; // of patches (each 16 quads), each batch item (single patch), is stored as x,y,u,v
 		glNamedBufferStorage(vbo, max_batch_size * sizeof(GLint[4]), 0, GL_DYNAMIC_STORAGE_BIT);
 		err = glGetError();
 
@@ -106,13 +106,13 @@ struct RenderContext
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
 						xyz[3] = ivec3(xyuv[0].xy + xy*dxy, z);
 
-						normal = cross(vec3(xyz[3] - xyz[0]), vec3(xyz[3] - xyz[1]));
+						normal = cross(vec3(xyz[3] - xyz[0]), vec3(xyz[2] - xyz[1]));
 						normal.xy *= 1.0 / 16.0; // zscale
 
 						for (int i = 0; i < 4; i++)
 						{
-							uv_h = vec3(4*x + (i&1), 4*y + (i>>1), xyz[i].z);
-							uv_h *= vec3(0.25, 0.25, 1.0 / 16.0);
+							uv_h = xyz[i] - ivec3(xyuv[0].xy, 0);
+							uv_h /= vec3(4.0,4.0,16.0);
 							gl_Position = tm * vec4(xyz[i], 1.0);
 							EmitVertex();
 						}
@@ -134,8 +134,16 @@ struct RenderContext
 			void main()
 			{
 				vec3 light_pos = normalize(vec3(1, 1, 1));
-				float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
+				//float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
+				float light = max(0.0, dot(light_pos, normalize(normal)));
 				color = vec4(vec3(light),1.0);
+				if (uv_h.x <0.02 || uv_h.y <0.02 || uv_h.x > 3.98 || uv_h.y > 3.98)
+					color.rgb *= 0.25;
+
+				vec2 pq = fract(uv_h.xy);
+				if (pq.x <0.01 || pq.y <0.01 || pq.x > 0.99 || pq.y > 0.99)
+					color.rgb *= 0.25;
+
 			}
 		);
 
@@ -235,7 +243,7 @@ struct RenderContext
 
 		buf->size++;
 
-		if (buf->size == 1000)
+		if (buf->size == 789)
 		{
 			rc->draws++;
 			
@@ -442,7 +450,7 @@ void my_render()
 
 	// currently we're assuming: 1 visual cell = 1 font_size
 
-	double font_size = 0.125;// 0.125;// 16; // so every visual cell appears as 16px
+	double font_size = 1;// 0.125;// 16; // so every visual cell appears as 16px
 	double z_scale = 1.0 / 16.0; // this is a constant, (what fraction of font_size is produced by +1 height_map)
 
 	double rx = 0.5 * io.DisplaySize.x / font_size;
@@ -614,11 +622,12 @@ void my_init()
 
 	terrain = CreateTerrain();
 
+	// ALTERNATIVE:
+	// terrain = CreateTerrain(int x, int y, int w, int h, uint16_t* data);
+	// xywh coords are in patches, so data is w*4+1,h*4+1 !!!!!!!!!!!!!!!!
+
 	const int num1 = 256;// 256;
 	const int num2 = num1*num1;
-
-//	AddTerrainPatch(terrain, 0, 0, rand() & 0xFF);
-//	AddTerrainPatch(terrain, 0xFF, 0xFF, rand() & 0xFF);
 
 	uint32_t rnd[num2];
 	int n = num2;
@@ -632,17 +641,8 @@ void my_init()
 		rnd[r] = rnd[--n];
 		uint32_t u = uv % num1;
 		uint32_t v = uv / num1;
-		AddTerrainPatch(terrain, u, v, rand()&0xFF);
+		AddTerrainPatch(terrain, u, v, rand()&0x7F);
 	}
-
-	/*
-	for (int i = 0; i < num2; i++)
-	{
-		uint32_t u = i % num1;
-		uint32_t v = i / num1;
-		AddTerrainPatch(terrain, u, v, rand() & 0xFF);
-	}
-	*/
 
 	pos_x = num1 * VISUAL_CELLS / 2;
 	pos_y = num1 * VISUAL_CELLS / 2;
@@ -650,8 +650,8 @@ void my_init()
 
 	a3dSetTitle(L"ASCIIID");
 
-	int full[] = { -1280,0,800,600 };
-	a3dSetRect(full, true);
+	int full[] = { 0,0,1920,1080 };
+	a3dSetRect(full, false);
 
 	a3dSetVisible(true);
 }
@@ -707,7 +707,7 @@ int main(int argc, char *argv[])
 	gd.alpha_bits = 8;
 	gd.depth_bits = 24;
 	gd.stencil_bits = 8;
-	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
+	gd.flags = (GraphicsDesc::FLAGS) (/*GraphicsDesc::DEBUG_CONTEXT | */GraphicsDesc::DOUBLE_BUFFER);
 
 	a3dOpen(&pi, &gd);
 

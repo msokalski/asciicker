@@ -26,7 +26,7 @@ struct TexPageBuffer
 	TexPage* prev;
 	TexPage* next;
 	int size;
-	GLint data[4 * 1000];
+	GLint data[4 * 789];
 };
 
 #endif

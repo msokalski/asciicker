@@ -841,7 +841,7 @@ TexAlloc* GetTerrainTexAlloc(Patch* p)
 }
 #endif
 
-static inline void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+static __forceinline void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	if (range == VISUAL_CELLS)
 	{
@@ -865,7 +865,7 @@ static inline void QueryTerrain(QuadItem* q, int x, int y, int range, int view_f
 }
 
 template <typename P>
-void QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+static void __forceinline QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	int hi = q->hi;
 	int lo = q->lo;
