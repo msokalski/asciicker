@@ -24,9 +24,12 @@
 #include "matrix.h"
 
 Terrain* terrain = 0;
-float pos_x = 0, pos_y = 0, pos_z = 0;
+
+float font_size = 1;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
+bool spin_anim = false;
+float pos_x = 0, pos_y = 0, pos_z = 0;
 
 
 #define CODE(...) #__VA_ARGS__
@@ -137,10 +140,15 @@ struct RenderContext
 				//float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
 				float light = max(0.0, dot(light_pos, normalize(normal)));
 				color = vec4(vec3(light),1.0);
+
 				if (uv_h.x <0.02 || uv_h.y <0.02 || uv_h.x > 3.98 || uv_h.y > 3.98)
 					color.rgb *= 0.25;
 
 				vec2 pq = fract(uv_h.xy);
+				if (pq.x <0.01 || pq.y <0.01 || pq.x > 0.99 || pq.y > 0.99)
+					color.rgb *= 0.25;
+
+				pq = fract(4.0*uv_h.xy);
 				if (pq.x <0.01 || pq.y <0.01 || pq.x > 0.99 || pq.y > 0.99)
 					color.rgb *= 0.25;
 
@@ -393,14 +401,32 @@ void my_render()
 			ImGui::NewFrame();
 		}
 
+		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+
+		ImGui::SliderFloat("PITCH", &rot_pitch, +30.0f, +90.0f);
+
+		if (ImGui::SliderFloat("YAW", &rot_yaw, -180.0f, +180.0f))
+
+		ImGui::SameLine();
+		ImGui::Checkbox("Spin", &spin_anim);
+
+		ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
+
+		ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
+
+		ImGui::End();
+
 		static bool show_demo_window = true;
 		static bool show_another_window = false;
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+		/*
 		if (show_demo_window)
 			ImGui::ShowDemoWindow(&show_demo_window);
+		*/
 
 		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
+		/*
 		{
 			static float f = 0.0f;
 			static int counter = 0;
@@ -425,8 +451,10 @@ void my_render()
 
 			ImGui::End();
 		}
+		*/
 
 		// 3. Show another simple window.
+		/*
 		if (show_another_window)
 		{
 			ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
@@ -435,6 +463,7 @@ void my_render()
 				show_another_window = false;
 			ImGui::End();
 		}
+		*/
 	}
 
 	ImGui::Render();
@@ -450,16 +479,20 @@ void my_render()
 
 	// currently we're assuming: 1 visual cell = 1 font_size
 
-	double font_size = 1;// 0.125;// 16; // so every visual cell appears as 16px
 	double z_scale = 1.0 / 16.0; // this is a constant, (what fraction of font_size is produced by +1 height_map)
 
 	double rx = 0.5 * io.DisplaySize.x / font_size;
 	double ry = 0.5 * io.DisplaySize.y / font_size;
 
-	static double anim = 0;
-	anim += 1;
 	double pitch = rot_pitch * (M_PI / 180);
-	double yaw = (rot_yaw + anim) * (M_PI / 180);
+	double yaw = rot_yaw * (M_PI / 180);
+
+	if (spin_anim)
+	{
+		rot_yaw += 0.1f;
+		if (rot_yaw > 180)
+			rot_yaw -= 180;
+	}
 
 	tm[0] = +cos(yaw)/rx;
 	tm[1] = -sin(yaw)*sin(pitch)/ry;
@@ -506,6 +539,7 @@ void my_render()
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
+		/*
 		int rect[4] =
 		{
 			(int)(io.MousePos.x) - 16,
@@ -519,6 +553,14 @@ void my_render()
 		glClearColor(1, 1, 1, 1);
 		glClear(GL_COLOR_BUFFER_BIT);
 		glDisable(GL_SCISSOR_TEST);
+		*/
+
+		// all coords in world space!
+		double hit[3];
+		double ray_p[3] = { 0x7F,0x7F,0 };
+		double ray_v[3] = { -1, -1, -1 };
+
+		Patch* p = HitTerrain(terrain, ray_p, ray_v, hit);
 	}
 
 	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
@@ -650,7 +692,7 @@ void my_init()
 
 	a3dSetTitle(L"ASCIIID");
 
-	int full[] = { 0,0,1920,1080 };
+	int full[] = { -1280,0,800,600};
 	a3dSetRect(full, false);
 
 	a3dSetVisible(true);

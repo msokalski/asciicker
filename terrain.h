@@ -33,6 +33,5 @@ struct TexPageBuffer
 
 int GetTerrainPatches(Terrain* t);
 
-template <typename P>
-void QueryTerrain(Terrain* t, int planes, P plane[][4], int view_flags, void (*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
-
+void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, void (*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
+Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4]);

@@ -864,8 +864,7 @@ static __forceinline void QueryTerrain(QuadItem* q, int x, int y, int range, int
 	}
 }
 
-template <typename P>
-static void __forceinline QueryTerrain(QuadItem* q, int x, int y, int range, int planes, P* plane[], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+static void __forceinline QueryTerrain(QuadItem* q, int x, int y, int range, int planes, double* plane[], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	int hi = q->hi;
 	int lo = q->lo;
@@ -913,7 +912,7 @@ static void __forceinline QueryTerrain(QuadItem* q, int x, int y, int range, int
 			planes--;
 			if (i < planes)
 			{
-				P* swap = plane[i];
+				double* swap = plane[i];
 				plane[i] = plane[planes];
 				plane[planes] = swap;
 			}
@@ -956,8 +955,7 @@ static void __forceinline QueryTerrain(QuadItem* q, int x, int y, int range, int
 	}
 }
 
-template <typename P>
-void QueryTerrain(Terrain* t, int planes, P plane[][4], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	if (!t || !t->root)
 		return;
@@ -966,10 +964,323 @@ void QueryTerrain(Terrain* t, int planes, P plane[][4], int view_flags, void(*cb
 		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, view_flags & 0xAA, cb, cookie);
 	else
 	{
-		P* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+		double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
 		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, planes, pp, view_flags & 0xAA, cb, cookie);
 	}
 }
 
-template void QueryTerrain<>(Terrain* t, int planes, float plane[][4], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
-template void QueryTerrain<>(Terrain* t, int planes, double plane[][4], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
+bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[4])
+{
+	static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
+
+	double* p0 = ray + 6;
+	double* p1 = ray + 9;
+	double inv_len = ray[12];
+
+	double bestlen = 1.e+10;
+	double bestpos[3] = { 0,0,-1 };
+	// simply check which depth sample is closest to the ray
+	for (int hy = 0; hy <= HEIGHT_CELLS; hy++)
+	{
+		for (int hx = 0; hx <= HEIGHT_CELLS; hx++)
+		{
+			double v[3] =
+			{
+				x + hx * sxy,
+				y + hy * sxy,
+				(double)p->height[hy][hx]
+			};
+
+			double vp0[3] =
+			{
+				v[0] - p0[0],
+				v[0] - p0[1],
+				v[0] - p0[2]
+			};
+
+			double vp1[3] =
+			{
+				v[0] - p1[0],
+				v[0] - p1[1],
+				v[0] - p1[2]
+			};
+
+			double c[3]=
+			{
+				vp0[1] * vp1[2] - vp0[2] * vp1[1],
+				vp0[2] * vp1[0] - vp0[0] * vp1[2],
+				vp0[0] * vp1[1] - vp0[1] * vp1[0]
+			};
+
+			double sqrlen = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+
+			if (sqrlen < bestlen)
+			{
+				bestlen = sqrlen;
+				bestpos[0] = v[0];
+				bestpos[1] = v[1];
+				bestpos[2] = v[2];
+			}
+		}
+	}
+
+	if (bestpos[2] > ret[2])
+	{
+		ret[0] = bestpos[0];
+		ret[1] = bestpos[1];
+		ret[2] = bestpos[2];
+		return true;
+	}
+
+	return false;
+}
+
+Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (ray[1] - qlo * ray[3] + ray[5] * (x + range) > 0 ||
+		ray[5] * (y + range) - ray[0] - qlo * ray[4] > 0 ||
+		ray[2] - ray[4] * x + ray[3] * (y + range) > 0 ||
+		ray[0] + qhi * ray[4] - ray[5] * (y + range) > 0 ||
+		qhi * ray[3] - ray[5] * (x + range) - ray[1] > 0 ||
+		ray[4] * (x + range) - ray[3] * y - ray[2] > 0)
+		return false;
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret))
+			return p;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain0(n->quad[0], x, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain0(n->quad[1], x+range, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain0(n->quad[2], x, y+range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain0(n->quad[3], x+range, y+range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (ray[5] * (y + range) - ray[0] - qlo * ray[4] > 0 ||
+		qlo * ray[3] - ray[5] * x - ray[1] > 0 ||
+		ray[2] - ray[4] * x + ray[3] * y > 0 ||
+		ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
+		ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
+		ray[4] * (x + range) - ray[3] * (y + range) - ray[2] > 0)
+		return false;
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret))
+			return p;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain1(n->quad[0], x, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain1(n->quad[1], x + range, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain1(n->quad[2], x, y + range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain1(n->quad[3], x + range, y + range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (ray[0] + qlo * ray[4] - ray[5] * y > 0 ||
+		ray[1] - qlo * ray[3] + ray[5] * (x + range) > 0 ||
+		ray[2] + ray[3] * (y + range) - ray[4] * (x + range) > 0 ||
+		ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
+		qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
+		ray[4] * x - ray[3] * y - ray[2] > 0)
+		return false;
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret))
+			return p;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain2(n->quad[0], x, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain2(n->quad[1], x + range, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain2(n->quad[2], x, y + range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain2(n->quad[3], x + range, y + range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (qlo * ray[3] - ray[5] * x - ray[1] > 0 ||
+		ray[0] + qlo * ray[4] - ray[5] * y > 0 ||
+		ray[2] - ray[4] * (x + range) + ray[3] * y > 0 ||
+		ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
+		ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
+		ray[4] * x - ray[3] * (y + range) - ray[2] > 0)
+		return false;
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret))
+			return p;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain3(n->quad[0], x, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain3(n->quad[1], x + range, y, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain3(n->quad[2], x, y + range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain3(n->quad[3], x + range, y + range, range, ray, ret);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4])
+{
+	// p should be projected to the BOTTOM plane!
+
+	// normalize V so we don't need to divide later
+	double len = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+	double ray[] =
+	{
+		p[1] * v[2] - p[2] * v[1],
+		p[2] * v[0] - p[0] * v[2],
+		p[0] * v[1] - p[1] * v[0],
+		v[0], v[1], v[2],
+		p[0], p[1], p[2], p[0] + v[0], p[1] + v[1], p[2] + v[2], 1.0/len // extras
+	};
+
+	int sign_case = 0;
+
+	if (v[0] >= 0)
+		sign_case |= 1;
+	if (v[1] >= 0)
+		sign_case |= 2;
+	if (v[2] >= 0)
+		sign_case |= 4;
+
+	assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
+
+	static Patch* (* const func_vect[])(QuadItem* q, int x, int y, int range, double ray[6], double ret[4]) =
+	{
+		HitTerrain0, 
+		HitTerrain1, 
+		HitTerrain2, 
+		HitTerrain3
+	};
+
+	ret[0] = p[0];
+	ret[1] = p[1];
+	ret[2] = p[2];
+
+	return func_vect[sign_case](t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, ray, ret);
+}
+
