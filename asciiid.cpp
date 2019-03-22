@@ -14,6 +14,7 @@
 #include "gl.h"
 
 #include "imgui/imgui.h"
+#include "imgui/imgui_internal.h" // beta: ImGuiItemFlags_Disabled
 #include "imgui_impl_opengl3.h"
 
 #include "asciiid_platform.h"
@@ -22,6 +23,25 @@
 #include "terrain.h"
 
 #include "matrix.h"
+
+
+
+
+static unsigned int g_seed = 0x87654321;
+
+// Used to seed the generator.           
+inline void fast_srand(int seed) {
+	g_seed = seed;
+}
+
+// Compute a pseudorandom integer.
+// Output value in range [0, 32767]
+inline int fast_rand(void) {
+	g_seed = (214013 * g_seed + 2531011);
+	return (g_seed >> 16) & 0x7FFF;
+}
+
+
 
 Terrain* terrain = 0;
 
@@ -222,6 +242,8 @@ struct RenderContext
 		draws = 0;
 		changes = 0;
 		page_tex = 0;
+
+		render_time = a3dGetTime();
 	}
 
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie)
@@ -310,6 +332,8 @@ struct RenderContext
 		glBindTextureUnit(0,0);
 		glBindVertexArray(0);
 		glUseProgram(0);
+
+		render_time = a3dGetTime() - render_time;
 	}
 
 	GLint tm_loc; // uniform
@@ -325,6 +349,7 @@ struct RenderContext
 	int patches; // rendered stats
 	int draws;
 	int changes;
+	uint64_t render_time;
 };
 
 RenderContext render_context;
@@ -405,14 +430,37 @@ void my_render()
 
 		ImGui::SliderFloat("PITCH", &rot_pitch, +30.0f, +90.0f);
 
-		if (ImGui::SliderFloat("YAW", &rot_yaw, -180.0f, +180.0f))
-
-		ImGui::SameLine();
+		ImGui::SliderFloat("YAW", &rot_yaw, -180.0f, +180.0f); ImGui::SameLine();
 		ImGui::Checkbox("Spin", &spin_anim);
 
 		ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
 
 		ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
+		ImGui::Text("RENDER TIME: %I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
+
+		static int paint_mode=0;
+
+		ImGui::RadioButton("VIEW POSITION", &paint_mode, 0); // or hold 'space' to interrupt current mode
+		ImGui::RadioButton("PAINT", &paint_mode, 1); ImGui::SameLine();
+		ImGui::RadioButton("SCULPT", &paint_mode, 2); ImGui::SameLine();
+		ImGui::RadioButton("SMOOTH", &paint_mode, 3);
+
+		if (paint_mode == 0)
+		{
+			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		}
+
+		static int tool_mode = 0;
+		ImGui::RadioButton("POINT", &tool_mode, 0); ImGui::SameLine();
+		ImGui::RadioButton("LINE", &tool_mode, 1); ImGui::SameLine();
+		ImGui::RadioButton("OVAL", &tool_mode, 2);
+
+		if (paint_mode == 0)
+		{
+			ImGui::PopStyleVar();
+			ImGui::PopItemFlag();
+		}
 
 		ImGui::End();
 
@@ -487,11 +535,12 @@ void my_render()
 	double pitch = rot_pitch * (M_PI / 180);
 	double yaw = rot_yaw * (M_PI / 180);
 
+
 	if (spin_anim)
 	{
 		rot_yaw += 0.1f;
 		if (rot_yaw > 180)
-			rot_yaw -= 180;
+			rot_yaw -= 360;
 	}
 
 	tm[0] = +cos(yaw)/rx;
@@ -508,7 +557,7 @@ void my_render()
 	tm[11] = 0;
 	tm[12] = -(pos_x * tm[0] + pos_y * tm[4] + pos_z * tm[8]);
 	tm[13] = -(pos_x * tm[1] + pos_y * tm[5] + pos_z * tm[9]);
-	tm[14] = -1.0 + .1;
+	tm[14] = -1.0;
 	tm[15] = 1.0;
 
 	// 4 clip planes in clip-space
@@ -539,28 +588,92 @@ void my_render()
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
-		/*
-		int rect[4] =
-		{
-			(int)(io.MousePos.x) - 16,
-			(int)(io.DisplaySize.y - io.MousePos.y) - 16,
-			(int)(io.MousePos.x) + 16,
-			(int)(io.DisplaySize.y - io.MousePos.y) + 16
-		};
-		// we are free to use mouse
-		glEnable(GL_SCISSOR_TEST);
-		glScissor(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
-		glClearColor(1, 1, 1, 1);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glDisable(GL_SCISSOR_TEST);
-		*/
-
 		// all coords in world space!
-		double hit[3];
-		double ray_p[3] = { 0x7F,0x7F,0 };
-		double ray_v[3] = { -1, -1, -1 };
+		double itm[16];
+		Invert(tm, itm);
+
+		double ray_p[4];
+		double ray_v[4];
+
+		// mouse ray
+		double clip_mouse[4] =
+		{
+			2.0 * io.MousePos.x / io.DisplaySize.x - 1.0,
+			1.0 - 2.0 * io.MousePos.y / io.DisplaySize.y,
+			-1, // floor
+			1
+		};
+
+		Product(itm, clip_mouse, ray_p);
+
+		clip_mouse[2] = -2; // under floor
+
+		Product(itm, clip_mouse, ray_v);
+
+		ray_v[0] -= ray_p[0];
+		ray_v[1] -= ray_p[1];
+		ray_v[2] -= ray_p[2];
+
+		double hit[4];
 
 		Patch* p = HitTerrain(terrain, ray_p, ray_v, hit);
+
+		if (p)
+		{
+			// now we will look for vertex...
+			// round xy to closest height sample and reshoot vertically
+
+			ray_p[0] = round(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
+			ray_p[1] = round(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
+			ray_p[2] = 0;
+
+			ray_v[0] = 0;
+			ray_v[1] = 0;
+			ray_v[2] = -1;
+
+			Patch* q = HitTerrain(terrain, ray_p, ray_v, hit);
+
+			if (q) // almost impossible to fail but let's be careful
+			{
+				// re-project to screen
+				hit[3] = 1;
+
+				double pos[4];
+				Product(tm, hit, pos);
+
+				pos[0] = (0.5 + 0.5*pos[0]) * io.DisplaySize.x;
+				pos[1] = (0.5 + 0.5*pos[1]) * io.DisplaySize.y;
+				pos[2] = 0.5 + 0.5*pos[2];
+
+				int rect[4] =
+				{
+					(int)(pos[0]) - 2,
+					(int)(pos[1]) - 2,
+					(int)(pos[0]) + 2,
+					(int)(pos[1]) + 2
+				};
+				// we are free to use mouse
+				glEnable(GL_SCISSOR_TEST);
+				glScissor(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
+				glClearColor(1, 0, 0, 1);
+				glClear(GL_COLOR_BUFFER_BIT);
+				glDisable(GL_SCISSOR_TEST);
+
+				// we need to handle 2 brush types differently:
+				// - drag & drop on Z axis
+				//   operate during 
+				// - XY paint brushes
+				//   operate when previous sample is different than current by more than brush spacing
+
+
+				// if previous sample is different than current by more than brush spacing
+				// - we should create/update/reuse patch matrix pointers covering brush area
+				// - update samples in patches using brush operator and weight
+				// - then these patches to gpu
+
+
+			}
+		}
 	}
 
 	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
@@ -678,12 +791,13 @@ void my_init()
 
 	for (int i = 0; i < num2; i++)
 	{
-		int r = (rand() + rand()*(RAND_MAX+1)) % n;
+		int r = (fast_rand() + fast_rand()*(RAND_MAX+1)) % n;
+
 		uint32_t uv = rnd[r];
 		rnd[r] = rnd[--n];
 		uint32_t u = uv % num1;
 		uint32_t v = uv / num1;
-		AddTerrainPatch(terrain, u, v, rand()&0x7F);
+		AddTerrainPatch(terrain, u, v, fast_rand()&0x7F);
 	}
 
 	pos_x = num1 * VISUAL_CELLS / 2;

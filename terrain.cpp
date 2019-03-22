@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include <malloc.h>
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 
@@ -969,73 +970,117 @@ void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, voi
 	}
 }
 
-bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[4])
+int triangle_intersections = 0; 
+static inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], double v2[3], double ret[3])
 {
-	static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
+	triangle_intersections++;
 
-	double* p0 = ray + 6;
-	double* p1 = ray + 9;
-	double inv_len = ray[12];
+	const double EPSILON = 0.0000001;
 
-	double bestlen = 1.e+10;
-	double bestpos[3] = { 0,0,-1 };
-	// simply check which depth sample is closest to the ray
-	for (int hy = 0; hy <= HEIGHT_CELLS; hy++)
+	double edge1[3] = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] };
+	double edge2[3] = { v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2] };
+
+	double h[3] = // rayVector.crossProduct(edge2);
 	{
-		for (int hx = 0; hx <= HEIGHT_CELLS; hx++)
+		ray[4] * edge2[2] - ray[5] * edge2[1],
+		ray[5] * edge2[0] - ray[3] * edge2[2],
+		ray[3] * edge2[1] - ray[4] * edge2[0]
+	};
+	
+	double a = // edge1.dotProduct(h);
+		edge1[0] * h[0] + edge1[1] * h[1] + edge1[2] * h[2];
+
+	if (a > -EPSILON && a < EPSILON)
+		return false;    // This ray is parallel to this vangle.
+
+	double f = 1.0 / a;
+	double s[3] = // rayOrigin - vertex0;
+	{
+		ray[6] - v0[0],
+		ray[7] - v0[1],
+		ray[8] - v0[2],
+	};
+
+	double u = // f * (s.dotProduct(h));
+		f * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
+
+	if (u < 0.0 || u > 1.0)
+		return false;
+
+	double q[3] = //s.crossProduct(edge1);
+	{
+		s[1] * edge1[2] - s[2] * edge1[1],
+		s[2] * edge1[0] - s[0] * edge1[2],
+		s[0] * edge1[1] - s[1] * edge1[0]
+	};
+
+	double v = // f * rayVector.dotProduct(q);
+		f * (ray[3] * q[0] + ray[4] * q[1] + ray[5] * q[2]);
+
+	if (v < 0.0 || u + v > 1.0)
+		return false;
+
+	// At this stage we can compute t to find out where the intersection point is on the line.
+
+	double t = //f * edge2.dotProduct(q);
+		f * (edge2[0] * q[0] + edge2[1] * q[1] + edge2[2] * q[2]);
+
+	// POSITIVE DIR OF RAY ONLY?
+	// if (t < EPSILON)
+	//	  return false;
+
+	ret[0] = ray[6] + ray[3] * t;
+	ret[1] = ray[7] + ray[4] * t;
+	ret[2] = ray[8] + ray[5] * t;
+	return true;
+}
+
+int hit_patch_tests = 0;
+bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
+{
+	hit_patch_tests ++;
+	static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
+	bool hit = false;
+
+	for (int hy = 0; hy < HEIGHT_CELLS; hy++)
+	{
+		for (int hx = 0; hx < HEIGHT_CELLS; hx++)
 		{
-			double v[3] =
+			double x0 = x + hx * sxy, x1 = x0 + sxy;
+			double y0 = y + hy * sxy, y1 = y0 + sxy;
+
+			double v[4][3] =
 			{
-				x + hx * sxy,
-				y + hy * sxy,
-				(double)p->height[hy][hx]
+				{x0,y0,(double)p->height[hy][hx]},
+				{x1,y0,(double)p->height[hy][hx+1]},
+				{x0,y1,(double)p->height[hy+1][hx]},
+				{x1,y1,(double)p->height[hy+1][hx+1]},
 			};
 
-			double vp0[3] =
-			{
-				v[0] - p0[0],
-				v[0] - p0[1],
-				v[0] - p0[2]
-			};
+			double r[3];
 
-			double vp1[3] =
+			if (RayIntersectsTriangle(ray, v[2], v[0], v[1], r) &&  r[2] > ret[2])
 			{
-				v[0] - p1[0],
-				v[0] - p1[1],
-				v[0] - p1[2]
-			};
+				hit |= 1;
+				ret[0] = r[0];
+				ret[1] = r[1];
+				ret[2] = r[2];
+			}
 
-			double c[3]=
+			if (RayIntersectsTriangle(ray, v[2], v[1], v[3], r) && r[2] > ret[2])
 			{
-				vp0[1] * vp1[2] - vp0[2] * vp1[1],
-				vp0[2] * vp1[0] - vp0[0] * vp1[2],
-				vp0[0] * vp1[1] - vp0[1] * vp1[0]
-			};
-
-			double sqrlen = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
-
-			if (sqrlen < bestlen)
-			{
-				bestlen = sqrlen;
-				bestpos[0] = v[0];
-				bestpos[1] = v[1];
-				bestpos[2] = v[2];
+				hit |= 1;
+				ret[0] = r[0];
+				ret[1] = r[1];
+				ret[2] = r[2];
 			}
 		}
 	}
 
-	if (bestpos[2] > ret[2])
-	{
-		ret[0] = bestpos[0];
-		ret[1] = bestpos[1];
-		ret[2] = bestpos[2];
-		return true;
-	}
-
-	return false;
+	return hit;
 }
 
-Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1043,8 +1088,8 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (ray[1] - qlo * ray[3] + ray[5] * (x + range) > 0 ||
 		ray[5] * (y + range) - ray[0] - qlo * ray[4] > 0 ||
 		ray[2] - ray[4] * x + ray[3] * (y + range) > 0 ||
-		ray[0] + qhi * ray[4] - ray[5] * (y + range) > 0 ||
-		qhi * ray[3] - ray[5] * (x + range) - ray[1] > 0 ||
+		qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
+		ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
 		ray[4] * (x + range) - ray[3] * y - ray[2] > 0)
 		return false;
 
@@ -1053,6 +1098,8 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 		Patch* p = (Patch*)q;
 		if (HitPatch(p, x, y, ray, ret))
 			return p;
+		else
+			return 0;
 	}
 
 	// recurse
@@ -1087,7 +1134,7 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1105,6 +1152,8 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 		Patch* p = (Patch*)q;
 		if (HitPatch(p, x, y, ray, ret))
 			return p;
+		else
+			return 0;
 	}
 
 	// recurse
@@ -1139,7 +1188,7 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1157,6 +1206,8 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 		Patch* p = (Patch*)q;
 		if (HitPatch(p, x, y, ray, ret))
 			return p;
+		else
+			return 0;
 	}
 
 	// recurse
@@ -1191,7 +1242,7 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double ret[4])
+Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1209,6 +1260,8 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 		Patch* p = (Patch*)q;
 		if (HitPatch(p, x, y, ray, ret))
 			return p;
+		else
+			return 0;
 	}
 
 	// recurse
@@ -1243,19 +1296,18 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4])
+Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 {
 	// p should be projected to the BOTTOM plane!
 
 	// normalize V so we don't need to divide later
-	double len = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 	double ray[] =
 	{
 		p[1] * v[2] - p[2] * v[1],
 		p[2] * v[0] - p[0] * v[2],
 		p[0] * v[1] - p[1] * v[0],
 		v[0], v[1], v[2],
-		p[0], p[1], p[2], p[0] + v[0], p[1] + v[1], p[2] + v[2], 1.0/len // extras
+		p[0], p[1], p[2] // used by triangle-ray intersection
 	};
 
 	int sign_case = 0;
@@ -1269,7 +1321,7 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4])
 
 	assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
 
-	static Patch* (* const func_vect[])(QuadItem* q, int x, int y, int range, double ray[6], double ret[4]) =
+	static Patch* (* const func_vect[])(QuadItem* q, int x, int y, int range, double ray[6], double ret[3]) =
 	{
 		HitTerrain0, 
 		HitTerrain1, 
@@ -1281,6 +1333,9 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4])
 	ret[1] = p[1];
 	ret[2] = p[2];
 
-	return func_vect[sign_case](t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, ray, ret);
+	hit_patch_tests = 0;
+	triangle_intersections = 0;
+	Patch* patch = func_vect[sign_case](t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, ray, ret);
+	return patch;
 }
 
