@@ -476,10 +476,8 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 			else
 			if (w == 2 || w == 3)
 			{
-				/*
 				if (platform_api.render)
 					platform_api.render();
-				*/
 			}
 			break;
 		}
@@ -649,6 +647,15 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 	return DefWindowProc(h, m, w, l);
 }
 
+#include <stdio.h>
+/*
+LONG WINAPI a3dExceptionProc(EXCEPTION_POINTERS *ExceptionInfo)
+{
+	printf("Exception has been ignored!\n");
+	return EXCEPTION_CONTINUE_EXECUTION;
+}
+*/
+
 // creates window & initialized GL
 bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/)
 {
@@ -672,11 +679,11 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	memset(&platform_api, 0, sizeof(PlatformInterface));
 
-	DWORD styles = WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+	DWORD styles = WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 	styles |= WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
 
 	HWND h = CreateWindow(wc.lpszClassName, L"", styles,
-		CW_USEDEFAULT, CW_USEDEFAULT, 640, 480, 
+		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
 		0, 0, wc.hInstance, 0);
 
 	if (!h)
@@ -684,6 +691,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		UnregisterClass(wc.lpszClassName, wc.hInstance);
 		return 0;
 	}
+
+	styles |= WS_POPUP; // add it later (hack to make CW_USEDEFAULT working)
+	SetWindowLong(h, GWL_STYLE, styles);
 
 	PIXELFORMATDESCRIPTOR pfd;
 	memset(&pfd, 0, sizeof(PIXELFORMATDESCRIPTOR));
@@ -781,6 +791,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (platform_api.resize)
 		platform_api.resize(r.right,r.bottom);
 
+	// LPTOP_LEVEL_EXCEPTION_FILTER old_exception_proc = SetUnhandledExceptionFilter(a3dExceptionProc);
+
 	while (!closing)
 	{
 		MSG msg;
@@ -799,6 +811,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	ReleaseDC(h, dc);
 	DestroyWindow(h);
 	UnregisterClass(wc.lpszClassName, wc.hInstance);
+
+	// SetUnhandledExceptionFilter(old_exception_proc);
 
 	return true;
 }

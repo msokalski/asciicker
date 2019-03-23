@@ -51,7 +51,6 @@ float rot_pitch = 30;//90;
 bool spin_anim = false;
 float pos_x = 0, pos_y = 0, pos_z = 0;
 
-
 #define CODE(...) #__VA_ARGS__
 
 struct RenderContext
@@ -96,7 +95,9 @@ struct RenderContext
 			uniform mat4 tm;
 
 			in ivec4 xyuv[];
-			out vec3 uv_h;
+
+			out vec2 world_xy;
+			out vec3 uvh;
 			flat out vec3 normal;
 			
 			void main()
@@ -134,8 +135,10 @@ struct RenderContext
 
 						for (int i = 0; i < 4; i++)
 						{
-							uv_h = xyz[i] - ivec3(xyuv[0].xy, 0);
-							uv_h /= vec3(4.0,4.0,16.0);
+							world_xy = xyz[i].xy;
+							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
+							uvh.xyz /= vec3(4.0,4.0,16.0);
+
 							gl_Position = tm * vec4(xyz[i], 1.0);
 							EmitVertex();
 						}
@@ -151,8 +154,10 @@ struct RenderContext
 		
 			layout(location = 0) out vec4 color;
 
+			uniform vec4 br;
 			flat in vec3 normal;
-			in vec3 uv_h;
+			in vec3 uvh;
+			in vec2 world_xy;
 			
 			void main()
 			{
@@ -161,17 +166,44 @@ struct RenderContext
 				float light = max(0.0, dot(light_pos, normalize(normal)));
 				color = vec4(vec3(light),1.0);
 
-				if (uv_h.x <0.02 || uv_h.y <0.02 || uv_h.x > 3.98 || uv_h.y > 3.98)
+				/*
+				if (uvh.x <0.02 || uvh.y <0.02 || uvh.x > 3.98 || uvh.y > 3.98)
 					color.rgb *= 0.25;
+				*/
 
-				vec2 pq = fract(uv_h.xy);
-				if (pq.x <0.01 || pq.y <0.01 || pq.x > 0.99 || pq.y > 0.99)
-					color.rgb *= 0.25;
 
-				pq = fract(4.0*uv_h.xy);
-				if (pq.x <0.01 || pq.y <0.01 || pq.x > 0.99 || pq.y > 0.99)
-					color.rgb *= 0.25;
+				vec2 duv = fwidth(uvh.xy);
+				if (duv.x < 0.25)
+					color.rgb *= smoothstep(0, duv.x, uvh.x) * smoothstep(4.0, 4.0 - duv.x, uvh.x);
+				if (duv.y < 0.25)
+					color.rgb *= smoothstep(0, duv.y, uvh.y) * smoothstep(4.0, 4.0 - duv.y, uvh.y);
 
+				vec2 pq = fract(uvh.xy);
+				if (duv.x < 0.125)
+					color.rgb *= smoothstep(0, duv.x, pq.x) * smoothstep(1.0, 1.0 - duv.x, pq.x);
+				if (duv.y < 0.125)
+					color.rgb *= smoothstep(0, duv.y, pq.y) * smoothstep(1.0, 1.0 - duv.y, pq.y);
+
+				pq = fract(4.0*uvh.xy);
+				if (duv.x < 0.0625)
+					color.rgb *= smoothstep(0, duv.x, pq.x) * smoothstep(1.0, 1.0 - duv.x, pq.x);
+				if (duv.y < 0.0625)
+					color.rgb *= smoothstep(0, duv.y, pq.y) * smoothstep(1.0, 1.0 - duv.y, pq.y);
+
+				// brush silhouette
+				if (br.w > 0.0)
+				{
+					float len = length(world_xy - br.xy);
+					float alf = (br.z - len) / br.z;
+					alf *= br.w;
+
+					float dalf = fwidth(alf);
+					float silh = smoothstep(-dalf, 0, alf) * smoothstep(+dalf, 0, alf);
+
+					alf = max(0.0, alf);
+					color.gb *= 1.0 - alf;
+					color.rgb *= 1.0 - silh*0.25;
+				}
 			}
 		);
 
@@ -216,6 +248,7 @@ struct RenderContext
 
 		tm_loc = glGetUniformLocation(prg, "tm");
 		z_tex_loc = glGetUniformLocation(prg, "z_tex");
+		br_loc = glGetUniformLocation(prg, "br");
 	}
 
 	void Delete()
@@ -225,16 +258,22 @@ struct RenderContext
 		glDeleteProgram(prg);
 	}
 
-	void BeginPatches(double* tm)
+	void BeginPatches(const double* tm, const float* br)
 	{
+		glUseProgram(prg);
+
+		static const float br_off[] = { 0,0,1,0 };
+		if (!br)
+			br = br_off;
+
+		//glUniformMatrix4dv(tm_loc, 1, GL_FALSE, tm);
 		float ftm[16];// NV bug! workaround
 		for (int i = 0; i < 16; i++)
 			ftm[i] = (float)tm[i];
-		int err = glGetError();
-		glUseProgram(prg);
-		//glUniformMatrix4dv(tm_loc, 1, GL_FALSE, tm);
+
 		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
 		glUniform1i(z_tex_loc, 0);
+		glUniform4fv(br_loc, 1, br);
 		glBindVertexArray(vao);
 
 		head = 0;
@@ -338,6 +377,7 @@ struct RenderContext
 
 	GLint tm_loc; // uniform
 	GLint z_tex_loc;
+	GLint br_loc;
 
 	GLuint prg;
 	GLuint vao;
@@ -411,6 +451,9 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 
 void my_render()
 {
+	static float br_xyra[4] = { 0,0, 4, 1.0 };
+	bool br_enabled = false;
+
 	// THINGZ
 	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	{
@@ -426,6 +469,26 @@ void my_render()
 			ImGui::NewFrame();
 		}
 
+		ImGui::BeginMainMenuBar();
+		if (ImGui::BeginMenu("Examples"))
+		{
+			{
+				static bool s = false;
+				ImGui::MenuItem("gogo", NULL, &s);
+			}
+			{
+				static bool s = false;
+				ImGui::MenuItem("zogo", NULL, &s);
+			}
+			{
+				static bool s = false;
+				ImGui::MenuItem("fogo", NULL, &s);
+			}
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndMainMenuBar();
+
 		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
 
 		ImGui::SliderFloat("PITCH", &rot_pitch, +30.0f, +90.0f);
@@ -436,7 +499,10 @@ void my_render()
 		ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
 
 		ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
-		ImGui::Text("RENDER TIME: %I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
+		ImGui::Text("RENDER TIME: %6I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
+
+		ImGui::SliderFloat("BRUSH RADIUS", br_xyra + 2, 1, 100);
+		ImGui::SliderFloat("BRUSH ALPHA", br_xyra + 3, 0, 1);
 
 		static int paint_mode=0;
 
@@ -560,31 +626,7 @@ void my_render()
 	tm[14] = -1.0;
 	tm[15] = 1.0;
 
-	// 4 clip planes in clip-space
-
-	double clip_left[4] =   { 1, 0, 0,+1 };
-	double clip_right[4] =  {-1, 0, 0,+1 };
-	double clip_bottom[4] = { 0, 1, 0,+1 };
-	double clip_top[4] =    { 0,-1, 0,+1 };
-
-	// transform them to world-space (mul by tm^-1)
-
-	double clip_world[4][4];
-	TransposeProduct(tm, clip_left, clip_world[0]);
-	TransposeProduct(tm, clip_right, clip_world[1]);
-	TransposeProduct(tm, clip_bottom, clip_world[2]);
-	TransposeProduct(tm, clip_top, clip_world[3]);
-
-	int planes = 4;
-	int view_flags = 0xAA; // should contain only bits that face viewing direction
-
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_GEQUAL);
-	rc->BeginPatches(tm);
-	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
-	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
-	rc->EndPatches();
-	glDisable(GL_DEPTH_TEST);
+	br_enabled = false;
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -620,6 +662,10 @@ void my_render()
 
 		if (p)
 		{
+			br_enabled = true;
+
+			br_xyra[0] = (float)hit[0];
+			br_xyra[1] = (float)hit[1];
 			// now we will look for vertex...
 			// round xy to closest height sample and reshoot vertically
 
@@ -652,29 +698,44 @@ void my_render()
 					(int)(pos[0]) + 2,
 					(int)(pos[1]) + 2
 				};
-				// we are free to use mouse
+
+				/*
 				glEnable(GL_SCISSOR_TEST);
 				glScissor(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
 				glClearColor(1, 0, 0, 1);
 				glClear(GL_COLOR_BUFFER_BIT);
 				glDisable(GL_SCISSOR_TEST);
-
-				// we need to handle 2 brush types differently:
-				// - drag & drop on Z axis
-				//   operate during 
-				// - XY paint brushes
-				//   operate when previous sample is different than current by more than brush spacing
-
-
-				// if previous sample is different than current by more than brush spacing
-				// - we should create/update/reuse patch matrix pointers covering brush area
-				// - update samples in patches using brush operator and weight
-				// - then these patches to gpu
-
-
+				*/
 			}
 		}
 	}
+
+	// 4 clip planes in clip-space
+
+	double clip_left[4] =   { 1, 0, 0,+1 };
+	double clip_right[4] =  {-1, 0, 0,+1 };
+	double clip_bottom[4] = { 0, 1, 0,+1 };
+	double clip_top[4] =    { 0,-1, 0,+1 };
+
+	// transform them to world-space (mul by tm^-1)
+
+	double clip_world[4][4];
+	TransposeProduct(tm, clip_left, clip_world[0]);
+	TransposeProduct(tm, clip_right, clip_world[1]);
+	TransposeProduct(tm, clip_bottom, clip_world[2]);
+	TransposeProduct(tm, clip_top, clip_world[3]);
+
+	int planes = 4;
+	int view_flags = 0xAA; // should contain only bits that face viewing direction
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_GEQUAL);
+	rc->BeginPatches(tm, br_enabled ? br_xyra : 0);
+	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
+	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
+	rc->EndPatches();
+	glDisable(GL_DEPTH_TEST);
+
 
 	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
 	
@@ -806,7 +867,8 @@ void my_init()
 
 	a3dSetTitle(L"ASCIIID");
 
-	int full[] = { -1280,0,800,600};
+	//int full[] = { -1280,0,800,600};
+	int full[] = { 0,0,1920,1080};
 	a3dSetRect(full, false);
 
 	a3dSetVisible(true);
