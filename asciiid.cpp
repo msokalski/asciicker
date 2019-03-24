@@ -131,7 +131,7 @@ struct RenderContext
 						xyz[3] = ivec3(xyuv[0].xy + xy*dxy, z);
 
 						normal = cross(vec3(xyz[3] - xyz[0]), vec3(xyz[2] - xyz[1]));
-						normal.xy *= 1.0 / 16.0; // zscale
+						normal.xy *= 1.0 / 4.0; // isn't zscale = 1/16 ?
 
 						for (int i = 0; i < 4; i++)
 						{
@@ -161,34 +161,53 @@ struct RenderContext
 			
 			void main()
 			{
-				vec3 light_pos = normalize(vec3(1, 1, 1));
+				vec3 light_pos = normalize(vec3(0, 0, 1));
 				//float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
-				float light = max(0.0, dot(light_pos, normalize(normal)));
+				float light = 0.5 + 0.5*max(0.0, dot(light_pos, normalize(normal)));
 				color = vec4(vec3(light),1.0);
-
-				/*
-				if (uvh.x <0.02 || uvh.y <0.02 || uvh.x > 3.98 || uvh.y > 3.98)
-					color.rgb *= 0.25;
-				*/
-
 
 				vec2 duv = fwidth(uvh.xy);
 				if (duv.x < 0.25)
-					color.rgb *= smoothstep(0, duv.x, uvh.x) * smoothstep(4.0, 4.0 - duv.x, uvh.x);
+				{
+					float a = min(1.0, -log2(duv.x * 4));
+					float m = smoothstep(0, duv.x, uvh.x) * smoothstep(4.0, 4.0 - duv.x, uvh.x);
+					color.rgb *= mix(1.0,m,a);
+				}
 				if (duv.y < 0.25)
-					color.rgb *= smoothstep(0, duv.y, uvh.y) * smoothstep(4.0, 4.0 - duv.y, uvh.y);
+				{
+					float a = min(1.0, -log2(duv.y * 4));
+					float m = smoothstep(0, duv.y, uvh.y) * smoothstep(4.0, 4.0 - duv.y, uvh.y);
+					color.rgb *= mix(1.0, m, a);
+				}
 
 				vec2 pq = fract(uvh.xy);
 				if (duv.x < 0.125)
-					color.rgb *= smoothstep(0, duv.x, pq.x) * smoothstep(1.0, 1.0 - duv.x, pq.x);
+				{
+					float a = min(1.0, -log2(duv.x * 8));
+					float m = smoothstep(0, 2.0*duv.x, pq.x) * smoothstep(1.0, 1.0 - 2.0*duv.x, pq.x);
+					color.rgb *= mix(1.0, m, a);
+				}
 				if (duv.y < 0.125)
-					color.rgb *= smoothstep(0, duv.y, pq.y) * smoothstep(1.0, 1.0 - duv.y, pq.y);
+				{
+					float a = min(1.0, -log2(duv.y * 8));
+					float m = smoothstep(0, 2.0*duv.y, pq.y) * smoothstep(1.0, 1.0 - 2.0*duv.y, pq.y);
+					color.rgb *= mix(1.0, m, a);
+				}
 
 				pq = fract(4.0*uvh.xy);
 				if (duv.x < 0.0625)
-					color.rgb *= smoothstep(0, duv.x, pq.x) * smoothstep(1.0, 1.0 - duv.x, pq.x);
+				{
+					float a = min(1.0, -log2(duv.x * 16));
+					float m = smoothstep(0, 4.0*duv.x, pq.x) * smoothstep(1.0, 1.0 - 4.0*duv.x, pq.x);
+					color.rgb *= mix(1.0, m, a);
+				}
 				if (duv.y < 0.0625)
-					color.rgb *= smoothstep(0, duv.y, pq.y) * smoothstep(1.0, 1.0 - duv.y, pq.y);
+				{
+					float a = min(1.0, -log2(duv.y * 16));
+					float m = smoothstep(0, 4.0*duv.y, pq.y) * smoothstep(1.0, 1.0 - 4.0*duv.y, pq.y);
+					color.rgb *= mix(1.0, m, a);
+				}
+
 
 				// brush silhouette
 				if (br.w > 0.0)
@@ -666,46 +685,32 @@ void my_render()
 
 			br_xyra[0] = (float)hit[0];
 			br_xyra[1] = (float)hit[1];
-			// now we will look for vertex...
-			// round xy to closest height sample and reshoot vertically
 
-			ray_p[0] = round(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
-			ray_p[1] = round(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
-			ray_p[2] = 0;
-
-			ray_v[0] = 0;
-			ray_v[1] = 0;
-			ray_v[2] = -1;
-
-			Patch* q = HitTerrain(terrain, ray_p, ray_v, hit);
-
-			if (q) // almost impossible to fail but let's be careful
+			if (io.MouseDown[0])
 			{
-				// re-project to screen
-				hit[3] = 1;
+				// apply brush
+				// loop over neighbors of patch p in brush's radius rounded up
+				// for every height sample calc alpha (same way as shader does)
+				// and apply some modification weighted by alpha
 
-				double pos[4];
-				Product(tm, hit, pos);
+				// - in paint mode we render alpha to alpha TexHeap
+				//   it is also used during rendering to have wysiwyg
+				// - on drop we readback alpha TexHeap allocs and apply
+				//   paint to terrain in same way
 
-				pos[0] = (0.5 + 0.5*pos[0]) * io.DisplaySize.x;
-				pos[1] = (0.5 + 0.5*pos[1]) * io.DisplaySize.y;
-				pos[2] = 0.5 + 0.5*pos[2];
+				// - in sculpt mode during z-drag we update 'edit' uniform
+				//   it is used to render preview, 
+				// - on drop we do same on terrain data (once)
 
-				int rect[4] =
+				double brush_planes[][4]=
 				{
-					(int)(pos[0]) - 2,
-					(int)(pos[1]) - 2,
-					(int)(pos[0]) + 2,
-					(int)(pos[1]) + 2
+					{ 1,0,0, br_xyra[2] - br_xyra[0] },
+					{-1,0,0, br_xyra[2] - br_xyra[0] },
+					{ 1,0,0, br_xyra[2] - br_xyra[1] },
+					{-1,0,0, br_xyra[2] - br_xyra[1] }
 				};
 
-				/*
-				glEnable(GL_SCISSOR_TEST);
-				glScissor(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
-				glClearColor(1, 0, 0, 1);
-				glClear(GL_COLOR_BUFFER_BIT);
-				glDisable(GL_SCISSOR_TEST);
-				*/
+				//QueryTerrain(terrain,4, brush_planes, 0, CB::RaiseHeight, )
 			}
 		}
 	}
