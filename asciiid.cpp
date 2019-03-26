@@ -45,11 +45,27 @@ inline int fast_rand(void) {
 
 Terrain* terrain = 0;
 
-float font_size = 1;// 0.125;// 16; // so every visual cell appears as 16px
+float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
 bool spin_anim = false;
 float pos_x = 0, pos_y = 0, pos_z = 0;
+int mouse_in = 0;
+int panning = 0;
+int panning_x = 0;
+int panning_y = 0;
+double panning_dx = 0;
+double panning_dy = 0;
+
+int painting = 0;
+float br_xyra[4] = { 0,0, 10, 0.5 };
+
+// these are to keep constant 25% of blobsize distances between stamps
+double paint_pos_z = 0; // always keep mouse on this level
+double paint_last_x=0, paint_last_y=0; // last coord of mouse AFTER last stamp
+double stamp_last_x=0, stamp_last_y=0; // last position of stamp rasterization
+
+uint64_t g_Time; // in microsecs
 
 #define CODE(...) #__VA_ARGS__
 
@@ -91,6 +107,7 @@ struct RenderContext
 			layout(points) in;
 			layout(triangle_strip, max_vertices = 64) out;
 
+			uniform vec4 br;
 			uniform usampler2D z_tex;
 			uniform mat4 tm;
 
@@ -109,6 +126,8 @@ struct RenderContext
 				ivec3 xyz[4];
 
 				int dxy = 4;
+
+				float pfi = log(0.1) / (2.0*br.z*br.z);
 
 				for (int y = 0; y < 4; y++)
 				{
@@ -130,14 +149,25 @@ struct RenderContext
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
 						xyz[3] = ivec3(xyuv[0].xy + xy*dxy, z);
 
+						if (br.w != 0.0)
+						{
+							for (int i = 0; i < 4; i++)
+							{
+								vec2 d = xyz[i].xy - br.xy;
+								float gauss = exp(pfi*dot(d, d)) * br.w;
+								xyz[i].z += int(round(gauss * 256));
+								xyz[i].z = clamp(xyz[i].z, 0, 0xffff);
+							}
+						}
+						
 						normal = cross(vec3(xyz[3] - xyz[0]), vec3(xyz[2] - xyz[1]));
-						normal.xy *= 1.0 / 4.0; // isn't zscale = 1/16 ?
+						normal.xy *= 1.0 / 16.0; // isn't zscale = 1/16 ?
 
 						for (int i = 0; i < 4; i++)
 						{
 							world_xy = xyz[i].xy;
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
-							uvh.xyz /= vec3(4.0,4.0,16.0);
+							uvh.xyz /= vec3(4.0, 4.0, 16.0);
 
 							gl_Position = tm * vec4(xyz[i], 1.0);
 							EmitVertex();
@@ -161,9 +191,9 @@ struct RenderContext
 			
 			void main()
 			{
-				vec3 light_pos = normalize(vec3(0, 0, 1));
+				vec3 light_pos = normalize(vec3(1, 0, 0));
 				//float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
-				float light = 0.5 + 0.5*max(0.0, dot(light_pos, normalize(normal)));
+				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
 				color = vec4(vec3(light),1.0);
 
 				vec2 duv = fwidth(uvh.xy);
@@ -209,12 +239,12 @@ struct RenderContext
 				}
 
 
-				// brush silhouette
-				if (br.w > 0.0)
+				// brush preview
+				if (br.w != 0.0)
 				{
-					float len = length(world_xy - br.xy);
+					float len = length(world_xy - br.xy) / 2.33;
 					float alf = (br.z - len) / br.z;
-					alf *= br.w;
+					alf *= abs(br.w);
 
 					float dalf = fwidth(alf);
 					float silh = smoothstep(-dalf, 0, alf) * smoothstep(+dalf, 0, alf);
@@ -413,10 +443,6 @@ struct RenderContext
 
 RenderContext render_context;
 
-int mouse_in = 0;
-uint64_t g_Time; // in microsecs
-
-
 void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
 {
 	static const char* source_str[] = // 0x8246 - 0x824B
@@ -468,9 +494,46 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
 }
 
+static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
+{
+	double* xy = (double*)cookie;
+	uint16_t* map = GetTerrainHeightMap(p);
+
+	double pfi = log(0.1) / (2.0*br_xyra[2] * br_xyra[2]);
+	const static double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
+
+	for (int i = 0, hy = 0; hy <= HEIGHT_CELLS; hy++)
+	{
+		double dy = y + sxy * hy - xy[1];
+		dy *= dy;
+		for (int hx = 0; hx <= HEIGHT_CELLS; hx++, i++)
+		{
+			double dx = x + sxy * hx - xy[0];
+			dx *= dx;
+
+			double gauss = exp(pfi*(dx+dy)) * br_xyra[3];
+			map[i] += (int)(round(gauss * 256));
+		}
+	}
+
+	TexAlloc* ta = GetTerrainTexAlloc(p);
+	UpdateTerrainPatch(p);
+}
+
+void Stamp(double x, double y)
+{
+	// query all patches int radial range br_xyra[2] from x,y
+	// get their heightmaps apply brush on height samples and update TexHeap pages 
+
+	double thresh = 1.0 / 513; 	// we need to query radius at which we have gauss < 1/512
+	double r = sqrt(2.0 * log(thresh / fabs(br_xyra[3])) / log(0.1) ) * br_xyra[2];
+
+	double xy[2] = { x,y };
+	QueryTerrain(terrain, x, y, r, 0x00, StampCB, xy);
+}
+
 void my_render()
 {
-	static float br_xyra[4] = { 0,0, 4, 1.0 };
 	bool br_enabled = false;
 
 	// THINGZ
@@ -520,8 +583,8 @@ void my_render()
 		ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
 		ImGui::Text("RENDER TIME: %6I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
 
-		ImGui::SliderFloat("BRUSH RADIUS", br_xyra + 2, 1, 100);
-		ImGui::SliderFloat("BRUSH ALPHA", br_xyra + 3, 0, 1);
+		ImGui::SliderFloat("BRUSH RADIUS", br_xyra + 2, 1, 100*16);
+		ImGui::SliderFloat("BRUSH ALPHA", br_xyra + 3, -1, 1);
 
 		static int paint_mode=0;
 
@@ -628,6 +691,25 @@ void my_render()
 			rot_yaw -= 360;
 	}
 
+	if (!io.MouseDown[0])
+	{
+		painting = 0;
+	}
+
+	if (!io.WantCaptureMouse && panning)
+	{
+		double mdx = panning_x - round(io.MousePos.x);
+		double mdy = - (panning_y - round(io.MousePos.y)) / sin(pitch);
+		pos_x = panning_dx + (mdx*cos(yaw) - mdy*sin(yaw))/font_size;
+		pos_y = panning_dy + (mdx*sin(yaw) + mdy*cos(yaw))/font_size;
+
+		panning_x = round(io.MousePos.x);
+		panning_y = round(io.MousePos.y);
+
+		panning_dx = pos_x;
+		panning_dy = pos_y;
+	}
+
 	tm[0] = +cos(yaw)/rx;
 	tm[1] = -sin(yaw)*sin(pitch)/ry;
 	tm[2] = 0;
@@ -661,13 +743,13 @@ void my_render()
 		{
 			2.0 * io.MousePos.x / io.DisplaySize.x - 1.0,
 			1.0 - 2.0 * io.MousePos.y / io.DisplaySize.y,
-			-1, // floor
+			-1.1, // bit under floor
 			1
 		};
 
 		Product(itm, clip_mouse, ray_p);
 
-		clip_mouse[2] = -2; // under floor
+		clip_mouse[2] = -1.2; // bit under bit under floor
 
 		Product(itm, clip_mouse, ray_v);
 
@@ -681,37 +763,52 @@ void my_render()
 
 		if (p)
 		{
-			br_enabled = true;
-
 			br_xyra[0] = (float)hit[0];
 			br_xyra[1] = (float)hit[1];
 
 			if (io.MouseDown[0])
 			{
-				// apply brush
-				// loop over neighbors of patch p in brush's radius rounded up
-				// for every height sample calc alpha (same way as shader does)
-				// and apply some modification weighted by alpha
-
-				// - in paint mode we render alpha to alpha TexHeap
-				//   it is also used during rendering to have wysiwyg
-				// - on drop we readback alpha TexHeap allocs and apply
-				//   paint to terrain in same way
-
-				// - in sculpt mode during z-drag we update 'edit' uniform
-				//   it is used to render preview, 
-				// - on drop we do same on terrain data (once)
-
-				double brush_planes[][4]=
+				if (!painting)
 				{
-					{ 1,0,0, br_xyra[2] - br_xyra[0] },
-					{-1,0,0, br_xyra[2] - br_xyra[0] },
-					{ 1,0,0, br_xyra[2] - br_xyra[1] },
-					{-1,0,0, br_xyra[2] - br_xyra[1] }
-				};
+					painting = 1;
+					paint_pos_z = hit[2];
+					paint_last_x = hit[0];
+					paint_last_y = hit[1];
 
-				//QueryTerrain(terrain,4, brush_planes, 0, CB::RaiseHeight, )
+					Stamp(hit[0], hit[1]);
+					stamp_last_x = hit[0];
+					stamp_last_y = hit[1];
+				}
+				else
+				{
+					/*
+					double mdx = panning_x - round(io.MousePos.x);
+					double mdy = -(panning_y - round(io.MousePos.y)) / sin(pitch);
+
+					double mouse_x = paint_last_x + (mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+					double mouse_y = paint_last_y + (mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+
+					mdx = mouse_x - paint_last_x;
+					mdy = mouse_y - paint_last_y;
+
+					double len = sqrt(mdx*mdx + mdy * mdy);
+
+					if (paint_len + len > br_xyra[2])
+					{
+						// interpolate between mouse and oaint_last
+						// so stamp_pos gives len = br_xyra[2]
+						stamp_x =
+						stamp_y = ;
+					}
+
+					paint_last_x = mouse_x;
+					paint_last_y = mouse_y;
+					*/
+				}
 			}
+
+			if (!painting)
+				br_enabled = true;
 		}
 	}
 
@@ -719,8 +816,18 @@ void my_render()
 
 	double clip_left[4] =   { 1, 0, 0,+1 };
 	double clip_right[4] =  {-1, 0, 0,+1 };
-	double clip_bottom[4] = { 0, 1, 0,+1 };
-	double clip_top[4] =    { 0,-1, 0,+1 };
+	double clip_bottom[4] = { 0, 1, 0,+1 }; 
+	double clip_top[4] =    { 0,-1, 0,+1 }; // adjust by max brush descent
+
+	double brush_extent = cos(pitch) * br_xyra[3] * 256 * z_scale / ry;
+
+	// adjust by max brush ASCENT
+	if (br_xyra[3]>0)
+		clip_bottom[3] += brush_extent;
+
+	// adjust by max brush DESCENT
+	if (br_xyra[3]<0)
+		clip_top[3] -= brush_extent;
 
 	// transform them to world-space (mul by tm^-1)
 
@@ -785,9 +892,15 @@ void my_mouse(int x, int y, MouseInfo mi)
 			io.MouseDown[1] = false;
 			break;
 		case MouseInfo::MIDDLE_DN:
+			panning = 1;
+			panning_x = x;
+			panning_y = y;
+			panning_dx = pos_x;
+			panning_dy = pos_y;
 			io.MouseDown[2] = true;
 			break;
 		case MouseInfo::MIDDLE_UP:
+			panning = 0;
 			io.MouseDown[2] = false;
 			break;
 	}
@@ -863,7 +976,7 @@ void my_init()
 		rnd[r] = rnd[--n];
 		uint32_t u = uv % num1;
 		uint32_t v = uv / num1;
-		AddTerrainPatch(terrain, u, v, fast_rand()&0x7F);
+		AddTerrainPatch(terrain, u, v, 0/*fast_rand()&0x7F*/);
 	}
 
 	pos_x = num1 * VISUAL_CELLS / 2;
@@ -872,9 +985,9 @@ void my_init()
 
 	a3dSetTitle(L"ASCIIID");
 
-	//int full[] = { -1280,0,800,600};
-	int full[] = { 0,0,1920,1080};
-	a3dSetRect(full, false);
+	int full[] = { -1280,0,800,600};
+	//int full[] = { 0,0,1920,1080};
+	a3dSetRect(full, true);
 
 	a3dSetVisible(true);
 }

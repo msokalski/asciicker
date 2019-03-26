@@ -830,6 +830,27 @@ uint16_t* GetTerrainHeightMap(Patch* p)
 	return (uint16_t*)p->height;
 }
 
+void UpdateTerrainPatch(Patch* p)
+{
+	int lo = 0xffff;
+	int hi = 0x0000;
+
+	for (int y = 0; y <= HEIGHT_CELLS; y++)
+	{
+		for (int x = 0; x <= HEIGHT_CELLS; x++)
+		{
+			p->lo = p->height[y][x] < p->lo ? p->height[y][x] : p->lo;
+			p->hi = p->height[y][x] > p->hi ? p->height[y][x] : p->hi;
+		}
+	}
+
+#ifdef TEXHEAP
+	p->ta->Update(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height); 
+#endif
+
+	UpdateNodes(p);
+}
+
 #ifdef TEXHEAP
 TexHeap* GetTerrainTexHeap(Terrain* t)
 {
@@ -969,6 +990,91 @@ void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, voi
 		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, planes, pp, view_flags & 0xAA, cb, cookie);
 	}
 }
+
+
+void QueryTerrain(QuadItem* q, int x, int y, int range, const double xyr[3], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+{
+	int hit = 0;
+
+	double rr = xyr[2] * xyr[2];
+	double dx0 = xyr[0] - x; dx0 *= dx0;
+	double dy0 = xyr[1] - y; dy0 *= dy0;
+	double dx1 = xyr[0] - x - range; dx1 *= dx1;
+	double dy1 = xyr[1] - y - range; dy1 *= dy1;
+
+	if (dx0 + dy0 < rr) 
+		hit++;
+
+	if (dx1 + dy0 < rr)
+		hit++;
+
+	if (dx0 + dy1 < rr)
+		hit++;
+	
+	if (dx1 + dy1 < rr)
+		hit++;
+
+	if (!hit)
+	{
+		bool fit_x = xyr[0] >= x && xyr[0] <= x + range;
+		bool fit_y = xyr[1] >= y && xyr[1] <= y + range;
+
+		if (fit_y && xyr[0] >= x - xyr[2] && xyr[0] <= x + range + xyr[2] ||
+			fit_x && xyr[1] >= y - xyr[2] && xyr[1] <= y + range + xyr[2])
+		{
+			hit = 1;
+		}
+		else
+			return;
+	}
+
+	if (range == VISUAL_CELLS)
+	{
+		cb((Patch*)q, x, y, view_flags & ~q->flags, cookie);
+	}
+	else
+	{
+		Node* n = (Node*)q;
+		range >>= 1;
+
+		if (hit == 4)
+		{
+			if (n->quad[0])
+				QueryTerrain(n->quad[0], x, y, range, view_flags, cb, cookie);
+			if (n->quad[1])
+				QueryTerrain(n->quad[1], x + range, y, range, view_flags, cb, cookie);
+			if (n->quad[2])
+				QueryTerrain(n->quad[2], x, y + range, range, view_flags, cb, cookie);
+			if (n->quad[3])
+				QueryTerrain(n->quad[3], x + range, y + range, range, view_flags, cb, cookie);
+		}
+		else
+		{
+			if (n->quad[0])
+				QueryTerrain(n->quad[0], x, y, range, xyr, view_flags, cb, cookie);
+			if (n->quad[1])
+				QueryTerrain(n->quad[1], x + range, y, range, xyr, view_flags, cb, cookie);
+			if (n->quad[2])
+				QueryTerrain(n->quad[2], x, y + range, range, xyr, view_flags, cb, cookie);
+			if (n->quad[3])
+				QueryTerrain(n->quad[3], x + range, y + range, range, xyr, view_flags, cb, cookie);
+		}
+	}
+}
+
+void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+{
+	if (!t || !t->root)
+		return;
+
+	if (r <= 0)
+		return;
+
+	double xyr[3] = { x,y,r };
+
+	QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, xyr, view_flags & 0xAA, cb, cookie);
+}
+
 
 int triangle_intersections = 0; 
 static inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], double v2[3], double ret[3])
@@ -1299,8 +1405,6 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 {
 	// p should be projected to the BOTTOM plane!
-
-	// normalize V so we don't need to divide later
 	double ray[] =
 	{
 		p[1] * v[2] - p[2] * v[1],
