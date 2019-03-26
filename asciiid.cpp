@@ -51,19 +51,29 @@ float rot_pitch = 30;//90;
 bool spin_anim = false;
 float pos_x = 0, pos_y = 0, pos_z = 0;
 int mouse_in = 0;
+
 int panning = 0;
 int panning_x = 0;
 int panning_y = 0;
 double panning_dx = 0;
 double panning_dy = 0;
 
-int painting = 0;
-float br_xyra[4] = { 0,0, 10, 0.5 };
+float zoom_wheel = 0;
 
-// these are to keep constant 25% of blobsize distances between stamps
-double paint_pos_z = 0; // always keep mouse on this level
-double paint_last_x=0, paint_last_y=0; // last coord of mouse AFTER last stamp
-double stamp_last_x=0, stamp_last_y=0; // last position of stamp rasterization
+int spinning = 0;
+int spinning_x = 0;
+int spinning_y = 0;
+
+int painting = 0; 
+const float STAMP_R = 0.50;
+const float STAMP_A = 1.00;
+float br_radius = 10;
+float br_alpha = 0.5f;
+int painting_x = 0;
+int painting_y = 0;
+double painting_dx;
+double painting_dy;
+double paint_dist;
 
 uint64_t g_Time; // in microsecs
 
@@ -95,7 +105,7 @@ struct RenderContext
 
 			void main()
 			{
-				int duv = 5;
+				int duv = 5; // HEIGHT_CELLS+1
 				xyuv = in_xyuv;
 				xyuv.zw *= duv;
 			}
@@ -125,9 +135,7 @@ struct RenderContext
 
 				ivec3 xyz[4];
 
-				int dxy = 4;
-
-				float pfi = log(0.1) / (2.0*br.z*br.z);
+				int dxy = 4; // VISUAL_CELLS/HEIGHT_CELLS
 
 				for (int y = 0; y < 4; y++)
 				{
@@ -154,20 +162,24 @@ struct RenderContext
 							for (int i = 0; i < 4; i++)
 							{
 								vec2 d = xyz[i].xy - br.xy;
-								float gauss = exp(pfi*dot(d, d)) * br.w;
-								xyz[i].z += int(round(gauss * 256));
-								xyz[i].z = clamp(xyz[i].z, 0, 0xffff);
+								float len = length(d);
+								if (len < br.z)
+								{
+									float gauss = (0.5 + 0.5*cos(len/br.z*3.141592));
+									xyz[i].z += int(round(gauss*gauss * br.w * br.z * 16/*Z_SCALE*/));
+									xyz[i].z = clamp(xyz[i].z, 0, 0xffff);
+								}
 							}
 						}
 						
 						normal = cross(vec3(xyz[3] - xyz[0]), vec3(xyz[2] - xyz[1]));
-						normal.xy *= 1.0 / 16.0; // isn't zscale = 1/16 ?
+						normal.xy *= 1.0 / 16.0; // Z_SCALE
 
 						for (int i = 0; i < 4; i++)
 						{
 							world_xy = xyz[i].xy;
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
-							uvh.xyz /= vec3(4.0, 4.0, 16.0);
+							uvh.xyz /= vec3(4.0, 4.0, 16.0); // VISUAL_CELLS/HEIGHT_CELLS,VISUAL_CELLS/HEIGHT_CELLS,Z_SCALE
 
 							gl_Position = tm * vec4(xyz[i], 1.0);
 							EmitVertex();
@@ -191,7 +203,7 @@ struct RenderContext
 			
 			void main()
 			{
-				vec3 light_pos = normalize(vec3(1, 0, 0));
+				vec3 light_pos = normalize(vec3(1, 1, 0.25));
 				//float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
 				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
 				color = vec4(vec3(light),1.0);
@@ -242,9 +254,8 @@ struct RenderContext
 				// brush preview
 				if (br.w != 0.0)
 				{
-					float len = length(world_xy - br.xy) / 2.33;
+					float len = length(world_xy - br.xy);
 					float alf = (br.z - len) / br.z;
-					alf *= abs(br.w);
 
 					float dalf = fwidth(alf);
 					float silh = smoothstep(-dalf, 0, alf) * smoothstep(+dalf, 0, alf);
@@ -499,9 +510,11 @@ static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 	double* xy = (double*)cookie;
 	uint16_t* map = GetTerrainHeightMap(p);
 
-	double pfi = log(0.1) / (2.0*br_xyra[2] * br_xyra[2]);
 	const static double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
 
+	double max_r2 = 0;
+
+	double mul = br_alpha * br_radius * 16.0;// z_scale;
 	for (int i = 0, hy = 0; hy <= HEIGHT_CELLS; hy++)
 	{
 		double dy = y + sxy * hy - xy[1];
@@ -511,10 +524,26 @@ static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 			double dx = x + sxy * hx - xy[0];
 			dx *= dx;
 
-			double gauss = exp(pfi*(dx+dy)) * br_xyra[3];
-			map[i] += (int)(round(gauss * 256));
+			double len = sqrt(dx + dy);
+			if (len < br_radius)
+			{
+				double gauss = 0.5 + 0.5*cos(len / br_radius * M_PI);
+
+				int d = (int)(round(gauss*gauss * mul));
+				if (d)
+					max_r2 = fmax(max_r2, dx + dy);
+
+				int z = map[i] + d;
+				if (z < 0)
+					z = 0;
+				if (z > 0xffff)
+					z = 0xffff;
+				map[i] = z;
+			}
 		}
 	}
+
+	xy[2] = fmax(xy[2], max_r2);
 
 	TexAlloc* ta = GetTerrainTexAlloc(p);
 	UpdateTerrainPatch(p);
@@ -525,17 +554,12 @@ void Stamp(double x, double y)
 	// query all patches int radial range br_xyra[2] from x,y
 	// get their heightmaps apply brush on height samples and update TexHeap pages 
 
-	double thresh = 1.0 / 513; 	// we need to query radius at which we have gauss < 1/512
-	double r = sqrt(2.0 * log(thresh / fabs(br_xyra[3])) / log(0.1) ) * br_xyra[2];
-
-	double xy[2] = { x,y };
-	QueryTerrain(terrain, x, y, r, 0x00, StampCB, xy);
+	double xy[3] = { x,y,0 };
+	QueryTerrain(terrain, x, y, br_radius * 1.001, 0x00, StampCB, xy);
 }
 
 void my_render()
 {
-	bool br_enabled = false;
-
 	// THINGZ
 	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	{
@@ -583,8 +607,8 @@ void my_render()
 		ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
 		ImGui::Text("RENDER TIME: %6I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
 
-		ImGui::SliderFloat("BRUSH RADIUS", br_xyra + 2, 1, 100*16);
-		ImGui::SliderFloat("BRUSH ALPHA", br_xyra + 3, -1, 1);
+		ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 1, 100 * 16);
+		ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -1, 1);
 
 		static int paint_mode=0;
 
@@ -677,6 +701,49 @@ void my_render()
 
 	double z_scale = 1.0 / 16.0; // this is a constant, (what fraction of font_size is produced by +1 height_map)
 
+	if (!io.MouseDown[1])
+	{
+		spinning = 0;
+	}
+
+	if (!io.WantCaptureMouse)
+	{
+		if (zoom_wheel)
+		{
+			font_size *= pow(1.1, zoom_wheel);
+			zoom_wheel = 0;
+		}
+
+		if (spinning)
+		{
+			double mdx = spinning_x - round(io.MousePos.x);
+			double mdy = -(spinning_y - round(io.MousePos.y));
+
+			rot_yaw += mdx * 0.1;
+			if (rot_yaw < -180)
+				rot_yaw += 360;
+			if (rot_yaw > 180)
+				rot_yaw -= 360;
+
+			rot_pitch += mdy * 0.1;
+			if (rot_pitch > 90)
+				rot_pitch = 90;
+			if (rot_pitch < 30)
+				rot_pitch = 30;
+
+
+			spinning_x = round(io.MousePos.x);
+			spinning_y = round(io.MousePos.y);
+		}
+		else
+		if (io.MouseDown[1])
+		{
+			spinning = 1;
+			spinning_x = round(io.MousePos.x);
+			spinning_y = round(io.MousePos.y);
+		}
+	}
+
 	double rx = 0.5 * io.DisplaySize.x / font_size;
 	double ry = 0.5 * io.DisplaySize.y / font_size;
 
@@ -689,11 +756,6 @@ void my_render()
 		rot_yaw += 0.1f;
 		if (rot_yaw > 180)
 			rot_yaw -= 360;
-	}
-
-	if (!io.MouseDown[0])
-	{
-		painting = 0;
 	}
 
 	if (!io.WantCaptureMouse && panning)
@@ -727,89 +789,127 @@ void my_render()
 	tm[14] = -1.0;
 	tm[15] = 1.0;
 
-	br_enabled = false;
+	float br_xyra[4] = { 0,0, br_radius, 0 };
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
-		// all coords in world space!
-		double itm[16];
-		Invert(tm, itm);
-
-		double ray_p[4];
-		double ray_v[4];
-
-		// mouse ray
-		double clip_mouse[4] =
+		if (painting)
 		{
-			2.0 * io.MousePos.x / io.DisplaySize.x - 1.0,
-			1.0 - 2.0 * io.MousePos.y / io.DisplaySize.y,
-			-1.1, // bit under floor
-			1
-		};
+			//DRAG and/or DROP
+			double mdx = painting_x - round(io.MousePos.x);
+			double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
+			double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+			double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+			double x = painting_dx + dx;
+			double y = painting_dy + dy;
 
-		Product(itm, clip_mouse, ray_p);
+			double dist = paint_dist + sqrt(dx*dx + dy * dy);
 
-		clip_mouse[2] = -1.2; // bit under bit under floor
-
-		Product(itm, clip_mouse, ray_v);
-
-		ray_v[0] -= ray_p[0];
-		ray_v[1] -= ray_p[1];
-		ray_v[2] -= ray_p[2];
-
-		double hit[4];
-
-		Patch* p = HitTerrain(terrain, ray_p, ray_v, hit);
-
-		if (p)
-		{
-			br_xyra[0] = (float)hit[0];
-			br_xyra[1] = (float)hit[1];
-
-			if (io.MouseDown[0])
+			int i = 0;
+			float alpha = br_alpha;
+			br_alpha *= STAMP_A;
+			while (1)
 			{
-				if (!painting)
+				double w = ((i + 1) * br_radius * STAMP_R - paint_dist) / (dist - paint_dist);
+
+				if (w >= 1)
+					break;
+
+				double sx = painting_dx + w * dx;
+				double sy = painting_dy + w * dy;
+
+				Stamp(sx, sy);
+
+				i++;
+			}
+			br_alpha = alpha;
+
+			paint_dist = dist - i * br_radius * STAMP_R;
+			painting_dx = x;
+			painting_dy = y;
+			painting_x = (int)round(io.MousePos.x);
+			painting_y = (int)round(io.MousePos.y);
+
+			br_xyra[0] = x;
+			br_xyra[1] = y;
+
+			if (!io.MouseDown[0])
+			{
+				// DROP
+				float alpha = br_alpha;
+				br_alpha *= paint_dist / (br_radius * STAMP_R) * STAMP_A;
+				Stamp(x, y);
+				br_alpha = alpha;
+				br_xyra[3] = 0;
+				painting = 0;
+			}
+			else
+				br_xyra[3] = paint_dist / (br_radius * STAMP_R) * br_alpha;
+		}
+		else
+		{
+			// HOVER preview
+			// all coords in world space!
+			double itm[16];
+			Invert(tm, itm);
+
+			double ray_p[4];
+			double ray_v[4];
+
+			// mouse ray
+			double clip_mouse[4] =
+			{
+				2.0 * io.MousePos.x / io.DisplaySize.x - 1.0,
+				1.0 - 2.0 * io.MousePos.y / io.DisplaySize.y,
+				-1.1, // bit under floor
+				1
+			};
+
+			Product(itm, clip_mouse, ray_p);
+
+			clip_mouse[2] = -1.2; // bit under bit under floor
+
+			Product(itm, clip_mouse, ray_v);
+
+			ray_v[0] -= ray_p[0];
+			ray_v[1] -= ray_p[1];
+			ray_v[2] -= ray_p[2];
+
+			double hit[4];
+
+			Patch* p = HitTerrain(terrain, ray_p, ray_v, hit);
+
+			if (p)
+			{
+				br_xyra[0] = (float)hit[0];
+				br_xyra[1] = (float)hit[1];
+				br_xyra[3] = br_alpha;
+
+				if (io.MouseDown[0])
 				{
+					//BEGIN
 					painting = 1;
-					paint_pos_z = hit[2];
-					paint_last_x = hit[0];
-					paint_last_y = hit[1];
+					painting_x = round(io.MousePos.x);
+					painting_y = round(io.MousePos.y);
 
+					painting_dx = hit[0];
+					painting_dy = hit[1];
+					paint_dist = 0.0;
+
+					float alpha = br_alpha;
+					br_alpha *= STAMP_A;
 					Stamp(hit[0], hit[1]);
-					stamp_last_x = hit[0];
-					stamp_last_y = hit[1];
-				}
-				else
-				{
-					/*
-					double mdx = panning_x - round(io.MousePos.x);
-					double mdy = -(panning_y - round(io.MousePos.y)) / sin(pitch);
+					br_alpha = alpha;
 
-					double mouse_x = paint_last_x + (mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
-					double mouse_y = paint_last_y + (mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
-
-					mdx = mouse_x - paint_last_x;
-					mdy = mouse_y - paint_last_y;
-
-					double len = sqrt(mdx*mdx + mdy * mdy);
-
-					if (paint_len + len > br_xyra[2])
-					{
-						// interpolate between mouse and oaint_last
-						// so stamp_pos gives len = br_xyra[2]
-						stamp_x =
-						stamp_y = ;
-					}
-
-					paint_last_x = mouse_x;
-					paint_last_y = mouse_y;
-					*/
+					// stamped, don't apply preview to it
 				}
 			}
-
-			if (!painting)
-				br_enabled = true;
 		}
+	}
+
+	if (panning || spinning)
+	{
+		br_xyra[3] = 0;
 	}
 
 	// 4 clip planes in clip-space
@@ -819,7 +919,7 @@ void my_render()
 	double clip_bottom[4] = { 0, 1, 0,+1 }; 
 	double clip_top[4] =    { 0,-1, 0,+1 }; // adjust by max brush descent
 
-	double brush_extent = cos(pitch) * br_xyra[3] * 256 * z_scale / ry;
+	double brush_extent = cos(pitch) * br_xyra[3] * br_xyra[2]/*256 * z_scale*/ / ry;
 
 	// adjust by max brush ASCENT
 	if (br_xyra[3]>0)
@@ -842,7 +942,7 @@ void my_render()
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_GEQUAL);
-	rc->BeginPatches(tm, br_enabled ? br_xyra : 0);
+	rc->BeginPatches(tm, br_xyra);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 	rc->EndPatches();
@@ -874,9 +974,11 @@ void my_mouse(int x, int y, MouseInfo mi)
 	switch (mi & 0xF)
 	{
 		case MouseInfo::WHEEL_DN:
+			zoom_wheel--;
 			io.MouseWheel -= 1.0;
 			break;
 		case MouseInfo::WHEEL_UP:
+			zoom_wheel++;
 			io.MouseWheel += 1.0;
 			break;
 		case MouseInfo::LEFT_DN:
@@ -960,10 +1062,10 @@ void my_init()
 	// terrain = CreateTerrain(int x, int y, int w, int h, uint16_t* data);
 	// xywh coords are in patches, so data is w*4+1,h*4+1 !!!!!!!!!!!!!!!!
 
-	const int num1 = 256;// 256;
+	const int num1 = 32;
 	const int num2 = num1*num1;
 
-	uint32_t rnd[num2];
+	uint32_t* rnd = (uint32_t*)malloc(sizeof(uint32_t)*num2);
 	int n = num2;
 	for (int i = 0; i < num2; i++)
 		rnd[i] = i;
@@ -978,6 +1080,8 @@ void my_init()
 		uint32_t v = uv / num1;
 		AddTerrainPatch(terrain, u, v, 0/*fast_rand()&0x7F*/);
 	}
+
+	free(rnd);
 
 	pos_x = num1 * VISUAL_CELLS / 2;
 	pos_y = num1 * VISUAL_CELLS / 2;
