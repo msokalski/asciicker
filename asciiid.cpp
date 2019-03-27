@@ -1179,8 +1179,8 @@ void my_init()
 
 	a3dSetTitle(L"ASCIIID");
 
-	int full[] = { -1280,0,800,600};
-	//int full[] = { 0,0,1920,1080};
+	//int full[] = { -1280,0,800,600};
+	int full[] = { 0,0,1920,1080};
 	a3dSetRect(full, true);
 
 	a3dSetVisible(true);

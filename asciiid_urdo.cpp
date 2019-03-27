@@ -145,6 +145,9 @@ static void PurgeUndo()
 			{
 				undo = g->prev;
 				redo = g->next;
+				
+				g->group_tail = 0;
+
 				g->Free();
 				if (redo)
 					redo->prev = undo;
@@ -190,6 +193,9 @@ static void PurgeRedo()
 			{
 				redo = g->next;
 				undo = g->prev;
+
+				g->group_head = 0;
+
 				g->Free();
 				if (undo)
 					undo->next = redo;
