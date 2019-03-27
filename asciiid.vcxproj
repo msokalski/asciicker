@@ -171,6 +171,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="asciiid_platform.h" />
+    <ClInclude Include="asciiid_urdo.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
@@ -187,6 +188,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp" />
+    <ClCompile Include="asciiid_urdo.cpp" />
     <ClCompile Include="asciiid_mswin.cpp" />
     <ClCompile Include="gl.c" />
     <ClCompile Include="imgui\imgui.cpp" />

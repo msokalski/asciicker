@@ -48,6 +48,8 @@ struct Foliage
 };
 #endif
 
+
+
 struct Node;
 
 struct QuadItem
@@ -70,7 +72,7 @@ struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
 
 #ifdef TEXHEAP
-	TexAlloc* ta;
+	TexAlloc* ta; // MUST BE AT THE TAIL OF STRUCT !!!
 #endif
 };
 
@@ -83,7 +85,7 @@ struct Terrain
 	int patches;
 
 #ifdef TEXHEAP
-	TexHeap th;
+	TexHeap th; // MUST BE AT THE TAIL OF STRUCT !!!
 #endif
 };
 
@@ -129,7 +131,6 @@ Terrain* CreateTerrain(int z)
 
 	return t;
 }
-
 
 void DeleteTerrain(Terrain* t)
 {
@@ -825,15 +826,30 @@ int GetTerrainPatches(Terrain* t)
 	return t->patches;
 }
 
+size_t GetTerrainBytes(Terrain* t)
+{
+	return t->patches * sizeof(Patch) + t->nodes * sizeof(Node);
+}
+
+
 uint16_t* GetTerrainHeightMap(Patch* p)
 {
 	return (uint16_t*)p->height;
 }
 
+void GetTerrainLimits(Patch* p, uint16_t* lo, uint16_t* hi)
+{
+	if (lo)
+		*lo = p->lo;
+	if (hi)
+		*hi = p->hi;
+}
+
+
 void UpdateTerrainPatch(Patch* p)
 {
-	int lo = 0xffff;
-	int hi = 0x0000;
+	p->lo = 0xffff;
+	p->hi = 0x0000;
 
 	for (int y = 0; y <= HEIGHT_CELLS; y++)
 	{

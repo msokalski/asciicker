@@ -18,9 +18,9 @@
 #include "imgui_impl_opengl3.h"
 
 #include "asciiid_platform.h"
-
 #include "texheap.h"
 #include "terrain.h"
+#include "asciiid_urdo.h"
 
 #include "matrix.h"
 
@@ -507,6 +507,17 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 
 static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 {
+	double mul = br_alpha * br_radius * 16.0;// z_scale;
+	if (fabs(mul) < 0.499)
+		return;
+
+	uint16_t lo, hi;
+	GetTerrainLimits(p, &lo, &hi);
+	if (hi == 0 && br_alpha < 0 || lo == 0xffff && br_alpha>0)
+		return;
+
+	URDO_Patch(p);
+
 	double* xy = (double*)cookie;
 	uint16_t* map = GetTerrainHeightMap(p);
 
@@ -514,8 +525,7 @@ static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 
 	double max_r2 = 0;
 
-	double mul = br_alpha * br_radius * 16.0;// z_scale;
-	for (int i = 0, hy = 0; hy <= HEIGHT_CELLS; hy++)
+	for (int i=0, hy = 0; hy <= HEIGHT_CELLS; hy++)
 	{
 		double dy = y + sxy * hy - xy[1];
 		dy *= dy;
@@ -544,8 +554,6 @@ static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 	}
 
 	xy[2] = fmax(xy[2], max_r2);
-
-	TexAlloc* ta = GetTerrainTexAlloc(p);
 	UpdateTerrainPatch(p);
 }
 
@@ -554,12 +562,16 @@ void Stamp(double x, double y)
 	// query all patches int radial range br_xyra[2] from x,y
 	// get their heightmaps apply brush on height samples and update TexHeap pages 
 
+	URDO_Open();
 	double xy[3] = { x,y,0 };
 	QueryTerrain(terrain, x, y, br_radius * 1.001, 0x00, StampCB, xy);
+	URDO_Close();
 }
 
 void my_render()
 {
+	ImGuiIO& io = ImGui::GetIO();
+
 	// THINGZ
 	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	{
@@ -597,19 +609,85 @@ void my_render()
 
 		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
 
-		ImGui::SliderFloat("PITCH", &rot_pitch, +30.0f, +90.0f);
+		if (ImGui::CollapsingHeader("View Control", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::SliderFloat("PITCH", &rot_pitch, +30.0f, +90.0f);
 
-		ImGui::SliderFloat("YAW", &rot_yaw, -180.0f, +180.0f); ImGui::SameLine();
-		ImGui::Checkbox("Spin", &spin_anim);
+			ImGui::SliderFloat("YAW", &rot_yaw, -180.0f, +180.0f); ImGui::SameLine();
+			ImGui::Checkbox("Spin", &spin_anim);
 
-		ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
+			ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
+		}
 
-		ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
-		ImGui::Text("RENDER TIME: %6I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
+		if (ImGui::CollapsingHeader("Brush", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 1, 100 * 16);
+			ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -1, 1);
+		}
 
-		ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 1, 100 * 16);
-		ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -1, 1);
+		if (ImGui::CollapsingHeader("Undo / Redo", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			if (!URDO_CanUndo())
+			{
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				ImGui::Button("<<");
+				ImGui::SameLine();
+				ImGui::Button("<");
+				ImGui::PopStyleVar();
+				ImGui::PopItemFlag();
+			}
+			else
+			{
+				if (ImGui::Button("<<") || ImGui::IsItemActive() && io.MouseDownDuration[0] > .25f)
+					URDO_Undo(0);
+				ImGui::SameLine();
+				if (ImGui::Button("<") || ImGui::IsItemActive() && io.MouseDownDuration[0] > .25f)
+					URDO_Undo(1);
+			}
+			ImGui::SameLine();
+			if (!URDO_CanRedo())
+			{
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				ImGui::Button(">");
+				ImGui::SameLine();
+				ImGui::Button(">>");
+				ImGui::PopStyleVar();
+				ImGui::PopItemFlag();
+			}
+			else
+			{
+				if (ImGui::Button(">") || ImGui::IsItemActive() && io.MouseDownDuration[0] > .25f)
+					URDO_Redo(1);
+				ImGui::SameLine();
+				if (ImGui::Button(">>") || ImGui::IsItemActive() && io.MouseDownDuration[0] > .25f)
+					URDO_Redo(0);
+			}
+			ImGui::SameLine();
+			if (!URDO_CanRedo() && !URDO_CanUndo())
+			{
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				ImGui::Button("PURGE");
+				ImGui::PopStyleVar();
+				ImGui::PopItemFlag();
+			}
+			else
+			if (ImGui::Button("PURGE"))
+				URDO_Purge();
+			ImGui::SameLine();
+			ImGui::Text("%zu BYTES", URDO_Bytes());
+		}
 
+		if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
+			ImGui::Text("RENDER TIME: %6I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
+			ImGui::Text("%zu BYTES", GetTerrainBytes(terrain));
+		}
+
+		/*
 		static int paint_mode=0;
 
 		ImGui::RadioButton("VIEW POSITION", &paint_mode, 0); // or hold 'space' to interrupt current mode
@@ -633,6 +711,7 @@ void my_render()
 			ImGui::PopStyleVar();
 			ImGui::PopItemFlag();
 		}
+		*/
 
 		ImGui::End();
 
@@ -640,10 +719,8 @@ void my_render()
 		static bool show_another_window = false;
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-		/*
 		if (show_demo_window)
 			ImGui::ShowDemoWindow(&show_demo_window);
-		*/
 
 		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
 		/*
@@ -688,7 +765,6 @@ void my_render()
 
 	ImGui::Render();
 
-	ImGuiIO& io = ImGui::GetIO();
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
 	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 	glClearDepth(0);
@@ -704,6 +780,11 @@ void my_render()
 	if (!io.MouseDown[1])
 	{
 		spinning = 0;
+	}
+
+	if (!io.MouseDown[2])
+	{
+		panning = 0;
 	}
 
 	if (!io.WantCaptureMouse)
@@ -758,18 +839,30 @@ void my_render()
 			rot_yaw -= 360;
 	}
 
-	if (!io.WantCaptureMouse && panning)
+	if (!io.WantCaptureMouse)
 	{
-		double mdx = panning_x - round(io.MousePos.x);
-		double mdy = - (panning_y - round(io.MousePos.y)) / sin(pitch);
-		pos_x = panning_dx + (mdx*cos(yaw) - mdy*sin(yaw))/font_size;
-		pos_y = panning_dy + (mdx*sin(yaw) + mdy*cos(yaw))/font_size;
+		if (panning)
+		{
+			double mdx = panning_x - round(io.MousePos.x);
+			double mdy = -(panning_y - round(io.MousePos.y)) / sin(pitch);
+			pos_x = panning_dx + (mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+			pos_y = panning_dy + (mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
 
-		panning_x = round(io.MousePos.x);
-		panning_y = round(io.MousePos.y);
+			panning_x = round(io.MousePos.x);
+			panning_y = round(io.MousePos.y);
 
-		panning_dx = pos_x;
-		panning_dy = pos_y;
+			panning_dx = pos_x;
+			panning_dy = pos_y;
+		}
+		else
+		if (io.MouseDown[2])
+		{
+			panning = 1;
+			panning_x = round(io.MousePos.x);
+			panning_y = round(io.MousePos.y);
+			panning_dx = pos_x;
+			panning_dy = pos_y;
+		}
 	}
 
 	tm[0] = +cos(yaw)/rx;
@@ -842,6 +935,7 @@ void my_render()
 				br_alpha = alpha;
 				br_xyra[3] = 0;
 				painting = 0;
+				URDO_Close();
 			}
 			else
 				br_xyra[3] = paint_dist / (br_radius * STAMP_R) * br_alpha;
@@ -888,7 +982,9 @@ void my_render()
 				if (io.MouseDown[0])
 				{
 					//BEGIN
+					URDO_Open();
 					painting = 1;
+
 					painting_x = round(io.MousePos.x);
 					painting_y = round(io.MousePos.y);
 
@@ -994,15 +1090,9 @@ void my_mouse(int x, int y, MouseInfo mi)
 			io.MouseDown[1] = false;
 			break;
 		case MouseInfo::MIDDLE_DN:
-			panning = 1;
-			panning_x = x;
-			panning_y = y;
-			panning_dx = pos_x;
-			panning_dy = pos_y;
 			io.MouseDown[2] = true;
 			break;
 		case MouseInfo::MIDDLE_UP:
-			panning = 0;
 			io.MouseDown[2] = false;
 			break;
 	}

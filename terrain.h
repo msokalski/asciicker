@@ -18,6 +18,8 @@ bool DelTerrainPatch(Terrain* t, int x, int y);
 uint16_t* GetTerrainHeightMap(Patch* p);
 void UpdateTerrainPatch(Patch* p);
 
+void GetTerrainLimits(Patch* p, uint16_t* lo, uint16_t* hi);
+
 #ifdef TEXHEAP
 TexHeap* GetTerrainTexHeap(Terrain* t);
 TexAlloc* GetTerrainTexAlloc(Patch* p);
@@ -33,6 +35,7 @@ struct TexPageBuffer
 #endif
 
 int GetTerrainPatches(Terrain* t);
+size_t GetTerrainBytes(Terrain* t);
 
 void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
 void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, void (*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
