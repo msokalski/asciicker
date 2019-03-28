@@ -157,7 +157,7 @@ struct RenderContext
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
 						xyz[3] = ivec3(xyuv[0].xy + xy*dxy, z);
 
-						if (br.w != 0.0)
+						if (br.w != 0.0 && br.z>0)
 						{
 							for (int i = 0; i < 4; i++)
 							{
@@ -254,14 +254,20 @@ struct RenderContext
 				// brush preview
 				if (br.w != 0.0)
 				{
+					float abs_r = abs(br.z);
 					float len = length(world_xy - br.xy);
-					float alf = (br.z - len) / br.z;
+					float alf = (abs_r - len) / abs_r;
 
 					float dalf = fwidth(alf);
 					float silh = smoothstep(-dalf, 0, alf) * smoothstep(+dalf, 0, alf);
 
 					alf = max(0.0, alf);
-					color.gb *= 1.0 - alf;
+
+					if (br.z>0)
+						color.gb *= 1.0 - alf;
+					else
+						color.rg *= 1.0 - alf;
+
 					color.rgb *= 1.0 - silh*0.25;
 				}
 			}
@@ -505,6 +511,56 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
 }
 
+
+struct Gather
+{
+	int x, y; // patch aligned
+	int count; // number of actually queried patches
+	int size; // in patches
+	int* tmp_x;
+	int* tmp_y;
+	Patch* patch[1];
+
+	int GetPatchIdx(int px, int py)
+	{
+		int dx = px - x;
+		int dy = py - y;
+
+		int bx = dx / VISUAL_CELLS;
+		int by = dy / VISUAL_CELLS;
+
+		assert(bx >= 0 && bx < size && by >= 0 && by < size);
+		return bx + by * size;
+	}
+
+	int Sample(int hx, int hy) // hx and hy are in height map samples relative to Gather::x,y
+	{
+		int px = hx / HEIGHT_CELLS;
+		int py = hy / HEIGHT_CELLS;
+
+		int sx = hx % HEIGHT_CELLS;
+		int sy = hy % HEIGHT_CELLS;
+
+		int idx = px + py * size;
+		Patch* p = patch[idx];
+
+		if (!p)
+			return -1;
+
+		uint16_t* map = GetTerrainHeightMap(p);
+
+		return map[sx + sy * (HEIGHT_CELLS + 1)];
+	}
+};
+
+Gather* gather = 0;
+
+static void GatherCB(Patch* p, int x, int y, int view_flags, void* cookie)
+{
+	gather->count++;
+	gather->patch[gather->GetPatchIdx(x, y)] = p;
+}
+
 static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 {
 	double mul = br_alpha * br_radius * 16.0;// z_scale;
@@ -562,10 +618,177 @@ void Stamp(double x, double y)
 	// query all patches int radial range br_xyra[2] from x,y
 	// get their heightmaps apply brush on height samples and update TexHeap pages 
 
-	URDO_Open();
-	double xy[3] = { x,y,0 };
-	QueryTerrain(terrain, x, y, br_radius * 1.001, 0x00, StampCB, xy);
-	URDO_Close();
+	ImGuiIO& io = ImGui::GetIO();
+
+	int stamp_mode = 1;
+	if (io.KeysDown[A3D_LSHIFT])
+		stamp_mode = 2;
+
+	if (stamp_mode == 1)
+	{
+		URDO_Open();
+		double xy[3] = { x,y,0 };
+		QueryTerrain(terrain, x, y, br_radius * 1.001, 0x00, StampCB, xy);
+		URDO_Close();
+	}
+	else
+	{
+		double mul = br_alpha * br_radius * 16.0;// z_scale;
+		if (fabs(mul) < 0.499)
+			return;
+
+		// gather
+		int size = 4 * (int)ceil(br_radius / VISUAL_CELLS) + 2;
+		int tmp_buf_size = sizeof(int)*(size*HEIGHT_CELLS)*(size*HEIGHT_CELLS);
+		if (!gather || gather->size != size)
+		{
+			if (gather)
+			{
+				free(gather->tmp_x);
+				free(gather->tmp_y);
+				free(gather);
+			}
+			int bs = sizeof(Gather) + sizeof(Patch*)*(size*size - 1);
+			gather = (Gather*)malloc(bs);
+			gather->size = size;
+
+			gather->tmp_x = (int*)malloc(tmp_buf_size);
+			gather->tmp_y = (int*)malloc(tmp_buf_size);
+		}
+
+		memset(gather->patch, 0, sizeof(Patch*)*(size*size));
+
+		gather->x = (int)floor(x / VISUAL_CELLS - 0.5 * size) * VISUAL_CELLS;
+		gather->y = (int)floor(y / VISUAL_CELLS - 0.5 * size) * VISUAL_CELLS;
+
+		gather->count=0;
+		QueryTerrain(terrain, x, y, 2.0*br_radius, 0x00, GatherCB, 0);
+
+		if (!gather->count)
+			return;
+
+		int* tmp_x = gather->tmp_x;
+		memset(tmp_x, -1, tmp_buf_size);
+
+		int r = (int)floor(br_radius * HEIGHT_CELLS / VISUAL_CELLS);
+		for (int hy = 0; hy < size * HEIGHT_CELLS; hy++)
+		{
+			for (int hx = r; hx < size * HEIGHT_CELLS - r; hx++)
+			{
+				double acc = 0;
+				double den = 0;
+
+				for (int sx = hx-r; sx < hx+r; sx++)
+				{
+					int h = gather->Sample(sx, hy);
+					if (h >= 0)
+					{
+						// HERE we use TRUE gaussian filter (must be separable)
+						double len = (double)sx * VISUAL_CELLS / HEIGHT_CELLS + gather->x - x;
+						len /= br_radius;
+						double gauss = exp(-len * len * 3);
+
+						acc += h * gauss;
+						den += gauss;
+					}
+				}
+
+				if (den > 0)
+					tmp_x[hx + hy * size * HEIGHT_CELLS] = (uint16_t)round(acc / den);
+				else
+					tmp_x[hx + hy * size * HEIGHT_CELLS] = -1;
+			}
+		}
+
+		int* tmp_y = gather->tmp_y;
+		memset(tmp_y, -1, tmp_buf_size);
+
+		for (int hy = r; hy < size * HEIGHT_CELLS - r; hy++)
+		{
+			for (int hx = r; hx < size * HEIGHT_CELLS - r; hx++)
+			{
+				double acc = 0;
+				double den = 0;
+
+				for (int sy = hy - r; sy < hy + r; sy++)
+				{
+					int h = tmp_x[hx + sy * size * HEIGHT_CELLS];
+					if (h >= 0)
+					{
+						// HERE we use TRUE gaussian filter (must be separable)
+						double len = (double)sy * VISUAL_CELLS / HEIGHT_CELLS + gather->y - y;
+						len /= br_radius;
+						double gauss = exp(-len*len*3);
+
+						acc += h * gauss;
+						den += gauss;
+					}
+				}
+
+				if (den > 0)
+					tmp_y[hx + hy * size * HEIGHT_CELLS] = (uint16_t)round(acc / den);
+				else
+					tmp_y[hx + hy * size * HEIGHT_CELLS] = -1;
+			}
+		}
+
+		// run all patches
+		URDO_Open();
+		for (int py = gather->size/4; py < gather->size - gather->size / 4; py++)
+		{
+			for (int px = gather->size / 4; px < gather->size - gather->size / 4; px++)
+			{
+				Patch* p = gather->patch[px + size * py];
+				if (p)
+				{
+					URDO_Patch(p);
+					uint16_t* map = GetTerrainHeightMap(p);
+
+					for (int sy = 0; sy <= HEIGHT_CELLS; sy++)
+					{
+						int hy = (HEIGHT_CELLS * py + sy);
+						double dy = gather->y + hy * VISUAL_CELLS / (double)HEIGHT_CELLS - y;
+						dy *= dy;
+						for (int sx = 0; sx <= HEIGHT_CELLS; sx++)
+						{
+							int hx = (HEIGHT_CELLS * px + sx);
+							double dx = gather->x + hx * VISUAL_CELLS / (double)HEIGHT_CELLS - x;
+							dx *= dx;
+
+							double len = sqrt(dx + dy);
+
+							if (len < br_radius)
+							{
+								double gauss = 0.5 + 0.5*cos(len / br_radius * M_PI);
+								gauss *= gauss * br_alpha;
+
+								if (gauss < 0)
+								{
+									double diff = gauss * (tmp_y[hx + hy * size * HEIGHT_CELLS] - map[sx + sy * (HEIGHT_CELLS + 1)]);
+									int z = (int)round(diff) + map[sx + sy * (HEIGHT_CELLS + 1)];
+									if (z < 0)
+										z = 0;
+									if (z > 0xffff)
+										z = 0xffff;
+
+									map[sx + sy * (HEIGHT_CELLS + 1)] = z;
+								}
+								else
+								{
+									double blend = map[sx + sy * (HEIGHT_CELLS + 1)] * (1.0 - gauss);
+									blend += tmp_y[hx + hy * size * HEIGHT_CELLS] * gauss;
+									map[sx + sy * (HEIGHT_CELLS + 1)] = (uint16_t)round(blend);
+								}
+							}
+						}
+					}
+
+					UpdateTerrainPatch(p);
+				}
+			}
+		}
+		URDO_Close();
+	}
 }
 
 void my_render()
@@ -1008,6 +1231,11 @@ void my_render()
 		br_xyra[3] = 0;
 	}
 
+	if (io.KeysDown[A3D_LSHIFT])
+	{
+		br_xyra[2] = -br_xyra[2];
+	}
+
 	// 4 clip planes in clip-space
 
 	double clip_left[4] =   { 1, 0, 0,+1 };
@@ -1017,13 +1245,16 @@ void my_render()
 
 	double brush_extent = cos(pitch) * br_xyra[3] * br_xyra[2]/*256 * z_scale*/ / ry;
 
-	// adjust by max brush ASCENT
-	if (br_xyra[3]>0)
-		clip_bottom[3] += brush_extent;
+	if (br_xyra[2] > 0)
+	{
+		// adjust by max brush ASCENT
+		if (br_xyra[3] > 0)
+			clip_bottom[3] += brush_extent;
 
-	// adjust by max brush DESCENT
-	if (br_xyra[3]<0)
-		clip_top[3] -= brush_extent;
+		// adjust by max brush DESCENT
+		if (br_xyra[3] < 0)
+			clip_top[3] -= brush_extent;
+	}
 
 	// transform them to world-space (mul by tm^-1)
 
@@ -1179,8 +1410,8 @@ void my_init()
 
 	a3dSetTitle(L"ASCIIID");
 
-	//int full[] = { -1280,0,800,600};
-	int full[] = { 0,0,1920,1080};
+	int full[] = { -1280,0,800,600};
+	//int full[] = { 0,0,1920,1080};
 	a3dSetRect(full, true);
 
 	a3dSetVisible(true);
