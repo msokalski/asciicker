@@ -145,9 +145,14 @@ struct RenderContext
 				float dxy = 1.0 / float(HEIGHT_CELLS);
 				ivec2 bxy = xyuv[0].xy*HEIGHT_CELLS;
 
+				// todo: emit optimized strips
+				// should allow having upto 6x6 patches -> 12 scalars * 6 strips * (6+1) cols * 2 verts = 1008 components (out of 1024)
+				// currently max is 4x4 -> 12 scalars * 4*4 quads * 4 verts -> 768 components
+
+
 				for (int y = 0; y < HEIGHT_CELLS; y++)
 				{
-					for (int x = 1; x <= HEIGHT_CELLS; x++)
+					for (int x = 0; x < HEIGHT_CELLS; x++)
 					{
 						xy = ivec2(x, y + 1);
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
@@ -222,6 +227,10 @@ struct RenderContext
 				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
 				color = vec4(vec3(light),1.0);
 
+				if (!gl_FrontFacing)
+					color.rgb = 0.25 * (vec3(1.0) - color.rgb);
+
+
 				vec2 duv = fwidth(uvh.xy);
 				if (duv.x < 0.25)
 				{
@@ -263,7 +272,6 @@ struct RenderContext
 					float m = smoothstep(0, 4.0*duv.y, pq.y) * smoothstep(1.0, 1.0 - 4.0*duv.y, pq.y);
 					color.rgb *= mix(1.0, m, a);
 				}
-
 
 				// brush preview
 				if (br.w != 0.0)
@@ -858,8 +866,57 @@ void my_render()
 
 		if (ImGui::CollapsingHeader("Brush", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 1, 100 * 16);
-			ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -1, 1);
+			ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 5.f, 100.f);
+			ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -.5f, .5f);
+
+			/*
+			static bool mat;
+			ImGui::Checkbox("MATERIAL",&mat);
+
+			static const char* lab[8][8] =
+			{
+				{"00","01","02","03","04","05","06","07"},
+				{"08","09","0A","0B","0C","0D","0E","0F"},
+				{"10","11","12","13","14","15","16","17"},
+				{"18","19","1A","1B","1C","1D","1E","1F"},
+				{"20","21","22","23","24","25","26","27"},
+				{"28","29","2A","2B","2C","2D","2E","2F"},
+				{"30","31","32","33","34","35","36","37"},
+				{"38","39","3A","3B","3C","3D","3E","3F"},
+			};
+
+			static float rgb[8][8][3];
+			static bool init_rgb = true;
+			if (init_rgb)
+			{
+				for (int c = 0; c < 64; c++)
+				{
+					int x = c & 7;
+					int y = (c >> 4) | ((c >> 3)&1) << 2;
+					rgb[y][x][0] = (c&3) / 3.0f;
+					rgb[y][x][1] = ((c>>2)&3) / 3.0f;
+					rgb[y][x][2] = ((c>>4)&3) / 3.0f;
+				}
+			}
+
+			for (int y = 0; y < 8; y++)
+			{
+				for (int x = 0; x < 8; x++)
+				{
+					ImGui::RadioButton(lab[y][x], true); ImGui::SameLine();
+					ImGui::ColorEdit3(lab[y][x], rgb[y][x], 
+						ImGuiColorEditFlags_NoAlpha |
+						ImGuiColorEditFlags_NoInputs |
+						ImGuiColorEditFlags_NoLabel
+					);
+
+					if (x < 7)
+						ImGui::SameLine();
+				}
+
+			}
+			*/
+
 		}
 
 		if (ImGui::CollapsingHeader("Undo / Redo", ImGuiTreeNodeFlags_DefaultOpen))
