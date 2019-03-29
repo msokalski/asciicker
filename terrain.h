@@ -1,9 +1,8 @@
 #pragma once
 
-#define HEIGHT_CELLS 4 // num of verts -1 along patch X and Y axis
-#define VISUAL_PER_HEIGHT_CELLS 4
-
-#define VISUAL_CELLS (HEIGHT_CELLS*VISUAL_PER_HEIGHT_CELLS)
+#define HEIGHT_SCALE 8 // how may z-steps produces 1 visual cell
+#define HEIGHT_CELLS 3 // num of verts -1 along patch X and Y axis
+#define VISUAL_CELLS 6
 
 struct Terrain;
 

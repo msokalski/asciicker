@@ -24,9 +24,6 @@
 
 #include "matrix.h"
 
-
-
-
 static unsigned int g_seed = 0x87654321;
 
 // Used to seed the generator.           
@@ -77,6 +74,8 @@ double paint_dist;
 
 uint64_t g_Time; // in microsecs
 
+#define QUOT(a) #a
+#define DEFN(a) "#define " #a " " QUOT(a) "\n"
 #define CODE(...) #__VA_ARGS__
 
 struct RenderContext
@@ -98,24 +97,31 @@ struct RenderContext
 		glEnableVertexAttribArray(0);
 		glBindVertexArray(0);
 
-		const char* vs_src = CODE(
-			#version 450\n
+		const char* vs_src = 
+		CODE(#version 450\n)
+		DEFN(HEIGHT_SCALE)
+		DEFN(HEIGHT_CELLS)
+		DEFN(VISUAL_CELLS)
+		CODE(
 			layout(location = 0) in ivec4 in_xyuv;
 			out ivec4 xyuv;
 
 			void main()
 			{
-				int duv = 5; // HEIGHT_CELLS+1
+				int duv = HEIGHT_CELLS + 1; 
 				xyuv = in_xyuv;
 				xyuv.zw *= duv;
 			}
 		);
 
-		const char* gs_src = CODE(
-			#version 450\n
-
+		const char* gs_src = 
+		CODE(#version 450\n)
+		DEFN(HEIGHT_SCALE)
+		DEFN(HEIGHT_CELLS)
+		DEFN(VISUAL_CELLS)
+		CODE(
 			layout(points) in;
-			layout(triangle_strip, max_vertices = 64) out;
+			layout(triangle_strip, max_vertices = 4*HEIGHT_CELLS*HEIGHT_CELLS ) out;
 
 			uniform vec4 br;
 			uniform usampler2D z_tex;
@@ -133,29 +139,35 @@ struct RenderContext
 				vec4 v;
 				ivec2 xy;
 
-				ivec3 xyz[4];
+				vec3 xyz[4];
 
-				int dxy = 4; // VISUAL_CELLS/HEIGHT_CELLS
+				float rvh = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
+				float dxy = 1.0 / float(HEIGHT_CELLS);
+				ivec2 bxy = xyuv[0].xy*HEIGHT_CELLS;
 
-				for (int y = 0; y < 4; y++)
+				for (int y = 0; y < HEIGHT_CELLS; y++)
 				{
-					for (int x = 0; x < 4; x++)
+					for (int x = 1; x <= HEIGHT_CELLS; x++)
 					{
 						xy = ivec2(x, y + 1);
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
-						xyz[0] = ivec3(xyuv[0].xy + xy*dxy, z);
+						xy = bxy + xy*VISUAL_CELLS;
+						xyz[0] = vec3(xy*dxy, z);
 
 						xy = ivec2(x, y);
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
-						xyz[1] = ivec3(xyuv[0].xy + xy*dxy, z);
+						xy = bxy + xy*VISUAL_CELLS;
+						xyz[1] = vec3(xy*dxy, z);
 
 						xy = ivec2(x + 1, y + 1);
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
-						xyz[2] = ivec3(xyuv[0].xy + xy*dxy, z);
+						xy = bxy + xy * VISUAL_CELLS;
+						xyz[2] = vec3(xy*dxy, z);
 
 						xy = ivec2(x + 1, y);
 						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
-						xyz[3] = ivec3(xyuv[0].xy + xy*dxy, z);
+						xy = bxy + xy * VISUAL_CELLS;
+						xyz[3] = vec3(xy*dxy, z);
 
 						if (br.w != 0.0 && br.z>0)
 						{
@@ -166,20 +178,20 @@ struct RenderContext
 								if (len < br.z)
 								{
 									float gauss = (0.5 + 0.5*cos(len/br.z*3.141592));
-									xyz[i].z += int(round(gauss*gauss * br.w * br.z * 16/*Z_SCALE*/));
+									xyz[i].z += int(round(gauss*gauss * br.w * br.z * HEIGHT_SCALE));
 									xyz[i].z = clamp(xyz[i].z, 0, 0xffff);
 								}
 							}
 						}
 						
-						normal = cross(vec3(xyz[3] - xyz[0]), vec3(xyz[2] - xyz[1]));
-						normal.xy *= 1.0 / 16.0; // Z_SCALE
+						normal = cross(xyz[3] - xyz[0], xyz[2] - xyz[1]);
+						normal.xy *= 1.0 / HEIGHT_SCALE;
 
 						for (int i = 0; i < 4; i++)
 						{
 							world_xy = xyz[i].xy;
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
-							uvh.xyz /= vec3(4.0, 4.0, 16.0); // VISUAL_CELLS/HEIGHT_CELLS,VISUAL_CELLS/HEIGHT_CELLS,Z_SCALE
+							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
 
 							gl_Position = tm * vec4(xyz[i], 1.0);
 							EmitVertex();
@@ -191,9 +203,12 @@ struct RenderContext
 			}
 		);
 
-		const char* fs_src = CODE(
-			#version 450\n
-		
+		const char* fs_src = 
+		CODE(#version 450\n)
+		DEFN(HEIGHT_SCALE)
+		DEFN(HEIGHT_CELLS)
+		DEFN(VISUAL_CELLS)
+		CODE(
 			layout(location = 0) out vec4 color;
 
 			uniform vec4 br;
@@ -204,7 +219,6 @@ struct RenderContext
 			void main()
 			{
 				vec3 light_pos = normalize(vec3(1, 1, 0.25));
-				//float light = 0.5 * (1.0 + dot(light_pos, normalize(normal)));
 				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
 				color = vec4(vec3(light),1.0);
 
@@ -563,7 +577,7 @@ static void GatherCB(Patch* p, int x, int y, int view_flags, void* cookie)
 
 static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 {
-	double mul = br_alpha * br_radius * 16.0;// z_scale;
+	double mul = br_alpha * br_radius * HEIGHT_SCALE;
 	if (fabs(mul) < 0.499)
 		return;
 
@@ -633,7 +647,7 @@ void Stamp(double x, double y)
 	}
 	else
 	{
-		double mul = br_alpha * br_radius * 16.0;// z_scale;
+		double mul = br_alpha * br_radius * HEIGHT_SCALE;
 		if (fabs(mul) < 0.499)
 			return;
 
@@ -998,7 +1012,7 @@ void my_render()
 
 	// currently we're assuming: 1 visual cell = 1 font_size
 
-	double z_scale = 1.0 / 16.0; // this is a constant, (what fraction of font_size is produced by +1 height_map)
+	double z_scale = 1.0 / HEIGHT_SCALE; // this is a constant, (what fraction of font_size is produced by +1 height_map)
 
 	if (!io.MouseDown[1])
 	{
@@ -1153,7 +1167,7 @@ void my_render()
 			{
 				// DROP
 				float alpha = br_alpha;
-				br_alpha *= paint_dist / (br_radius * STAMP_R) * STAMP_A;
+				br_alpha *= pow(paint_dist / (br_radius * STAMP_R) * STAMP_A,2.0);
 				Stamp(x, y);
 				br_alpha = alpha;
 				br_xyra[3] = 0;
@@ -1161,7 +1175,7 @@ void my_render()
 				URDO_Close();
 			}
 			else
-				br_xyra[3] = paint_dist / (br_radius * STAMP_R) * br_alpha;
+				br_xyra[3] = pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0) * br_alpha;
 		}
 		else
 		{
@@ -1243,7 +1257,7 @@ void my_render()
 	double clip_bottom[4] = { 0, 1, 0,+1 }; 
 	double clip_top[4] =    { 0,-1, 0,+1 }; // adjust by max brush descent
 
-	double brush_extent = cos(pitch) * br_xyra[3] * br_xyra[2]/*256 * z_scale*/ / ry;
+	double brush_extent = cos(pitch) * br_xyra[3] * br_xyra[2] / ry;
 
 	if (br_xyra[2] > 0)
 	{
@@ -1406,7 +1420,7 @@ void my_init()
 
 	pos_x = num1 * VISUAL_CELLS / 2;
 	pos_y = num1 * VISUAL_CELLS / 2;
-	pos_z = 0x7F;
+	pos_z = 0x0;
 
 	a3dSetTitle(L"ASCIIID");
 
@@ -1448,8 +1462,6 @@ void my_close()
 
 	render_context.Delete();
 }
-
-
 
 int main(int argc, char *argv[]) 
 {

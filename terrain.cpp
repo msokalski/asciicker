@@ -67,7 +67,7 @@ struct Node : QuadItem
 struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 {
 	// visual contains:                grass, sand, rock,
-	// 1bit elevation, 1bit optic_flag, 6bits material_idx, 4bits_shade, 4bits_light
+	// 1bit elevation, 6bit material
 	// uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
 
