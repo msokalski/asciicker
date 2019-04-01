@@ -879,7 +879,7 @@ TexAlloc* GetTerrainTexAlloc(Patch* p)
 }
 #endif
 
-static __forceinline void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+static inline /*__forceinline*/ void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	if (range == VISUAL_CELLS)
 	{
@@ -902,7 +902,7 @@ static __forceinline void QueryTerrain(QuadItem* q, int x, int y, int range, int
 	}
 }
 
-static void __forceinline QueryTerrain(QuadItem* q, int x, int y, int range, int planes, double* plane[], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
+static void inline /*__forceinline*/ QueryTerrain(QuadItem* q, int x, int y, int range, int planes, double* plane[], int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	int hi = q->hi;
 	int lo = q->lo;
@@ -1213,7 +1213,7 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 		qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
 		ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
 		ray[4] * (x + range) - ray[3] * y - ray[2] > 0)
-		return false;
+		return 0;
 
 	if (range == VISUAL_CELLS)
 	{
@@ -1267,7 +1267,7 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 		ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
 		ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
 		ray[4] * (x + range) - ray[3] * (y + range) - ray[2] > 0)
-		return false;
+		return 0;
 
 	if (range == VISUAL_CELLS)
 	{
@@ -1321,7 +1321,7 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 		ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
 		qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
 		ray[4] * x - ray[3] * y - ray[2] > 0)
-		return false;
+		return 0;
 
 	if (range == VISUAL_CELLS)
 	{
@@ -1375,7 +1375,7 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 		ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
 		ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
 		ray[4] * x - ray[3] * (y + range) - ray[2] > 0)
-		return false;
+		return 0;
 
 	if (range == VISUAL_CELLS)
 	{

@@ -33,6 +33,7 @@ inline void fast_srand(int seed) {
 
 // Compute a pseudorandom integer.
 // Output value in range [0, 32767]
+#define FAST_RAND_MAX 0x7fff
 inline int fast_rand(void) {
 	g_seed = (214013 * g_seed + 2531011);
 	return (g_seed >> 16) & 0x7FFF;
@@ -977,7 +978,7 @@ void my_render()
 		if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
-			ImGui::Text("RENDER TIME: %6I64d [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
+			ImGui::Text("RENDER TIME: %6jd [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
 			ImGui::Text("%zu BYTES", GetTerrainBytes(terrain));
 		}
 
@@ -1464,7 +1465,7 @@ void my_init()
 
 	for (int i = 0; i < num2; i++)
 	{
-		int r = (fast_rand() + fast_rand()*(RAND_MAX+1)) % n;
+		int r = (fast_rand() + fast_rand()*(FAST_RAND_MAX+1)) % n;
 
 		uint32_t uv = rnd[r];
 		rnd[r] = rnd[--n];

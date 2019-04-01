@@ -1,5 +1,6 @@
 
 #include <malloc.h>
+#include <string.h>
 #include "texheap.h"
 
 void TexHeap::Create(int page_cap_x, int page_cap_y, int alloc_w, int alloc_h, GLenum internal_format, int page_user_bytes)
