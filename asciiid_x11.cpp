@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <wchar.h>
 
 #include "gl.h"
 
@@ -20,6 +21,8 @@
 
 #include "asciiid_platform.h"
 
+bool mapped = false;
+char title[256]="A3D";
 Display* dpy;
 Window win;
 
@@ -428,7 +431,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	XSetWindowAttributes swa;
 	swa.colormap = cmap;
-	swa.event_mask = ExposureMask | VisibilityChangeMask | KeyPressMask | PointerMotionMask | StructureNotifyMask;
+	swa.event_mask = ExposureMask | PointerMotionMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask;
 
 	// win is global
 	win = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
@@ -439,6 +442,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	}
 
  	XMapWindow(dpy, win);
+	mapped = true;
+
 	XStoreName(dpy, win, "asciiid");
 
  	glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
@@ -463,46 +468,85 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		platform_api.init();
 
 	// send initial notifications:
-	/*
-	RECT r;
-	GetClientRect(h, &r);
+	XGetWindowAttributes(dpy, win, &gwa);
+	int w = gwa.width, h = gwa.height;
+
 	if (platform_api.resize)
-		platform_api.resize(r.right,r.bottom);
-	*/
+		platform_api.resize(w,h);
 
 	while (!closing)
 	{
-		XNextEvent(dpy, &xev);
-		
-		if(xev.type == Expose) 
+		XGetWindowAttributes(dpy, win, &gwa);
+		if (gwa.width!=w || gwa.height!=h)
 		{
-		        XGetWindowAttributes(dpy, win, &gwa);
-			
-			// TODO
-			// if gwa != previous send resize cb
+			w = gwa.width;
+			h = gwa.height;			
+			if (platform_api.resize)
+				platform_api.resize(w,h);			
+		}
 
+		if (XCheckWindowEvent(dpy, win, -1, &xev))
+		{
+			if (xev.type == DestroyNotify)
+			{
+				glXMakeCurrent(dpy, None, NULL);
+				glXDestroyContext(dpy, glc);
+				break;
+			}
 
+			if (xev.type == Expose) 
+			{
+				if (platform_api.render)
+					platform_api.render();
+			}
+			else 
+			if(xev.type == KeyPress) 
+			{
+			}
+			else 
+			if(xev.type == KeyRelease) 
+			{
+			}
+			else
+			if (xev.type == ButtonPress)
+			{
+				if (platform_api.mouse)
+					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::LEFT_DN);				
+			}
+			else
+			if (xev.type == ButtonRelease)
+			{
+				if (platform_api.mouse)
+					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::LEFT_UP);
+			}
+			else
+			if (xev.type == MotionNotify)
+			{
+				if (platform_api.mouse)
+					platform_api.mouse(xev.xmotion.x,xev.xmotion.y,MouseInfo::MOVE);
+			}
+		}
+		else
+		{
 			if (platform_api.render)
 				platform_api.render();
 		}
-		        
-		else if(xev.type == KeyPress) 
-		{
-		        glXMakeCurrent(dpy, None, NULL);
-		        glXDestroyContext(dpy, glc);
-		        XDestroyWindow(dpy, win);
-		        XCloseDisplay(dpy);
-		        break;
-		}
+		
 	}
+
+	XCloseDisplay(dpy);
 
 	return true;
 }
 
 void a3dClose()
 {
-	memset(&platform_api, 0, sizeof(PlatformInterface));
-	closing = true;
+	if (!closing)
+	{
+		XDestroyWindow(dpy,win);
+		memset(&platform_api, 0, sizeof(PlatformInterface));
+		closing = true;
+	}
 }
 
 uint64_t a3dGetTime()
@@ -536,107 +580,47 @@ bool a3dGetKeyb(KeyInfo ki)
 
 void a3dSetTitle(const wchar_t* name)
 {
-	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	SetWindowText(hWnd, name);
-	*/
+	snprintf(title,255,"%ls", name);
+	XStoreName(dpy, win, title);
 }
 
 int a3dGetTitle(wchar_t* name, int size)
 {
-	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	if (name)
-		GetWindowText(hWnd, name, size);
-	return GetWindowTextLength(hWnd)+1;
-	*/
-	return 0;
+	if (!name)
+		return strlen(title);
+	return swprintf(name,size,L"%s",title);
 }
 
 void a3dSetVisible(bool visible)
 {
-	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	ShowWindow(hWnd, visible ? SW_SHOW : SW_HIDE);
-	*/
+	mapped = visible;
+	if (visible)
+		XMapWindow(dpy, win);
+	else
+		XUnmapWindow(dpy, win);
 }
 
 bool a3dGetVisible()
 {
-	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	if (GetWindowLong(hWnd, GWL_STYLE) & WS_VISIBLE)
-		return true;
-	*/
-	return false;
+	return mapped;
 }
 
 // resize
 bool a3dGetRect(int* xywh)
 {
-	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	RECT r;
-	GetWindowRect(hWnd, &r);
-	if (xywh)
-	{
-		xywh[0] = r.left;
-		xywh[1] = r.top;
-		xywh[2] = r.right - r.left;
-		xywh[3] = r.bottom - r.top;
-	}
-
-	if (GetWindowLong(hWnd, GWL_STYLE) & WS_CAPTION)
-		return true;
-	*/
-	return false;
+	XWindowAttributes gwa;
+    XGetWindowAttributes(dpy, win, &gwa);
+	xywh[0]=gwa.x;
+	xywh[1]=gwa.y;
+	xywh[2]=gwa.width;
+	xywh[3]=gwa.height;
+	return true;
 }
 
 void a3dSetRect(const int* xywh, bool wnd_mode)
 {
-	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	DWORD s = GetWindowLong(hWnd, GWL_STYLE);
-	DWORD ns = s;
-
-	RECT r;
-	RECT nr;
-	GetWindowRect(hWnd, &r);
-
-	nr.left = xywh[0];
-	nr.top = xywh[1];
-	nr.right = xywh[2] + xywh[0];
-	nr.bottom = xywh[3] + xywh[1];
-
-	if (wnd_mode)
-		ns |= WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
-	else
-		ns &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
-
-	if (r.left != nr.left || r.top != nr.top ||
-		r.right != nr.right || r.bottom != nr.bottom)
-	{
-		if (ns != s)
-		{
-			SetWindowLong(hWnd, GWL_STYLE, ns);
-			SetWindowPos(hWnd, 0, nr.left, nr.top, nr.right - nr.left, nr.bottom - nr.top,
-				SWP_NOZORDER | SWP_FRAMECHANGED | SWP_DRAWFRAME);
-		}
-		else
-			SetWindowPos(hWnd, 0, nr.left, nr.top, nr.right - nr.left, nr.bottom - nr.top, SWP_NOZORDER);
-	}
-	else
-	if (ns != s)
-		SetWindowPos(hWnd, 0, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_DRAWFRAME);
-	*/
+	XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
 }
-
 
 // mouse
 MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no state
@@ -682,10 +666,8 @@ bool a3dGetKeybKey(KeyInfo ki) // return true if vk is down, keyb_char has no st
 // keyb_focus
 bool a3dGetFocus()
 {
-	return false;
-	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	return GetFocus() == hWnd;
-	*/
+	Window focused;
+	int revert_to;
+	XGetInputFocus(dpy, &focused, &revert_to);
+	return focused == win;
 }
