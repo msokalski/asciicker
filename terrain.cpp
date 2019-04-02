@@ -236,7 +236,7 @@ struct Tap3x3
 
 		if (x < 0)
 		{
-			x -= HEIGHT_CELLS;
+			x += HEIGHT_CELLS;
 			px = 0;
 		}
 		else
@@ -277,11 +277,11 @@ struct Tap3x3
 
 		if (x < 0)
 		{
-			x -= HEIGHT_CELLS;
+			x += HEIGHT_CELLS;
 			px = 0;
 		}
 		else
-		if (x >= HEIGHT_CELLS)
+		if (x /*>=*/ > HEIGHT_CELLS) // assuming '>' is fresher
 		{
 			x -= HEIGHT_CELLS;
 			px = 2;
@@ -293,7 +293,7 @@ struct Tap3x3
 			py = 0;
 		}
 		else
-		if (y >= HEIGHT_CELLS)
+		if (y /*>=*/ > HEIGHT_CELLS) // assuming '>' is fresher
 		{
 			y -= HEIGHT_CELLS;
 			py = 2;
@@ -326,12 +326,13 @@ struct Tap3x3
 		{
 			for (int x = -1; x <= HEIGHT_CELLS; x++)
 			{
-				int ll = Sample(x, y) - Sample(x - 1, x - 1);
-				int ur = Sample(x + 2, y + 2) - Sample(x + 1, y + 1);
-				int lr = Sample(x + 1, y) - Sample(x + 2, y - 1);
-				int ul = Sample(x - 1, y + 2) - Sample(x, y + 1);
+				int c0 = 4 * Sample(x, y) - 2*Sample(x - 1, y - 1) - Sample(x, y - 1) - Sample(x - 1, y) +
+					2*Sample(x + 2, y + 2) + Sample(x + 1, y + 2) + Sample(x + 2, y + 1) - 4 * Sample(x + 1, y + 1);
 
-				SetDiag(x, y, abs(ll - ur) < abs(lr - ul));
+				int c1 = 4 * Sample(x + 1, y) - 2*Sample(x + 2, y - 1) - Sample(x + 1, y - 1) - Sample(x + 2, y) +
+					2*Sample(x - 1, y + 2) + Sample(x - 1, y + 1) + Sample(x, y + 2) - 4 * Sample(x, y + 1);
+
+				SetDiag(x, y, abs(c0) > abs(c1));
 			}
 		}
 	}
@@ -996,9 +997,16 @@ Patch* GetTerrainNeighbor(Patch* p, int dx, int dy)
 
 		int i = 0;
 		if (dx >= hr)
+		{
 			i |= 1;
+			dx -= hr;
+		}
+
 		if (dy >= hr)
+		{
 			i |= 2;
+			dy -= hr;
+		}
 
 		if (hr == 1)
 			return (Patch*)n->quad[i];
@@ -1074,7 +1082,7 @@ TexAlloc* GetTerrainTexAlloc(Patch* p)
 
 uint16_t GetTerrainDiag(Patch* p)
 {
-	return ~p->diag;
+	return p->diag;
 }
 
 static inline /*__forceinline*/ void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
@@ -1657,3 +1665,21 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 	return patch;
 }
 
+void TapCheck(Terrain* t)
+{
+	for (int y = 0; y < 32; y++)
+	{
+		for (int x = 0; x < 32; x++)
+		{
+			Patch* c = GetTerrainPatch(t, x, y);
+			if (c)
+			{
+				Tap3x3 tap(c);
+				for (int dy = -1; dy <= 1; dy++)
+					for (int dx = -1; dx <= 1; dx++)
+						assert( GetTerrainPatch(t, x + dx, y + dy) == tap.p[dy+1][dx+1] );
+			}
+		}
+
+	}
+}

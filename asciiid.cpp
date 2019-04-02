@@ -1540,6 +1540,10 @@ void my_init()
 
 	free(rnd);
 
+	void TapCheck(Terrain* t);
+	TapCheck(terrain);
+
+
 	pos_x = num1 * VISUAL_CELLS / 2;
 	pos_y = num1 * VISUAL_CELLS / 2;
 	pos_z = 0x0;
@@ -1548,7 +1552,7 @@ void my_init()
 
 	int full[] = { -1280,0,800,600};
 	//int full[] = { 0,0,1920,1080};
-	a3dSetRect(full, true);
+	//a3dSetRect(full, true);
 
 	a3dSetVisible(true);
 }
