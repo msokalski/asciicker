@@ -87,15 +87,17 @@ struct RenderContext
 		glCreateBuffers(1, &vbo);
 		err = glGetError();
 		int max_batch_size = 789; // of patches (each 16 quads), each batch item (single patch), is stored as x,y,u,v
-		glNamedBufferStorage(vbo, max_batch_size * sizeof(GLint[4]), 0, GL_DYNAMIC_STORAGE_BIT);
+		glNamedBufferStorage(vbo, max_batch_size * sizeof(GLint[5]), 0, GL_DYNAMIC_STORAGE_BIT);
 		err = glGetError();
 
 		glCreateVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glVertexAttribIPointer(0, 4, GL_UNSIGNED_INT, 0, 0);
+		glVertexAttribIPointer(0, 4, GL_UNSIGNED_INT, sizeof(GLint[5]), (void*)0);
+		glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, sizeof(GLint[5]), (void*)sizeof(GLint[4]));
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
 		glBindVertexArray(0);
 
 		const char* vs_src = 
@@ -105,13 +107,16 @@ struct RenderContext
 		DEFN(VISUAL_CELLS)
 		CODE(
 			layout(location = 0) in ivec4 in_xyuv;
+			layout(location = 1) in int in_diag;
 			out ivec4 xyuv;
+			out int diag;
 
 			void main()
 			{
 				int duv = HEIGHT_CELLS + 1; 
 				xyuv = in_xyuv;
 				xyuv.zw *= duv;
+				diag = in_diag;
 			}
 		);
 
@@ -129,6 +134,7 @@ struct RenderContext
 			uniform mat4 tm;
 
 			in ivec4 xyuv[];
+			in int diag[];
 
 			out vec2 world_xy;
 			out vec3 uvh;
@@ -150,6 +156,8 @@ struct RenderContext
 				// should allow having upto 6x6 patches -> 12 scalars * 6 strips * (6+1) cols * 2 verts = 1008 components (out of 1024)
 				// currently max is 4x4 -> 12 scalars * 4*4 quads * 4 verts -> 768 components
 
+				int rot = diag[0];
+				ivec4 order[2] = ivec4[2](ivec4(0, 1, 2, 3), ivec4(1, 3, 0, 2));
 
 				for (int y = 0; y < HEIGHT_CELLS; y++)
 				{
@@ -189,12 +197,24 @@ struct RenderContext
 								}
 							}
 						}
-						
+
+						vec3 norm[4];
+						norm[0] = cross(xyz[1] - xyz[0], xyz[2] - xyz[0]);
+						norm[1] = cross(xyz[2] - xyz[3], xyz[1] - xyz[3]);
+						norm[2] = cross(xyz[3] - xyz[1], xyz[0] - xyz[1]);
+						norm[3] = cross(xyz[0] - xyz[2], xyz[3] - xyz[2]);
+
+						/*
 						normal = cross(xyz[3] - xyz[0], xyz[2] - xyz[1]);
 						normal.xy *= 1.0 / HEIGHT_SCALE;
+						*/
 
-						for (int i = 0; i < 4; i++)
+						int r = rot & 1;
+						/*
+						for (int j = 0; j < 4; j++)
 						{
+							int i = order[r][j];
+
 							world_xy = xyz[i].xy;
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
 							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
@@ -202,7 +222,58 @@ struct RenderContext
 							gl_Position = tm * vec4(xyz[i], 1.0);
 							EmitVertex();
 						}
+						*/
 
+						{
+							int i = order[r][0];
+
+							world_xy = xyz[i].xy;
+							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
+							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
+
+							gl_Position = tm * vec4(xyz[i], 1.0);
+							EmitVertex();
+						}
+						{
+							int i = order[r][1];
+
+							world_xy = xyz[i].xy;
+							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
+							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
+
+							gl_Position = tm * vec4(xyz[i], 1.0);
+							EmitVertex();
+						}
+						{
+							int i = order[r][2];
+
+							world_xy = xyz[i].xy;
+							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
+							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
+
+							normal = norm[2*r];
+							normal.xy *= 1.0 / HEIGHT_SCALE;
+
+							gl_Position = tm * vec4(xyz[i], 1.0);
+
+							EmitVertex();
+						}
+						{
+							int i = order[r][3];
+
+							world_xy = xyz[i].xy;
+							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
+							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
+
+							normal = norm[2 * r + 1];
+							normal.xy *= 1.0 / HEIGHT_SCALE;
+
+							gl_Position = tm * vec4(xyz[i], 1.0);
+							EmitVertex();
+						}
+
+
+						rot = rot >> 1;
 						EndPrimitive();
 					}
 				}
@@ -221,6 +292,29 @@ struct RenderContext
 			flat in vec3 normal;
 			in vec3 uvh;
 			in vec2 world_xy;
+
+			float Grid(vec2 d, vec2 p, float s)
+			{
+				d *= s;
+				p = fract(p*s + vec2(0.5));
+
+				float r = 1.0;
+
+				if (d.x < 0.25)
+				{
+					float a = clamp(-log2(d.x * 4), 0.0, 1.0);
+					float m = smoothstep(0.5 - d.x, 0.5, p.x) * smoothstep(0.5 + d.x, 0.5, p.x);
+					r *= mix(1.0, pow(1.0 - m, 0.5), a);
+				}
+				if (d.y < 0.25)
+				{
+					float a = clamp(-log2(d.y * 4), 0.0, 1.0);
+					float m = smoothstep(0.5 - d.y, 0.5, p.y) * smoothstep(0.5 + d.y, 0.5, p.y);
+					r *= mix(1.0, pow(1.0 - m, 0.5), a);
+				}
+
+				return r;
+			}
 			
 			void main()
 			{
@@ -231,48 +325,17 @@ struct RenderContext
 				if (!gl_FrontFacing)
 					color.rgb = 0.25 * (vec3(1.0) - color.rgb);
 
+				float dx = 1.25*length(vec2(dFdxFine(uvh.x), dFdyFine(uvh.x)));
+				float dy = 1.25*length(vec2(dFdxFine(uvh.y), dFdyFine(uvh.y)));
 
-				vec2 duv = fwidth(uvh.xy);
-				if (duv.x < 0.25)
-				{
-					float a = min(1.0, -log2(duv.x * 4));
-					float m = smoothstep(0, duv.x, uvh.x) * smoothstep(4.0, 4.0 - duv.x, uvh.x);
-					color.rgb *= mix(1.0,m,a);
-				}
-				if (duv.y < 0.25)
-				{
-					float a = min(1.0, -log2(duv.y * 4));
-					float m = smoothstep(0, duv.y, uvh.y) * smoothstep(4.0, 4.0 - duv.y, uvh.y);
-					color.rgb *= mix(1.0, m, a);
-				}
+				vec2 d = vec2(dx, dy);
 
-				vec2 pq = fract(uvh.xy);
-				if (duv.x < 0.125)
-				{
-					float a = min(1.0, -log2(duv.x * 8));
-					float m = smoothstep(0, 2.0*duv.x, pq.x) * smoothstep(1.0, 1.0 - 2.0*duv.x, pq.x);
-					color.rgb *= mix(1.0, m, a);
-				}
-				if (duv.y < 0.125)
-				{
-					float a = min(1.0, -log2(duv.y * 8));
-					float m = smoothstep(0, 2.0*duv.y, pq.y) * smoothstep(1.0, 1.0 - 2.0*duv.y, pq.y);
-					color.rgb *= mix(1.0, m, a);
-				}
+				float grid = 1.0;
+				grid = min(grid, Grid(d*1.50, uvh.xy, 1.0 / float(HEIGHT_CELLS)));
+				grid = min(grid, Grid(d*1.25, uvh.xy, 1.0));
+				grid = min(grid, Grid(d*1.00, uvh.xy, float(VISUAL_CELLS) / float(HEIGHT_CELLS)));
 
-				pq = fract(4.0*uvh.xy);
-				if (duv.x < 0.0625)
-				{
-					float a = min(1.0, -log2(duv.x * 16));
-					float m = smoothstep(0, 4.0*duv.x, pq.x) * smoothstep(1.0, 1.0 - 4.0*duv.x, pq.x);
-					color.rgb *= mix(1.0, m, a);
-				}
-				if (duv.y < 0.0625)
-				{
-					float a = min(1.0, -log2(duv.y * 16));
-					float m = smoothstep(0, 4.0*duv.y, pq.y) * smoothstep(1.0, 1.0 - 4.0*duv.y, pq.y);
-					color.rgb *= mix(1.0, m, a);
-				}
+				color.rgb *= grid;
 
 				// brush preview
 				if (br.w != 0.0)
@@ -392,12 +455,13 @@ struct RenderContext
 			rc->head = ta->page;
 		}
 
-		GLint* patch = buf->data + 4 * buf->size;
+		GLint* patch = buf->data + 5 * buf->size;
 
 		patch[0] = x;
 		patch[1] = y;
 		patch[2] = ta->x;
 		patch[3] = ta->y;
+		patch[4] = GetTerrainDiag(p);
 
 		buf->size++;
 
@@ -412,7 +476,7 @@ struct RenderContext
 				glBindTextureUnit(0, rc->page_tex);
 			}
 
-			glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[4]) * buf->size, buf->data);
+			glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[5]) * buf->size, buf->data);
 			glDrawArrays(GL_POINTS, 0, buf->size);
 
 			if (buf->prev)
@@ -445,7 +509,7 @@ struct RenderContext
 			}
 
 			draws++;
-			glNamedBufferSubData(vbo, 0, sizeof(GLint[4]) * buf->size, buf->data);
+			glNamedBufferSubData(vbo, 0, sizeof(GLint[5]) * buf->size, buf->data);
 			glDrawArrays(GL_POINTS, 0, buf->size);
 
 			tp = buf->next;

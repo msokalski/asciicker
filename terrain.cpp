@@ -70,6 +70,7 @@ struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 	// 1bit elevation, 6bit material
 	// uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
+	uint16_t diag;
 
 #ifdef TEXHEAP
 	TexAlloc* ta; // MUST BE AT THE TAIL OF STRUCT !!!
@@ -114,6 +115,7 @@ Terrain* CreateTerrain(int z)
 		for (int y = 0; y <= HEIGHT_CELLS; y++)
 			for (int x = 0; x <= HEIGHT_CELLS; x++)
 				p->height[y][x] = z;
+		p->diag = 0;
 
 		t->root = p;
 		t->patches = 1;
@@ -211,6 +213,131 @@ void DeleteTerrain(Terrain* t)
 		}
 	}
 }
+
+struct Tap3x3
+{
+	Tap3x3(Patch* c)
+	{
+		assert(c);
+		p[0][0] = GetTerrainNeighbor(c, -1, -1);
+		p[0][1] = GetTerrainNeighbor(c, 0, -1);
+		p[0][2] = GetTerrainNeighbor(c, +1, -1);
+		p[1][0] = GetTerrainNeighbor(c, -1, 0);
+		p[1][1] = c;
+		p[1][2] = GetTerrainNeighbor(c, +1, 0);
+		p[2][0] = GetTerrainNeighbor(c, -1, +1);
+		p[2][1] = GetTerrainNeighbor(c, 0, +1);
+		p[2][2] = GetTerrainNeighbor(c, +1, +1);
+	}
+
+	void SetDiag(int x, int y, bool d)
+	{
+		int px = 1, py = 1;
+
+		if (x < 0)
+		{
+			x -= HEIGHT_CELLS;
+			px = 0;
+		}
+		else
+		if (x >= HEIGHT_CELLS)
+		{
+			x -= HEIGHT_CELLS;
+			px = 2;
+		}
+
+		if (y < 0)
+		{
+			y += HEIGHT_CELLS;
+			py = 0;
+		}
+		else
+		if (y >= HEIGHT_CELLS)
+		{
+			y -= HEIGHT_CELLS;
+			py = 2;
+		}
+
+		if (p[py][px])
+		{
+			if (d)
+				p[py][px]->diag |= 1 << (x + y * HEIGHT_CELLS);
+			else
+				p[py][px]->diag &= ~(1 << (x + y * HEIGHT_CELLS));
+		}
+		else
+		{
+			int a = 0;
+		}
+	}
+
+	int Sample(int x, int y)
+	{
+		int px = 1, py = 1;
+
+		if (x < 0)
+		{
+			x -= HEIGHT_CELLS;
+			px = 0;
+		}
+		else
+		if (x >= HEIGHT_CELLS)
+		{
+			x -= HEIGHT_CELLS;
+			px = 2;
+		}
+
+		if (y < 0)
+		{
+			y += HEIGHT_CELLS;
+			py = 0;
+		}
+		else
+		if (y >= HEIGHT_CELLS)
+		{
+			y -= HEIGHT_CELLS;
+			py = 2;
+		}
+
+		if (!p[py][px])
+		{
+			if (px == 0)
+				x = 0;
+			else
+			if (px == 2)
+				x = HEIGHT_CELLS;
+
+			if (py == 0)
+				y = 0;
+			else
+			if (py == 2)
+				y = HEIGHT_CELLS;
+
+			px = 1;
+			py = 1;
+		}
+
+		return p[py][px]->height[y][x];
+	}
+
+	void Update()
+	{
+		for (int y = -1; y <= HEIGHT_CELLS; y++)
+		{
+			for (int x = -1; x <= HEIGHT_CELLS; x++)
+			{
+				int ll = Sample(x, y) - Sample(x - 1, x - 1);
+				int ur = Sample(x + 2, y + 2) - Sample(x + 1, y + 1);
+				int lr = Sample(x + 1, y) - Sample(x + 2, y - 1);
+				int ul = Sample(x - 1, y + 2) - Sample(x, y + 1);
+
+				SetDiag(x, y, abs(ll - ur) < abs(lr - ul));
+			}
+		}
+	}
+
+	Patch* p[3][3];
+};
 
 Patch* GetTerrainPatch(Terrain* t, int x, int y)
 {
@@ -402,6 +529,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 		for (int y = 0; y <= HEIGHT_CELLS; y++)
 			for (int x = 0; x <= HEIGHT_CELLS; x++)
 				p->height[y][x] = z;
+		p->diag = 0;
 
 		t->root = p;
 		t->patches = 1;
@@ -637,6 +765,8 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			p->parent = n;
 			p->flags = 0;
 
+			p->diag = 0;
+
 			int nx = x - t->x, ny = y - t->y;
 
 			Patch* np[8] =
@@ -807,6 +937,10 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				}
 			}
 
+			// update diag flags
+			Tap3x3 tap(p);
+			tap.Update();
+
 			UpdateNodes(p);
 
 #ifdef TEXHEAP
@@ -820,6 +954,62 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 	assert(0); // should never reach here
 	return 0;
 }
+
+Patch* GetTerrainNeighbor(Patch* p, int dx, int dy)
+{
+	if (dx == 0 && dy == 0)
+		return p;
+
+	int r = 1;
+
+	QuadItem* q = p;
+	Node* n = q->parent;
+
+	while (n)
+	{
+		if (n->quad[1] == q)
+			dx += r;
+		else
+		if (n->quad[2] == q)
+			dy += r;
+		else
+		if (n->quad[3] == q)
+		{
+			dx += r;
+			dy += r;
+		}
+		else
+			assert(n->quad[0] == q);
+
+		r <<= 1;
+
+		if (dx >= 0 && dx < r && dy >= 0 && dy < r)
+			break; // in range!
+
+		q = n;
+		n = n->parent;
+	}
+
+	while (n)
+	{
+		int hr = r >> 1;
+
+		int i = 0;
+		if (dx >= hr)
+			i |= 1;
+		if (dy >= hr)
+			i |= 2;
+
+		if (hr == 1)
+			return (Patch*)n->quad[i];
+
+		r = hr;
+		n = (Node*)n->quad[i];
+	}
+	   
+	return 0;
+}
+
 
 int GetTerrainPatches(Terrain* t)
 {
@@ -860,6 +1050,9 @@ void UpdateTerrainPatch(Patch* p)
 		}
 	}
 
+	Tap3x3 tap(p);
+	tap.Update();
+
 #ifdef TEXHEAP
 	p->ta->Update(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height); 
 #endif
@@ -878,6 +1071,11 @@ TexAlloc* GetTerrainTexAlloc(Patch* p)
 	return p->ta;
 }
 #endif
+
+uint16_t GetTerrainDiag(Patch* p)
+{
+	return ~p->diag;
+}
 
 static inline /*__forceinline*/ void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
