@@ -413,6 +413,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (!dpy)
 		return false;
 
+	Atom wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+
 	Window root = DefaultRootWindow(dpy);
 	if (!root)
 	{
@@ -431,7 +433,19 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	XSetWindowAttributes swa;
 	swa.colormap = cmap;
-	swa.event_mask = ExposureMask | PointerMotionMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask;
+	swa.event_mask = 
+		StructureNotifyMask |
+		PropertyChangeMask | 
+		VisibilityChangeMask | 
+		FocusChangeMask |
+		ExposureMask | 
+		PointerMotionMask | 
+		KeyPressMask | 
+		KeyReleaseMask | 
+		ButtonPressMask | 
+		ButtonReleaseMask |
+		EnterWindowMask |
+		LeaveWindowMask;
 
 	// win is global
 	win = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
@@ -440,6 +454,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		XCloseDisplay(dpy);
 		return false;
 	}
+
+	XSetWMProtocols(dpy, win, &wm_delete_window, 1);		
 
  	XMapWindow(dpy, win);
 	mapped = true;
@@ -485,20 +501,47 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 				platform_api.resize(w,h);			
 		}
 
-		if (XCheckWindowEvent(dpy, win, -1, &xev))
+		if (XPending(dpy))
 		{
+			XNextEvent(dpy, &xev);
+
+			if (xev.type == ClientMessage) 
+			{
+				if ((Atom)xev.xclient.data.l[0] == wm_delete_window) 
+				{
+					glXMakeCurrent(dpy, None, NULL);
+					glXDestroyContext(dpy, glc);
+					XDestroyWindow(dpy,win);
+					break;
+				}
+			}
+
+			/*
 			if (xev.type == DestroyNotify)
 			{
 				glXMakeCurrent(dpy, None, NULL);
 				glXDestroyContext(dpy, glc);
 				break;
 			}
+			*/
 
 			if (xev.type == Expose) 
 			{
 				if (platform_api.render)
 					platform_api.render();
 			}
+			else 
+			if(xev.type == EnterNotify) 
+			{
+				if (platform_api.mouse)
+					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::ENTER);
+			}
+			else 
+			if(xev.type == LeaveNotify) 
+			{
+				if (platform_api.mouse)
+					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::LEAVE);
+			}			
 			else 
 			if(xev.type == KeyPress) 
 			{
@@ -510,14 +553,38 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else
 			if (xev.type == ButtonPress)
 			{
+				MouseInfo mi = (MouseInfo)0;
+				switch (xev.xbutton.button)
+				{
+					case Button1: mi = MouseInfo::LEFT_DN; break;
+					case Button3: mi = MouseInfo::RIGHT_DN; break;
+					case Button2: mi = MouseInfo::MIDDLE_DN; break;
+					case Button5: mi = MouseInfo::WHEEL_DN; break;
+					case Button4: mi = MouseInfo::WHEEL_UP; break;
+				}
+
+				// xev.xbutton.state can contain:
+				// Button1Mask, Button2Mask, Button3Mask, Button4Mask, Button5Mask, 
+				// ShiftMask, LockMask, ControlMask, Mod1Mask, Mod2Mask, Mod3Mask, Mod4Mask, and Mod5Mask
+
+				// todo:
+				// add it to mi state :)
+
 				if (platform_api.mouse)
-					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::LEFT_DN);				
+					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,mi);				
 			}
 			else
 			if (xev.type == ButtonRelease)
 			{
+				MouseInfo mi = (MouseInfo)0;
+				switch (xev.xbutton.button)
+				{
+					case Button1: mi = MouseInfo::LEFT_UP; break;
+					case Button3: mi = MouseInfo::RIGHT_UP; break;
+					case Button2: mi = MouseInfo::MIDDLE_UP; break;
+				}
 				if (platform_api.mouse)
-					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::LEFT_UP);
+					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,mi);
 			}
 			else
 			if (xev.type == MotionNotify)

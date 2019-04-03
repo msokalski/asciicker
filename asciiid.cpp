@@ -1308,7 +1308,7 @@ void my_render()
 
 	float br_xyra[4] = { 0,0, br_radius, 0 };
 	float br_quad[3] = { 0,0,0 };
-	float br_probe[3] = { probe_z, 1.0, br_limit ? br_alpha : 0 };
+	float br_probe[3] = { (float)probe_z, 1.0f, br_limit ? br_alpha : 0.0f };
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
