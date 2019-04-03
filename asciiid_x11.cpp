@@ -533,14 +533,26 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else 
 			if(xev.type == EnterNotify) 
 			{
+				// xev.xcrossing.state can contain:
+				// Button1Mask, Button2Mask, Button3Mask
+
+				// todo:
+				// add it to mi state :)
+				
 				if (platform_api.mouse)
-					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::ENTER);
+					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y,MouseInfo::ENTER);
 			}
 			else 
 			if(xev.type == LeaveNotify) 
 			{
+				// xev.xcrossing.state can contain:
+				// Button1Mask, Button2Mask, Button3Mask
+
+				// todo:
+				// add it to mi state :)				
+
 				if (platform_api.mouse)
-					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,MouseInfo::LEAVE);
+					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y,MouseInfo::LEAVE);
 			}			
 			else 
 			if(xev.type == KeyPress) 
@@ -564,8 +576,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 				}
 
 				// xev.xbutton.state can contain:
-				// Button1Mask, Button2Mask, Button3Mask, Button4Mask, Button5Mask, 
-				// ShiftMask, LockMask, ControlMask, Mod1Mask, Mod2Mask, Mod3Mask, Mod4Mask, and Mod5Mask
+				// Button1Mask, Button2Mask, Button3Mask
 
 				// todo:
 				// add it to mi state :)
@@ -583,12 +594,25 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					case Button3: mi = MouseInfo::RIGHT_UP; break;
 					case Button2: mi = MouseInfo::MIDDLE_UP; break;
 				}
+
+				// xev.xbutton.state can contain:
+				// Button1Mask, Button2Mask, Button3Mask
+
+				// todo:
+				// add it to mi state :)
+
 				if (platform_api.mouse)
 					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,mi);
 			}
 			else
 			if (xev.type == MotionNotify)
 			{
+				// xev.xmotion.state can contain:
+				// Button1Mask, Button2Mask, Button3Mask
+
+				// todo:
+				// add it to mi state :)
+
 				if (platform_api.mouse)
 					platform_api.mouse(xev.xmotion.x,xev.xmotion.y,MouseInfo::MOVE);
 			}
