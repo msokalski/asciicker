@@ -73,6 +73,10 @@ double painting_dx;
 double painting_dy;
 double paint_dist;
 
+bool diag_flipped = false;
+bool br_limit = false;
+int probe_z = 0;
+
 uint64_t g_Time; // in microsecs
 
 #define QUOT(a) #a
@@ -133,6 +137,9 @@ struct RenderContext
 			uniform usampler2D z_tex;
 			uniform mat4 tm;
 
+			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
+
+
 			in ivec4 xyuv[];
 			in int diag[];
 
@@ -192,8 +199,43 @@ struct RenderContext
 								if (len < br.z)
 								{
 									float gauss = (0.5 + 0.5*cos(len/br.z*3.141592));
-									xyz[i].z += int(round(gauss*gauss * br.w * br.z * HEIGHT_SCALE));
-									xyz[i].z = clamp(xyz[i].z, 0, 0xffff);
+
+									int d = int(round(gauss*gauss * br.w * br.z * HEIGHT_SCALE));
+
+									float z = xyz[i].z + d;
+
+									if (pr.z!=0) // limit enabled
+									{
+										if (d > 0)
+										{
+											if (xyz[i].z > pr.x)
+												z = xyz[i].z;
+											else
+											if (z > pr.x)
+												z = pr.x;
+										}
+										else
+										if (d < 0)
+										{
+											if (xyz[i].z < pr.x)
+												z = xyz[i].z;
+											else
+											if (z < pr.x)
+												z = pr.x;
+										}
+									}
+									else
+									{
+										if (z < 0)
+											z = 0;
+										if (z > 0xffff)
+											z = 0xffff;
+									}
+
+									xyz[i].z = z;
+
+									// xyz[i].z += int(round(gauss*gauss * br.w * br.z * HEIGHT_SCALE));
+									// xyz[i].z = clamp(xyz[i].z, 0, 0xffff);
 								}
 							}
 						}
@@ -204,25 +246,10 @@ struct RenderContext
 						norm[2] = cross(xyz[3] - xyz[1], xyz[0] - xyz[1]);
 						norm[3] = cross(xyz[0] - xyz[2], xyz[3] - xyz[2]);
 
-						/*
-						normal = cross(xyz[3] - xyz[0], xyz[2] - xyz[1]);
-						normal.xy *= 1.0 / HEIGHT_SCALE;
-						*/
-
 						int r = rot & 1;
-						/*
-						for (int j = 0; j < 4; j++)
-						{
-							int i = order[r][j];
 
-							world_xy = xyz[i].xy;
-							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
-							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
-
-							gl_Position = tm * vec4(xyz[i], 1.0);
-							EmitVertex();
-						}
-						*/
+						normal = norm[2 * r];
+						normal.xy *= 1.0 / HEIGHT_SCALE;
 
 						{
 							int i = order[r][0];
@@ -251,22 +278,19 @@ struct RenderContext
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
 							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
 
-							normal = norm[2*r];
-							normal.xy *= 1.0 / HEIGHT_SCALE;
-
 							gl_Position = tm * vec4(xyz[i], 1.0);
-
 							EmitVertex();
 						}
+
+						normal = norm[2 * r + 1];
+						normal.xy *= 1.0 / HEIGHT_SCALE;
+
 						{
 							int i = order[r][3];
 
 							world_xy = xyz[i].xy;
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
 							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
-
-							normal = norm[2 * r + 1];
-							normal.xy *= 1.0 / HEIGHT_SCALE;
 
 							gl_Position = tm * vec4(xyz[i], 1.0);
 							EmitVertex();
@@ -288,7 +312,10 @@ struct RenderContext
 		CODE(
 			layout(location = 0) out vec4 color;
 
-			uniform vec4 br;
+			uniform vec4 br; // brush
+			uniform vec3 qd; // quad diag
+			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
+
 			flat in vec3 normal;
 			in vec3 uvh;
 			in vec2 world_xy;
@@ -321,6 +348,22 @@ struct RenderContext
 				vec3 light_pos = normalize(vec3(1, 1, 0.25));
 				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
 				color = vec4(vec3(light),1.0);
+
+				{
+					// quad preview
+					float d = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
+					if (world_xy.x >= qd.x && world_xy.x < qd.x + d &&
+						world_xy.y >= qd.y && world_xy.y < qd.y + d)
+					{
+						color.rb = mix(color.rb, color.rb * 0.5, qd.z);
+					}
+				}
+
+				{
+					// height probe
+					if (uvh.z * HEIGHT_SCALE < pr.x)
+						color.g *= (1.0 - 0.25 * pr.y);
+				}
 
 				if (!gl_FrontFacing)
 					color.rgb = 0.25 * (vec3(1.0) - color.rgb);
@@ -401,6 +444,8 @@ struct RenderContext
 		tm_loc = glGetUniformLocation(prg, "tm");
 		z_tex_loc = glGetUniformLocation(prg, "z_tex");
 		br_loc = glGetUniformLocation(prg, "br");
+		qd_loc = glGetUniformLocation(prg, "qd");
+		pr_loc = glGetUniformLocation(prg, "pr");
 	}
 
 	void Delete()
@@ -410,7 +455,7 @@ struct RenderContext
 		glDeleteProgram(prg);
 	}
 
-	void BeginPatches(const double* tm, const float* br)
+	void BeginPatches(const double* tm, const float* br, const float* qd, const float* pr)
 	{
 		glUseProgram(prg);
 
@@ -426,6 +471,8 @@ struct RenderContext
 		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
 		glUniform1i(z_tex_loc, 0);
 		glUniform4fv(br_loc, 1, br);
+		glUniform3fv(qd_loc, 1, qd);
+		glUniform3fv(pr_loc, 1, pr);
 		glBindVertexArray(vao);
 
 		head = 0;
@@ -531,6 +578,8 @@ struct RenderContext
 	GLint tm_loc; // uniform
 	GLint z_tex_loc;
 	GLint br_loc;
+	GLint qd_loc;
+	GLint pr_loc;
 
 	GLuint prg;
 	GLuint vao;
@@ -687,10 +736,34 @@ static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 					max_r2 = fmax(max_r2, dx + dy);
 
 				int z = map[i] + d;
-				if (z < 0)
-					z = 0;
-				if (z > 0xffff)
-					z = 0xffff;
+
+				if (br_limit)
+				{
+					if (d > 0)
+					{
+						if (map[i] > probe_z)
+							z = map[i];
+						else
+						if (z > probe_z)
+							z = probe_z;
+					}
+					else
+					if (d < 0)
+					{
+						if (map[i] < probe_z)
+							z = map[i];
+						else
+						if (z < probe_z)
+							z = probe_z;
+					}
+				}
+				else
+				{
+					if (z < 0)
+						z = 0;
+					if (z > 0xffff)
+						z = 0xffff;
+				}
 				map[i] = z;
 			}
 		}
@@ -931,57 +1004,43 @@ void my_render()
 
 		if (ImGui::CollapsingHeader("Brush", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			const char* mode = "";
+
+			if (!painting && io.KeyCtrl && io.KeyShift)
+			{
+				mode = "HEIGHT PROBE";
+			}
+			else
+			if (!painting && io.KeyCtrl)
+				mode = "DIAGONAL FLIP";
+			else
+			{
+				if (io.KeyShift)
+					mode = br_alpha >= 0 ? "BLURRING" : "SHARPENING";
+				else
+					mode = br_alpha >= 0 ? "ASCENT" : "DESCENT";
+			}
+
+			ImGui::Text("MODE (shift/ctrl): %s", mode);
 			ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 5.f, 100.f);
-			ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -.5f, .5f);
+			ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -0.5f, +0.5f);
 
-			/*
-			static bool mat;
-			ImGui::Checkbox("MATERIAL",&mat);
 
-			static const char* lab[8][8] =
-			{
-				{"00","01","02","03","04","05","06","07"},
-				{"08","09","0A","0B","0C","0D","0E","0F"},
-				{"10","11","12","13","14","15","16","17"},
-				{"18","19","1A","1B","1C","1D","1E","1F"},
-				{"20","21","22","23","24","25","26","27"},
-				{"28","29","2A","2B","2C","2D","2E","2F"},
-				{"30","31","32","33","34","35","36","37"},
-				{"38","39","3A","3B","3C","3D","3E","3F"},
-			};
+			ImGui::Checkbox("BRUSH HEIGHT LIMIT",&br_limit);
+			ImGui::SameLine();
 
-			static float rgb[8][8][3];
-			static bool init_rgb = true;
-			if (init_rgb)
-			{
-				for (int c = 0; c < 64; c++)
-				{
-					int x = c & 7;
-					int y = (c >> 4) | ((c >> 3)&1) << 2;
-					rgb[y][x][0] = (c&3) / 3.0f;
-					rgb[y][x][1] = ((c>>2)&3) / 3.0f;
-					rgb[y][x][2] = ((c>>4)&3) / 3.0f;
-				}
-			}
+			// Arrow buttons with Repeater
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			ImGui::PushButtonRepeat(true);
+			if (ImGui::ArrowButton("##left", ImGuiDir_Left)) { if (probe_z>0) probe_z-=1; }
+			ImGui::SameLine(0.0f, spacing);
+			if (ImGui::ArrowButton("##right", ImGuiDir_Right)) { if (probe_z<0xffff) probe_z+=1; }
+			ImGui::PopButtonRepeat();
+			ImGui::SameLine();
+			ImGui::Text("%d", probe_z);
+			ImGui::Text("%s", "ctrl+shift to probe");
 
-			for (int y = 0; y < 8; y++)
-			{
-				for (int x = 0; x < 8; x++)
-				{
-					ImGui::RadioButton(lab[y][x], true); ImGui::SameLine();
-					ImGui::ColorEdit3(lab[y][x], rgb[y][x], 
-						ImGuiColorEditFlags_NoAlpha |
-						ImGuiColorEditFlags_NoInputs |
-						ImGuiColorEditFlags_NoLabel
-					);
-
-					if (x < 7)
-						ImGui::SameLine();
-				}
-
-			}
-			*/
-
+			// ImGui::SliderFloat("BRUSH HEIGHT", &probe_z, 0.0f, 65535.0f);
 		}
 
 		if (ImGui::CollapsingHeader("Undo / Redo", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1081,8 +1140,9 @@ void my_render()
 		if (show_demo_window)
 			ImGui::ShowDemoWindow(&show_demo_window);
 
-		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
 		/*
+
+		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
 		{
 			static float f = 0.0f;
 			static int counter = 0;
@@ -1135,6 +1195,11 @@ void my_render()
 	// currently we're assuming: 1 visual cell = 1 font_size
 
 	double z_scale = 1.0 / HEIGHT_SCALE; // this is a constant, (what fraction of font_size is produced by +1 height_map)
+
+	if (!io.MouseDown[0])
+	{
+		diag_flipped = false;
+	}
 
 	if (!io.MouseDown[1])
 	{
@@ -1242,6 +1307,8 @@ void my_render()
 	tm[15] = 1.0;
 
 	float br_xyra[4] = { 0,0, br_radius, 0 };
+	float br_quad[3] = { 0,0,0 };
+	float br_probe[3] = { probe_z, 1.0, br_limit ? br_alpha : 0 };
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -1334,29 +1401,85 @@ void my_render()
 
 			if (p)
 			{
-				br_xyra[0] = (float)hit[0];
-				br_xyra[1] = (float)hit[1];
-				br_xyra[3] = br_alpha;
-
-				if (io.MouseDown[0])
+				if (io.KeyCtrl)
 				{
-					//BEGIN
-					URDO_Open();
-					painting = 1;
+					if (io.KeyShift)
+					{
+						// add here probe preview
+						if (io.MouseDown[0])
+						{
+							// height-probe
+							probe_z = (int)round(hit[2]);
+							br_probe[0] = probe_z;
+							br_probe[1] = 0.5;
+						}
+						else
+						{
+							// preview
+							br_probe[0] = round(hit[2]);
+							br_probe[1] = 0.5;
+						}
+					}
+					else
+					{
+						// add here quad preview
+						double qx = floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
+						double qy = floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
+						br_quad[0] = (float)qx;
+						br_quad[1] = (float)qy;
+						br_quad[2] = 1.0f;
 
-					painting_x = round(io.MousePos.x);
-					painting_y = round(io.MousePos.y);
+						if (!diag_flipped && io.MouseDown[0])
+						{
+							// floor xy hit coords to height cells
+							int hx = (int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
+							int hy = (int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
 
-					painting_dx = hit[0];
-					painting_dy = hit[1];
-					paint_dist = 0.0;
+							{
+								uint16_t diag = GetTerrainDiag(p);
+								diag ^= 1 << (hx + hy * HEIGHT_CELLS);
 
-					float alpha = br_alpha;
-					br_alpha *= STAMP_A;
-					Stamp(hit[0], hit[1]);
-					br_alpha = alpha;
+								// u/r is still screwed :(
 
-					// stamped, don't apply preview to it
+								URDO_Open();
+								URDO_Open();
+								URDO_Diag(p);
+								SetTerrainDiag(p, diag);
+								URDO_Close();
+								URDO_Close();
+							}
+
+							// one per click
+							diag_flipped = true;
+						}
+					}
+				}
+				else
+				{
+					br_xyra[0] = (float)hit[0];
+					br_xyra[1] = (float)hit[1];
+					br_xyra[3] = br_alpha;
+
+					if (io.MouseDown[0])
+					{
+						//BEGIN
+						URDO_Open();
+						painting = 1;
+
+						painting_x = round(io.MousePos.x);
+						painting_y = round(io.MousePos.y);
+
+						painting_dx = hit[0];
+						painting_dy = hit[1];
+						paint_dist = 0.0;
+
+						float alpha = br_alpha;
+						br_alpha *= STAMP_A;
+						Stamp(hit[0], hit[1]);
+						br_alpha = alpha;
+
+						// stamped, don't apply preview to it
+					}
 				}
 			}
 		}
@@ -1405,7 +1528,7 @@ void my_render()
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_GEQUAL);
-	rc->BeginPatches(tm, br_xyra);
+	rc->BeginPatches(tm, br_xyra, br_quad, br_probe);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 	rc->EndPatches();
@@ -1540,10 +1663,6 @@ void my_init()
 
 	free(rnd);
 
-	void TapCheck(Terrain* t);
-	TapCheck(terrain);
-
-
 	pos_x = num1 * VISUAL_CELLS / 2;
 	pos_y = num1 * VISUAL_CELLS / 2;
 	pos_z = 0x0;
@@ -1552,7 +1671,7 @@ void my_init()
 
 	int full[] = { -1280,0,800,600};
 	//int full[] = { 0,0,1920,1080};
-	//a3dSetRect(full, true);
+	a3dSetRect(full, true);
 
 	a3dSetVisible(true);
 }

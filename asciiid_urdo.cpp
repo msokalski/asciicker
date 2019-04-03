@@ -12,6 +12,7 @@ struct URDO
 	{
 		CMD_GROUP,
 		CMD_PATCH_UPDATE,
+		CMD_PATCH_DIAG
 	} cmd;
 
 	void Do(bool un);
@@ -33,8 +34,18 @@ struct URDO_PatchUpdate : URDO
 {
 	Patch* patch;
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
+	uint16_t diag;
 
 	static void Open(Patch* p); // alloc and copy original
+	void Do(bool un);
+};
+
+struct URDO_PatchDiag : URDO
+{
+	Patch* patch;
+	uint16_t diag;
+
+	static void Open(Patch* p);
 	void Do(bool un);
 };
 
@@ -52,6 +63,7 @@ void URDO::Do(bool un)
 	{
 		case CMD_GROUP: ((URDO_Group*)this)->Do(un); break;
 		case CMD_PATCH_UPDATE: ((URDO_PatchUpdate*)this)->Do(un); break;
+		case CMD_PATCH_DIAG: ((URDO_PatchDiag*)this)->Do(un); break;
 		default:
 			assert(0);
 	}
@@ -77,6 +89,9 @@ void URDO::Free()
 		case CMD_PATCH_UPDATE: 
 			bytes -= sizeof(URDO_PatchUpdate); 
 			break;
+		case CMD_PATCH_DIAG:
+			bytes -= sizeof(URDO_PatchDiag);
+			break;
 
 		default:
 			assert(0);
@@ -92,6 +107,7 @@ URDO* URDO::Alloc(CMD c)
 	{
 		case CMD_GROUP: s = sizeof(URDO_Group); break;
 		case CMD_PATCH_UPDATE: s = sizeof(URDO_PatchUpdate); break;
+		case CMD_PATCH_DIAG: s = sizeof(URDO_PatchDiag); break;
 		default:
 			assert(0);
 	}
@@ -217,8 +233,8 @@ void URDO_Purge()
 {
 	assert(!group_open);
 
-	PurgeUndo();
 	PurgeRedo();
+	PurgeUndo();
 }
 
 bool URDO_CanUndo()
@@ -357,6 +373,11 @@ void URDO_Patch(Patch* p)
 	URDO_PatchUpdate::Open(p);
 }
 
+void URDO_Diag(Patch* p)
+{
+	URDO_PatchDiag::Open(p);
+}
+
 void URDO_Group::Open()
 {
 	if (!group_open)
@@ -426,6 +447,7 @@ void URDO_PatchUpdate::Open(Patch* p)
 
 	urdo->patch = p;
 	memcpy(urdo->height, GetTerrainHeightMap(p), sizeof(uint16_t)*(HEIGHT_CELLS+1)*(HEIGHT_CELLS+1));
+	urdo->diag = GetTerrainDiag(p);
 }
 
 void URDO_PatchUpdate::Do(bool un)
@@ -439,6 +461,28 @@ void URDO_PatchUpdate::Do(bool un)
 		u[i] = s;
 	}
 
+	uint16_t d = diag;
+	diag = GetTerrainDiag(patch);
+
 	UpdateTerrainPatch(patch);
+	SetTerrainDiag(patch,d);
+}
+
+void URDO_PatchDiag::Open(Patch* p)
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_PatchDiag* urdo = (URDO_PatchDiag*)Alloc(CMD_PATCH_DIAG);
+
+	urdo->patch = p;
+	urdo->diag = GetTerrainDiag(p);
+}
+
+void URDO_PatchDiag::Do(bool un)
+{
+	uint16_t d = diag;
+	diag = GetTerrainDiag(patch);
+	SetTerrainDiag(patch, d);
 }
 

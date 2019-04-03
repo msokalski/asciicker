@@ -326,11 +326,29 @@ struct Tap3x3
 		{
 			for (int x = -1; x <= HEIGHT_CELLS; x++)
 			{
-				int c0 = 4 * Sample(x, y) - 2*Sample(x - 1, y - 1) - Sample(x, y - 1) - Sample(x - 1, y) +
-					2*Sample(x + 2, y + 2) + Sample(x + 1, y + 2) + Sample(x + 2, y + 1) - 4 * Sample(x + 1, y + 1);
+				int c0 =
+					+ Sample(x + 2, y + 2)
+					+ Sample(x + 1, y + 2)
+					+ Sample(x + 2, y + 1)
+					+ Sample(x - 1, y - 1)
+					+ Sample(x - 1, y)
+					+ Sample(x, y - 1)
+					- Sample(x, y)
+					- Sample(x + 1, y + 1)
+					- Sample(x + 1, y) * 2
+					- Sample(x, y + 1) * 2;
 
-				int c1 = 4 * Sample(x + 1, y) - 2*Sample(x + 2, y - 1) - Sample(x + 1, y - 1) - Sample(x + 2, y) +
-					2*Sample(x - 1, y + 2) + Sample(x - 1, y + 1) + Sample(x, y + 2) - 4 * Sample(x, y + 1);
+				int c1 =
+					+ Sample(x - 1, y + 2)
+					+ Sample(x - 1, y + 1)
+					+ Sample(x, y + 2)
+					+ Sample(x + 2, y - 1)
+					+ Sample(x + 1, y - 1)
+					+ Sample(x + 2, y)
+					- Sample(x, y + 1)
+					- Sample(x + 1, y)
+					- Sample(x, y) * 2
+					- Sample(x + 1, y + 1) * 2;
 
 				SetDiag(x, y, abs(c0) > abs(c1));
 			}
@@ -1085,6 +1103,11 @@ uint16_t GetTerrainDiag(Patch* p)
 	return p->diag;
 }
 
+void SetTerrainDiag(Patch* p, uint16_t diag)
+{
+	p->diag = diag;
+}
+
 static inline /*__forceinline*/ void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)
 {
 	if (range == VISUAL_CELLS)
@@ -1370,6 +1393,8 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
 	static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
 	bool hit = false;
 
+	int rot = p->diag;
+
 	for (int hy = 0; hy < HEIGHT_CELLS; hy++)
 	{
 		for (int hx = 0; hx < HEIGHT_CELLS; hx++)
@@ -1387,21 +1412,44 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
 
 			double r[3];
 
-			if (RayIntersectsTriangle(ray, v[2], v[0], v[1], r) &&  r[2] > ret[2])
+			if (rot & 1)
 			{
-				hit |= 1;
-				ret[0] = r[0];
-				ret[1] = r[1];
-				ret[2] = r[2];
+				if (RayIntersectsTriangle(ray, v[2], v[0], v[1], r) && r[2] > ret[2])
+				{
+					hit |= 1;
+					ret[0] = r[0];
+					ret[1] = r[1];
+					ret[2] = r[2];
+				}
+
+				if (RayIntersectsTriangle(ray, v[2], v[1], v[3], r) && r[2] > ret[2])
+				{
+					hit |= 1;
+					ret[0] = r[0];
+					ret[1] = r[1];
+					ret[2] = r[2];
+				}
+			}
+			else
+			{
+				if (RayIntersectsTriangle(ray, v[0], v[3], v[2], r) && r[2] > ret[2])
+				{
+					hit |= 1;
+					ret[0] = r[0];
+					ret[1] = r[1];
+					ret[2] = r[2];
+				}
+
+				if (RayIntersectsTriangle(ray, v[0], v[1], v[3], r) && r[2] > ret[2])
+				{
+					hit |= 1;
+					ret[0] = r[0];
+					ret[1] = r[1];
+					ret[2] = r[2];
+				}
 			}
 
-			if (RayIntersectsTriangle(ray, v[2], v[1], v[3], r) && r[2] > ret[2])
-			{
-				hit |= 1;
-				ret[0] = r[0];
-				ret[1] = r[1];
-				ret[2] = r[2];
-			}
+			rot >>= 1;
 		}
 	}
 
@@ -1665,21 +1713,3 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 	return patch;
 }
 
-void TapCheck(Terrain* t)
-{
-	for (int y = 0; y < 32; y++)
-	{
-		for (int x = 0; x < 32; x++)
-		{
-			Patch* c = GetTerrainPatch(t, x, y);
-			if (c)
-			{
-				Tap3x3 tap(c);
-				for (int dy = -1; dy <= 1; dy++)
-					for (int dx = -1; dx <= 1; dx++)
-						assert( GetTerrainPatch(t, x + dx, y + dy) == tap.p[dy+1][dx+1] );
-			}
-		}
-
-	}
-}

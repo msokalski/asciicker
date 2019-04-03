@@ -20,3 +20,4 @@ void URDO_Close();
 
 // patches
 void URDO_Patch(Patch* p);
+void URDO_Diag(Patch* p);
