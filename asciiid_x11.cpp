@@ -9,6 +9,7 @@
 #include<stdlib.h>
 #include<X11/X.h>
 #include<X11/Xlib.h>
+#include <X11/keysym.h>
 
 #include <stdint.h>
 #include <string.h>
@@ -17,7 +18,7 @@
 #include "gl.h"
 
 #include <GL/glx.h>
-#include <GL/glxext.h>
+//#include <GL/glxext.h>
 
 #include "asciiid_platform.h"
 
@@ -33,141 +34,251 @@ static int mouse_y = 0;
 static bool track = false;
 static bool closing = false;
 
-static const int ks_to_vk[256] =
+const char* caps[]=
 {
+	"A3D_NONE",
+	"A3D_BACKSPACE",
+	"A3D_TAB",
+	"A3D_ENTER",
+	"A3D_PAUSE",
+	"A3D_ESCAPE",
+	"A3D_SPACE",
+	"A3D_PAGEUP",
+	"A3D_PAGEDOWN",
+	"A3D_END",
+	"A3D_HOME",
+	"A3D_LEFT",
+	"A3D_UP",
+	"A3D_RIGHT",
+	"A3D_DOWN",
+	"A3D_PRINT",
+	"A3D_INSERT",
+	"A3D_DELETE",
+	"A3D_0",
+	"A3D_1",
+	"A3D_2",
+	"A3D_3",
+	"A3D_4",
+	"A3D_5",
+	"A3D_6",
+	"A3D_7",
+	"A3D_8",
+	"A3D_9",
+	"A3D_A",
+	"A3D_B",
+	"A3D_C",
+	"A3D_D",
+	"A3D_E",
+	"A3D_F",
+	"A3D_G",
+	"A3D_H",
+	"A3D_I",
+	"A3D_J",
+	"A3D_K",
+	"A3D_L",
+	"A3D_M",
+	"A3D_N",
+	"A3D_O",
+	"A3D_P",
+	"A3D_Q",
+	"A3D_R",
+	"A3D_S",
+	"A3D_T",
+	"A3D_U",
+	"A3D_V",
+	"A3D_W",
+	"A3D_X",
+	"A3D_Y",
+	"A3D_Z",
+	"A3D_LWIN",
+	"A3D_RWIN",
+	"A3D_APPS",
+	"A3D_NUMPAD_0",
+	"A3D_NUMPAD_1",
+	"A3D_NUMPAD_2",
+	"A3D_NUMPAD_3",
+	"A3D_NUMPAD_4",
+	"A3D_NUMPAD_5",
+	"A3D_NUMPAD_6",
+	"A3D_NUMPAD_7",
+	"A3D_NUMPAD_8",
+	"A3D_NUMPAD_9",
+	"A3D_NUMPAD_MULTIPLY",
+	"A3D_NUMPAD_DIVIDE",
+	"A3D_NUMPAD_ADD",
+	"A3D_NUMPAD_SUBTRACT",
+	"A3D_NUMPAD_DECIMAL",
+	"A3D_NUMPAD_ENTER",
+	"A3D_F1",
+	"A3D_F2",
+	"A3D_F3",
+	"A3D_F4",
+	"A3D_F5",
+	"A3D_F6",
+	"A3D_F7",
+	"A3D_F8",
+	"A3D_F9",
+	"A3D_F10",
+	"A3D_F11",
+	"A3D_F12",
+	"A3D_F13",
+	"A3D_F14",
+	"A3D_F15",
+	"A3D_F16",
+	"A3D_F17",
+	"A3D_F18",
+	"A3D_F19",
+	"A3D_F20",
+	"A3D_F21",
+	"A3D_F22",
+	"A3D_F23",
+	"A3D_F24",
+	"A3D_CAPSLOCK",
+	"A3D_NUMLOCK",
+	"A3D_SCROLLLOCK",
+	"A3D_LSHIFT",
+	"A3D_RSHIFT",
+	"A3D_LCTRL",
+	"A3D_RCTRL",
+	"A3D_LALT",
+	"A3D_RALT",
+	"A3D_OEM_COLON",		// ';:' for US
+	"A3D_OEM_PLUS",		// '+' any country
+	"A3D_OEM_COMMA",		// '",' any country
+	"A3D_OEM_MINUS",		// '-' any country
+	"A3D_OEM_PERIOD",		// '.' any country
+	"A3D_OEM_SLASH",		// '/?' for US
+	"A3D_OEM_TILDE",		// '`~' for US
+	"A3D_OEM_OPEN",       //  '[{' for US
+	"A3D_OEM_CLOSE",      //  ']}' for US
+	"A3D_OEM_BACKSLASH",  //  '\|' for US
+	"A3D_OEM_QUOTATION",  //  ''"' for US
+};	
+
+
+int kc_to_ki[128]=
+{
+	0,0,0,0,0,0,0,0,
+	0, // 8
+	A3D_ESCAPE, // 9
+	A3D_1, // 10
+	A3D_2, // 11
+	A3D_3, // 12
+	A3D_4, // 13
+	A3D_5, // 14
+	A3D_6, // 15
+	A3D_7, // 16
+	A3D_8, // 17
+	A3D_9, // 18
+	A3D_0, // 19
+	A3D_OEM_MINUS,
+	A3D_OEM_PLUS,
+	A3D_BACKSPACE,
+	A3D_TAB,
+	A3D_Q,
+	A3D_W,
+	A3D_E,
+	A3D_R,
+	A3D_T,
+	A3D_Y,
+	A3D_U,
+	A3D_I,
+	A3D_O,
+	A3D_P,
+	A3D_OEM_OPEN,
+	A3D_OEM_CLOSE, // 35
+	A3D_ENTER,
+	A3D_LCTRL,
+	A3D_A,
+	A3D_S,
+	A3D_D,
+	A3D_F,
+	A3D_G,//42
+	A3D_H,
+	A3D_J,
+	A3D_K,
+	A3D_L,
+	A3D_OEM_COLON,
+	A3D_OEM_QUOTATION,
+	A3D_OEM_TILDE,
+	A3D_LSHIFT,
+	A3D_OEM_BACKSLASH, // 51
+	A3D_Z,
+	A3D_X,
+	A3D_C,
+	A3D_V,
+	A3D_B,
+	A3D_N,
+	A3D_M,//58
+	A3D_OEM_COMMA,
+	A3D_OEM_PERIOD,
+	A3D_OEM_SLASH,
+	A3D_RSHIFT,//62
+	A3D_NUMPAD_MULTIPLY,//63
+	A3D_LALT,
+	A3D_SPACE,
+	A3D_CAPSLOCK,
+	A3D_F1,//67
+	A3D_F2,
+	A3D_F3,
+	A3D_F4,
+	A3D_F5,
+	A3D_F6,
+	A3D_F7,
+	A3D_F8,
+	A3D_F9,
+	A3D_F10,
+	A3D_NUMLOCK,//77
+	A3D_SCROLLLOCK,//78
+	A3D_NUMPAD_7,//79
+	A3D_NUMPAD_8,
+	A3D_NUMPAD_9,
+	A3D_NUMPAD_SUBTRACT,
+	A3D_NUMPAD_4,
+	A3D_NUMPAD_5,
+	A3D_NUMPAD_6,
+	A3D_NUMPAD_ADD,//86
+	A3D_NUMPAD_1,
+	A3D_NUMPAD_2,
+	A3D_NUMPAD_3, // 89
+	A3D_NUMPAD_0,
+	A3D_NUMPAD_DECIMAL,
+	0,//92
+	0,//93
+	0,//94
+	A3D_F11,//95
+	A3D_F12,//96
 	0,
-
-	XK_BackSpace,
-	XK_Tab,
-	XK_Return,
-
-	XK_Pause,
-	XK_Escape,
-
-	XK_space, // printable!
-	XK_Page_Up,
-	XK_Page_Down,
-	XK_End,
-	XK_Home,
-	XK_Left,
-	XK_Up,
-	XK_Right,
-	XK_Down,
-
-	XK_Print,
-	XK_Insert,
-	XK_Delete,
-
-	'0',
-	'1',
-	'2',
-	'3',
-	'4',
-	'5',
-	'6',
-	'7',
-	'8',
-	'9',
-
-	'A',
-	'B',
-	'C',
-	'D',
-	'E',
-	'F',
-	'G',
-	'H',
-	'I',
-	'J',
-	'K',
-	'L',
-	'M',
-	'N',
-	'O',
-	'P',
-	'Q',
-	'R',
-	'S',
-	'T',
-	'U',
-	'V',
-	'W',
-	'X',
-	'Y',
-	'Z',
-
-	XK_Meta_L,
-	XK_Meta_R,
-	XK_Menu,
-
-	XK_KP_0,
-	XK_KP_1,
-	XK_KP_2,
-	XK_KP_3,
-	XK_KP_4,
-	XK_KP_5,
-	XK_KP_6,
-	XK_KP_7,
-	XK_KP_8,
-	XK_KP_9,
-	XK_KP_Multiply,
-	XK_KP_Divide,
-	XK_KP_Add,
-	XK_KP_Subtract,
-	XK_KP_Decimal,
-	XK_KP_Enter,
-
-	XK_F1,
-	XK_F2,
-	XK_F3,
-	XK_F4,
-	XK_F5,
-	XK_F6,
-	XK_F7,
-	XK_F8,
-	XK_F9,
-	XK_F10,
-	XK_F11,
-	XK_F12,
-	XK_F13,
-	XK_F14,
-	XK_F15,
-	XK_F16,
-	XK_F17,
-	XK_F18,
-	XK_F19,
-	XK_F20,
-	XK_F21,
-	XK_F22,
-	XK_F23,
-	XK_F24,
-
-	XK_Caps_Lock,
-	XK_Num_Lock,
-	XK_Scroll_Lock,
-
-	XK_Shift_L,
-	XK_Shift_R,
-	XK_Control_L,
-	XK_Control_R,
-	XK_Alt_L,
-	XK_Alt_R,
-
-	// these should come in pairs (regular & shifted) 
-
-	XK_semicolon, 		//XK_semicolon,	// ';:'
-	XK_equal, 		//XK_plus,		// '=+' any country
-	XK_comma, 		//XK_less,		// ',<' any country
-	XK_minus, 		//XK_underscore,	// '-_' any country
-	XK_period, 		//XK_greater,		// '.>' any country
-	XK_slash, 		//XK_question,		// '/?' for US
-	XK_grave, 		//XK_asciitilde,	// '`~' for US
-
-	XK_bracketleft, 	//XK_braceleft,   	//  '[{' for US
-	XK_bracketright, 	//XK_braceright,	//  ']}' for US
-	XK_backslash, 		//XK_bar,		//  '\|' for US
-	XK_apostrophe, 		//XK_quotedbl		//  ''"' for US
 	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	A3D_NUMPAD_ENTER,//104
+	A3D_RCTRL,//105
+	A3D_NUMPAD_DIVIDE,//106
+	0,//107
+	A3D_RALT,//108
+	0,
+	A3D_HOME,//110
+	A3D_UP,
+	A3D_PAGEUP,
+	A3D_LEFT,
+	A3D_RIGHT,
+	A3D_END,
+	A3D_DOWN,
+	A3D_PAGEDOWN,
+	A3D_INSERT,
+	A3D_DELETE,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	A3D_PAUSE,//127
 };
 
 /*
@@ -490,6 +601,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (platform_api.resize)
 		platform_api.resize(w,h);
 
+	//int key_seq = 0;
+	//printf("%s:\n",caps[key_seq]);
+
 	while (!closing)
 	{
 		XGetWindowAttributes(dpy, win, &gwa);
@@ -515,15 +629,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					break;
 				}
 			}
-
-			/*
-			if (xev.type == DestroyNotify)
-			{
-				glXMakeCurrent(dpy, None, NULL);
-				glXDestroyContext(dpy, glc);
-				break;
-			}
-			*/
 
 			if (xev.type == Expose) 
 			{
@@ -557,10 +662,39 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else 
 			if(xev.type == KeyPress) 
 			{
+				/*
+				if (key_seq>=0)
+				{
+					printf("(seq%d)\t%d\t0x%04x\n",key_seq,(int)xev.xkey.keycode,(int)xev.xkey.keycode);
+					key_seq++;
+					if (caps[key_seq])
+						printf("%s:\n",caps[key_seq]);
+					else
+						key_seq = -1;
+				}
+				*/
+				if (platform_api.keyb_key)
+				{
+					int kc = xev.xkey.keycode;
+					if (kc>=0 && kc<128) 
+					{
+						printf("PRESS: %s\n",caps[kc_to_ki[kc]]);
+						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],true);
+					}
+				}
 			}
 			else 
 			if(xev.type == KeyRelease) 
 			{
+				if (platform_api.keyb_key)
+				{
+					int kc = xev.xkey.keycode;
+					if (kc>=0 && kc<128) 
+					{
+						printf("RELEASE: %s\n",caps[kc_to_ki[kc]]);
+						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],false);
+					}			
+				}
 			}
 			else
 			if (xev.type == ButtonPress)
