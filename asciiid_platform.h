@@ -7,6 +7,14 @@ struct AudioDesc
 	int channels;
 	int frequency;
 };
+
+struct ImageDesc
+{
+	int width;
+	int height;
+	int channels;
+	int depth;
+};
 */
 
 struct GraphicsDesc
@@ -194,6 +202,9 @@ struct PlatformInterface
 	void(*keyb_char)(wchar_t ch);
 	void(*keyb_focus)(bool set);
 	void(*mouse)(int x, int y, MouseInfo mi);
+
+	// todo:
+	//void(*audio)(int samples, void* buffer);
 };
 
 bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/);
@@ -220,3 +231,8 @@ bool a3dGetKeyb(KeyInfo ki); // return true if vk is down, keyb_char has no stat
 
 // keyb_focus
 bool a3dGetFocus();
+
+// TODO: (must be async - like in html5)
+// bool a3dLoadImage(const wchar_t* path, void(*cb)(const ImageDesc* desc, void* data, void* cookie), void* cookie);
+// bool a3dLoadAudio(const wchar_t* path, void(*cb)(const AudioDesc* desc, int samples, void* data, void* cookie), void* cookie);
+

@@ -24,22 +24,7 @@
 
 #include "matrix.h"
 
-static unsigned int g_seed = 0x87654321;
-
-// Used to seed the generator.           
-inline void fast_srand(int seed) {
-	g_seed = seed;
-}
-
-// Compute a pseudorandom integer.
-// Output value in range [0, 32767]
-#define FAST_RAND_MAX 0x7fff
-inline int fast_rand(void) {
-	g_seed = (214013 * g_seed + 2531011);
-	return (g_seed >> 16) & 0x7FFF;
-}
-
-
+#include "fast_rand.h"
 
 Terrain* terrain = 0;
 
@@ -90,8 +75,7 @@ struct RenderContext
 		int err = glGetError();
 		glCreateBuffers(1, &vbo);
 		err = glGetError();
-		int max_batch_size = 789; // of patches (each 16 quads), each batch item (single patch), is stored as x,y,u,v
-		glNamedBufferStorage(vbo, max_batch_size * sizeof(GLint[5]), 0, GL_DYNAMIC_STORAGE_BIT);
+		glNamedBufferStorage(vbo, TERRAIN_TEXHEAP_CAPACITY * sizeof(GLint[5]), 0, GL_DYNAMIC_STORAGE_BIT);
 		err = glGetError();
 
 		glCreateVertexArrays(1, &vao);
@@ -117,9 +101,7 @@ struct RenderContext
 
 			void main()
 			{
-				int duv = HEIGHT_CELLS + 1; 
 				xyuv = in_xyuv;
-				xyuv.zw *= duv;
 				diag = in_diag;
 			}
 		);
@@ -143,7 +125,7 @@ struct RenderContext
 			in ivec4 xyuv[];
 			in int diag[];
 
-			out vec2 world_xy;
+			out vec4 world_xyuv;
 			out vec3 uvh;
 			flat out vec3 normal;
 			
@@ -154,6 +136,7 @@ struct RenderContext
 				ivec2 xy;
 
 				vec3 xyz[4];
+				vec2 uv[4];
 
 				float rvh = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
 				float dxy = 1.0 / float(HEIGHT_CELLS);
@@ -171,22 +154,26 @@ struct RenderContext
 					for (int x = 0; x < HEIGHT_CELLS; x++)
 					{
 						xy = ivec2(x, y + 1);
-						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						uv[0] = (xyuv[0].zw + vec2(xy) / HEIGHT_CELLS) * VISUAL_CELLS;
+						z = texelFetch(z_tex, xyuv[0].zw*(HEIGHT_CELLS+1) + xy, 0).r;
 						xy = bxy + xy*VISUAL_CELLS;
 						xyz[0] = vec3(xy*dxy, z);
 
 						xy = ivec2(x, y);
-						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						uv[1] = (xyuv[0].zw + vec2(xy) / HEIGHT_CELLS) * VISUAL_CELLS;
+						z = texelFetch(z_tex, xyuv[0].zw*(HEIGHT_CELLS + 1) + xy, 0).r;
 						xy = bxy + xy*VISUAL_CELLS;
 						xyz[1] = vec3(xy*dxy, z);
 
 						xy = ivec2(x + 1, y + 1);
-						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						uv[2] = (xyuv[0].zw + vec2(xy) / HEIGHT_CELLS) * VISUAL_CELLS;
+						z = texelFetch(z_tex, xyuv[0].zw*(HEIGHT_CELLS + 1) + xy, 0).r;
 						xy = bxy + xy * VISUAL_CELLS;
 						xyz[2] = vec3(xy*dxy, z);
 
 						xy = ivec2(x + 1, y);
-						z = texelFetch(z_tex, xyuv[0].zw + xy, 0).r;
+						uv[3] = (xyuv[0].zw + vec2(xy) / HEIGHT_CELLS) * VISUAL_CELLS;
+						z = texelFetch(z_tex, xyuv[0].zw*(HEIGHT_CELLS + 1) + xy, 0).r;
 						xy = bxy + xy * VISUAL_CELLS;
 						xyz[3] = vec3(xy*dxy, z);
 
@@ -254,7 +241,7 @@ struct RenderContext
 						{
 							int i = order[r][0];
 
-							world_xy = xyz[i].xy;
+							world_xyuv = vec4(xyz[i].xy, uv[i]);
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
 							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
 
@@ -264,7 +251,7 @@ struct RenderContext
 						{
 							int i = order[r][1];
 
-							world_xy = xyz[i].xy;
+							world_xyuv = vec4(xyz[i].xy, uv[i]);
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
 							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
 
@@ -274,7 +261,7 @@ struct RenderContext
 						{
 							int i = order[r][2];
 
-							world_xy = xyz[i].xy;
+							world_xyuv = vec4(xyz[i].xy, uv[i]);
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
 							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
 
@@ -288,7 +275,7 @@ struct RenderContext
 						{
 							int i = order[r][3];
 
-							world_xy = xyz[i].xy;
+							world_xyuv = vec4(xyz[i].xy, uv[i]);
 							uvh.xyz = xyz[i] - ivec3(xyuv[0].xy, 0);
 							uvh.xyz /= vec3(rvh, rvh, HEIGHT_SCALE);
 
@@ -312,13 +299,15 @@ struct RenderContext
 		CODE(
 			layout(location = 0) out vec4 color;
 
+			uniform usampler2D v_tex;
+
 			uniform vec4 br; // brush
 			uniform vec3 qd; // quad diag
 			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
 
 			flat in vec3 normal;
 			in vec3 uvh;
-			in vec2 world_xy;
+			in vec4 world_xyuv;
 
 			float Grid(vec2 d, vec2 p, float s)
 			{
@@ -345,24 +334,60 @@ struct RenderContext
 			
 			void main()
 			{
+				// sample terrain visual
+				uint visual = texelFetch(v_tex, ivec2(floor(world_xyuv.zw)), 0).r;
+				//visual = 12345;
+
+				{
+					/*
+					uint matid = visual & 0x3F;
+					uint shade = (visual >> 6) & 0xF;
+					// 6 bits left for (elevation, ...)
+
+					// sample material array
+					// y=0,1 -> descent; y=2,3 -> fill; y=4,5 -> ascent
+					vec4 fill_rgbx = texelFetch(m_tex, ivec3(shade, 2, matid), 0);
+					vec4 fill_rgby = texelFetch(m_tex, ivec3(shade, 3, matid), 0);
+
+					// sample font texture (pure alpha)
+					vec2 chr_ofs = vec2(0, 0);  // calc fraction of char coordinate
+					float glyph = texture(f_tex, vec2(fill_fg_rgbx.w, fill_bg_rgby.w) + chr_ofs).r;
+
+					// compose glyph
+					vec3 color = mix(fill_rgbx.rgb, fill_rgby.rgb, glyph);
+					*/
+
+				}
+
+				// at the moment we assume that visual is simply RGB565 color
+				color.r = float(visual & 0x1f) / 31.0;
+				color.g = float((visual>>5) & 0x3f) / 63.0;
+				color.b = float((visual>>11) & 0x1f) / 31.0;
+				color.a = 1;
+
 				vec3 light_pos = normalize(vec3(1, 1, 0.25));
 				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
-				color = vec4(vec3(light),1.0);
+
+				color.rgb *= light;
 
 				{
 					// quad preview
 					float d = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
-					if (world_xy.x >= qd.x && world_xy.x < qd.x + d &&
-						world_xy.y >= qd.y && world_xy.y < qd.y + d)
+					if (world_xyuv.x >= qd.x && world_xyuv.x < qd.x + d &&
+						world_xyuv.y >= qd.y && world_xyuv.y < qd.y + d)
 					{
-						color.rb = mix(color.rb, color.rb * 0.5, qd.z);
+						//color.rb = mix(color.rb, color.rb * 0.5, qd.z);
+						color.rgb = mix(color.rgb, vec3(0, 1, 0), qd.z*0.25);
 					}
 				}
 
 				{
 					// height probe
 					if (uvh.z * HEIGHT_SCALE < pr.x)
-						color.g *= (1.0 - 0.25 * pr.y);
+					{
+						//color.g *= (1.0 - 0.25 * pr.y);
+						color.rgb = mix(color.rgb, vec3(0.25, 0.5, 0.75), 0.1 + 0.1 * pr.y);
+					}
 				}
 
 				if (!gl_FrontFacing)
@@ -378,13 +403,14 @@ struct RenderContext
 				grid = min(grid, Grid(d*1.25, uvh.xy, 1.0));
 				grid = min(grid, Grid(d*1.00, uvh.xy, float(VISUAL_CELLS) / float(HEIGHT_CELLS)));
 
-				color.rgb *= grid;
+				// color.rgb *= grid;
+				color.rgb = mix(vec3(0, 0, 1), color.rgb, grid);
 
 				// brush preview
 				if (br.w != 0.0)
 				{
 					float abs_r = abs(br.z);
-					float len = length(world_xy - br.xy);
+					float len = length(world_xyuv.xy - br.xy);
 					float alf = (abs_r - len) / abs_r;
 
 					float dalf = fwidth(alf);
@@ -443,6 +469,7 @@ struct RenderContext
 
 		tm_loc = glGetUniformLocation(prg, "tm");
 		z_tex_loc = glGetUniformLocation(prg, "z_tex");
+		v_tex_loc = glGetUniformLocation(prg, "v_tex");
 		br_loc = glGetUniformLocation(prg, "br");
 		qd_loc = glGetUniformLocation(prg, "qd");
 		pr_loc = glGetUniformLocation(prg, "pr");
@@ -470,6 +497,7 @@ struct RenderContext
 
 		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
 		glUniform1i(z_tex_loc, 0);
+		glUniform1i(v_tex_loc, 1);
 		glUniform4fv(br_loc, 1, br);
 		glUniform3fv(qd_loc, 1, qd);
 		glUniform3fv(pr_loc, 1, pr);
@@ -512,15 +540,17 @@ struct RenderContext
 
 		buf->size++;
 
-		if (buf->size == 789)
+		if (buf->size == TERRAIN_TEXHEAP_CAPACITY)
 		{
 			rc->draws++;
 			
-			if (rc->page_tex != ta->page->tex)
+			if (rc->page_tex != ta->page)
 			{
 				rc->changes++;
-				rc->page_tex = ta->page->tex;
-				glBindTextureUnit(0, rc->page_tex);
+				rc->page_tex = ta->page;
+
+				for (int u=0; u<2; u++)
+					glBindTextureUnit(u, rc->page_tex->tex[u]);
 			}
 
 			glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[5]) * buf->size, buf->data);
@@ -548,11 +578,13 @@ struct RenderContext
 		{
 			TexPageBuffer* buf = (TexPageBuffer*)tp->user;
 
-			if (page_tex != tp->tex)
+			if (page_tex != tp)
 			{
 				changes++;
-				page_tex = tp->tex;
-				glBindTextureUnit(0, page_tex);
+				page_tex = tp;
+
+				for (int u=0; u<2; u++)
+					glBindTextureUnit(u, page_tex->tex[u]);
 			}
 
 			draws++;
@@ -568,7 +600,9 @@ struct RenderContext
 		page_tex = 0;
 		head = 0;
 
-		glBindTextureUnit(0,0);
+		for (int u = 0; u < 2; u++)
+			glBindTextureUnit(u,0);
+
 		glBindVertexArray(0);
 		glUseProgram(0);
 
@@ -577,6 +611,7 @@ struct RenderContext
 
 	GLint tm_loc; // uniform
 	GLint z_tex_loc;
+	GLint v_tex_loc;
 	GLint br_loc;
 	GLint qd_loc;
 	GLint pr_loc;
@@ -585,7 +620,7 @@ struct RenderContext
 	GLuint vao;
 	GLuint vbo;
 
-	GLuint page_tex;
+	TexPage* page_tex;
 	TexPage* head;
 
 	int patches; // rendered stats
@@ -770,7 +805,7 @@ static void StampCB(Patch* p, int x, int y, int view_flags, void* cookie)
 	}
 
 	xy[2] = fmax(xy[2], max_r2);
-	UpdateTerrainPatch(p);
+	UpdateTerrainHeightMap(p);
 }
 
 void Stamp(double x, double y)
@@ -943,7 +978,7 @@ void Stamp(double x, double y)
 						}
 					}
 
-					UpdateTerrainPatch(p);
+					UpdateTerrainHeightMap(p);
 				}
 			}
 		}
@@ -1000,6 +1035,8 @@ void my_render()
 			ImGui::Checkbox("Spin", &spin_anim);
 
 			ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
+			ImGui::SameLine();
+			ImGui::Text("%dx%d", (int)round(io.DisplaySize.x/font_size), (int)round(io.DisplaySize.y / font_size));
 		}
 
 		if (ImGui::CollapsingHeader("Brush", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1439,14 +1476,8 @@ void my_render()
 								uint16_t diag = GetTerrainDiag(p);
 								diag ^= 1 << (hx + hy * HEIGHT_CELLS);
 
-								// u/r is still screwed :(
-
-								URDO_Open();
-								URDO_Open();
 								URDO_Diag(p);
 								SetTerrainDiag(p, diag);
-								URDO_Close();
-								URDO_Close();
 							}
 
 							// one per click
@@ -1725,7 +1756,7 @@ int main(int argc, char *argv[])
 	gd.alpha_bits = 8;
 	gd.depth_bits = 24;
 	gd.stencil_bits = 8;
-	gd.flags = (GraphicsDesc::FLAGS) (/*GraphicsDesc::DEBUG_CONTEXT | */GraphicsDesc::DOUBLE_BUFFER);
+	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
 	a3dOpen(&pi, &gd);
 

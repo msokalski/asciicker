@@ -4,6 +4,10 @@
 #define HEIGHT_CELLS 4 // num of verts -1 along patch X and Y axis
 #define VISUAL_CELLS 16
 
+#ifdef TEXHEAP
+#define TERRAIN_TEXHEAP_CAPACITY (1024 / (VISUAL_CELLS > HEIGHT_CELLS+1 ? VISUAL_CELLS : HEIGHT_CELLS+1))
+#endif
+
 struct Terrain;
 
 Terrain* CreateTerrain(int z=-1);
@@ -17,7 +21,10 @@ bool DelTerrainPatch(Terrain* t, int x, int y);
 Patch* GetTerrainNeighbor(Patch* p, int sign_x, int sign_y);
 
 uint16_t* GetTerrainHeightMap(Patch* p);
-void UpdateTerrainPatch(Patch* p);
+uint16_t* GetTerrainVisualMap(Patch* p);
+
+void UpdateTerrainHeightMap(Patch* p);
+void UpdateTerrainVisualMap(Patch* p);
 
 void GetTerrainLimits(Patch* p, uint16_t* lo, uint16_t* hi);
 
@@ -30,7 +37,9 @@ struct TexPageBuffer
 	TexPage* prev;
 	TexPage* next;
 	int size;
-	GLint data[5 * 789];
+
+	// large enough to refer to the whole page content by vbo (81920 bytes)
+	GLint data[5 * TERRAIN_TEXHEAP_CAPACITY];
 };
 
 #endif

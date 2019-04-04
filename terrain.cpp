@@ -13,6 +13,8 @@
 #include "terrain.h"
 #include "matrix.h"
 
+#include "fast_rand.h"
+
 #if 0
 #define TERRAIN_MATERIALS 64
 #define DETAIL_ANGLES 12
@@ -68,7 +70,7 @@ struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 {
 	// visual contains:                grass, sand, rock,
 	// 1bit elevation, 6bit material
-	// uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
+	uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
 	uint16_t diag;
 
@@ -98,8 +100,16 @@ Terrain* CreateTerrain(int z)
 	t->nodes = 0;
 
 #ifdef TEXHEAP
-	int cap = 1024 / (HEIGHT_CELLS + 1);
-	t->th.Create(cap,cap, HEIGHT_CELLS+1, HEIGHT_CELLS+1, GL_R16UI, sizeof(TexPageBuffer));
+
+	int cap = TERRAIN_TEXHEAP_CAPACITY;
+
+	TexDesc desc[2]=
+	{
+		{HEIGHT_CELLS + 1, HEIGHT_CELLS + 1, GL_R16UI},
+		{VISUAL_CELLS, VISUAL_CELLS, GL_R16UI}
+	};
+
+	t->th.Create(cap,cap, 2, desc, sizeof(TexPageBuffer));
 #endif
 
 	if (z >= 0)
@@ -117,11 +127,20 @@ Terrain* CreateTerrain(int z)
 				p->height[y][x] = z;
 		p->diag = 0;
 
+		for (int y = 0; y < VISUAL_CELLS; y++)
+			for (int x = 0; x < VISUAL_CELLS; x++)
+				p->visual[y][x] = fast_rand();
+
 		t->root = p;
 		t->patches = 1;
 
 #ifdef TEXHEAP
-		p->ta = t->th.Alloc(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height);
+		TexData data[2]=
+		{
+			{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height},
+			{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->visual},
+		};
+		p->ta = t->th.Alloc(data);
 #endif
 	}
 	else
@@ -550,11 +569,20 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				p->height[y][x] = z;
 		p->diag = 0;
 
+		for (int y = 0; y < VISUAL_CELLS; y++)
+			for (int x = 0; x < VISUAL_CELLS; x++)
+				p->visual[y][x] = fast_rand();
+
 		t->root = p;
 		t->patches = 1;
 
 #ifdef TEXHEAP
-		p->ta = t->th.Alloc(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height);
+		TexData data[2] =
+		{
+			{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height},
+			{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->visual},
+		};
+		p->ta = t->th.Alloc(data);
 #endif
 
 		return p;
@@ -956,6 +984,11 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				}
 			}
 
+
+			for (int y = 0; y < VISUAL_CELLS; y++)
+				for (int x = 0; x < VISUAL_CELLS; x++)
+					p->visual[y][x] = fast_rand();
+
 			// update diag flags
 			Tap3x3 tap(p);
 			tap.Update();
@@ -963,7 +996,12 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			UpdateNodes(p);
 
 #ifdef TEXHEAP
-			p->ta = t->th.Alloc(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height);
+			TexData data[2] =
+			{
+				{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height},
+				{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->visual},
+			};
+			p->ta = t->th.Alloc(data);
 #endif
 
 			return p;
@@ -1053,6 +1091,11 @@ uint16_t* GetTerrainHeightMap(Patch* p)
 	return (uint16_t*)p->height;
 }
 
+uint16_t* GetTerrainVisualMap(Patch* p)
+{
+	return (uint16_t*)p->visual;
+}
+
 void GetTerrainLimits(Patch* p, uint16_t* lo, uint16_t* hi)
 {
 	if (lo)
@@ -1062,7 +1105,7 @@ void GetTerrainLimits(Patch* p, uint16_t* lo, uint16_t* hi)
 }
 
 
-void UpdateTerrainPatch(Patch* p)
+void UpdateTerrainHeightMap(Patch* p)
 {
 	p->lo = 0xffff;
 	p->hi = 0x0000;
@@ -1080,10 +1123,19 @@ void UpdateTerrainPatch(Patch* p)
 	tap.Update();
 
 #ifdef TEXHEAP
-	p->ta->Update(GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height); 
+	TexData data = { GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->height };
+	p->ta->Update(0, 1, &data); // ONLY HEIGHT !!!
 #endif
 
 	UpdateNodes(p);
+}
+
+void UpdateTerrainVisualMap(Patch* p)
+{
+#ifdef TEXHEAP
+	TexData data = { GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->visual };
+	p->ta->Update(1, 1, &data); // ONLY VISUAL !!!
+#endif
 }
 
 #ifdef TEXHEAP

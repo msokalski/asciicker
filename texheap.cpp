@@ -3,17 +3,21 @@
 #include <string.h>
 #include "texheap.h"
 
-void TexHeap::Create(int page_cap_x, int page_cap_y, int alloc_w, int alloc_h, GLenum internal_format, int page_user_bytes)
+void TexHeap::Create(int page_cap_x, int page_cap_y, int numtex, const TexDesc* texdesc, int page_user_bytes)
 {
 	allocs = 0;
-	item_w = alloc_w;
-	item_h = alloc_h;
 	cap_x = page_cap_x;
 	cap_y = page_cap_y;
-	ifmt = internal_format;
 	user = page_user_bytes;
 	head = 0;
 	tail = 0;
+
+	// item_w = alloc_w;
+	// item_h = alloc_h;
+	// ifmt = internal_format;
+
+	num = numtex;
+	memcpy(tex, texdesc, num * sizeof(TexDesc));
 }
 
 void TexHeap::Destroy()
@@ -26,7 +30,7 @@ void TexHeap::Destroy()
 	while (p!=tail)
 	{
 		TexPage* n = p->next;
-		glDeleteTextures(1, &p->tex);
+		glDeleteTextures(num, p->tex);
 		for (int i = 0; i < cap; i++)
 			free(p->alloc[i]);
 		free(p);
@@ -34,13 +38,13 @@ void TexHeap::Destroy()
 	}
 
 	cap = allocs % cap;
-	glDeleteTextures(1, &p->tex);
+	glDeleteTextures(num, p->tex);
 	for (int i = 0; i < cap; i++)
 		free(p->alloc[i]);
 	free(p);
 }
 
-TexAlloc* TexHeap::Alloc(GLenum format, GLenum type, void* data)
+TexAlloc* TexHeap::Alloc(const TexData data[])
 {
 	int cap = cap_x * cap_y;
 	TexPage* page = tail;
@@ -63,13 +67,16 @@ TexAlloc* TexHeap::Alloc(GLenum format, GLenum type, void* data)
 		else
 			head = page;
 		tail = page;
-			
-		glCreateTextures(GL_TEXTURE_2D, 1, &page->tex);
-		glTextureStorage2D(page->tex, 1, ifmt, cap_x * item_w, cap_y * item_h);
-		glTextureParameteri(page->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(page->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(page->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTextureParameteri(page->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		
+		glCreateTextures(GL_TEXTURE_2D, num, page->tex);
+		for (int t = 0; t < num; t++)
+		{
+			glTextureStorage2D(page->tex[t], 1, tex[t].ifmt, cap_x * tex[t].item_w, cap_y * tex[t].item_h);
+			glTextureParameteri(page->tex[t], GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTextureParameteri(page->tex[t], GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTextureParameteri(page->tex[t], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTextureParameteri(page->tex[t], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		}
 	}
 
 	int on_page = allocs % cap;
@@ -83,7 +90,11 @@ TexAlloc* TexHeap::Alloc(GLenum format, GLenum type, void* data)
 	allocs++;
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTextureSubImage2D(page->tex, 0, a->x * item_w, a->y * item_h, item_w, item_h, format, type, data);
+	for (int t = 0; t < num; t++)
+	{
+		glTextureSubImage2D(page->tex[t], 0, a->x * tex[t].item_w, a->y * tex[t].item_h,
+			tex[t].item_w, tex[t].item_h, data[t].format, data[t].type, data[t].data);
+	}
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 	return a;
 }
@@ -98,10 +109,13 @@ void TexAlloc::Free()
 	if (page != h->tail || on_page != h->allocs % cap)
 	{
 		TexAlloc* last = h->tail->alloc[h->allocs % cap];
-		glCopyImageSubData(
-			last->page->tex, GL_TEXTURE_2D, 0, last->x * h->item_w, last->y * h->item_h, 0,
-			page->tex, GL_TEXTURE_2D, 0, x * h->item_w, y * h->item_h, 0,
-			h->item_w, h->item_h, 1);
+		for (int t = 0; t < h->num; t++)
+		{
+			glCopyImageSubData(
+				last->page->tex[t], GL_TEXTURE_2D, 0, last->x * h->tex[t].item_w, last->y * h->tex[t].item_h, 0,
+				page->tex[t], GL_TEXTURE_2D, 0, x * h->tex[t].item_w, y * h->tex[t].item_h, 0,
+				h->tex[t].item_w, h->tex[t].item_h, 1);
+		}
 		page->alloc[on_page] = last;
 		last->page = page;
 		last->x = x;
@@ -114,7 +128,7 @@ void TexAlloc::Free()
 	// now check if we can delete last page 
 	if (h->allocs % cap == 0)
 	{
-		glDeleteTextures(1, &h->tail->tex);
+		glDeleteTextures(h->num, h->tail->tex);
 		if (h->tail->prev)
 			h->tail->prev->next = 0;
 		else
@@ -124,10 +138,16 @@ void TexAlloc::Free()
 	}
 }
 
-void TexAlloc::Update(GLenum format, GLenum type, void* data)
+void TexAlloc::Update(int first, int count, const TexData data[])
 {
 	TexHeap* h = page->heap;
+	int end = first + count;
+	end = h->num < end ? h->num : end;
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTextureSubImage2D(page->tex, 0, x * h->item_w, y * h->item_h, h->item_w, h->item_h, format, type, data);
+	for (int t = first; t < end; t++)
+	{
+		glTextureSubImage2D(page->tex[t], 0, x * h->tex[t].item_w, y * h->tex[t].item_h,
+			h->tex[t].item_w, h->tex[t].item_h, data[t].format, data[t].type, data[t].data);
+	}
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }

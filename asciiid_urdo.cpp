@@ -3,6 +3,97 @@
 #include <assert.h>
 #include "asciiid_urdo.h"
 
+#if 0
+// todo: switch to file storage
+// - each command record: {[cmd_id][DATA][rec_size]}
+// - stream contains group open/close:  ....{open}{}{}{open}{}{}{}<-undo|redo->{}{}{close}{}{close}....
+// - we just need to track current stack depth
+
+struct URDO
+{
+	enum CMD
+	{
+		CMD_GROUP_OPEN,
+		CMD_GROUP_CLOSE,
+		CMD_PATCH_UPDATE,
+		CMD_PATCH_DIAG
+	} cmd;
+
+	// followed by data and record size in bytes (int)
+
+	void Do(bool un);
+	static URDO* Alloc(CMD c);
+	void Free();
+};
+
+// note: no need to have PurgeUndo()
+
+static void PurgeRedo()
+{
+	// truncate file at current pos
+	// write 'closes' for all open groups
+}
+
+void URDO_Purge()
+{
+	// reset stack & file size
+	// move file pointer to 0 and flush
+}
+
+bool URDO_CanUndo()
+{
+	// true if we're not at the file head
+}
+
+bool URDO_CanRedo()
+{
+	// true if we're not at the file tail
+}
+
+size_t URDO_Bytes()
+{
+	// file size (keep track)
+}
+
+void URDO_Undo(int max_depth)
+{
+}
+
+void URDO_Redo(int max_depth)
+{
+}
+
+void URDO_Open()
+{
+	// write CMD
+	// write sizeof(REC)
+}
+
+void URDO_Close()
+{
+	// write CMD
+	// write sizeof(REC)
+}
+
+void URDO_Patch(Patch* p)
+{
+	// write CMD
+	// write Patch*
+	// write GetTerrainHeightMap(p)
+	// write GetTerrainDiag(p)
+	// write sizeof(REC)
+}
+
+void URDO_Diag(Patch* p)
+{
+	// write CMD
+	// write Patch*
+	// write GetTerrainDiag(p)
+	// write sizeof(REC)
+}
+
+#endif
+
 struct URDO
 {
 	URDO* next;
@@ -137,14 +228,9 @@ static void PurgeUndo()
 {
 	while (1)
 	{
-		URDO* head = 0;
-
-		if (undo)
-		{
-			head = undo->next;
-			if (head)
-				head->prev = 0;
-		}
+		URDO* head = redo;
+		if (head)
+			head->prev = 0;
 
 		while (undo)
 		{
@@ -185,14 +271,9 @@ static void PurgeRedo()
 {
 	while (1)
 	{
-		URDO* tail = 0; 
-		
-		if (redo)
-		{
-			tail = redo->prev;
-			if (tail)
-				tail->next = 0;
-		}
+		URDO* tail = undo;
+		if (tail)
+			tail->next = 0;
 
 		while (redo)
 		{
@@ -233,8 +314,8 @@ void URDO_Purge()
 {
 	assert(!group_open);
 
-	PurgeRedo();
 	PurgeUndo();
+	PurgeRedo();
 }
 
 bool URDO_CanUndo()
@@ -291,7 +372,7 @@ void URDO_Undo(int max_depth)
 		redo = 0;
 	}
 
-	if (stack_depth == max_depth && undo)
+	if (stack_depth <= max_depth && undo)
 	{
 		undo->Do(true);
 		redo = undo;
@@ -333,7 +414,7 @@ void URDO_Redo(int max_depth)
 		undo = 0;
 	}
 
-	if (stack_depth == max_depth && redo)
+	if (stack_depth <= max_depth && redo)
 	{
 		redo->Do(false);
 		undo = redo;
@@ -464,7 +545,7 @@ void URDO_PatchUpdate::Do(bool un)
 	uint16_t d = diag;
 	diag = GetTerrainDiag(patch);
 
-	UpdateTerrainPatch(patch);
+	UpdateTerrainHeightMap(patch);
 	SetTerrainDiag(patch,d);
 }
 

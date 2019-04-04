@@ -172,6 +172,7 @@
   <ItemGroup>
     <ClInclude Include="asciiid_platform.h" />
     <ClInclude Include="asciiid_urdo.h" />
+    <ClInclude Include="fast_rand.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
