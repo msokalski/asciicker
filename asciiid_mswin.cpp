@@ -962,3 +962,43 @@ bool a3dGetFocus()
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
 	return GetFocus() == hWnd;
 }
+
+#include "upng.h"
+
+bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf))
+{
+	upng_t* upng;
+
+	upng = upng_new_from_file(path);
+
+	if (upng_get_error(upng) != UPNG_EOK) 
+	{
+		printf("error: %u %u\n", upng_get_error(upng), upng_get_error_line(upng));
+		return false;
+	}
+
+	if (upng_decode(upng) != UPNG_EOK)
+	{
+		printf("error: %u %u\n", upng_get_error(upng), upng_get_error_line(upng));
+		upng_free(upng);
+		return false;
+	}
+
+	int format, width, height, depth;
+	format = upng_get_format(upng);
+	width = upng_get_width(upng);
+	height = upng_get_height(upng);
+	depth = upng_get_bpp(upng) / 8;
+
+	printf("size:	%ux%ux%u (%u)\n", width, height, upng_get_bpp(upng), upng_get_size(upng));
+	printf("format:	%u\n", format);
+
+	const void* buf = upng_get_buffer(upng);
+	const void* pal_buf = upng_get_pal_buffer(upng);
+	unsigned pal_size = upng_get_pal_size(upng);
+
+	cb(cookie, (A3D_ImageFormat)format, width, height, buf, pal_size, pal_buf);
+
+	upng_free(upng);
+	return true;
+}

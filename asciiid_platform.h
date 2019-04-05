@@ -203,6 +203,10 @@ struct PlatformInterface
 	void(*keyb_focus)(bool set);
 	void(*mouse)(int x, int y, MouseInfo mi);
 
+	// asset loader
+	void(*image)(void* cookie, int width, int height, int channels, int depth, void* data);
+	void(*sound)(void* cookie, int samples, int channels, int depth, void* data);
+
 	// todo:
 	//void(*audio)(int samples, void* buffer);
 };
@@ -232,7 +236,26 @@ bool a3dGetKeyb(KeyInfo ki); // return true if vk is down, keyb_char has no stat
 // keyb_focus
 bool a3dGetFocus();
 
-// TODO: (must be async - like in html5)
-// bool a3dLoadImage(const wchar_t* path, void(*cb)(const ImageDesc* desc, void* data, void* cookie), void* cookie);
-// bool a3dLoadAudio(const wchar_t* path, void(*cb)(const AudioDesc* desc, int samples, void* data, void* cookie), void* cookie);
 
+enum A3D_ImageFormat
+{
+	A3D_NULL,
+	A3D_RGB8,
+	A3D_RGB16,
+	A3D_RGBA8,
+	A3D_RGBA16,
+	A3D_LUMINANCE1,
+	A3D_LUMINANCE2,
+	A3D_LUMINANCE4,
+	A3D_LUMINANCE8,
+	A3D_LUMINANCE_ALPHA1,
+	A3D_LUMINANCE_ALPHA2,
+	A3D_LUMINANCE_ALPHA4,
+	A3D_LUMINANCE_ALPHA8,
+	A3D_INDEX1,
+	A3D_INDEX2,
+	A3D_INDEX4,
+	A3D_INDEX8,
+};
+
+bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf));

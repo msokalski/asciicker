@@ -28,6 +28,148 @@
 
 Terrain* terrain = 0;
 
+struct Font
+{
+	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+	{
+		Font* font = (Font*)cookie;
+
+		glCreateTextures(GL_TEXTURE_2D, 1, &font->tex);
+		int ifmt = 0;
+		int fmt = 0;
+		int type = 0;
+
+		void* buf = 0;
+		int bits = 0;
+		int bytes = 0;
+
+		switch (f)
+		{
+			case A3D_RGB8:
+				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_RGB16:
+				ifmt = GL_RGB16; fmt = GL_RGB; type = GL_UNSIGNED_SHORT;
+				break;
+			case A3D_RGBA8:
+				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_RGBA16:
+				ifmt = GL_RGBA16; fmt = GL_RGBA; type = GL_UNSIGNED_SHORT;
+				break;
+			case A3D_LUMINANCE1:
+				bits = 1; bytes = 1;
+				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_LUMINANCE2:
+				bits = 2; bytes = 1;
+				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_LUMINANCE4:
+				bits = 4; bytes = 1;
+				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_LUMINANCE8:
+				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_LUMINANCE_ALPHA1:
+				bits = 1; bytes = 2;
+				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_LUMINANCE_ALPHA2:
+				bits = 2; bytes = 2;
+				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_LUMINANCE_ALPHA4:
+				bits = 4; bytes = 2;
+				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_LUMINANCE_ALPHA8:
+				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
+				break;
+
+			case A3D_INDEX1:
+				bits = 1; bytes = 4;
+				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_INDEX2:
+				bits = 2; bytes = 4;
+				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_INDEX4:
+				bits = 4; bytes = 4;
+				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_INDEX8:
+				bits = 8; bytes = 4;
+				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
+				break;
+		}
+
+		if (bits)
+		{
+			int out_row = bytes * w;
+			int in_row = (((bits * w - 1) | 0x7) + 1) / 8;
+			const uint8_t* in_line = (const uint8_t*)data;
+			uint8_t* out_line = (uint8_t*)malloc(out_row*h);
+
+			int d = 1;
+			int q = 8 / bits - 1;
+			int m = (1 << bits) - 1;
+			int r = 0;
+			int mul = 1;
+			switch (bits)
+			{
+				case 1: r = 3; mul = 255; break;
+				case 2: r = 2; mul = 85;  break;
+				case 4: r = 1; mul = 17;  break;
+			}
+
+			if (bytes < 4)
+			{
+				for (int y = 0; y < h; y++)
+				{
+					for (int b = 0; b < out_row; b++)
+					{
+						int val = (in_line[b >> r] >> ((b&q)*bits)) & m;
+						out_line[b] = val * mul;
+					}
+
+					in_line += in_row;
+					out_line += out_row;
+				}
+			}
+			else
+			{
+				// depal
+				for (int y = 0; y < h; y++)
+				{
+					for (int b = 0; b < w; b++)
+					{
+						int idx = (in_line[b >> r] >> ((b&q)*bits)) & m;
+						((uint32_t*)out_line)[b] = ((const uint32_t*)palbuf)[b];
+					}
+
+					in_line += in_row;
+					out_line += out_row;
+				}
+			}
+		}
+
+		glTextureStorage2D(font->tex, 1, ifmt, w, h);
+		glTextureParameteri(font->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(font->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		glTextureSubImage2D(font->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+
+		if (buf)
+			free(buf);
+	}
+	GLuint tex;
+} font;
+
 float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
@@ -1627,6 +1769,9 @@ void my_resize(int w, int h)
 
 void my_init()
 {
+	font.tex = 0;
+	a3dLoadImage("cp437_18x18.png", &font, Font::Load);
+
 	g_Time = a3dGetTime();
 	render_context.Create();
 
@@ -1635,6 +1780,7 @@ void my_init()
 	// Setup Dear ImGui context
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
+	io.IniFilename = 0;
 	io.BackendPlatformName = "imgui_impl_a3d";
 
 	io.KeyMap[ImGuiKey_Tab] = A3D_TAB;

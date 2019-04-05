@@ -186,6 +186,7 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="terrain.h" />
     <ClInclude Include="texheap.h" />
+    <ClInclude Include="upng.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp" />
@@ -199,6 +200,7 @@
     <ClCompile Include="imgui_impl_opengl3.cpp" />
     <ClCompile Include="terrain.cpp" />
     <ClCompile Include="texheap.cpp" />
+    <ClCompile Include="upng.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

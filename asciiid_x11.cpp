@@ -5,13 +5,15 @@
 // sudo apt-get install libglu1-mesa-dev
 // gcc -o asciiid_x11 asciiid_x11.cpp -lGL -lX11 -L/usr/X11R6/lib -I/usr/X11R6/include
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<X11/X.h>
-#include<X11/Xlib.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <X11/X.h>
+#include <X11/Xlib.h>
 #include <X11/keysym.h>
+#include <X11/XKBlib.h>
 
 #include <time.h>
+#include <unistd.h> // usleep
 
 #include <stdint.h>
 #include <string.h>
@@ -145,17 +147,17 @@ const char* caps[]=
 	"A3D_RCTRL",
 	"A3D_LALT",
 	"A3D_RALT",
-	"A3D_OEM_COLON",		// ';:' for US
-	"A3D_OEM_PLUS",		// '+' any country
-	"A3D_OEM_COMMA",		// '",' any country
-	"A3D_OEM_MINUS",		// '-' any country
-	"A3D_OEM_PERIOD",		// '.' any country
-	"A3D_OEM_SLASH",		// '/?' for US
-	"A3D_OEM_TILDE",		// '`~' for US
-	"A3D_OEM_OPEN",       //  '[{' for US
-	"A3D_OEM_CLOSE",      //  ']}' for US
-	"A3D_OEM_BACKSLASH",  //  '\|' for US
-	"A3D_OEM_QUOTATION",  //  ''"' for US
+	"A3D_OEM_COLON",	
+	"A3D_OEM_PLUS",		
+	"A3D_OEM_COMMA",	
+	"A3D_OEM_MINUS",	
+	"A3D_OEM_PERIOD",	
+	"A3D_OEM_SLASH",	
+	"A3D_OEM_TILDE",	
+	"A3D_OEM_OPEN",     
+	"A3D_OEM_CLOSE",    
+	"A3D_OEM_BACKSLASH",
+	"A3D_OEM_QUOTATION",
 };	
 
 static const unsigned char ki_to_kc[] =
@@ -432,100 +434,6 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 
 	switch (m)
 	{
-		case WM_CREATE:
-			closing = false;
-			track = false;
-			mouse_b = 0;
-
-			QueryPerformanceFrequency(&timer_freq);
-			QueryPerformanceCounter(&coarse_perf);
-			coarse_micro = 0;
-
-			// set timer to refresh coarse_perf & coarse_micro every minute
-			// to prevent overflows in a3dGetTIme 
-			SetTimer(h, 1, 60000, 0);
-			return TRUE;
-
-		case WM_ENTERMENULOOP:
-		{
-			SetTimer(h, 2, 0, 0);
-			break;
-		}
-
-		case WM_ENTERSIZEMOVE:
-		{
-			SetTimer(h, 3, 0, 0);
-			break;
-		}
-
-		case WM_EXITSIZEMOVE:
-		{
-			KillTimer(h, 3);
-			break;
-		}
-
-		case WM_EXITMENULOOP:
-		{
-			KillTimer(h, 2);
-			break;
-		}
-
-		case WM_TIMER:
-		{
-			if (w == 1)
-			{
-				LARGE_INTEGER c;
-				QueryPerformanceCounter(&c);
-				uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
-				uint64_t seconds = diff / timer_freq.QuadPart;
-				coarse_perf.QuadPart += seconds * timer_freq.QuadPart;
-				coarse_micro += seconds * 1000000;
-			}
-			else
-			if (w == 2 || w == 3)
-			{
-				if (platform_api.render)
-					platform_api.render();
-			}
-			break;
-		}
-		
-		case WM_CLOSE:
-			if (platform_api.close)
-				platform_api.close();
-			else
-			{
-				memset(&platform_api, 0, sizeof(PlatformInterface));
-				closing = true;
-			}
-			return 0;
-
-		case WM_SIZE:
-			if (platform_api.resize)
-				platform_api.resize(LOWORD(l),HIWORD(l));
-			return 0;
-
-		case WM_ERASEBKGND:
-			return 0;
-
-		case WM_PAINT:
-			ValidateRect(h, 0);
-			return 0;
-
-		case WM_MOUSEWHEEL:
-			rep = GET_WHEEL_DELTA_WPARAM(w) / WHEEL_DELTA;
-			if (rep > 0)
-				mi = MouseInfo::WHEEL_UP;
-			else
-			if (rep < 0)
-			{
-				mi = MouseInfo::WHEEL_DN;
-				rep = -rep;
-			}
-			else
-				return 0;
-			break;
-
 		case WM_SETFOCUS:
 			if (platform_api.keyb_focus)
 				platform_api.keyb_focus(true);
@@ -666,6 +574,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (!dpy)
 		return false;
 
+	Bool DetectableAutoRepeat = false;
+	XkbSetDetectableAutoRepeat(dpy, True, &DetectableAutoRepeat);
+
 	Atom wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
 
 	Window root = DefaultRootWindow(dpy);
@@ -749,20 +660,11 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	while (!closing)
 	{
-		XGetWindowAttributes(dpy, win, &gwa);
-		if (gwa.width!=w || gwa.height!=h)
-		{
-			w = gwa.width;
-			h = gwa.height;			
-			if (platform_api.resize)
-				platform_api.resize(w,h);			
-		}
-
 		if (XPending(dpy))
 		{
 			XNextEvent(dpy, &xev);
 
-			if (xev.type == ClientMessage) 
+			if (xev.type == ClientMessage)
 			{
 				if ((Atom)xev.xclient.data.l[0] == wm_delete_window) 
 				{
@@ -773,9 +675,32 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 				}
 			}
 
+			if (xev.type == ConfigureNotify)
+			{
+				if (xev.xconfigure.width != w || xev.xconfigure.height != h)
+				{
+					w = gwa.width;
+					h = gwa.height;
+					if (platform_api.resize)
+						platform_api.resize(w, h);
+				}
+			}
+			else
+			if (xev.type == FocusIn)
+			{
+				if (platform_api.keyb_focus)
+					platform_api.keyb_focus(true);
+			}
+			else
+			if (xev.type == FocusOut)
+			{
+				if (platform_api.keyb_focus)
+					platform_api.keyb_focus(false);
+			}
+			else
 			if (xev.type == Expose) 
 			{
-				if (platform_api.render)
+				if (platform_api.render && mapped)
 					platform_api.render();
 			}
 			else 
@@ -816,7 +741,23 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else 
 			if(xev.type == KeyRelease) 
 			{
-				if (platform_api.keyb_key)
+				bool physical = DetectableAutoRepeat;
+
+				if (!physical)
+				{
+					XEvent nev;
+					XPeekEvent(disp, &nev);
+
+					// autorepeat guessing...
+					if (nev.type != KeyPress || 
+						nev.xkey.time != xev.xkey.time ||
+						nev.xkey.keycode != xev.xkey.keycode)
+					{
+						physical = true;
+					}
+				}
+
+				if (physical && platform_api.keyb_key)
 				{
 					int kc = xev.xkey.keycode;
 					if (kc>=0 && kc<128) 
@@ -914,10 +855,11 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		}
 		else
 		{
-			if (platform_api.render)
+			if (platform_api.render && mapped)
 				platform_api.render();
+			else
+				usleep(20000); // 1/50s
 		}
-		
 	}
 
 	XCloseDisplay(dpy);
@@ -949,6 +891,11 @@ void a3dSwapBuffers()
 
 bool a3dGetKeyb(KeyInfo ki)
 {
+	/*
+	unsigned int n;
+	XkbGetIndicatorState(dpy, XkbUseCoreKbd, &n);
+	*/
+
 	if (ki <= 0 && || >= A3D_MAPEND)
 		return false;
 

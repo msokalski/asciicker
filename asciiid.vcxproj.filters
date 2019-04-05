@@ -75,6 +75,9 @@
     <ClInclude Include="fast_rand.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="upng.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp">
@@ -108,6 +111,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="asciiid_urdo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="upng.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
