@@ -11,6 +11,8 @@
 #include<X11/Xlib.h>
 #include <X11/keysym.h>
 
+#include <time.h>
+
 #include <stdint.h>
 #include <string.h>
 #include <wchar.h>
@@ -18,10 +20,11 @@
 #include "gl.h"
 
 #include <GL/glx.h>
-//#include <GL/glxext.h>
+//#include <GL/glxext.h> // <- we'll need it to request versioned context
 
 #include "asciiid_platform.h"
 
+bool wndmode = false;
 bool mapped = false;
 char title[256]="A3D";
 Display* dpy;
@@ -155,130 +158,270 @@ const char* caps[]=
 	"A3D_OEM_QUOTATION",  //  ''"' for US
 };	
 
-
-int kc_to_ki[128]=
+static const unsigned char ki_to_kc[] =
 {
+	0,		// A3D_NONE
+	22,		// A3D_BACKSPACE
+	23,		// A3D_TAB
+	36,		// A3D_ENTER
+
+	127,	// A3D_PAUSE
+	9,		// A3D_ESCAPE
+
+	65,		// A3D_SPACE
+	112,	// A3D_PAGEUP
+	117,	// A3D_PAGEDOWN
+	115,	// A3D_END
+	110,	// A3D_HOME
+	113,	// A3D_LEFT
+	111,	// A3D_UP
+	114,	// A3D_RIGHT
+	116,	// A3D_DOWN
+
+	0,		// A3D_PRINT
+	118,	// A3D_INSERT
+	119,	// A3D_DELETE
+
+	19,		// A3D_0
+	10,		// A3D_1
+	11,		// A3D_2
+	12,		// A3D_3
+	13,		// A3D_4
+	14,		// A3D_5
+	15,		// A3D_6
+	16,		// A3D_7
+	17,		// A3D_8
+	18,		// A3D_9
+
+	38,		// A3D_A
+	56,		// A3D_B
+	54,		// A3D_C
+	40,		// A3D_D
+	26,		// A3D_E
+	41,		// A3D_F
+	42,		// A3D_G
+	43,		// A3D_H
+	31,		// A3D_I
+	44,		// A3D_J
+	45,		// A3D_K
+	46,		// A3D_L
+	58,		// A3D_M
+	57,		// A3D_N
+	32,		// A3D_O
+	33,		// A3D_P
+	24,		// A3D_Q
+	27,		// A3D_R
+	39,		// A3D_S
+	28,		// A3D_T
+	30,		// A3D_U
+	55,		// A3D_V
+	25,		// A3D_W
+	53,		// A3D_X
+	29,		// A3D_Y
+	52,		// A3D_Z
+
+	0,		// A3D_LWIN
+	0,		// A3D_RWIN
+	0,		// A3D_APPS
+
+	90,		// A3D_NUMPAD_0
+	87,		// A3D_NUMPAD_1
+	88,		// A3D_NUMPAD_2
+	89,		// A3D_NUMPAD_3
+	83,		// A3D_NUMPAD_4
+	84,		// A3D_NUMPAD_5
+	85,		// A3D_NUMPAD_6
+	79,		// A3D_NUMPAD_7
+	80,		// A3D_NUMPAD_8
+	81,		// A3D_NUMPAD_9
+	63,		// A3D_NUMPAD_MULTIPLY
+	106,	// A3D_NUMPAD_DIVIDE
+	86,		// A3D_NUMPAD_ADD
+	82,		// A3D_NUMPAD_SUBTRACT
+	91,		// A3D_NUMPAD_DECIMAL
+	104,	// A3D_NUMPAD_ENTER
+
+	67,		// A3D_F1
+	68,		// A3D_F2
+	69,		// A3D_F3
+	70,		// A3D_F4
+	71,		// A3D_F5
+	72,		// A3D_F6
+	73,		// A3D_F7
+	74,		// A3D_F8
+	75,		// A3D_F9
+	76,		// A3D_F10
+	95,		// A3D_F11
+	96,		// A3D_F12
+	0,		// A3D_F13
+	0,		// A3D_F14
+	0,		// A3D_F15
+	0,		// A3D_F16
+	0,		// A3D_F17
+	0,		// A3D_F18
+	0,		// A3D_F19
+	0,		// A3D_F20
+	0,		// A3D_F21
+	0,		// A3D_F22
+	0,		// A3D_F23
+	0,		// A3D_F24
+
+	66,		// A3D_CAPSLOCK
+	77,		// A3D_NUMLOCK
+	78,		// A3D_SCROLLLOCK
+
+	50,		// A3D_LSHIFT
+	62,		// A3D_RSHIFT
+	37,		// A3D_LCTRL
+	105,	// A3D_RCTRL
+	64,		// A3D_LALT
+	108,	// A3D_RALT
+
+	47,		// A3D_OEM_COLON
+	21,		// A3D_OEM_PLUS
+	59,		// A3D_OEM_COMMA
+	20,		// A3D_OEM_MINUS
+	60,		// A3D_OEM_PERIOD
+	61,		// A3D_OEM_SLASH
+	49,		// A3D_OEM_TILDE
+
+	34,		// A3D_OEM_OPEN
+	35,		// A3D_OEM_CLOSE
+	51,		// A3D_OEM_BACKSLASH
+	48,		// A3D_OEM_QUOTATION
+}
+
+static const unsigned char kc_to_ki[128]=
+{
+	// ok
+
 	0,0,0,0,0,0,0,0,
-	0, // 8
-	A3D_ESCAPE, // 9
-	A3D_1, // 10
-	A3D_2, // 11
-	A3D_3, // 12
-	A3D_4, // 13
-	A3D_5, // 14
-	A3D_6, // 15
-	A3D_7, // 16
-	A3D_8, // 17
-	A3D_9, // 18
-	A3D_0, // 19
-	A3D_OEM_MINUS,
-	A3D_OEM_PLUS,
-	A3D_BACKSPACE,
-	A3D_TAB,
-	A3D_Q,
-	A3D_W,
-	A3D_E,
-	A3D_R,
-	A3D_T,
-	A3D_Y,
-	A3D_U,
-	A3D_I,
-	A3D_O,
-	A3D_P,
-	A3D_OEM_OPEN,
-	A3D_OEM_CLOSE, // 35
-	A3D_ENTER,
-	A3D_LCTRL,
-	A3D_A,
-	A3D_S,
-	A3D_D,
-	A3D_F,
-	A3D_G,//42
-	A3D_H,
-	A3D_J,
-	A3D_K,
-	A3D_L,
-	A3D_OEM_COLON,
-	A3D_OEM_QUOTATION,
-	A3D_OEM_TILDE,
-	A3D_LSHIFT,
-	A3D_OEM_BACKSLASH, // 51
-	A3D_Z,
-	A3D_X,
-	A3D_C,
-	A3D_V,
-	A3D_B,
-	A3D_N,
-	A3D_M,//58
-	A3D_OEM_COMMA,
-	A3D_OEM_PERIOD,
-	A3D_OEM_SLASH,
-	A3D_RSHIFT,//62
-	A3D_NUMPAD_MULTIPLY,//63
-	A3D_LALT,
-	A3D_SPACE,
-	A3D_CAPSLOCK,
-	A3D_F1,//67
-	A3D_F2,
-	A3D_F3,
-	A3D_F4,
-	A3D_F5,
-	A3D_F6,
-	A3D_F7,
-	A3D_F8,
-	A3D_F9,
-	A3D_F10,
-	A3D_NUMLOCK,//77
-	A3D_SCROLLLOCK,//78
-	A3D_NUMPAD_7,//79
-	A3D_NUMPAD_8,
-	A3D_NUMPAD_9,
-	A3D_NUMPAD_SUBTRACT,
-	A3D_NUMPAD_4,
-	A3D_NUMPAD_5,
-	A3D_NUMPAD_6,
-	A3D_NUMPAD_ADD,//86
-	A3D_NUMPAD_1,
-	A3D_NUMPAD_2,
-	A3D_NUMPAD_3, // 89
-	A3D_NUMPAD_0,
-	A3D_NUMPAD_DECIMAL,
-	0,//92
-	0,//93
-	0,//94
-	A3D_F11,//95
-	A3D_F12,//96
-	0,
-	0,
-	0,
-	0,
-	0,
-	0,
-	0,
-	A3D_NUMPAD_ENTER,//104
-	A3D_RCTRL,//105
-	A3D_NUMPAD_DIVIDE,//106
-	0,//107
-	A3D_RALT,//108
-	0,
-	A3D_HOME,//110
-	A3D_UP,
-	A3D_PAGEUP,
-	A3D_LEFT,
-	A3D_RIGHT,
-	A3D_END,
-	A3D_DOWN,
-	A3D_PAGEDOWN,
-	A3D_INSERT,
-	A3D_DELETE,
-	0,
-	0,
-	0,
-	0,
-	0,
-	0,
-	0,
-	A3D_PAUSE,//127
+	0,						// 8
+	A3D_ESCAPE,				// 9
+	A3D_1,					// 10
+	A3D_2,					// 11
+	A3D_3,					// 12
+	A3D_4,					// 13
+	A3D_5,					// 14
+	A3D_6,					// 15
+	A3D_7,					// 16
+	A3D_8,					// 17
+	A3D_9,					// 18
+	A3D_0,					// 19
+	A3D_OEM_MINUS,			// 20
+	A3D_OEM_PLUS,			// 21
+	A3D_BACKSPACE,			// 22
+	A3D_TAB,				// 23
+	A3D_Q,					// 24
+	A3D_W,					// 25
+	A3D_E,					// 26
+	A3D_R,					// 27
+	A3D_T,					// 28
+	A3D_Y,					// 29
+	A3D_U,					// 30
+	A3D_I,					// 31
+	A3D_O,					// 32
+	A3D_P,					// 33
+	A3D_OEM_OPEN,			// 34
+	A3D_OEM_CLOSE,			// 35
+	A3D_ENTER,				// 36
+	A3D_LCTRL,				// 37
+	A3D_A,					// 38
+	A3D_S,					// 39
+	A3D_D,					// 40
+	A3D_F,					// 41
+	A3D_G,					// 42
+	A3D_H,					// 43
+	A3D_J,					// 44
+	A3D_K,					// 45
+	A3D_L,					// 46
+	A3D_OEM_COLON,			// 47
+	A3D_OEM_QUOTATION,		// 48
+	A3D_OEM_TILDE,			// 49
+	A3D_LSHIFT,				// 50
+	A3D_OEM_BACKSLASH,		// 51
+	A3D_Z,					// 52
+	A3D_X,					// 53
+	A3D_C,					// 54
+	A3D_V,					// 55
+	A3D_B,					// 56
+	A3D_N,					// 57
+	A3D_M,//58				// 58
+	A3D_OEM_COMMA,			// 59
+	A3D_OEM_PERIOD,			// 60
+	A3D_OEM_SLASH,			// 61
+	A3D_RSHIFT,				// 62
+	A3D_NUMPAD_MULTIPLY,	// 63
+	A3D_LALT,				// 64
+	A3D_SPACE,				// 65
+	A3D_CAPSLOCK,			// 66
+	A3D_F1,					// 67
+	A3D_F2,					// 68
+	A3D_F3,					// 69
+	A3D_F4,					// 70
+	A3D_F5,					// 71
+	A3D_F6,					// 72
+	A3D_F7,					// 73
+	A3D_F8,					// 74
+	A3D_F9,					// 75
+	A3D_F10,				// 76
+	A3D_NUMLOCK,			// 77
+	A3D_SCROLLLOCK,			// 78
+	A3D_NUMPAD_7,			// 79
+	A3D_NUMPAD_8,			// 80
+	A3D_NUMPAD_9,			// 81
+	A3D_NUMPAD_SUBTRACT,	// 82
+	A3D_NUMPAD_4,			// 83
+	A3D_NUMPAD_5,			// 84
+	A3D_NUMPAD_6,			// 85
+	A3D_NUMPAD_ADD,			// 86
+	A3D_NUMPAD_1,			// 87
+	A3D_NUMPAD_2,			// 88
+	A3D_NUMPAD_3,			// 89
+	A3D_NUMPAD_0,			// 90
+	A3D_NUMPAD_DECIMAL,		// 91
+	0,						// 92
+	0,						// 93
+	0,						// 94
+	A3D_F11,				// 95
+	A3D_F12,				// 96
+
+	// bad
+
+	0,						// 97
+	0,						// 98
+	0,						// 99
+	0,						// 100
+	0,						// 101
+	0,						// 102
+	0,						// 103
+	A3D_NUMPAD_ENTER,		// 104
+	A3D_RCTRL,				// 105
+	A3D_NUMPAD_DIVIDE,		// 106
+	0,						// 107
+	A3D_RALT,				// 108
+	0,						// 109
+	A3D_HOME,				// 110
+	A3D_UP,					// 111
+	A3D_PAGEUP,				// 112
+	A3D_LEFT,				// 113
+	A3D_RIGHT,				// 114
+	A3D_END,				// 115
+	A3D_DOWN,				// 116
+	A3D_PAGEDOWN,			// 117
+	A3D_INSERT,				// 118
+	A3D_DELETE,				// 119
+	0,						// 120
+	0,						// 121
+	0,						// 122
+	0,						// 123
+	0,						// 124
+	0,						// 125
+	0,						// 126
+
+	// ok
+
+	A3D_PAUSE,				// 127
 };
 
 /*
@@ -513,7 +656,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (!pi || !gd)
 		return false;
 
-
 	GLint                   att[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
 	GLXContext              glc;
 	XWindowAttributes       gwa;
@@ -559,6 +701,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		LeaveWindowMask;
 
 	// win is global
+	wnd_mode = true;
 	win = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
 	if (!win)
 	{
@@ -568,8 +711,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	XSetWMProtocols(dpy, win, &wm_delete_window, 1);		
 
- 	XMapWindow(dpy, win);
-	mapped = true;
+ 	// XMapWindow(dpy, win);
+	mapped = false;
 
 	XStoreName(dpy, win, "asciiid");
 
@@ -638,41 +781,28 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else 
 			if(xev.type == EnterNotify) 
 			{
-				// xev.xcrossing.state can contain:
-				// Button1Mask, Button2Mask, Button3Mask
+				int state = 0;
+				state |= xev.xcrossing.state & Button1Mask ? MouseInfo::LEFT : 0;
+				state |= xev.xcrossing.state & Button3Mask ? MouseInfo::RIGHT : 0;
+				state |= xev.xcrossing.state & Button2Mask ? MouseInfo::MIDDLE : 0;
 
-				// todo:
-				// add it to mi state :)
-				
 				if (platform_api.mouse)
-					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y,MouseInfo::ENTER);
+					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y,(MouseInfo)(MouseInfo::ENTER | state));
 			}
 			else 
 			if(xev.type == LeaveNotify) 
 			{
-				// xev.xcrossing.state can contain:
-				// Button1Mask, Button2Mask, Button3Mask
-
-				// todo:
-				// add it to mi state :)				
+				int state = 0;
+				state |= xev.xcrossing.state & Button1Mask ? MouseInfo::LEFT : 0;
+				state |= xev.xcrossing.state & Button3Mask ? MouseInfo::RIGHT : 0;
+				state |= xev.xcrossing.state & Button2Mask ? MouseInfo::MIDDLE : 0;
 
 				if (platform_api.mouse)
-					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y,MouseInfo::LEAVE);
+					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y, (MouseInfo)(MouseInfo::LEAVE | state));
 			}			
 			else 
 			if(xev.type == KeyPress) 
 			{
-				/*
-				if (key_seq>=0)
-				{
-					printf("(seq%d)\t%d\t0x%04x\n",key_seq,(int)xev.xkey.keycode,(int)xev.xkey.keycode);
-					key_seq++;
-					if (caps[key_seq])
-						printf("%s:\n",caps[key_seq]);
-					else
-						key_seq = -1;
-				}
-				*/
 				if (platform_api.keyb_key)
 				{
 					int kc = xev.xkey.keycode;
@@ -699,21 +829,43 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else
 			if (xev.type == ButtonPress)
 			{
+				int state = 0;
 				MouseInfo mi = (MouseInfo)0;
 				switch (xev.xbutton.button)
 				{
-					case Button1: mi = MouseInfo::LEFT_DN; break;
-					case Button3: mi = MouseInfo::RIGHT_DN; break;
-					case Button2: mi = MouseInfo::MIDDLE_DN; break;
-					case Button5: mi = MouseInfo::WHEEL_DN; break;
-					case Button4: mi = MouseInfo::WHEEL_UP; break;
+					case Button1: 
+						mi = MouseInfo::LEFT_DN; 
+						state |= MouseInfo::LEFT;
+						state |= xev.xbutton.state & Button3Mask ? MouseInfo::RIGHT : 0;
+						state |= xev.xbutton.state & Button2Mask ? MouseInfo::MIDDLE : 0;
+						break;
+					case Button3: 
+						mi = MouseInfo::RIGHT_DN; 
+						state |= xev.xbutton.state & Button1Mask ? MouseInfo::LEFT : 0;
+						state |= MouseInfo::RIGHT;
+						state |= xev.xbutton.state & Button2Mask ? MouseInfo::MIDDLE : 0;
+						break;
+					case Button2: 
+						mi = MouseInfo::MIDDLE_DN; 
+						state |= xev.xbutton.state & Button1Mask ? MouseInfo::LEFT : 0;
+						state |= xev.xbutton.state & Button3Mask ? MouseInfo::RIGHT : 0;
+						state |= MouseInfo::MIDDLE;
+						break;
+					case Button5: 
+						mi = MouseInfo::WHEEL_DN; 
+						state |= xev.xbutton.state & Button1Mask ? MouseInfo::LEFT : 0;
+						state |= xev.xbutton.state & Button3Mask ? MouseInfo::RIGHT : 0;
+						state |= xev.xbutton.state & Button2Mask ? MouseInfo::MIDDLE : 0;
+						break;
+					case Button4: 
+						mi = MouseInfo::WHEEL_UP; 
+						state |= xev.xbutton.state & Button1Mask ? MouseInfo::LEFT : 0;
+						state |= xev.xbutton.state & Button3Mask ? MouseInfo::RIGHT : 0;
+						state |= xev.xbutton.state & Button2Mask ? MouseInfo::MIDDLE : 0;
+						break;
 				}
 
-				// xev.xbutton.state can contain:
-				// Button1Mask, Button2Mask, Button3Mask
-
-				// todo:
-				// add it to mi state :)
+				mi = (MouseInfo)(mi |state);
 
 				if (platform_api.mouse)
 					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,mi);				
@@ -721,19 +873,28 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else
 			if (xev.type == ButtonRelease)
 			{
+				int state = 0;
 				MouseInfo mi = (MouseInfo)0;
 				switch (xev.xbutton.button)
 				{
-					case Button1: mi = MouseInfo::LEFT_UP; break;
-					case Button3: mi = MouseInfo::RIGHT_UP; break;
-					case Button2: mi = MouseInfo::MIDDLE_UP; break;
+				case Button1:
+					mi = MouseInfo::LEFT_UP;
+					state |= xev.xbutton.state & Button3Mask ? MouseInfo::RIGHT : 0;
+					state |= xev.xbutton.state & Button2Mask ? MouseInfo::MIDDLE : 0;
+					break;
+				case Button3:
+					mi = MouseInfo::RIGHT_UP;
+					state |= xev.xbutton.state & Button1Mask ? MouseInfo::LEFT : 0;
+					state |= xev.xbutton.state & Button2Mask ? MouseInfo::MIDDLE : 0;
+					break;
+				case Button2:
+					mi = MouseInfo::MIDDLE_UP;
+					state |= xev.xbutton.state & Button1Mask ? MouseInfo::LEFT : 0;
+					state |= xev.xbutton.state & Button3Mask ? MouseInfo::RIGHT : 0;
+					break;
 				}
 
-				// xev.xbutton.state can contain:
-				// Button1Mask, Button2Mask, Button3Mask
-
-				// todo:
-				// add it to mi state :)
+				mi = (MouseInfo)(mi | state);
 
 				if (platform_api.mouse)
 					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,mi);
@@ -741,14 +902,14 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else
 			if (xev.type == MotionNotify)
 			{
-				// xev.xmotion.state can contain:
-				// Button1Mask, Button2Mask, Button3Mask
+				state |= xev.xmotion.state & Button1Mask ? MouseInfo::LEFT : 0;
+				state |= xev.xmotion.state & Button3Mask ? MouseInfo::RIGHT : 0;
+				state |= xev.xmotion.state & Button2Mask ? MouseInfo::MIDDLE : 0;
 
-				// todo:
-				// add it to mi state :)
+				MouseInfo mi = (MouseInfo)(MouseInfo::MOVE | state);
 
 				if (platform_api.mouse)
-					platform_api.mouse(xev.xmotion.x,xev.xmotion.y,MouseInfo::MOVE);
+					platform_api.mouse(xev.xmotion.x,xev.xmotion.y,mi);
 			}
 		}
 		else
@@ -776,17 +937,9 @@ void a3dClose()
 
 uint64_t a3dGetTime()
 {
-	static uint64_t dummy = 0;
-	return dummy+=10000; // 10ms dummy advance
-	// TODO:
-	/*
-	LARGE_INTEGER c;
-	QueryPerformanceCounter(&c);
-	uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
-	return coarse_micro + diff * 1000000 / timer_freq.QuadPart;
-	// we can handle diff upto 3 minutes @ 100GHz clock
-	// this is why we refresh coarse time every minute on WM_TIMER
-	*/
+	static timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
 void a3dSwapBuffers()
@@ -796,11 +949,17 @@ void a3dSwapBuffers()
 
 bool a3dGetKeyb(KeyInfo ki)
 {
-	return 0;
-	// TODO
-	/*
-	return 0 != (1 & (GetKeyState(ki_to_vk[ki])>>15));
-	*/
+	if (ki <= 0 && || >= A3D_MAPEND)
+		return false;
+
+	int kc = ki_to_kc[ki];
+	if (!kc)
+		return false;
+
+	char bits[32];
+	XQueryKeymap(dpy, keys_return);
+
+	return bits[kc >> 3] & (1 << (kc & 7)) != 0;
 }
 
 void a3dSetTitle(const wchar_t* name)
@@ -839,11 +998,13 @@ bool a3dGetRect(int* xywh)
 	xywh[1]=gwa.y;
 	xywh[2]=gwa.width;
 	xywh[3]=gwa.height;
-	return true;
+	return wndmode;
 }
 
 void a3dSetRect(const int* xywh, bool wnd_mode)
 {
+	wndmode = wnd_mode;
+	// todo: handle decorations
 	XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
 }
 
@@ -851,41 +1012,28 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no state
 {
 	// TODO
-	/*
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	POINT p;
-	GetCursorPos(&p);
-	ScreenToClient(hWnd, &p);
-	if (x)
-		*x = p.x;
-	if (y)
-		*y = p.y;
+	Window root;
+	Window child;
+	int root_x, root_y;
+	int win_x, win_y;
+	int mask;
 
-	int fl = 0;
+	if (XQueryPointer(dpy, win, &root, &child, &root_x, &root_y, &win_x, &win_y, &mask))
+	{
+		int state = 0;
+		state |= mask & Button1Mask ? MouseInfo::LEFT : 0;
+		state |= mask & Button3Mask ? MouseInfo::RIGHT : 0;
+		state |= mask & Button2Mask ? MouseInfo::MIDDLE : 0;
 
-	if (0x8000 & GetKeyState(VK_LBUTTON))
-		fl |= MouseInfo::LEFT;
-	if (0x8000 & GetKeyState(VK_RBUTTON))
-		fl |= MouseInfo::RIGHT;
-	if (0x8000 & GetKeyState(VK_MBUTTON))
-		fl |= MouseInfo::MIDDLE;
+		if (x)
+			*x = win_x;
+		if (y)
+			*y = win_y;
 
-	return (MouseInfo)fl;
-	*/
+		return (MouseInfo)(MouseInfo::MOVE | state);
+	}
+
 	return (MouseInfo)0;
-}
-
-// keyb_key
-bool a3dGetKeybKey(KeyInfo ki) // return true if vk is down, keyb_char has no state
-{
-	if (ki < 0 || ki >= A3D_MAPEND)
-		return false;
-	// TODO
-	/*
-	if (GetKeyState(ki_to_vk[ki]) & 0x8000)
-		return true;
-	*/
-	return false;
 }
 
 // keyb_focus

@@ -840,7 +840,11 @@ void a3dSwapBuffers()
 
 bool a3dGetKeyb(KeyInfo ki)
 {
-	return 0 != (1 & (GetKeyState(ki_to_vk[ki])>>15));
+	if (ki < 0 || ki >= A3D_MAPEND || ki_to_vk[ki] == 0)
+		return false;
+	if (GetKeyState(ki_to_vk[ki]) & 0x8000)
+		return true;
+	return false;
 }
 
 void a3dSetTitle(const wchar_t* name)
@@ -950,16 +954,6 @@ MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no s
 		fl |= MouseInfo::MIDDLE;
 
 	return (MouseInfo)fl;
-}
-
-// keyb_key
-bool a3dGetKeybKey(KeyInfo ki) // return true if vk is down, keyb_char has no state
-{
-	if (ki < 0 || ki >= A3D_MAPEND)
-		return false;
-	if (GetKeyState(ki_to_vk[ki]) & 0x8000)
-		return true;
-	return false;
 }
 
 // keyb_focus
