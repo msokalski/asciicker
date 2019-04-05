@@ -38,6 +38,7 @@ static int mouse_x = 0;
 static int mouse_y = 0;
 static bool track = false;
 static bool closing = false;
+static int force_key = A3D_NONE;
 
 const char* caps[]=
 {
@@ -291,7 +292,7 @@ static const unsigned char ki_to_kc[] =
 	35,		// A3D_OEM_CLOSE
 	51,		// A3D_OEM_BACKSLASH
 	48,		// A3D_OEM_QUOTATION
-}
+};
 
 static const unsigned char kc_to_ki[128]=
 {
@@ -612,7 +613,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		LeaveWindowMask;
 
 	// win is global
-	wnd_mode = true;
+	wndmode = true;
 	win = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
 	if (!win)
 	{
@@ -679,8 +680,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			{
 				if (xev.xconfigure.width != w || xev.xconfigure.height != h)
 				{
-					w = gwa.width;
-					h = gwa.height;
+					w = xev.xconfigure.width;
+					h = xev.xconfigure.height;
 					if (platform_api.resize)
 						platform_api.resize(w, h);
 				}
@@ -734,9 +735,26 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					if (kc>=0 && kc<128) 
 					{
 						printf("PRESS: %s\n",caps[kc_to_ki[kc]]);
+
+						force_key = kc_to_ki[kc];
 						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],true);
+						force_key = A3D_NONE;
 					}
 				}
+
+                XComposeStatus composeStatus;
+                char asciiCode[ 32 ];
+                KeySym keySym;
+                int len;
+
+				// todo switch to XwcLookupString ...
+				// thar will require use of: XOpenIM, XCreateIC, XSetICFocus, 
+                len = XLookupString( &xev.xkey, asciiCode, sizeof(asciiCode),
+                                     &keySym, &composeStatus);
+
+				if (platform_api.keyb_char)
+					for (int i=0; i<len; i++)
+						platform_api.keyb_char((wchar_t)asciiCode[i]);
 			}
 			else 
 			if(xev.type == KeyRelease) 
@@ -746,7 +764,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 				if (!physical)
 				{
 					XEvent nev;
-					XPeekEvent(disp, &nev);
+					XPeekEvent(dpy, &nev);
 
 					// autorepeat guessing...
 					if (nev.type != KeyPress || 
@@ -843,6 +861,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			else
 			if (xev.type == MotionNotify)
 			{
+				int state = 0;
 				state |= xev.xmotion.state & Button1Mask ? MouseInfo::LEFT : 0;
 				state |= xev.xmotion.state & Button3Mask ? MouseInfo::RIGHT : 0;
 				state |= xev.xmotion.state & Button2Mask ? MouseInfo::MIDDLE : 0;
@@ -855,10 +874,24 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		}
 		else
 		{
+			int c=0;
+			char bits[32]={0};
+			XQueryKeymap(dpy, bits);
+			for (int i=0; i<256; i++)
+			{
+				if (bits[i>>3] & (1<<(i&7)))
+				{
+					printf("%d",i);
+					c++;
+				}
+			}
+			if (c)
+				printf("\n");
+
 			if (platform_api.render && mapped)
 				platform_api.render();
-			else
-				usleep(20000); // 1/50s
+//			else
+//				usleep(20000); // 1/50s
 		}
 	}
 
@@ -896,15 +929,18 @@ bool a3dGetKeyb(KeyInfo ki)
 	XkbGetIndicatorState(dpy, XkbUseCoreKbd, &n);
 	*/
 
-	if (ki <= 0 && || >= A3D_MAPEND)
+	if (ki <= 0 || ki >= A3D_MAPEND)
 		return false;
+
+	if (ki == force_key)
+		return true;
 
 	int kc = ki_to_kc[ki];
 	if (!kc)
 		return false;
 
-	char bits[32];
-	XQueryKeymap(dpy, keys_return);
+	char bits[32]={0};
+	XQueryKeymap(dpy, bits);
 
 	return bits[kc >> 3] & (1 << (kc & 7)) != 0;
 }
@@ -963,7 +999,7 @@ MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no s
 	Window child;
 	int root_x, root_y;
 	int win_x, win_y;
-	int mask;
+	unsigned int mask;
 
 	if (XQueryPointer(dpy, win, &root, &child, &root_x, &root_y, &win_x, &win_y, &mask))
 	{
@@ -990,4 +1026,45 @@ bool a3dGetFocus()
 	int revert_to;
 	XGetInputFocus(dpy, &focused, &revert_to);
 	return focused == win;
+}
+
+
+#include "upng.h"
+
+bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf))
+{
+	upng_t* upng;
+
+	upng = upng_new_from_file(path);
+
+	if (upng_get_error(upng) != UPNG_EOK) 
+	{
+		printf("error: %u %u\n", upng_get_error(upng), upng_get_error_line(upng));
+		return false;
+	}
+
+	if (upng_decode(upng) != UPNG_EOK)
+	{
+		printf("error: %u %u\n", upng_get_error(upng), upng_get_error_line(upng));
+		upng_free(upng);
+		return false;
+	}
+
+	int format, width, height, depth;
+	format = upng_get_format(upng);
+	width = upng_get_width(upng);
+	height = upng_get_height(upng);
+	depth = upng_get_bpp(upng) / 8;
+
+	printf("size:	%ux%ux%u (%u)\n", width, height, upng_get_bpp(upng), upng_get_size(upng));
+	printf("format:	%u\n", format);
+
+	const void* buf = upng_get_buffer(upng);
+	const void* pal_buf = upng_get_pal_buffer(upng);
+	unsigned pal_size = upng_get_pal_size(upng);
+
+	cb(cookie, (A3D_ImageFormat)format, width, height, buf, pal_size, pal_buf);
+
+	upng_free(upng);
+	return true;
 }
