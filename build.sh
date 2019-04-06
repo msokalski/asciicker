@@ -8,7 +8,7 @@ asciiid_x11.cpp \
 asciiid_urdo.cpp \
 terrain.cpp \
 texheap.cpp \
-upng.cpp \
+upng.c \
 gl.c \
 imgui_impl_opengl3.cpp \
 imgui/imgui.cpp \
