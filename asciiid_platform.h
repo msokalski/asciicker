@@ -252,10 +252,14 @@ enum A3D_ImageFormat
 	A3D_LUMINANCE_ALPHA2,
 	A3D_LUMINANCE_ALPHA4,
 	A3D_LUMINANCE_ALPHA8,
-	A3D_INDEX1,
-	A3D_INDEX2,
-	A3D_INDEX4,
-	A3D_INDEX8,
+	A3D_INDEX1_RGB,
+	A3D_INDEX2_RGB,
+	A3D_INDEX4_RGB,
+	A3D_INDEX8_RGB,
+	A3D_INDEX1_RGBA,
+	A3D_INDEX2_RGBA,
+	A3D_INDEX4_RGBA,
+	A3D_INDEX8_RGBA,
 };
 
 bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf));

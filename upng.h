@@ -1,4 +1,5 @@
 /*
+uPNG -- altered by @msokalski
 uPNG -- derived from LodePNG version 20100808
 
 Copyright (c) 2005-2010 Lode Vandevenne
@@ -53,10 +54,14 @@ typedef enum upng_format {
 	UPNG_LUMINANCE_ALPHA2,
 	UPNG_LUMINANCE_ALPHA4,
 	UPNG_LUMINANCE_ALPHA8,
-	UPNG_INDEX1,
-	UPNG_INDEX2,
-	UPNG_INDEX4,
-	UPNG_INDEX8,
+	UPNG_INDEX1_RGB,
+	UPNG_INDEX2_RGB,
+	UPNG_INDEX4_RGB,
+	UPNG_INDEX8_RGB,
+	UPNG_INDEX1_RGBA,
+	UPNG_INDEX2_RGBA,
+	UPNG_INDEX4_RGBA,
+	UPNG_INDEX8_RGBA,
 } upng_format;
 
 typedef struct upng_t upng_t;
@@ -66,7 +71,7 @@ upng_t*		upng_new_from_file	(const char* path);
 void		upng_free			(upng_t* upng);
 
 upng_error	upng_header			(upng_t* upng);
-upng_error	upng_decode			(upng_t* upng);
+upng_error	upng_decode			(upng_t* upng, bool flip_y);
 
 upng_error	upng_get_error		(const upng_t* upng);
 unsigned	upng_get_error_line	(const upng_t* upng);

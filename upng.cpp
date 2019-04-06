@@ -1,4 +1,5 @@
 /*
+uPNG -- altered by @msokalski
 uPNG -- derived from LodePNG version 20100808
 
 Copyright (c) 2005-2010 Lode Vandevenne
@@ -87,6 +88,7 @@ typedef struct upng_source {
 
 typedef struct upng_pal {
 	int len;
+	unsigned char trns; 
 	unsigned char rgba[1024];
 } upng_pal;
 
@@ -840,6 +842,26 @@ static void post_process_scanlines(upng_t* upng, unsigned char *out, unsigned ch
 	}
 }
 
+static void flip_scanlines(upng_t* upng)
+{
+	unsigned bpp = upng_get_bpp(upng);
+	unsigned w = upng->width;
+	unsigned h = upng->height;	
+	unsigned long linebytes = (w * bpp + 7) / 8;
+
+	for (int y=h>>1; y>=0; y--)
+	{
+		int p = y*linebytes;
+		int q = (h-1-y)*linebytes; 
+		for (int b=0; b<linebytes; b++)
+		{
+			unsigned char swap = upng->buffer[p+b];
+			upng->buffer[p+b] = upng->buffer[q+b];
+			upng->buffer[q+b] = swap;
+		}
+	}
+} 
+
 static upng_format determine_format(upng_t* upng) {
 	switch (upng->color_type) {
 	case UPNG_LUM:
@@ -866,18 +888,37 @@ static upng_format determine_format(upng_t* upng) {
 		}
 
 	case UPNG_IDX:
-		switch (upng->color_depth) {
-		case 1:
-			return UPNG_INDEX1;
-		case 2:
-			return UPNG_INDEX2;
-		case 4:
-			return UPNG_INDEX4;
-		case 8:
-			return UPNG_INDEX8;
-		default:
-			return UPNG_BADFORMAT;
+		if (upng->pal.trns)
+		{
+			switch (upng->color_depth) {
+			case 1:
+				return UPNG_INDEX1_RGBA;
+			case 2:
+				return UPNG_INDEX2_RGBA;
+			case 4:
+				return UPNG_INDEX4_RGBA;
+			case 8:
+				return UPNG_INDEX8_RGBA;
+			default:
+				return UPNG_BADFORMAT;
+			}
 		}
+		else
+		{
+			switch (upng->color_depth) {
+			case 1:
+				return UPNG_INDEX1_RGB;
+			case 2:
+				return UPNG_INDEX2_RGB;
+			case 4:
+				return UPNG_INDEX4_RGB;
+			case 8:
+				return UPNG_INDEX8_RGB;
+			default:
+				return UPNG_BADFORMAT;
+			}
+		}
+		
 
 	case UPNG_LUMA:
 		switch (upng->color_depth) {
@@ -986,7 +1027,7 @@ upng_error upng_header(upng_t* upng)
 }
 
 /*read a PNG, the result will be in the same color type as the PNG (hence "generic")*/
-upng_error upng_decode(upng_t* upng)
+upng_error upng_decode(upng_t* upng, bool flip_y)
 {
 	const unsigned char *chunk;
 	unsigned char* compressed;
@@ -1021,6 +1062,7 @@ upng_error upng_decode(upng_t* upng)
 	/* first byte of the first chunk after the header */
 	chunk = upng->source.buffer + 33;
 
+	upng->pal.trns = 0;
 	upng->pal.len = 0;
 
 	/* scan through the chunks, finding the size of all IDAT chunks, and also
@@ -1058,7 +1100,7 @@ upng_error upng_decode(upng_t* upng)
 			break;
 		} else if (upng_chunk_type(chunk) == CHUNK_PLTE) {
 			int len = length / 3;
-			if (len*3 != length)
+			if (len>256 || len*3 != length)
 			{
 				SET_ERROR(upng, UPNG_EMALFORMED);
 				return upng->error;
@@ -1074,6 +1116,19 @@ upng_error upng_decode(upng_t* upng)
 			for (int i = old; i < len; i++)
 				upng->pal.rgba[4 * i + 3] = 0xFF;
 		} else if (upng_chunk_type(chunk) == CHUNK_tRNS) {
+			if (length>256)
+			{
+				SET_ERROR(upng, UPNG_EMALFORMED);
+				return upng->error;
+			}
+			for (int i = upng->pal.len; i < length; i++)
+			{
+				upng->pal.rgba[4*i+0]=0;				
+				upng->pal.rgba[4*i+1]=0;				
+				upng->pal.rgba[4*i+2]=0;				
+			}
+			upng->pal.len = upng->pal.len > length ? upng->pal.len : length;
+			upng->pal.trns = length;
 			for (int i = 0; i < length; i++)
 				upng->pal.rgba[4 * i + 3] = chunk[8 + i];
 		} else if (upng_chunk_critical(chunk)) {
@@ -1156,6 +1211,9 @@ upng_error upng_decode(upng_t* upng)
 
 	/* we are done with our input buffer; free it if we own it */
 	upng_free_source(upng);
+
+	if (flip_y)
+		flip_scanlines(upng);
 
 	return upng->error;
 }

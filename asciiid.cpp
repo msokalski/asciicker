@@ -34,7 +34,9 @@ struct Font
 	{
 		Font* font = (Font*)cookie;
 
-		glCreateTextures(GL_TEXTURE_2D, 1, &font->tex);
+		font->width = w;
+		font->height = h;
+
 		int ifmt = 0;
 		int fmt = 0;
 		int type = 0;
@@ -88,19 +90,36 @@ struct Font
 				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
 				break;
 
-			case A3D_INDEX1:
+			case A3D_INDEX1_RGB:
+				bits = 1; bytes = 3;
+				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_INDEX2_RGB:
+				bits = 2; bytes = 3;
+				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_INDEX4_RGB:
+				bits = 4; bytes = 3;
+				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
+				break;
+			case A3D_INDEX8_RGB:
+				bits = 8; bytes = 3;
+				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
+				break;
+
+			case A3D_INDEX1_RGBA:
 				bits = 1; bytes = 4;
 				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
 				break;
-			case A3D_INDEX2:
+			case A3D_INDEX2_RGBA:
 				bits = 2; bytes = 4;
 				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
 				break;
-			case A3D_INDEX4:
+			case A3D_INDEX4_RGBA:
 				bits = 4; bytes = 4;
 				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
 				break;
-			case A3D_INDEX8:
+			case A3D_INDEX8_RGBA:
 				bits = 8; bytes = 4;
 				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
 				break;
@@ -109,9 +128,11 @@ struct Font
 		if (bits)
 		{
 			int out_row = bytes * w;
-			int in_row = (((bits * w - 1) | 0x7) + 1) / 8;
+			int in_row = (bits * w + 7) >> 3;
 			const uint8_t* in_line = (const uint8_t*)data;
-			uint8_t* out_line = (uint8_t*)malloc(out_row*h);
+
+			buf = malloc(out_row*h);
+			uint8_t* out_line = (uint8_t*)buf;
 
 			int d = 1;
 			int q = 8 / bits - 1;
@@ -125,8 +146,9 @@ struct Font
 				case 4: r = 1; mul = 17;  break;
 			}
 
-			if (bytes < 4)
+			if (bytes < 3)
 			{
+				// unpack, normalize
 				for (int y = 0; y < h; y++)
 				{
 					for (int b = 0; b < out_row; b++)
@@ -141,32 +163,67 @@ struct Font
 			}
 			else
 			{
-				// depal
-				for (int y = 0; y < h; y++)
-				{
-					for (int b = 0; b < w; b++)
+				if (bytes==4) // depal rgba
+					for (int y = 0; y < h; y++)
 					{
-						int idx = (in_line[b >> r] >> ((b&q)*bits)) & m;
-						((uint32_t*)out_line)[b] = ((const uint32_t*)palbuf)[b];
-					}
+						for (int x = 0; x < w; x++)
+						{
+							int idx = (in_line[x >> r] >> ((x&q)*bits)) & m;
+							if (idx>=palsize)
+								((uint32_t*)out_line)[x] = 0x00000000; // black-transp if outside pal
+							else 
+								((uint32_t*)out_line)[x] = ((const uint32_t*)palbuf)[idx];
+						}
 
-					in_line += in_row;
-					out_line += out_row;
-				}
+						in_line += in_row;
+						out_line += out_row;
+					}
+				else // depal rgb
+					for (int y = 0; y < h; y++)
+					{
+						for (int x = 0; x < w; x++)
+						{
+							int idx = (in_line[x >> r] >> ((x&q)*bits)) & m;
+
+							if (idx>=palsize)
+							{
+								out_line[3*x+0] = 0;
+								out_line[3*x+1] = 0;
+								out_line[3*x+2] = 0;
+							}
+							else 
+							{
+								out_line[3*x+0] = ((const uint8_t*)palbuf)[4*idx+0];
+								out_line[3*x+1] = ((const uint8_t*)palbuf)[4*idx+1];
+								out_line[3*x+2] = ((const uint8_t*)palbuf)[4*idx+2];
+							}
+						}
+
+						in_line += in_row;
+						out_line += out_row;
+					}				
 			}
 		}
 
+		glCreateTextures(GL_TEXTURE_2D, 1, &font->tex);
 		glTextureStorage2D(font->tex, 1, ifmt, w, h);
+
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTextureSubImage2D(font->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
 		glTextureParameteri(font->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTextureParameteri(font->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-		glTextureSubImage2D(font->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
-
 		if (buf)
 			free(buf);
 	}
+
+	int width;
+	int height;
+
 	GLuint tex;
 } font;
 
@@ -1284,6 +1341,11 @@ void my_render()
 			ImGui::Text("%zu BYTES", GetTerrainBytes(terrain));
 		}
 
+		if (ImGui::CollapsingHeader("Font", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Image((void*)(intptr_t)font.tex, ImVec2(font.width,font.height), ImVec2(0,1), ImVec2(1,0));
+		}
+
 		/*
 		static int paint_mode=0;
 
@@ -1427,6 +1489,11 @@ void my_render()
 			spinning_y = round(io.MousePos.y);
 		}
 	}
+	else
+	{
+		zoom_wheel = 0;
+	}
+	
 
 	double rx = 0.5 * io.DisplaySize.x / font_size;
 	double ry = 0.5 * io.DisplaySize.y / font_size;
@@ -1770,7 +1837,7 @@ void my_resize(int w, int h)
 void my_init()
 {
 	font.tex = 0;
-	a3dLoadImage("cp437_18x18.png", &font, Font::Load);
+	a3dLoadImage("fonts/cp437_18x18.png", &font, Font::Load);
 
 	g_Time = a3dGetTime();
 	render_context.Create();
