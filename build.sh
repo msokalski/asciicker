@@ -3,6 +3,7 @@ then
 	mkdir .run
 fi
 g++ -g -o .run/asciiid \
+#g++ -O3 .run/asciiid \
 asciiid.cpp \
 asciiid_x11.cpp \
 asciiid_urdo.cpp \

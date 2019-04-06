@@ -22,7 +22,8 @@
 #include "gl.h"
 
 #include <GL/glx.h>
-//#include <GL/glxext.h> // <- we'll need it to request versioned context
+
+#include <GL/glxext.h> // <- we'll need it to request versioned context
 
 #include "asciiid_platform.h"
 
@@ -565,6 +566,12 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (!pi || !gd)
 		return false;
 
+	PFNGLXCREATECONTEXTATTRIBSARBPROC glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC)
+		glXGetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
+	
+	if (!glXCreateContextAttribsARB)
+		return false;
+
 	GLint                   att[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
 	GLXContext              glc;
 	XWindowAttributes       gwa;
@@ -628,7 +635,17 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	XStoreName(dpy, win, "asciiid");
 
- 	glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
+	int nelements;
+	GLXFBConfig *fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), 0, &nelements);	
+	int attribs[] = {
+		GLX_CONTEXT_FLAGS_ARB, gd->flags & GraphicsDesc::DEBUG_CONTEXT ? GLX_CONTEXT_DEBUG_BIT_ARB : 0,
+		GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 5,
+		0};
+
+	glc = glXCreateContextAttribsARB(dpy, *fbc, 0, true, attribs);
+ 	//glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
+
 	if (!glc)
 	{
 		XDestroyWindow(dpy, win);
