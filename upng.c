@@ -1027,7 +1027,7 @@ upng_error upng_header(upng_t* upng)
 }
 
 /*read a PNG, the result will be in the same color type as the PNG (hence "generic")*/
-upng_error upng_decode(upng_t* upng, bool flip_y)
+upng_error upng_decode(upng_t* upng, int flip_y)
 {
 	const unsigned char *chunk;
 	unsigned char* compressed;
@@ -1100,12 +1100,12 @@ upng_error upng_decode(upng_t* upng, bool flip_y)
 			break;
 		} else if (upng_chunk_type(chunk) == CHUNK_PLTE) {
 			int len = length / 3;
+			int old = upng->pal.len;
 			if (len>256 || len*3 != length)
 			{
 				SET_ERROR(upng, UPNG_EMALFORMED);
 				return upng->error;
 			}
-			int old = upng->pal.len;
 			upng->pal.len = len > old ? len : old;
 			for (int i = 0; i < len; i++)
 			{
