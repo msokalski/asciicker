@@ -640,7 +640,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	int attribs[] = {
 		GLX_CONTEXT_FLAGS_ARB, gd->flags & GraphicsDesc::DEBUG_CONTEXT ? GLX_CONTEXT_DEBUG_BIT_ARB : 0,
 		GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 5,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 6,
 		0};
 
 	glc = glXCreateContextAttribsARB(dpy, *fbc, 0, true, attribs);
@@ -966,8 +966,28 @@ bool a3dGetKeyb(KeyInfo ki)
 
 void a3dSetTitle(const wchar_t* name)
 {
-	snprintf(title,255,"%ls", name);
-	XStoreName(dpy, win, title);
+//	snprintf(title,255,"%ls", name);
+//	XStoreName(dpy, win, title);
+
+    /* This variable will store the window name property. */
+    XTextProperty window_name_property;
+    /* This variable will store the icon name property. */
+	XTextProperty icon_name_property;
+
+    char window_name[] = "hello, world";
+	char icon_name[] = "small world";
+
+	char* window_name_ptr = window_name;
+	char* icon_name_ptr = icon_name;
+
+	int rc;
+    //rc = XStringListToTextProperty(&window_name_ptr, 1, &window_name_property);		
+    rc = XStringListToTextProperty(&icon_name_ptr, 1, &icon_name_property);		
+
+    //XSetWMName(dpy, win, &window_name_property);
+	XSetWMIconName(dpy, win, &icon_name_property);	
+
+	XFlush(dpy);
 }
 
 int a3dGetTitle(wchar_t* name, int size)

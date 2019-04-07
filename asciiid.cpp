@@ -230,6 +230,11 @@ struct Font
 float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
+
+float lit_yaw = 0;
+float lit_pitch = 60;//90;
+float lit_time = 12.0f;
+
 bool spin_anim = false;
 float pos_x = 0, pos_y = 0, pos_z = 0;
 int mouse_in = 0;
@@ -500,6 +505,7 @@ struct RenderContext
 
 			uniform usampler2D v_tex;
 
+			uniform vec3 lt; // light pos
 			uniform vec4 br; // brush
 			uniform vec3 qd; // quad diag
 			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
@@ -564,7 +570,7 @@ struct RenderContext
 				color.b = float((visual>>11) & 0x1f) / 31.0;
 				color.a = 1;
 
-				vec3 light_pos = normalize(vec3(1, 1, 0.25));
+				vec3 light_pos = normalize(lt);
 				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
 
 				color.rgb *= light;
@@ -672,6 +678,7 @@ struct RenderContext
 		br_loc = glGetUniformLocation(prg, "br");
 		qd_loc = glGetUniformLocation(prg, "qd");
 		pr_loc = glGetUniformLocation(prg, "pr");
+		lt_loc = glGetUniformLocation(prg, "lt");
 	}
 
 	void Delete()
@@ -681,7 +688,7 @@ struct RenderContext
 		glDeleteProgram(prg);
 	}
 
-	void BeginPatches(const double* tm, const float* br, const float* qd, const float* pr)
+	void BeginPatches(const double* tm, const float* lt, const float* br, const float* qd, const float* pr)
 	{
 		glUseProgram(prg);
 
@@ -695,6 +702,7 @@ struct RenderContext
 			ftm[i] = (float)tm[i];
 
 		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
+		glUniform3fv(lt_loc, 1, lt);
 		glUniform1i(z_tex_loc, 0);
 		glUniform1i(v_tex_loc, 1);
 		glUniform4fv(br_loc, 1, br);
@@ -809,6 +817,7 @@ struct RenderContext
 	}
 
 	GLint tm_loc; // uniform
+	GLint lt_loc;
 	GLint z_tex_loc;
 	GLint v_tex_loc;
 	GLint br_loc;
@@ -1204,38 +1213,38 @@ void my_render()
 			ImGui::NewFrame();
 		}
 
-		ImGui::BeginMainMenuBar();
-		if (ImGui::BeginMenu("Examples"))
+		struct Dock
 		{
+			static void Size(ImGuiSizeCallbackData* data)
 			{
-				static bool s = false;
-				ImGui::MenuItem("gogo", NULL, &s);
+				data->DesiredSize.x = data->CurrentSize.x;
+				data->DesiredSize.y = 100;
 			}
-			{
-				static bool s = false;
-				ImGui::MenuItem("zogo", NULL, &s);
-			}
-			{
-				static bool s = false;
-				ImGui::MenuItem("fogo", NULL, &s);
-			}
-			ImGui::EndMenu();
-		}
+		};
 
-		ImGui::EndMainMenuBar();
-
-		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+		ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
+		//ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(0,0),Dock::Size,0);
+		ImGui::Begin("MAIN TOOLS",0,ImGuiWindowFlags_AlwaysAutoResize);
+		ImGui::PopStyleVar(1);
 
 		if (ImGui::CollapsingHeader("View Control", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::SliderFloat("PITCH", &rot_pitch, +30.0f, +90.0f);
+			ImGui::SliderFloat("VIEW PITCH", &rot_pitch, +30.0f, +90.0f);
 
-			ImGui::SliderFloat("YAW", &rot_yaw, -180.0f, +180.0f); ImGui::SameLine();
+			ImGui::SliderFloat("VIEW YAW", &rot_yaw, -180.0f, +180.0f); ImGui::SameLine();
 			ImGui::Checkbox("Spin", &spin_anim);
 
 			ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
 			ImGui::SameLine();
 			ImGui::Text("%dx%d", (int)round(io.DisplaySize.x/font_size), (int)round(io.DisplaySize.y / font_size));
+		}
+
+		if (ImGui::CollapsingHeader("Light Control", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::SliderFloat("LIGHT PITCH", &lit_pitch, -90.0f, +90.0f);
+			ImGui::SliderFloat("LIGHT YAW", &lit_yaw, -180.0f, +180.0f);
+			ImGui::SliderFloat("LIGHT TIME", &lit_time, 0, 24);
 		}
 
 		if (ImGui::CollapsingHeader("Brush", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1343,6 +1352,7 @@ void my_render()
 
 		if (ImGui::CollapsingHeader("Font", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			ImGui::Text("CELL SIZE: %dx%d px", font.width/16, font.height/16);
 			ImGui::Image((void*)(intptr_t)font.tex, ImVec2(font.width,font.height), ImVec2(0,1), ImVec2(1,0));
 		}
 
@@ -1378,8 +1388,10 @@ void my_render()
 		static bool show_another_window = false;
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+		/*
 		if (show_demo_window)
 			ImGui::ShowDemoWindow(&show_demo_window);
+		*/
 
 		/*
 
@@ -1766,9 +1778,16 @@ void my_render()
 	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
+	float lt[3] =
+	{
+		(float)(cos(lit_yaw*M_PI/180)*cos(lit_pitch*M_PI/180)*sin((lit_time-12)*M_PI/12)),
+		(float)(sin(lit_yaw*M_PI/180)*cos(lit_pitch*M_PI/180)*sin((lit_time-12)*M_PI/12)),
+		(float)(sin(lit_pitch*M_PI/180)*cos((lit_time-12)*M_PI/12))
+	};
+
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_GEQUAL);
-	rc->BeginPatches(tm, br_xyra, br_quad, br_probe);
+	rc->BeginPatches(tm, lt, br_xyra, br_quad, br_probe);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 	rc->EndPatches();
@@ -1836,6 +1855,11 @@ void my_resize(int w, int h)
 
 void my_init()
 {
+	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
+	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
+	printf("VERSION:  %s\n",glGetString(GL_VERSION));
+	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
+
 	font.tex = 0;
 	a3dLoadImage("fonts/cp437_18x18.png", &font, Font::Load);
 

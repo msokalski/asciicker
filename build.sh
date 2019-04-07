@@ -3,7 +3,6 @@ then
 	mkdir .run
 fi
 g++ -g -o .run/asciiid \
-#g++ -O3 .run/asciiid \
 asciiid.cpp \
 asciiid_x11.cpp \
 asciiid_urdo.cpp \
@@ -17,6 +16,6 @@ imgui/imgui_demo.cpp \
 imgui/imgui_draw.cpp \
 imgui/imgui_widgets.cpp \
 	-lGL \
-	-lX11 \
-	-L/usr/X11R6/lib \
-	-I/usr/X11R6/include
+	-lX11 
+#	-L/usr/X11R6/lib \
+#	-I/usr/X11R6/include

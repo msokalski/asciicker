@@ -127,9 +127,12 @@ Terrain* CreateTerrain(int z)
 				p->height[y][x] = z;
 		p->diag = 0;
 
+		/*
 		for (int y = 0; y < VISUAL_CELLS; y++)
 			for (int x = 0; x < VISUAL_CELLS; x++)
 				p->visual[y][x] = fast_rand();
+		*/
+		memset(p->visual,0xFF,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
 
 		t->root = p;
 		t->patches = 1;
@@ -569,9 +572,12 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				p->height[y][x] = z;
 		p->diag = 0;
 
+		/*
 		for (int y = 0; y < VISUAL_CELLS; y++)
 			for (int x = 0; x < VISUAL_CELLS; x++)
 				p->visual[y][x] = fast_rand();
+		*/
+		memset(p->visual,0xFF,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
 
 		t->root = p;
 		t->patches = 1;
@@ -984,10 +990,12 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				}
 			}
 
-
+			/*
 			for (int y = 0; y < VISUAL_CELLS; y++)
 				for (int x = 0; x < VISUAL_CELLS; x++)
 					p->visual[y][x] = fast_rand();
+			*/
+			memset(p->visual,0xFF,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
 
 			// update diag flags
 			Tap3x3 tap(p);
