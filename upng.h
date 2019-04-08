@@ -75,7 +75,7 @@ upng_t*		upng_new_from_file	(const char* path);
 void		upng_free			(upng_t* upng);
 
 upng_error	upng_header			(upng_t* upng);
-upng_error	upng_decode			(upng_t* upng, int flip_y);
+upng_error	upng_decode			(upng_t* upng);
 
 upng_error	upng_get_error		(const upng_t* upng);
 unsigned	upng_get_error_line	(const upng_t* upng);

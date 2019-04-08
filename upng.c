@@ -842,26 +842,6 @@ static void post_process_scanlines(upng_t* upng, unsigned char *out, unsigned ch
 	}
 }
 
-static void flip_scanlines(upng_t* upng)
-{
-	unsigned bpp = upng_get_bpp(upng);
-	unsigned w = upng->width;
-	unsigned h = upng->height;	
-	unsigned long linebytes = (w * bpp + 7) / 8;
-
-	for (int y=h>>1; y>=0; y--)
-	{
-		int p = y*linebytes;
-		int q = (h-1-y)*linebytes; 
-		for (int b=0; b<linebytes; b++)
-		{
-			unsigned char swap = upng->buffer[p+b];
-			upng->buffer[p+b] = upng->buffer[q+b];
-			upng->buffer[q+b] = swap;
-		}
-	}
-} 
-
 static upng_format determine_format(upng_t* upng) {
 	switch (upng->color_type) {
 	case UPNG_LUM:
@@ -1027,7 +1007,7 @@ upng_error upng_header(upng_t* upng)
 }
 
 /*read a PNG, the result will be in the same color type as the PNG (hence "generic")*/
-upng_error upng_decode(upng_t* upng, int flip_y)
+upng_error upng_decode(upng_t* upng)
 {
 	const unsigned char *chunk;
 	unsigned char* compressed;
@@ -1211,9 +1191,6 @@ upng_error upng_decode(upng_t* upng, int flip_y)
 
 	/* we are done with our input buffer; free it if we own it */
 	upng_free_source(upng);
-
-	if (flip_y)
-		flip_scanlines(upng);
 
 	return upng->error;
 }

@@ -200,7 +200,7 @@
     <ClCompile Include="imgui_impl_opengl3.cpp" />
     <ClCompile Include="terrain.cpp" />
     <ClCompile Include="texheap.cpp" />
-    <ClCompile Include="upng.cpp" />
+    <ClCompile Include="upng.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

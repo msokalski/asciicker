@@ -160,3 +160,42 @@ inline int PositiveProduct(L l[4], R r[4])
 {
 	return Product(l, r) > 0 ? 1 : 0;
 }
+
+template <typename V, typename A, typename M>
+inline void Rotation(const V v[3], A a, M m[16])
+{
+	M c = cos(a);
+	M s = sin(a);
+	M d = 1 - c;
+
+	m[0] = v[0] * v[0] * d + c;
+	m[1] = v[1] * v[0] * d + v[2] * s;
+	m[2] = v[2] * v[0] * d - v[1] * s;
+	m[3] = 0;
+
+	m[4] = v[0] * v[1] * d - v[2] * s;
+	m[5] = v[1] * v[1] * d + c;
+	m[6] = v[2] * v[1] * d + v[0] * s;
+	m[7] = 0;
+
+	m[8] = v[0] * v[2] * d + v[1] * s;
+	m[9] = v[1] * v[2] * d - v[0] * s;
+	m[10] = v[2] * v[2] * d + c;
+	m[11] = 0;
+
+	m[12] = 0;
+	m[13] = 0;
+	m[14] = 0;
+	m[15] = 1;
+}
+
+template <typename R, typename M>
+inline void RandRot(R r[3], M m[16])
+{
+	// r must hold 3 random vals in range 0..1 
+
+	// M = -H R
+	// H = I - 2vvT
+	// R = random xy rot by 2Pi*r[0]
+	// v = {cos(2Pi*x[1])*sqrt(x[2]), sin(2Pi*x[1])*sqrt(x[2]), sqrt(1-x[2])}
+}

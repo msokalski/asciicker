@@ -113,7 +113,7 @@
     <ClCompile Include="asciiid_urdo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="upng.cpp">
+    <ClCompile Include="upng.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

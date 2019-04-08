@@ -28,9 +28,73 @@
 
 Terrain* terrain = 0;
 
+void HsvToRgb(const uint8_t hsv[3], uint8_t rgb[3])
+{
+	uint8_t region, remainder, p, q, t;
+
+	if (hsv[1] == 0)
+	{
+		rgb[0] = hsv[2];
+		rgb[1] = hsv[2];
+		rgb[2] = hsv[2];
+		return;
+	}
+
+	region = hsv[0] / 43;
+	remainder = (hsv[0] - (region * 43)) * 6;
+
+	p = (hsv[2] * (255 - hsv[1])) >> 8;
+	q = (hsv[2] * (255 - ((hsv[1] * remainder) >> 8))) >> 8;
+	t = (hsv[2] * (255 - ((hsv[1] * (255 - remainder)) >> 8))) >> 8;
+
+	switch (region)
+	{
+	case 0:
+		rgb[0] = hsv[2]; rgb[1] = t; rgb[2] = p;
+		break;
+	case 1:
+		rgb[0] = q; rgb[1] = hsv[2]; rgb[2] = p;
+		break;
+	case 2:
+		rgb[0] = p; rgb[1] = hsv[2]; rgb[2] = t;
+		break;
+	case 3:
+		rgb[0] = p; rgb[1] = q; rgb[2] = hsv[2];
+		break;
+	case 4:
+		rgb[0] = t; rgb[1] = p; rgb[2] = hsv[2];
+		break;
+	default:
+		rgb[0] = hsv[2]; rgb[1] = p; rgb[2] = q;
+		break;
+	}
+}
+
 struct Font
 {
-	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+	/*
+	static void flip_scanlines(upng_t* upng)
+	{
+		unsigned bpp = upng_get_bpp(upng);
+		unsigned w = upng->width;
+		unsigned h = upng->height;
+		unsigned long linebytes = (w * bpp + 7) / 8;
+
+		for (int y = (h >> 1) - 1; y >= 0; y--)
+		{
+			int p = y * linebytes;
+			int q = (h - 1 - y)*linebytes;
+			for (int b = 0; b < linebytes; b++)
+			{
+				unsigned char swap = upng->buffer[p + b];
+				upng->buffer[p + b] = upng->buffer[q + b];
+				upng->buffer[q + b] = swap;
+			}
+		}
+	}
+	*/
+
+	static void Load_OLD(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 	{
 		Font* font = (Font*)cookie;
 
@@ -221,18 +285,160 @@ struct Font
 			free(buf);
 	}
 
+	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+	{
+		Font* font = (Font*)cookie;
+
+		font->width = w;
+		font->height = h;
+
+		int ifmt = GL_RGBA8;
+		int fmt = GL_RGBA;
+		int type = GL_UNSIGNED_BYTE;
+
+		uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
+		int bits = 0;
+		int bytes = 0;
+
+		switch (f)
+		{
+			case A3D_RGB8:
+			{
+				const uint8_t* src = (const uint8_t*)data;
+				for (int i = 0; i < w*h; i++)
+					buf[i] = (((src[3 * i + 0] * 2 + src[3 * i + 1] * 3 + src[3 * i + 2] + 3) / 6) << 24) | 0xFFFFFF;
+				break;
+			}
+
+			case A3D_RGB16:
+			{
+				const uint16_t* src = (const uint16_t*)data;
+				for (int i = 0; i < w*h; i++)
+					buf[i] = (((src[3 * i + 0] * 2 + src[3 * i + 1] * 3 + src[3 * i + 2] + 3 * 257) / (6*257)) << 24) | 0xFFFFFF;
+				break;
+			}
+
+			case A3D_RGBA8:
+			{
+				const uint8_t* src = (const uint8_t*)data;
+				for (int i = 0; i < w*h; i++)
+					buf[i] = (((src[4 * i + 0] * 2 + src[4 * i + 1] * 3 + src[4 * i + 2] + 3) / 6) << 24) | 0xFFFFFF;
+				break;
+			}
+
+			case A3D_RGBA16:
+			{
+				const uint16_t* src = (const uint16_t*)data;
+				for (int i = 0; i < w*h; i++)
+					buf[i] = (((src[4 * i + 0] * 2 + src[4 * i + 1] * 3 + src[4 * i + 2] + 3 * 257) / (6 * 257)) << 24) | 0xFFFFFF;
+				break;
+			}
+
+			case A3D_LUMINANCE1:
+				break;
+			case A3D_LUMINANCE2:
+				break;
+			case A3D_LUMINANCE4:
+				break;
+			case A3D_LUMINANCE8:
+			{
+				const uint8_t* src = (const uint8_t*)data;
+				for (int i = 0; i < w*h; i++)
+					buf[i] = (src[i] << 24) | 0xFFFFFF;
+				break;
+			}
+			case A3D_LUMINANCE_ALPHA1:
+				break;
+			case A3D_LUMINANCE_ALPHA2:
+				break;
+			case A3D_LUMINANCE_ALPHA4:
+				break;
+			case A3D_LUMINANCE_ALPHA8:
+			{
+				const uint8_t* src = (const uint8_t*)data;
+				for (int i = 0; i < w*h; i++)
+					buf[i] = (src[2 * i + 0] << 24) | 0xFFFFFF;
+				break;
+			}
+
+			case A3D_INDEX1_RGB:
+				break;
+			case A3D_INDEX2_RGB:
+				break;
+			case A3D_INDEX4_RGB:
+				break;
+			case A3D_INDEX8_RGB:
+			{
+				const uint8_t* src = (const uint8_t*)data;
+				for (int i = 0; i < w*h; i++)
+				{
+					int q = src[i];
+					if (q >= palsize)
+						buf[i] = 0xFFFFFF;
+					else
+					{
+						const uint8_t* p = (const uint8_t*)palbuf + 4 * q;
+						buf[i] = (((p[0] * 2 + p[1] * 3 + p[2] + 3) / 6) << 24) | 0xFFFFFF;
+					}
+				}
+				break;
+			}
+
+			case A3D_INDEX1_RGBA:
+				break;
+			case A3D_INDEX2_RGBA:
+				break;
+			case A3D_INDEX4_RGBA:
+				break;
+			case A3D_INDEX8_RGBA:
+				const uint8_t* src = (const uint8_t*)data;
+				for (int i = 0; i < w*h; i++)
+				{
+					int q = src[i];
+					if (q >= palsize)
+						buf[i] = 0xFFFFFF;
+					else
+					{
+						const uint8_t* p = (const uint8_t*)palbuf + 4 * q;
+						buf[i] = (((p[0] * 2 + p[1] * 3 + p[2] + 3) / 6) << 24) | 0xFFFFFF;
+					}
+				}
+				break;
+		}
+
+		glCreateTextures(GL_TEXTURE_2D, 1, &font->tex);
+		glTextureStorage2D(font->tex, 1, ifmt, w, h);
+
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTextureSubImage2D(font->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+		glTextureParameteri(font->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(font->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		if (buf)
+			free(buf);
+	}
+
 	int width;
 	int height;
 
 	GLuint tex;
 } font;
 
+int active_font = 0;
+int active_glyph = 0x40; //@
+int active_palette = 0;
+int active_material = 0;
+
 float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
 
-float lit_yaw = 0;
-float lit_pitch = 60;//90;
+float lit_yaw = 45;
+float lit_pitch = 30;//90;
 float lit_time = 12.0f;
 
 bool spin_anim = false;
@@ -1226,7 +1432,7 @@ void my_render()
 		ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
 		//ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(0,0),Dock::Size,0);
 		ImGui::Begin("MAIN TOOLS",0,ImGuiWindowFlags_AlwaysAutoResize);
-		ImGui::PopStyleVar(1);
+		ImGui::PopStyleVar();
 
 		if (ImGui::CollapsingHeader("View Control", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -1277,9 +1483,9 @@ void my_render()
 			// Arrow buttons with Repeater
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 			ImGui::PushButtonRepeat(true);
-			if (ImGui::ArrowButton("##left", ImGuiDir_Left)) { if (probe_z>0) probe_z-=1; }
+			if (ImGui::ArrowButton("##probe_left", ImGuiDir_Left)) { if (probe_z>0) probe_z-=1; }
 			ImGui::SameLine(0.0f, spacing);
-			if (ImGui::ArrowButton("##right", ImGuiDir_Right)) { if (probe_z<0xffff) probe_z+=1; }
+			if (ImGui::ArrowButton("##probe_right", ImGuiDir_Right)) { if (probe_z<0xffff) probe_z+=1; }
 			ImGui::PopButtonRepeat();
 			ImGui::SameLine();
 			ImGui::Text("%d", probe_z);
@@ -1350,10 +1556,255 @@ void my_render()
 			ImGui::Text("%zu BYTES", GetTerrainBytes(terrain));
 		}
 
-		if (ImGui::CollapsingHeader("Font", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Fonts", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			ImGui::PushButtonRepeat(true);
+			if (ImGui::ArrowButton("##fnt_left", ImGuiDir_Left)) { if (active_font > 0) active_font--; }
+			ImGui::SameLine(0.0f, spacing);
+			if (ImGui::ArrowButton("##fnt_right", ImGuiDir_Right)) { if (active_font < 0xff) active_font++; }
+			ImGui::PopButtonRepeat();
+			ImGui::SameLine();
+			ImGui::Text("0x%02X (%d)", active_font, active_font); // path?
+
 			ImGui::Text("CELL SIZE: %dx%d px", font.width/16, font.height/16);
-			ImGui::Image((void*)(intptr_t)font.tex, ImVec2(font.width,font.height), ImVec2(0,1), ImVec2(1,0));
+			//ImGui::Image((void*)(intptr_t)font.tex, ImVec2(font.width,font.height), ImVec2(0,1), ImVec2(1,0));
+
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1,1));
+			ImVec4 tint_normal(1, 1, 1, 0.33f);
+			ImVec4 tint_onedim(1, 1, 1, 0.50f);
+			ImVec4 tint_active(1, 1, 1, 1.00f);
+			for (int y = 0; y < 16; y++)
+			{
+				for (int x = 0; x < 16; x++)
+				{
+					ImVec4* tint = &tint_normal;
+
+					bool pushed = false;
+					if (x + y*16 == active_glyph)
+					{
+						ImVec4 hi = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+						ImGui::PushStyleColor(ImGuiCol_Button,hi);
+						tint = &tint_active;
+						pushed = true;
+					}
+					else
+					if (x == (active_glyph & 0xf) || y == (active_glyph>>4))
+						tint = &tint_onedim;
+
+					ImGui::PushID(x + y * 16);
+					if (ImGui::ImageButton((void*)(intptr_t)font.tex, ImVec2(font.width / 16.f, font.height / 16.f),
+						ImVec2(x / 16.0f, y / 16.0f), ImVec2((x + 1) / 16.0f, (y + 1)/ 16.0f), 1, ImVec4(0, 0, 0, 0), *tint))
+					{
+						active_glyph = x + y * 16;
+					}
+					ImGui::PopID();
+
+					if (pushed)
+						ImGui::PopStyleColor();
+
+					if (x<15)
+						ImGui::SameLine();
+				}
+			}
+			ImGui::PopStyleVar();
+		}
+
+		if (ImGui::CollapsingHeader("Character", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			ImGui::PushButtonRepeat(true);
+			if (ImGui::ArrowButton("##chr_left", ImGuiDir_Left)) { if (active_glyph > 0) active_glyph--; }
+			ImGui::SameLine(0.0f, spacing);
+			if (ImGui::ArrowButton("##chr_right", ImGuiDir_Right)) { if (active_glyph < 0xff) active_glyph++; }
+			ImGui::PopButtonRepeat();
+			ImGui::SameLine();
+			ImGui::Text("0x%02X (%d)", active_glyph, active_glyph);
+
+
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
+
+			int glyph_w = font.width / 16;
+			int glyph_h = font.height / 16;
+
+			float glyph_x = (active_glyph & 0xf) * glyph_w / (float)font.width;
+			float glyph_y = (active_glyph >> 4) * glyph_h / (float)font.height;
+
+			float texel_w = 1.0f / font.width;
+			float texel_h = 1.0f / font.height;
+
+			float but_w = 13 + 48.0f / glyph_w;
+
+			for (int y = 0; y < glyph_h ; y++)
+			{
+				for (int x = 0; x < glyph_w; x++)
+				{
+					ImGui::PushID(x + y * glyph_w + 256);
+					if (ImGui::ImageButton((void*)(intptr_t)font.tex, ImVec2(but_w, but_w),
+						ImVec2(glyph_x + x*texel_w, glyph_y + y*texel_h), ImVec2(glyph_x + (x+1)*texel_w, glyph_y + (y+1)*texel_h), 
+						1, ImVec4(0,0,0,.5f), ImVec4(1,1,1,.5)))
+					{
+						// tick that pixel
+					}
+					ImGui::PopID();
+
+					if (x < glyph_w-1)
+						ImGui::SameLine();
+				}
+			}
+
+			ImGui::PopStyleVar();
+		}
+
+		if (ImGui::CollapsingHeader("Palettes", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			ImGui::PushButtonRepeat(true);
+			if (ImGui::ArrowButton("##pal_left", ImGuiDir_Left)) { if (active_palette > 0) active_palette--; }
+			ImGui::SameLine(0.0f, spacing);
+			if (ImGui::ArrowButton("##pal_right", ImGuiDir_Right)) { if (active_palette < 0xff) active_palette++; }
+			ImGui::PopButtonRepeat();
+			ImGui::SameLine();
+			ImGui::Text("0x%02X (%d)", active_palette, active_palette);
+
+			int glyph_w = font.width / 16;
+			int glyph_h = font.height / 16;
+
+			float but_w = 13 + 48.0f / glyph_w;
+
+			static bool init = true;
+			static uint8_t pal[256][3 * 256];
+			if (init)
+			{
+				init = false;
+				for (int j=0; j<256; j++)
+					for (int i = 0; i < 768; i++)
+						pal[j][i] = fast_rand() & 0xFF;
+			}
+
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
+
+			for (int y = 0; y < 16; y++)
+			{
+				for (int x = 0; x < 16; x++)
+				{
+					ImVec4 tint(
+						pal[active_palette][3 * (x + 16 * y) + 0] / 255.0f, 
+						pal[active_palette][3 * (x + 16 * y) + 1] / 255.0f, 
+						pal[active_palette][3 * (x + 16 * y) + 2] / 255.0f, 
+						1.0
+					);
+
+					ImGui::PushID(x + y * 16 + 256 + glyph_w * glyph_h);
+					if (ImGui::ImageButton(0/*samples black!*/,ImVec2(glyph_w, glyph_w), ImVec2(0,0), ImVec2(1,1), 1, tint, ImVec4(0,0,0,0)))
+					{
+						// select that color
+					}
+					ImGui::PopID();
+
+					if (x < 15)
+						ImGui::SameLine();
+				}
+			}
+
+			ImGui::PopStyleVar();
+		}
+
+		if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			ImGui::PushButtonRepeat(true);
+			if (ImGui::ArrowButton("##mat_left", ImGuiDir_Left)) { if (active_material > 0) active_material--; }
+			ImGui::SameLine(0.0f, spacing);
+			if (ImGui::ArrowButton("##mat_right", ImGuiDir_Right)) { if (active_material < 0xff) active_material++; }
+			ImGui::PopButtonRepeat();
+			ImGui::SameLine();
+			ImGui::Text("0x%02X (%d)", active_material, active_material);
+
+			int glyph_w = font.width / 16;
+			int glyph_h = font.height / 16;
+
+			float texel_w = 1.0f / font.width;
+			float texel_h = 1.0f / font.height;
+
+			struct Cell
+			{
+				uint8_t fg[3];
+				uint8_t bg[3];
+				uint8_t gl;
+				uint8_t pad;
+			};
+
+			struct Material
+			{
+				Cell shade[3][16];
+			};
+
+			static bool init = true;
+			static Material mat[256];
+			if (init)
+			{
+				init = false;
+				for (int i = 0; i < 256; i++)
+				{
+					for (int m = 0; m < 3; m++)
+					{
+						for (int s = 0; s < 16; s++)
+						{
+							mat[i].shade[m][s].bg[0] = fast_rand() & 0xFF;
+							mat[i].shade[m][s].bg[1] = fast_rand() & 0xFF;
+							mat[i].shade[m][s].bg[2] = fast_rand() & 0xFF;
+							mat[i].shade[m][s].fg[0] = fast_rand() & 0xFF;
+							mat[i].shade[m][s].fg[1] = fast_rand() & 0xFF;
+							mat[i].shade[m][s].fg[2] = fast_rand() & 0xFF;
+							mat[i].shade[m][s].gl = fast_rand() & 0xFF;
+							mat[i].shade[m][s].pad = 0;
+						}
+					}
+				}
+			}
+
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
+
+			for (int y = 0; y < 3; y++)
+			{
+				for (int x = 0; x < 16; x++)
+				{
+					float glyph_x = (mat[active_material].shade[y][x].gl & 0xF) / 16.0f;
+					float glyph_y = (mat[active_material].shade[y][x].gl >> 4) / 16.0f;
+
+					uint8_t* bg = mat[active_material].shade[y][x].bg;
+					uint8_t* fg = mat[active_material].shade[y][x].fg;
+
+					ImGui::PushID(x + y * 16 + 512 + glyph_w * glyph_h);
+					if (ImGui::ImageButton((void*)(intptr_t)font.tex, ImVec2(glyph_w, glyph_h),
+						ImVec2(glyph_x, glyph_y), ImVec2(glyph_x + 1 / 16.0f, glyph_y + 1 / 16.0f), 
+						1, ImVec4(bg[0] / 255.f, bg[1] / 255.f, bg[2] / 255.f, 1), 
+						ImVec4(fg[0] / 255.f, fg[1] / 255.f, fg[2] / 255.f, 1)))
+					{
+						// paint that slot with active_glyph, fg_color,  bg_color
+					}
+					ImGui::PopID();
+
+					if (x < 15)
+						ImGui::SameLine();
+				}
+			}
+
+			ImGui::PopStyleVar();
+
+			ImGui::Separator();
+
+			static bool paint_mat_glyph = true;
+			static bool paint_mat_foreground = true;
+			static bool paint_mat_background = true;
+
+			static float fg[3] = { .2f, .3f, .4f };
+			static float bg[3] = { .2f, .2f, .1f };
+
+			ImGui::Checkbox("Glyph", &paint_mat_glyph); ImGui::SameLine(); ImGui::Text("0x%02X (%d)", active_glyph, active_glyph);
+			ImGui::Checkbox("Foreground", &paint_mat_foreground); ImGui::SameLine(); ImGui::ColorEdit3("###FG", fg);
+			ImGui::Checkbox("Background", &paint_mat_background); ImGui::SameLine(); ImGui::ColorEdit3("###BG", bg);
 		}
 
 		/*
@@ -1388,10 +1839,8 @@ void my_render()
 		static bool show_another_window = false;
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-		/*
 		if (show_demo_window)
 			ImGui::ShowDemoWindow(&show_demo_window);
-		*/
 
 		/*
 
@@ -1778,11 +2227,31 @@ void my_render()
 	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
+	double noon_pos[3] =
+	{
+		cos(lit_yaw*M_PI / 180)*cos(lit_pitch*M_PI / 180),
+		sin(lit_yaw*M_PI / 180)*cos(lit_pitch*M_PI / 180),
+		sin(lit_pitch*M_PI / 180)
+	};
+
+	double lit_norm[3] =
+	{
+		-noon_pos[0],
+		-noon_pos[1],
+		cos(lit_pitch*M_PI / 180)
+	};
+
+	double time_tm[16];
+	Rotation(lit_norm, -(lit_time - 12)*M_PI / 12, time_tm);
+
+	double lit_pos[4];
+	Product(time_tm, noon_pos, lit_pos);
+
 	float lt[3] =
 	{
-		(float)(cos(lit_yaw*M_PI/180)*cos(lit_pitch*M_PI/180)*sin((lit_time-12)*M_PI/12)),
-		(float)(sin(lit_yaw*M_PI/180)*cos(lit_pitch*M_PI/180)*sin((lit_time-12)*M_PI/12)),
-		(float)(sin(lit_pitch*M_PI/180)*cos((lit_time-12)*M_PI/12))
+		(float)lit_pos[0],
+		(float)lit_pos[1],
+		(float)lit_pos[2]
 	};
 
 	glEnable(GL_DEPTH_TEST);

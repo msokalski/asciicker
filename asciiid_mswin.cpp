@@ -975,7 +975,7 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 		return false;
 
 
-	if (upng_decode(upng, true) != UPNG_EOK)
+	if (upng_decode(upng) != UPNG_EOK)
 	{
 		upng_free(upng);
 		return false;
