@@ -1080,7 +1080,7 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 		return false;
 
 
-	if (upng_decode(upng, true) != UPNG_EOK)
+	if (upng_decode(upng) != UPNG_EOK)
 	{
 		upng_free(upng);
 		return false;
@@ -1102,4 +1102,29 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 
 	upng_free(upng);
 	return true;
+}
+
+
+#include <dirent.h>
+
+int a3dListDir(const char* dir_path, bool (*cb)(const char* name, void* cookie), void* cookie)
+{
+    DIR* d;
+    struct dirent* dir;
+
+    d = opendir(dir_path);	
+	if (!d)
+		return -1;
+
+	int num = 0;
+	while ((dir = readdir(d)) != 0)
+	{
+		printf("%s\n", dir->d_name);
+		if (cb && !cb(dir->d_name,cookie))
+			break;
+		num++;
+	}
+
+	closedir(d);
+	return num;	
 }

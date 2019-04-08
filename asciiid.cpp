@@ -27,6 +27,7 @@
 #include "fast_rand.h"
 
 Terrain* terrain = 0;
+int fonts_loaded = 0;
 
 void HsvToRgb(const uint8_t hsv[3], uint8_t rgb[3])
 {
@@ -70,8 +71,11 @@ void HsvToRgb(const uint8_t hsv[3], uint8_t rgb[3])
 	}
 }
 
-struct Font
+void* GetFontArr();
+
+struct MyFont
 {
+
 	/*
 	static void flip_scanlines(upng_t* upng)
 	{
@@ -94,12 +98,23 @@ struct Font
 	}
 	*/
 
+	static bool Scan(const char* name, void* cookie)
+	{
+		char buf[4096];
+		snprintf(buf,4095,"%s/%s",(char*)cookie,name);
+		buf[4095]=0;
+
+		a3dLoadImage(buf, 0, MyFont::Load);
+		return true;
+	}
+
+#if 0
 	static void Load_OLD(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 	{
-		Font* font = (Font*)cookie;
+		MyFont* fnt = (MyFont*)cookie;
 
-		font->width = w;
-		font->height = h;
+		fnt->width = w;
+		fnt->height = h;
 
 		int ifmt = 0;
 		int fmt = 0;
@@ -269,28 +284,32 @@ struct Font
 			}
 		}
 
-		glCreateTextures(GL_TEXTURE_2D, 1, &font->tex);
-		glTextureStorage2D(font->tex, 1, ifmt, w, h);
+		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
+		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
 
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(font->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+		glTextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-		glTextureParameteri(font->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(font->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 		if (buf)
 			free(buf);
 	}
+#endif
 
 	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 	{
-		Font* font = (Font*)cookie;
+		if (fonts_loaded==256)
+			return;
+			
+		MyFont* fnt = (MyFont*)GetFontArr() + fonts_loaded;
 
-		font->width = w;
-		font->height = h;
+		fnt->width = w;
+		fnt->height = h;
 
 		int ifmt = GL_RGBA8;
 		int fmt = GL_RGBA;
@@ -406,27 +425,35 @@ struct Font
 				break;
 		}
 
-		glCreateTextures(GL_TEXTURE_2D, 1, &font->tex);
-		glTextureStorage2D(font->tex, 1, ifmt, w, h);
+		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
+		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
 
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(font->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+		glTextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-		glTextureParameteri(font->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(font->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTextureParameteri(font->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 		if (buf)
 			free(buf);
+
+		fonts_loaded++;
 	}
 
 	int width;
 	int height;
 
 	GLuint tex;
-} font;
+} font[256];
+
+void* GetFontArr()
+{
+	return font;
+}
+
 
 int active_font = 0;
 int active_glyph = 0x40; //@
@@ -1556,18 +1583,40 @@ void my_render()
 			ImGui::Text("%zu BYTES", GetTerrainBytes(terrain));
 		}
 
-		if (ImGui::CollapsingHeader("Fonts", ImGuiTreeNodeFlags_DefaultOpen))
+		// fonts related stuff
+		float font_width = font[active_font].width;
+		float font_height = font[active_font].height;
+		if (font_width<256)
+		{
+			font_width = 256;
+			font_height *= 256.0f / font[active_font].width;
+		}
+
+		int glyph_w = font[active_font].width / 16;
+		int glyph_h = font[active_font].height / 16;
+		float glyph_x = (active_glyph & 0xf) * glyph_w / (float)font[active_font].width;
+		float glyph_y = (active_glyph >> 4) * glyph_h / (float)font[active_font].height;
+		float texel_w = 1.0f / font[active_font].width;
+		float texel_h = 1.0f / font[active_font].height;
+		float but_w = 13 + 48.0f / (font_width / 16);	
+
+		float but16_w = font_width / 16;
+		float but16_h = font_height / 16;
+
+
+
+		if (fonts_loaded && ImGui::CollapsingHeader("Fonts", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 			ImGui::PushButtonRepeat(true);
 			if (ImGui::ArrowButton("##fnt_left", ImGuiDir_Left)) { if (active_font > 0) active_font--; }
 			ImGui::SameLine(0.0f, spacing);
-			if (ImGui::ArrowButton("##fnt_right", ImGuiDir_Right)) { if (active_font < 0xff) active_font++; }
+			if (ImGui::ArrowButton("##fnt_right", ImGuiDir_Right)) { if (active_font < fonts_loaded-1) active_font++; }
 			ImGui::PopButtonRepeat();
 			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d)", active_font, active_font); // path?
 
-			ImGui::Text("CELL SIZE: %dx%d px", font.width/16, font.height/16);
+			ImGui::Text("CELL SIZE: %dx%d px", font[active_font].width/16, font[active_font].height/16);
 			//ImGui::Image((void*)(intptr_t)font.tex, ImVec2(font.width,font.height), ImVec2(0,1), ImVec2(1,0));
 
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1,1));
@@ -1593,7 +1642,9 @@ void my_render()
 						tint = &tint_onedim;
 
 					ImGui::PushID(x + y * 16);
-					if (ImGui::ImageButton((void*)(intptr_t)font.tex, ImVec2(font.width / 16.f, font.height / 16.f),
+					if (ImGui::ImageButton((void*)(intptr_t)font[active_font].tex, 
+						//ImVec2(font[active_font].width / 16.f, font[active_font].height / 16.f),
+						ImVec2(font_width / 16.f, font_height / 16.f),
 						ImVec2(x / 16.0f, y / 16.0f), ImVec2((x + 1) / 16.0f, (y + 1)/ 16.0f), 1, ImVec4(0, 0, 0, 0), *tint))
 					{
 						active_glyph = x + y * 16;
@@ -1610,7 +1661,7 @@ void my_render()
 			ImGui::PopStyleVar();
 		}
 
-		if (ImGui::CollapsingHeader("Character", ImGuiTreeNodeFlags_DefaultOpen))
+		if (fonts_loaded && ImGui::CollapsingHeader("Character", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 			ImGui::PushButtonRepeat(true);
@@ -1624,23 +1675,12 @@ void my_render()
 
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
 
-			int glyph_w = font.width / 16;
-			int glyph_h = font.height / 16;
-
-			float glyph_x = (active_glyph & 0xf) * glyph_w / (float)font.width;
-			float glyph_y = (active_glyph >> 4) * glyph_h / (float)font.height;
-
-			float texel_w = 1.0f / font.width;
-			float texel_h = 1.0f / font.height;
-
-			float but_w = 13 + 48.0f / glyph_w;
-
 			for (int y = 0; y < glyph_h ; y++)
 			{
 				for (int x = 0; x < glyph_w; x++)
 				{
 					ImGui::PushID(x + y * glyph_w + 256);
-					if (ImGui::ImageButton((void*)(intptr_t)font.tex, ImVec2(but_w, but_w),
+					if (ImGui::ImageButton((void*)(intptr_t)font[active_font].tex, ImVec2(but_w, but_w),
 						ImVec2(glyph_x + x*texel_w, glyph_y + y*texel_h), ImVec2(glyph_x + (x+1)*texel_w, glyph_y + (y+1)*texel_h), 
 						1, ImVec4(0,0,0,.5f), ImVec4(1,1,1,.5)))
 					{
@@ -1667,11 +1707,6 @@ void my_render()
 			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d)", active_palette, active_palette);
 
-			int glyph_w = font.width / 16;
-			int glyph_h = font.height / 16;
-
-			float but_w = 13 + 48.0f / glyph_w;
-
 			static bool init = true;
 			static uint8_t pal[256][3 * 256];
 			if (init)
@@ -1696,7 +1731,10 @@ void my_render()
 					);
 
 					ImGui::PushID(x + y * 16 + 256 + glyph_w * glyph_h);
-					if (ImGui::ImageButton(0/*samples black!*/,ImVec2(glyph_w, glyph_w), ImVec2(0,0), ImVec2(1,1), 1, tint, ImVec4(0,0,0,0)))
+					if (ImGui::ImageButton(0/*samples black!*/,
+						//ImVec2(glyph_w, glyph_w), 
+						ImVec2(but16_w, but16_h),
+						ImVec2(0,0), ImVec2(1,1), 1, tint, ImVec4(0,0,0,0)))
 					{
 						// select that color
 					}
@@ -1710,7 +1748,7 @@ void my_render()
 			ImGui::PopStyleVar();
 		}
 
-		if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen))
+		if (fonts_loaded && ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 			ImGui::PushButtonRepeat(true);
@@ -1720,12 +1758,6 @@ void my_render()
 			ImGui::PopButtonRepeat();
 			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d)", active_material, active_material);
-
-			int glyph_w = font.width / 16;
-			int glyph_h = font.height / 16;
-
-			float texel_w = 1.0f / font.width;
-			float texel_h = 1.0f / font.height;
 
 			struct Cell
 			{
@@ -1777,7 +1809,9 @@ void my_render()
 					uint8_t* fg = mat[active_material].shade[y][x].fg;
 
 					ImGui::PushID(x + y * 16 + 512 + glyph_w * glyph_h);
-					if (ImGui::ImageButton((void*)(intptr_t)font.tex, ImVec2(glyph_w, glyph_h),
+					if (ImGui::ImageButton((void*)(intptr_t)font[active_font].tex, 
+						// ImVec2(glyph_w, glyph_h),
+						ImVec2(but16_w, but16_h),
 						ImVec2(glyph_x, glyph_y), ImVec2(glyph_x + 1 / 16.0f, glyph_y + 1 / 16.0f), 
 						1, ImVec4(bg[0] / 255.f, bg[1] / 255.f, bg[2] / 255.f, 1), 
 						ImVec4(fg[0] / 255.f, fg[1] / 255.f, fg[2] / 255.f, 1)))
@@ -1839,8 +1873,8 @@ void my_render()
 		static bool show_another_window = false;
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-		if (show_demo_window)
-			ImGui::ShowDemoWindow(&show_demo_window);
+		//if (show_demo_window)
+		//	ImGui::ShowDemoWindow(&show_demo_window);
 
 		/*
 
@@ -2329,8 +2363,8 @@ void my_init()
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-	font.tex = 0;
-	a3dLoadImage("fonts/cp437_18x18.png", &font, Font::Load);
+	char dirname[] = "./fonts";
+	a3dListDir(dirname, MyFont::Scan, dirname);
 
 	g_Time = a3dGetTime();
 	render_context.Create();
