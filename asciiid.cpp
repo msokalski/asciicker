@@ -1539,7 +1539,12 @@ void my_render()
 						ImVec2(glyph_x + x*texel_w, glyph_y + y*texel_h), ImVec2(glyph_x + (x+1)*texel_w, glyph_y + (y+1)*texel_h), 
 						1, ImVec4(0,0,0,.5f), ImVec4(1,1,1,.5)))
 					{
+						int u = x + glyph_w*(active_glyph&0xF);
+						int v = y + glyph_h*(active_glyph>>4);
 						// tick that pixel
+						uint8_t p = font[active_font].GetTexel(u,v);
+						p ^=0xFF;
+						font[active_font].SetTexel(u,v,p);
 					}
 					ImGui::PopID();
 
