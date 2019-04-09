@@ -46,10 +46,34 @@ struct Cell
 
 struct MyMaterial
 {
+	static void Free()
+	{
+		glDeleteTextures(1,&tex);
+	}
+
 	static void Init()
 	{
 		MyMaterial* m = (MyMaterial*)GetMaterialArr();
-		for (int i = 0; i < 256; i++)
+
+		uint8_t g[3] = {'`',' ',','};
+		uint8_t f[3] = {0xFF,0,0};
+		for (int s=0; s<16; s++)
+		{
+			for (int r=0; r<3; r++)
+			{
+				m[0].shade[r][s].fg[0]=f[r];
+				m[0].shade[r][s].fg[1]=f[r];
+				m[0].shade[r][s].fg[2]=f[r];
+
+				m[0].shade[r][s].gl = g[r];
+
+				m[0].shade[r][s].bg[0]=0xCF;
+				m[0].shade[r][s].bg[1]=0xCF;
+				m[0].shade[r][s].bg[2]=0xCF;
+			}
+		}
+
+		for (int i = 1; i < 256; i++)
 		{
 			for (int r = 0; r < 3; r++)
 			{
@@ -174,6 +198,15 @@ struct MyFont
 		int qb = fb->width*fb->height;
 
 		return qa - qb;
+	}
+
+	static void Free()
+	{
+		MyFont* fnt = (MyFont*)GetFontArr();
+		for (int i=0; i<fonts_loaded; i++)
+		{
+			glDeleteTextures(1,&fnt[i].tex);
+		}
 	}
 
 	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
@@ -2353,6 +2386,10 @@ void my_keyb_focus(bool set)
 
 void my_close()
 {
+	DeleteTerrain(terrain);
+	MyFont::Free();
+	MyMaterial::Free();
+
 	a3dClose();
 
 	ImGui_ImplOpenGL3_Shutdown();
