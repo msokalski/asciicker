@@ -69,7 +69,7 @@ struct MyMaterial
 
 		glCreateTextures(GL_TEXTURE_2D, 1, &tex);
 
-		glTextureStorage2D(tex, 1, GL_RGB8UI, 128, 256);
+		glTextureStorage2D(tex, 1, GL_RGBA8UI, 128, 256);
 
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 		glTextureSubImage2D(tex, 0, 0, 0, 128, 256, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, m->shade );
@@ -83,9 +83,11 @@ struct MyMaterial
 
 	void Update()
 	{
+		MyMaterial* m = (MyMaterial*)GetMaterialArr();
+		int y = (int)(this-m);
 		// update this single material texture slice !
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(tex, 0, 0, 0, 128, 1, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, shade);
+		glTextureSubImage2D(tex, 0, 0, y, 128, 1, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, shade);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 	}
 
@@ -585,6 +587,8 @@ struct RenderContext
 					uint mat_x = 2 * shade + 32 * elev;
 					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(0+mat_x, matid), 0);
 					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(1+mat_x, matid), 0);
+
+					//fill_rgbc.w = 44;
 
 					uvec2 font_size = textureSize(f_tex,0);
 					uvec2 glyph_size = font_size / 16;
