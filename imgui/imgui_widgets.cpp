@@ -3960,15 +3960,15 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
 // - ColorPickerOptionsPopup() [Internal]
 //-------------------------------------------------------------------------
 
-bool ImGui::ColorEdit3(const char* label, float col[3], ImGuiColorEditFlags flags)
+bool ImGui::ColorEdit3(const char* label, float col[3], ImGuiColorEditFlags flags, const ImVec2& btn_size)
 {
-    return ColorEdit4(label, col, flags | ImGuiColorEditFlags_NoAlpha);
+    return ColorEdit4(label, col, flags | ImGuiColorEditFlags_NoAlpha, btn_size);
 }
 
 // Edit colors components (each component in 0.0f..1.0f range).
 // See enum ImGuiColorEditFlags_ for available options. e.g. Only access 3 floats if ImGuiColorEditFlags_NoAlpha flag is set.
 // With typical options: Left-click on colored square to open color picker. Right-click to open option menu. CTRL-Click over input fields to edit them and TAB to go to next item.
-bool ImGui::ColorEdit4(const char* label, float col[4], ImGuiColorEditFlags flags)
+bool ImGui::ColorEdit4(const char* label, float col[4], ImGuiColorEditFlags flags, const ImVec2& btn_size)
 {
     ImGuiWindow* window = GetCurrentWindow();
     if (window->SkipItems)
@@ -4098,7 +4098,8 @@ bool ImGui::ColorEdit4(const char* label, float col[4], ImGuiColorEditFlags flag
             SameLine(0, style.ItemInnerSpacing.x);
 
         const ImVec4 col_v4(col[0], col[1], col[2], alpha ? col[3] : 1.0f);
-        if (ColorButton("##ColorButton", col_v4, flags))
+        ImVec2 bs;
+        if (ColorButton("##ColorButton", col_v4, flags, btn_size))
         {
             if (!(flags & ImGuiColorEditFlags_NoPicker))
             {

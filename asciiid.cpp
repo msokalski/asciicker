@@ -13,6 +13,8 @@
 
 #include "gl.h"
 
+#include "rgba8.h"
+
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h" // beta: ImGuiItemFlags_Disabled
 #include "imgui_impl_opengl3.h"
@@ -28,76 +30,129 @@
 
 Terrain* terrain = 0;
 int fonts_loaded = 0;
+int palettes_loaded = 0;
 
-void HsvToRgb(const uint8_t hsv[3], uint8_t rgb[3])
-{
-	uint8_t region, remainder, p, q, t;
-
-	if (hsv[1] == 0)
-	{
-		rgb[0] = hsv[2];
-		rgb[1] = hsv[2];
-		rgb[2] = hsv[2];
-		return;
-	}
-
-	region = hsv[0] / 43;
-	remainder = (hsv[0] - (region * 43)) * 6;
-
-	p = (hsv[2] * (255 - hsv[1])) >> 8;
-	q = (hsv[2] * (255 - ((hsv[1] * remainder) >> 8))) >> 8;
-	t = (hsv[2] * (255 - ((hsv[1] * (255 - remainder)) >> 8))) >> 8;
-
-	switch (region)
-	{
-	case 0:
-		rgb[0] = hsv[2]; rgb[1] = t; rgb[2] = p;
-		break;
-	case 1:
-		rgb[0] = q; rgb[1] = hsv[2]; rgb[2] = p;
-		break;
-	case 2:
-		rgb[0] = p; rgb[1] = hsv[2]; rgb[2] = t;
-		break;
-	case 3:
-		rgb[0] = p; rgb[1] = q; rgb[2] = hsv[2];
-		break;
-	case 4:
-		rgb[0] = t; rgb[1] = p; rgb[2] = hsv[2];
-		break;
-	default:
-		rgb[0] = hsv[2]; rgb[1] = p; rgb[2] = q;
-		break;
-	}
-}
-
+void* GetMaterialArr();
+void* GetPaletteArr();
 void* GetFontArr();
+
+struct Cell
+{
+	uint8_t fg[3];
+	uint8_t gl;
+	uint8_t bg[3];
+	uint8_t pad;
+};
+
+struct MyMaterial
+{
+	static void Init()
+	{
+		MyMaterial* m = (MyMaterial*)GetMaterialArr();
+		for (int i = 0; i < 256; i++)
+		{
+			for (int r = 0; r < 3; r++)
+			{
+				for (int s = 0; s < 16; s++)
+				{
+					m[i].shade[r][s].bg[0] = fast_rand() & 0xFF;
+					m[i].shade[r][s].bg[1] = fast_rand() & 0xFF;
+					m[i].shade[r][s].bg[2] = fast_rand() & 0xFF;
+					m[i].shade[r][s].fg[0] = fast_rand() & 0xFF;
+					m[i].shade[r][s].fg[1] = fast_rand() & 0xFF;
+					m[i].shade[r][s].fg[2] = fast_rand() & 0xFF;
+					m[i].shade[r][s].gl = fast_rand() & 0xFF;
+					m[i].shade[r][s].pad = 0;
+				}
+			}
+		}
+
+		glCreateTextures(GL_TEXTURE_2D, 1, &tex);
+
+		glTextureStorage2D(tex, 1, GL_RGB8UI, 128, 256);
+
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTextureSubImage2D(tex, 0, 0, 0, 128, 256, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, m->shade );
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+		glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+
+	void Update()
+	{
+		// update this single material texture slice !
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTextureSubImage2D(tex, 0, 0, 0, 128, 1, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, shade);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	}
+
+	static GLuint tex; // single texture for all materials 128x256
+
+	Cell shade[4][16]; // each cell has 2 texels !!! shade[3] is currently spare space.
+};
+
+GLuint MyMaterial::tex = 0;
+MyMaterial mat[256];
+
+struct MyPalette
+{
+	static void Init()
+	{
+		MyPalette* p = (MyPalette*)GetPaletteArr();
+		for (int j = 0; j < 256; j++)
+			for (int i = 0; i < 768; i++)
+				p[j].rgb[i] = fast_rand() & 0xFF;
+	}
+
+	static bool Scan(const char* name, void* cookie)
+	{
+		char buf[4096];
+		snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
+		buf[4095] = 0;
+
+		a3dLoadImage(buf, 0, MyPalette::Load);
+		return true;
+	}
+
+	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+	{
+		if (palettes_loaded == 256)
+			return;
+
+		MyPalette* p = (MyPalette*)GetPaletteArr() + palettes_loaded;
+
+		uint32_t* buf = (uint32_t*)malloc(w*h * sizeof(uint32_t));
+		Convert_RGBA8(buf, f, w, h, data, palsize, palbuf);
+
+		// extract palette by sampling at centers of w/16 x h/16 patches
+		int hx = (w + 16) / 32;
+		int hy = (h + 16) / 32;
+
+		for (int y = 0; y < 16; y++)
+		{
+			int row = w * (y * h / 16 + hy) + hx;
+			for (int x = 0; x < 16; x++)
+			{
+				uint32_t rgb = buf[x * w / 16 + row];
+
+				p->rgb[3 * (x + y * 16) + 0] = rgb & 0xFF;
+				p->rgb[3 * (x + y * 16) + 1] = (rgb>>8) & 0xFF;
+				p->rgb[3 * (x + y * 16) + 2] = (rgb>>16) & 0xFF;
+			}
+		}
+
+		free(buf);
+		palettes_loaded++;
+	}
+
+	uint8_t rgb[3 * 256];
+} pal[256];
 
 struct MyFont
 {
-
-	/*
-	static void flip_scanlines(upng_t* upng)
-	{
-		unsigned bpp = upng_get_bpp(upng);
-		unsigned w = upng->width;
-		unsigned h = upng->height;
-		unsigned long linebytes = (w * bpp + 7) / 8;
-
-		for (int y = (h >> 1) - 1; y >= 0; y--)
-		{
-			int p = y * linebytes;
-			int q = (h - 1 - y)*linebytes;
-			for (int b = 0; b < linebytes; b++)
-			{
-				unsigned char swap = upng->buffer[p + b];
-				upng->buffer[p + b] = upng->buffer[q + b];
-				upng->buffer[q + b] = swap;
-			}
-		}
-	}
-	*/
-
 	static bool Scan(const char* name, void* cookie)
 	{
 		char buf[4096];
@@ -108,198 +163,16 @@ struct MyFont
 		return true;
 	}
 
-#if 0
-	static void Load_OLD(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+	static int Sort(const void* a, const void* b)
 	{
-		MyFont* fnt = (MyFont*)cookie;
+		MyFont* fa = (MyFont*)a;
+		MyFont* fb = (MyFont*)b;
 
-		fnt->width = w;
-		fnt->height = h;
+		int qa = fa->width*fa->height;
+		int qb = fb->width*fb->height;
 
-		int ifmt = 0;
-		int fmt = 0;
-		int type = 0;
-
-		void* buf = 0;
-		int bits = 0;
-		int bytes = 0;
-
-		switch (f)
-		{
-			case A3D_RGB8:
-				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_RGB16:
-				ifmt = GL_RGB16; fmt = GL_RGB; type = GL_UNSIGNED_SHORT;
-				break;
-			case A3D_RGBA8:
-				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_RGBA16:
-				ifmt = GL_RGBA16; fmt = GL_RGBA; type = GL_UNSIGNED_SHORT;
-				break;
-			case A3D_LUMINANCE1:
-				bits = 1; bytes = 1;
-				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_LUMINANCE2:
-				bits = 2; bytes = 1;
-				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_LUMINANCE4:
-				bits = 4; bytes = 1;
-				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_LUMINANCE8:
-				ifmt = GL_R8; fmt = GL_RED; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_LUMINANCE_ALPHA1:
-				bits = 1; bytes = 2;
-				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_LUMINANCE_ALPHA2:
-				bits = 2; bytes = 2;
-				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_LUMINANCE_ALPHA4:
-				bits = 4; bytes = 2;
-				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_LUMINANCE_ALPHA8:
-				ifmt = GL_RG8; fmt = GL_RG; type = GL_UNSIGNED_BYTE;
-				break;
-
-			case A3D_INDEX1_RGB:
-				bits = 1; bytes = 3;
-				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_INDEX2_RGB:
-				bits = 2; bytes = 3;
-				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_INDEX4_RGB:
-				bits = 4; bytes = 3;
-				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_INDEX8_RGB:
-				bits = 8; bytes = 3;
-				ifmt = GL_RGB8; fmt = GL_RGB; type = GL_UNSIGNED_BYTE;
-				break;
-
-			case A3D_INDEX1_RGBA:
-				bits = 1; bytes = 4;
-				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_INDEX2_RGBA:
-				bits = 2; bytes = 4;
-				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_INDEX4_RGBA:
-				bits = 4; bytes = 4;
-				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
-				break;
-			case A3D_INDEX8_RGBA:
-				bits = 8; bytes = 4;
-				ifmt = GL_RGBA8; fmt = GL_RGBA; type = GL_UNSIGNED_BYTE;
-				break;
-		}
-
-		if (bits)
-		{
-			int out_row = bytes * w;
-			int in_row = (bits * w + 7) >> 3;
-			const uint8_t* in_line = (const uint8_t*)data;
-
-			buf = malloc(out_row*h);
-			uint8_t* out_line = (uint8_t*)buf;
-
-			int d = 1;
-			int q = 8 / bits - 1;
-			int m = (1 << bits) - 1;
-			int r = 0;
-			int mul = 1;
-			switch (bits)
-			{
-				case 1: r = 3; mul = 255; break;
-				case 2: r = 2; mul = 85;  break;
-				case 4: r = 1; mul = 17;  break;
-			}
-
-			if (bytes < 3)
-			{
-				// unpack, normalize
-				for (int y = 0; y < h; y++)
-				{
-					for (int b = 0; b < out_row; b++)
-					{
-						int val = (in_line[b >> r] >> ((b&q)*bits)) & m;
-						out_line[b] = val * mul;
-					}
-
-					in_line += in_row;
-					out_line += out_row;
-				}
-			}
-			else
-			{
-				if (bytes==4) // depal rgba
-					for (int y = 0; y < h; y++)
-					{
-						for (int x = 0; x < w; x++)
-						{
-							int idx = (in_line[x >> r] >> ((x&q)*bits)) & m;
-							if (idx>=palsize)
-								((uint32_t*)out_line)[x] = 0x00000000; // black-transp if outside pal
-							else 
-								((uint32_t*)out_line)[x] = ((const uint32_t*)palbuf)[idx];
-						}
-
-						in_line += in_row;
-						out_line += out_row;
-					}
-				else // depal rgb
-					for (int y = 0; y < h; y++)
-					{
-						for (int x = 0; x < w; x++)
-						{
-							int idx = (in_line[x >> r] >> ((x&q)*bits)) & m;
-
-							if (idx>=palsize)
-							{
-								out_line[3*x+0] = 0;
-								out_line[3*x+1] = 0;
-								out_line[3*x+2] = 0;
-							}
-							else 
-							{
-								out_line[3*x+0] = ((const uint8_t*)palbuf)[4*idx+0];
-								out_line[3*x+1] = ((const uint8_t*)palbuf)[4*idx+1];
-								out_line[3*x+2] = ((const uint8_t*)palbuf)[4*idx+2];
-							}
-						}
-
-						in_line += in_row;
-						out_line += out_row;
-					}				
-			}
-		}
-
-		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
-		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
-
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-
-		glTextureParameteri(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-		if (buf)
-			free(buf);
+		return qa - qb;
 	}
-#endif
 
 	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 	{
@@ -315,115 +188,10 @@ struct MyFont
 		int fmt = GL_RGBA;
 		int type = GL_UNSIGNED_BYTE;
 
-		uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
-		int bits = 0;
-		int bytes = 0;
+		uint32_t* buf = (uint32_t*)malloc(w * h * sizeof(uint32_t));
 
-		switch (f)
-		{
-			case A3D_RGB8:
-			{
-				const uint8_t* src = (const uint8_t*)data;
-				for (int i = 0; i < w*h; i++)
-					buf[i] = (((src[3 * i + 0] * 2 + src[3 * i + 1] * 3 + src[3 * i + 2] + 3) / 6) << 24) | 0xFFFFFF;
-				break;
-			}
-
-			case A3D_RGB16:
-			{
-				const uint16_t* src = (const uint16_t*)data;
-				for (int i = 0; i < w*h; i++)
-					buf[i] = (((src[3 * i + 0] * 2 + src[3 * i + 1] * 3 + src[3 * i + 2] + 3 * 257) / (6*257)) << 24) | 0xFFFFFF;
-				break;
-			}
-
-			case A3D_RGBA8:
-			{
-				const uint8_t* src = (const uint8_t*)data;
-				for (int i = 0; i < w*h; i++)
-					buf[i] = (((src[4 * i + 0] * 2 + src[4 * i + 1] * 3 + src[4 * i + 2] + 3) / 6) << 24) | 0xFFFFFF;
-				break;
-			}
-
-			case A3D_RGBA16:
-			{
-				const uint16_t* src = (const uint16_t*)data;
-				for (int i = 0; i < w*h; i++)
-					buf[i] = (((src[4 * i + 0] * 2 + src[4 * i + 1] * 3 + src[4 * i + 2] + 3 * 257) / (6 * 257)) << 24) | 0xFFFFFF;
-				break;
-			}
-
-			case A3D_LUMINANCE1:
-				break;
-			case A3D_LUMINANCE2:
-				break;
-			case A3D_LUMINANCE4:
-				break;
-			case A3D_LUMINANCE8:
-			{
-				const uint8_t* src = (const uint8_t*)data;
-				for (int i = 0; i < w*h; i++)
-					buf[i] = (src[i] << 24) | 0xFFFFFF;
-				break;
-			}
-			case A3D_LUMINANCE_ALPHA1:
-				break;
-			case A3D_LUMINANCE_ALPHA2:
-				break;
-			case A3D_LUMINANCE_ALPHA4:
-				break;
-			case A3D_LUMINANCE_ALPHA8:
-			{
-				const uint8_t* src = (const uint8_t*)data;
-				for (int i = 0; i < w*h; i++)
-					buf[i] = (src[2 * i + 0] << 24) | 0xFFFFFF;
-				break;
-			}
-
-			case A3D_INDEX1_RGB:
-				break;
-			case A3D_INDEX2_RGB:
-				break;
-			case A3D_INDEX4_RGB:
-				break;
-			case A3D_INDEX8_RGB:
-			{
-				const uint8_t* src = (const uint8_t*)data;
-				for (int i = 0; i < w*h; i++)
-				{
-					int q = src[i];
-					if (q >= palsize)
-						buf[i] = 0xFFFFFF;
-					else
-					{
-						const uint8_t* p = (const uint8_t*)palbuf + 4 * q;
-						buf[i] = (((p[0] * 2 + p[1] * 3 + p[2] + 3) / 6) << 24) | 0xFFFFFF;
-					}
-				}
-				break;
-			}
-
-			case A3D_INDEX1_RGBA:
-				break;
-			case A3D_INDEX2_RGBA:
-				break;
-			case A3D_INDEX4_RGBA:
-				break;
-			case A3D_INDEX8_RGBA:
-				const uint8_t* src = (const uint8_t*)data;
-				for (int i = 0; i < w*h; i++)
-				{
-					int q = src[i];
-					if (q >= palsize)
-						buf[i] = 0xFFFFFF;
-					else
-					{
-						const uint8_t* p = (const uint8_t*)palbuf + 4 * q;
-						buf[i] = (((p[0] * 2 + p[1] * 3 + p[2] + 3) / 6) << 24) | 0xFFFFFF;
-					}
-				}
-				break;
-		}
+		uint8_t rgb[3] = { 0xff,0xff,0xff };
+		ConvertLuminanceToAlpha_RGBA8(buf, rgb, f, w, h, data, palsize, palbuf);
 
 		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
 		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
@@ -441,6 +209,21 @@ struct MyFont
 			free(buf);
 
 		fonts_loaded++;
+
+		qsort(GetFontArr(), fonts_loaded, sizeof(MyFont), MyFont::Sort);
+	}
+
+	void SetTexel(int x, int y, uint8_t val)
+	{
+		uint8_t texel[4] = { 0xFF,0xFF,0xFF,val };
+		glTextureSubImage2D(tex, 0, x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
+	}
+
+	uint8_t GetTexel(int x, int y)
+	{
+		uint8_t texel[4];
+		glGetTextureSubImage(tex, 0, x, y, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 4, texel);
+		return texel[3];
 	}
 
 	int width;
@@ -448,6 +231,16 @@ struct MyFont
 
 	GLuint tex;
 } font[256];
+
+void* GetMaterialArr()
+{
+	return mat;
+}
+
+void* GetPaletteArr()
+{
+	return pal;
+}
 
 void* GetFontArr()
 {
@@ -737,6 +530,8 @@ struct RenderContext
 			layout(location = 0) out vec4 color;
 
 			uniform usampler2D v_tex;
+			uniform usampler2D m_tex;
+			uniform sampler2D f_tex;
 
 			uniform vec3 lt; // light pos
 			uniform vec4 br; // brush
@@ -777,31 +572,44 @@ struct RenderContext
 				//visual = 12345;
 
 				{
-					/*
-					uint matid = visual & 0x3F;
-					uint shade = (visual >> 6) & 0xF;
-					// 6 bits left for (elevation, ...)
+					uint matid = visual & 0xFF;
+					uint shade = (visual >> 8) & 0xF;
+					uint elev  = (visual >> 12) & 0x1;
+					uint spare = (visual >> 13) & 0x7; // 3 bits left
+
+					// convert elev to 0,1,2 material row of shades
+					elev = uint(1);
 
 					// sample material array
 					// y=0,1 -> descent; y=2,3 -> fill; y=4,5 -> ascent
-					vec4 fill_rgbx = texelFetch(m_tex, ivec3(shade, 2, matid), 0);
-					vec4 fill_rgby = texelFetch(m_tex, ivec3(shade, 3, matid), 0);
+					uint mat_x = 2 * shade + 32 * elev;
+					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(0+mat_x, matid), 0);
+					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(1+mat_x, matid), 0);
+
+					uvec2 font_size = textureSize(f_tex,0);
+					uvec2 glyph_size = font_size / 16;
+
+					vec2 glyph_fract = fract(gl_FragCoord.xy / glyph_size);
+					glyph_fract.y = 1.0 - glyph_fract.y;
 
 					// sample font texture (pure alpha)
-					vec2 chr_ofs = vec2(0, 0);  // calc fraction of char coordinate
-					float glyph = texture(f_tex, vec2(fill_fg_rgbx.w, fill_bg_rgby.w) + chr_ofs).r;
+
+					vec2 glyph_coord = vec2(fill_rgbc.w & 0xF, fill_rgbc.w >> 4);
+
+					float glyph = texture(f_tex, (glyph_coord + glyph_fract) / 16.0).a;
 
 					// compose glyph
-					vec3 color = mix(fill_rgbx.rgb, fill_rgby.rgb, glyph);
-					*/
-
+					color = vec4(mix(vec3(fill_rgbp.rgb), vec3(fill_rgbc.rgb), glyph) / 255.0, 1.0);
+					//color = vec4(glyph_fract, 0.5, 1.0);
 				}
 
 				// at the moment we assume that visual is simply RGB565 color
+				/*
 				color.r = float(visual & 0x1f) / 31.0;
 				color.g = float((visual>>5) & 0x3f) / 63.0;
 				color.b = float((visual>>11) & 0x1f) / 31.0;
 				color.a = 1;
+				*/
 
 				vec3 light_pos = normalize(lt);
 				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
@@ -908,6 +716,8 @@ struct RenderContext
 		tm_loc = glGetUniformLocation(prg, "tm");
 		z_tex_loc = glGetUniformLocation(prg, "z_tex");
 		v_tex_loc = glGetUniformLocation(prg, "v_tex");
+		m_tex_loc = glGetUniformLocation(prg, "m_tex");
+		f_tex_loc = glGetUniformLocation(prg, "f_tex");
 		br_loc = glGetUniformLocation(prg, "br");
 		qd_loc = glGetUniformLocation(prg, "qd");
 		pr_loc = glGetUniformLocation(prg, "pr");
@@ -938,10 +748,15 @@ struct RenderContext
 		glUniform3fv(lt_loc, 1, lt);
 		glUniform1i(z_tex_loc, 0);
 		glUniform1i(v_tex_loc, 1);
+		glUniform1i(m_tex_loc, 2);
+		glUniform1i(f_tex_loc, 3);
 		glUniform4fv(br_loc, 1, br);
 		glUniform3fv(qd_loc, 1, qd);
 		glUniform3fv(pr_loc, 1, pr);
 		glBindVertexArray(vao);
+
+		glBindTextureUnit(2, MyMaterial::tex);
+		glBindTextureUnit(3, font[active_font].tex);
 
 		head = 0;
 		patches = 0;
@@ -1040,7 +855,7 @@ struct RenderContext
 		page_tex = 0;
 		head = 0;
 
-		for (int u = 0; u < 2; u++)
+		for (int u = 0; u < 4; u++)
 			glBindTextureUnit(u,0);
 
 		glBindVertexArray(0);
@@ -1053,6 +868,9 @@ struct RenderContext
 	GLint lt_loc;
 	GLint z_tex_loc;
 	GLint v_tex_loc;
+	GLint m_tex_loc;
+	GLint f_tex_loc;
+
 	GLint br_loc;
 	GLint qd_loc;
 	GLint pr_loc;
@@ -1707,16 +1525,6 @@ void my_render()
 			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d)", active_palette, active_palette);
 
-			static bool init = true;
-			static uint8_t pal[256][3 * 256];
-			if (init)
-			{
-				init = false;
-				for (int j=0; j<256; j++)
-					for (int i = 0; i < 768; i++)
-						pal[j][i] = fast_rand() & 0xFF;
-			}
-
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
 
 			for (int y = 0; y < 16; y++)
@@ -1724,12 +1532,13 @@ void my_render()
 				for (int x = 0; x < 16; x++)
 				{
 					ImVec4 tint(
-						pal[active_palette][3 * (x + 16 * y) + 0] / 255.0f, 
-						pal[active_palette][3 * (x + 16 * y) + 1] / 255.0f, 
-						pal[active_palette][3 * (x + 16 * y) + 2] / 255.0f, 
+						pal[active_palette].rgb[3 * (x + 16 * y) + 0] / 255.0f, 
+						pal[active_palette].rgb[3 * (x + 16 * y) + 1] / 255.0f,
+						pal[active_palette].rgb[3 * (x + 16 * y) + 2] / 255.0f,
 						1.0
 					);
 
+#if 0
 					ImGui::PushID(x + y * 16 + 256 + glyph_w * glyph_h);
 					if (ImGui::ImageButton(0/*samples black!*/,
 						//ImVec2(glyph_w, glyph_w), 
@@ -1738,6 +1547,17 @@ void my_render()
 					{
 						// select that color
 					}
+					ImGui::PopID();
+#endif
+					ImGui::PushID(x + y * 16 + 256 + glyph_w * glyph_h);
+
+					if (ImGui::ColorEdit3("", (float*)&tint, ImGuiColorEditFlags_NoInputs, ImVec2(but16_w + 2, but16_h + 2)))
+					{
+						pal[active_palette].rgb[3 * (x + 16 * y) + 0] = (int)round(tint.x * 255);
+						pal[active_palette].rgb[3 * (x + 16 * y) + 1] = (int)round(tint.y * 255);
+						pal[active_palette].rgb[3 * (x + 16 * y) + 2] = (int)round(tint.z * 255);
+					}
+					
 					ImGui::PopID();
 
 					if (x < 15)
@@ -1759,42 +1579,12 @@ void my_render()
 			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d)", active_material, active_material);
 
-			struct Cell
-			{
-				uint8_t fg[3];
-				uint8_t bg[3];
-				uint8_t gl;
-				uint8_t pad;
-			};
+			static bool paint_mat_glyph = true;
+			static bool paint_mat_foreground = true;
+			static bool paint_mat_background = true;
 
-			struct Material
-			{
-				Cell shade[3][16];
-			};
-
-			static bool init = true;
-			static Material mat[256];
-			if (init)
-			{
-				init = false;
-				for (int i = 0; i < 256; i++)
-				{
-					for (int m = 0; m < 3; m++)
-					{
-						for (int s = 0; s < 16; s++)
-						{
-							mat[i].shade[m][s].bg[0] = fast_rand() & 0xFF;
-							mat[i].shade[m][s].bg[1] = fast_rand() & 0xFF;
-							mat[i].shade[m][s].bg[2] = fast_rand() & 0xFF;
-							mat[i].shade[m][s].fg[0] = fast_rand() & 0xFF;
-							mat[i].shade[m][s].fg[1] = fast_rand() & 0xFF;
-							mat[i].shade[m][s].fg[2] = fast_rand() & 0xFF;
-							mat[i].shade[m][s].gl = fast_rand() & 0xFF;
-							mat[i].shade[m][s].pad = 0;
-						}
-					}
-				}
-			}
+			static float paint_mat_fg[3] = { .2f, .3f, .4f };
+			static float paint_mat_bg[3] = { .2f, .2f, .1f };
 
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
 
@@ -1816,8 +1606,121 @@ void my_render()
 						1, ImVec4(bg[0] / 255.f, bg[1] / 255.f, bg[2] / 255.f, 1), 
 						ImVec4(fg[0] / 255.f, fg[1] / 255.f, fg[2] / 255.f, 1)))
 					{
-						// paint that slot with active_glyph, fg_color,  bg_color
+						if (paint_mat_glyph)
+							mat[active_material].shade[y][x].gl = active_glyph;
+
+						if (paint_mat_foreground)
+						{
+							fg[0] = (int)round(paint_mat_fg[0] * 255);
+							fg[1] = (int)round(paint_mat_fg[1] * 255);
+							fg[2] = (int)round(paint_mat_fg[2] * 255);
+						}
+
+						if (paint_mat_background)
+						{
+							bg[0] = (int)round(paint_mat_bg[0] * 255);
+							bg[1] = (int)round(paint_mat_bg[1] * 255);
+							bg[2] = (int)round(paint_mat_bg[2] * 255);
+						}
+
+						mat[active_material].Update();
 					}
+
+					if (ImGui::IsItemClicked(1) && !io.MouseDown[0])
+					{
+						// this is cell probe
+						int a = 0;
+						if (paint_mat_foreground)
+						{
+							paint_mat_fg[0] = fg[0] / 255.0f;
+							paint_mat_fg[1] = fg[1] / 255.0f;
+							paint_mat_fg[2] = fg[2] / 255.0f;
+						}
+						if (paint_mat_background)
+						{
+							paint_mat_bg[0] = bg[0] / 255.0f;
+							paint_mat_bg[1] = bg[1] / 255.0f;
+							paint_mat_bg[2] = bg[2] / 255.0f;
+						}
+						if (paint_mat_glyph)
+						{
+							active_glyph = mat[active_material].shade[y][x].gl;
+						}
+					}
+
+					if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+					{
+						int cookie = x + 16 * y;
+						ImGui::SetDragDropPayload("DND_MAT_RAMPING", &cookie, sizeof(int));
+						ImGui::Text("RAMPING");
+						ImGui::EndDragDropSource();
+					}
+
+					if (ImGui::BeginDragDropTarget())
+					{
+						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_MAT_RAMPING"))
+						{
+							IM_ASSERT(payload->DataSize == sizeof(int));
+							int cookie = *(const int*)payload->Data;
+
+							int x1 = cookie & 0xF;
+							int y1 = cookie >> 4;
+							int x2 = x;
+							int y2 = y;
+
+							if (y1 > y2)
+							{
+								int s = y1;
+								y1 = y2;
+								y2 = s;
+							}
+
+							if (x1 > x2)
+							{
+								int s = x1;
+								x1 = x2;
+								x2 = s;
+							}
+
+							// action!
+							for (int dy = y1; dy <= y2; dy++)
+							{
+								// read endpoints
+								Cell c1 = mat[active_material].shade[dy][x1];
+								Cell c2 = mat[active_material].shade[dy][x2];
+
+								for (int dx = x1 + 1; dx < x2; dx++)
+								{
+									Cell* c = &(mat[active_material].shade[dy][dx]);
+									float w = (float)(dx - x1) / (float)(x2 - x1);
+									// interpolate
+									if (paint_mat_foreground)
+									{
+										c->fg[0] = (int)roundf(c1.fg[0] * (1 - w) + c2.fg[0] * w);
+										c->fg[1] = (int)roundf(c1.fg[1] * (1 - w) + c2.fg[1] * w);
+										c->fg[2] = (int)roundf(c1.fg[2] * (1 - w) + c2.fg[2] * w);
+									}
+									if (paint_mat_background)
+									{
+										c->bg[0] = (int)roundf(c1.bg[0] * (1 - w) + c2.bg[0] * w);
+										c->bg[1] = (int)roundf(c1.bg[1] * (1 - w) + c2.bg[1] * w);
+										c->bg[2] = (int)roundf(c1.bg[2] * (1 - w) + c2.bg[2] * w);
+									}
+									if (paint_mat_glyph)
+									{
+										if (dx - x1 < x2 - dx)
+											c->gl = c1.gl;
+										else
+											c->gl = c2.gl;
+									}
+								}
+							}
+
+							mat[active_material].Update();
+						}
+						ImGui::EndDragDropTarget();
+					}
+
 					ImGui::PopID();
 
 					if (x < 15)
@@ -1829,43 +1732,10 @@ void my_render()
 
 			ImGui::Separator();
 
-			static bool paint_mat_glyph = true;
-			static bool paint_mat_foreground = true;
-			static bool paint_mat_background = true;
-
-			static float fg[3] = { .2f, .3f, .4f };
-			static float bg[3] = { .2f, .2f, .1f };
-
 			ImGui::Checkbox("Glyph", &paint_mat_glyph); ImGui::SameLine(); ImGui::Text("0x%02X (%d)", active_glyph, active_glyph);
-			ImGui::Checkbox("Foreground", &paint_mat_foreground); ImGui::SameLine(); ImGui::ColorEdit3("###FG", fg);
-			ImGui::Checkbox("Background", &paint_mat_background); ImGui::SameLine(); ImGui::ColorEdit3("###BG", bg);
+			ImGui::Checkbox("Foreground", &paint_mat_foreground); ImGui::SameLine(); ImGui::ColorEdit3("###FG", paint_mat_fg);
+			ImGui::Checkbox("Background", &paint_mat_background); ImGui::SameLine(); ImGui::ColorEdit3("###BG", paint_mat_bg);
 		}
-
-		/*
-		static int paint_mode=0;
-
-		ImGui::RadioButton("VIEW POSITION", &paint_mode, 0); // or hold 'space' to interrupt current mode
-		ImGui::RadioButton("PAINT", &paint_mode, 1); ImGui::SameLine();
-		ImGui::RadioButton("SCULPT", &paint_mode, 2); ImGui::SameLine();
-		ImGui::RadioButton("SMOOTH", &paint_mode, 3);
-
-		if (paint_mode == 0)
-		{
-			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-		}
-
-		static int tool_mode = 0;
-		ImGui::RadioButton("POINT", &tool_mode, 0); ImGui::SameLine();
-		ImGui::RadioButton("LINE", &tool_mode, 1); ImGui::SameLine();
-		ImGui::RadioButton("OVAL", &tool_mode, 2);
-
-		if (paint_mode == 0)
-		{
-			ImGui::PopStyleVar();
-			ImGui::PopItemFlag();
-		}
-		*/
 
 		ImGui::End();
 
@@ -2363,8 +2233,16 @@ void my_init()
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-	char dirname[] = "./fonts";
-	a3dListDir(dirname, MyFont::Scan, dirname);
+	MyMaterial::Init();
+
+	char font_dirname[] = "./fonts";
+	fonts_loaded = 0;
+	a3dListDir(font_dirname, MyFont::Scan, font_dirname);
+
+	MyPalette::Init();
+	char pal_dirname[] = "./palettes";
+	palettes_loaded = 0;
+	a3dListDir(pal_dirname, MyPalette::Scan, pal_dirname);
 
 	g_Time = a3dGetTime();
 	render_context.Create();

@@ -998,3 +998,29 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 	upng_free(upng);
 	return true;
 }
+
+int a3dListDir(const char* dir_path, bool(*cb)(const char* name, void* cookie), void* cookie)
+{
+	WIN32_FIND_DATAA wfd;
+
+	char patt[1024];
+	snprintf(patt, 1023, "%s/*", dir_path);
+
+	HANDLE h = FindFirstFileA(patt, &wfd);
+	if (h == INVALID_HANDLE_VALUE)
+		return -1;
+	if (!h)
+		return 0;
+
+	int num = 0;
+
+	do
+	{
+		num++;
+		if (!cb(wfd.cFileName, cookie))
+			break;
+	} while (FindNextFileA(h, &wfd));
+
+	FindClose(h);
+	return num;
+}
