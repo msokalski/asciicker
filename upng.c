@@ -25,6 +25,8 @@ freely, subject to the following restrictions:
 		distribution.
 */
 
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,8 +89,8 @@ typedef struct upng_source {
 } upng_source;
 
 typedef struct upng_pal {
-	int len;
-	unsigned char trns; 
+	unsigned len;
+	unsigned trns; 
 	unsigned char rgba[1024];
 } upng_pal;
 
@@ -1101,7 +1103,7 @@ upng_error upng_decode(upng_t* upng)
 				SET_ERROR(upng, UPNG_EMALFORMED);
 				return upng->error;
 			}
-			for (int i = upng->pal.len; i < length; i++)
+			for (unsigned i = upng->pal.len; i < length; i++)
 			{
 				upng->pal.rgba[4*i+0]=0;				
 				upng->pal.rgba[4*i+1]=0;				
@@ -1109,7 +1111,7 @@ upng_error upng_decode(upng_t* upng)
 			}
 			upng->pal.len = upng->pal.len > length ? upng->pal.len : length;
 			upng->pal.trns = length;
-			for (int i = 0; i < length; i++)
+			for (unsigned i = 0; i < length; i++)
 				upng->pal.rgba[4 * i + 3] = chunk[8 + i];
 		} else if (upng_chunk_critical(chunk)) {
 			SET_ERROR(upng, UPNG_EUNSUPPORTED);

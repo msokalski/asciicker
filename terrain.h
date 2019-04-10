@@ -2,7 +2,7 @@
 
 #define HEIGHT_SCALE 16 // how may z-steps produces 1 visual cell
 #define HEIGHT_CELLS 4 // num of verts -1 along patch X and Y axis
-#define VISUAL_CELLS 16
+#define VISUAL_CELLS 8
 
 #ifdef TEXHEAP
 #define TERRAIN_TEXHEAP_CAPACITY (1024 / (VISUAL_CELLS > HEIGHT_CELLS+1 ? VISUAL_CELLS : HEIGHT_CELLS+1))

@@ -1075,10 +1075,14 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 	upng_t* upng;
 
 	upng = upng_new_from_file(path);
-
-	if (upng_get_error(upng) != UPNG_EOK) 
+	if (!upng)
 		return false;
 
+	if (upng_get_error(upng) != UPNG_EOK)
+	{
+		upng_free(upng);
+		return false;
+	}
 
 	if (upng_decode(upng) != UPNG_EOK)
 	{

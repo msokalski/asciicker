@@ -38,10 +38,21 @@ void* GetFontArr();
 
 struct Cell
 {
-	uint8_t fg[3];
-	uint8_t gl;
-	uint8_t bg[3];
-	uint8_t pad;
+	uint8_t fg[3];	// foreground color
+	uint8_t gl;		// glyph code
+	uint8_t bg[3];	// background color
+
+	uint8_t flags;  
+	// transparency mask :
+	// 0x1 - fg 
+	// 0x2 - gl 
+	// 0x4 - bg
+
+	// blend modes 3x3 bits:
+	// 0x03 2-bits fg blend mode (0:replace, 1:multiply, 2:screen, 3:transparent)
+	// 0x04 glyph write mask (0:replace, 1:keep)
+	// 0x18 2-bits bg blend mode (0:replace, 1:multiply, 2:screen, 3:transparent)
+	// 3 bits left!
 };
 
 struct MyMaterial
@@ -70,6 +81,8 @@ struct MyMaterial
 				m[0].shade[r][s].bg[0]=0xCF;
 				m[0].shade[r][s].bg[1]=0xCF;
 				m[0].shade[r][s].bg[2]=0xCF;
+
+				m[0].shade[r][s].flags = 0;
 			}
 		}
 
@@ -86,7 +99,7 @@ struct MyMaterial
 					m[i].shade[r][s].fg[1] = fast_rand() & 0xFF;
 					m[i].shade[r][s].fg[2] = fast_rand() & 0xFF;
 					m[i].shade[r][s].gl = fast_rand() & 0xFF;
-					m[i].shade[r][s].pad = 0;
+					m[i].shade[r][s].flags = 0;
 				}
 			}
 		}
@@ -235,10 +248,34 @@ struct MyFont
 		glTextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
+		float white_transp[4] = { 1,1,1,0 };
+
 		glTextureParameteri(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTextureParameteri(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+		glTextureParameterfv(fnt->tex, GL_TEXTURE_BORDER_COLOR, white_transp);
+
+
+		/*
+		// if we want to filter font we'd have first to
+		// modify 3 things in font sampling by shader:
+		// - clamp uv to glyph boundary during sampling
+		// - fade result by distance normalized to 0.5 of texel 
+		//   between unclamped uv to clamping glyph boundary
+		// - use manual lod as log2(font_zoom)
+
+		int max_lod = 0;
+		while (!((w & 1) | (h & 1)))
+		{
+			max_lod++;
+			w >>= 1;
+			h >>= 1;
+		}
+		glGenerateTextureMipmap(fnt->tex);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MAX_LOD, max_lod);
+		*/
 
 		if (buf)
 			free(buf);
@@ -287,6 +324,13 @@ int active_font = 0;
 int active_glyph = 0x40; //@
 int active_palette = 0;
 int active_material = 0;
+
+/*
+float dawn_color[3] = { 1,.8f,0 };
+float noon_color[3] = { 1,1,1 };
+float dusk_color[3] = { 1,.2f,0 };
+float midnight_color[3] = { .1f,.1f,.5f };
+*/
 
 float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
@@ -569,9 +613,11 @@ struct RenderContext
 			uniform sampler2D f_tex;
 
 			uniform vec3 lt; // light pos
+			// uniform vec3 lc; // light rgb
 			uniform vec4 br; // brush
 			uniform vec3 qd; // quad diag
 			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
+			uniform float fz; // font zoom
 
 			flat in vec3 normal;
 			in vec3 uvh;
@@ -606,11 +652,32 @@ struct RenderContext
 				uint visual = texelFetch(v_tex, ivec2(floor(world_xyuv.zw)), 0).r;
 				//visual = 12345;
 
+				vec3 light_pos = normalize(lt);
+				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
+
 				{
 					uint matid = visual & 0xFF;
 					uint shade = (visual >> 8) & 0xF;
 					uint elev  = (visual >> 12) & 0x1;
-					uint spare = (visual >> 13) & 0x7; // 3 bits left
+					uint mode = (visual >> 13) & 0x3;
+					// 1 bit left
+
+					if (mode == 1) // replace shade with lighting
+						shade = uint(round(light * 15.0));
+					else
+					if (mode == 2)
+						shade = uint(round(light * shade));
+					else
+					if (mode == 3)
+						shade = uint(round(light * 15.0)*(1 - shade) + shade);
+
+					/*
+						we could define mode on 2 bits:
+						- 0: use shade map than apply lighting to rgb (useful for sculpting w/o defined materials in editor)
+						- 1: overwrite shade with lighting   \
+						- 2: multiply shade map by lighting   >-- for game
+						- 3: screen shade map with lighting  /
+					*/
 
 					// convert elev to 0,1,2 material row of shades
 					elev = uint(1);
@@ -626,19 +693,30 @@ struct RenderContext
 					uvec2 font_size = textureSize(f_tex,0);
 					uvec2 glyph_size = font_size / 16;
 
-					vec2 glyph_fract = fract(gl_FragCoord.xy / glyph_size);
+					vec2 glyph_fract = fract(gl_FragCoord.xy * fz / glyph_size);
 					glyph_fract.y = 1.0 - glyph_fract.y;
+					if (glyph_fract.x < 0)
+						glyph_fract.x += 1;
+					if (glyph_fract.y < 0)
+						glyph_fract.y += 1;
+					if (glyph_fract.x >= 1)
+						glyph_fract.x -= 1;
+					if (glyph_fract.y >= 1)
+						glyph_fract.y -= 1;
 
 					// sample font texture (pure alpha)
-
 					vec2 glyph_coord = vec2(fill_rgbc.w & 0xF, fill_rgbc.w >> 4);
-
 					float glyph = texture(f_tex, (glyph_coord + glyph_fract) / 16.0).a;
 
 					// compose glyph
 					color = vec4(mix(vec3(fill_rgbp.rgb), vec3(fill_rgbc.rgb), glyph) / 255.0, 1.0);
 					//color = vec4(glyph_fract, 0.5, 1.0);
+
+					if (mode == 0) // editing
+						color.rgb *= light;
 				}
+
+				// color.rgb *= lc;
 
 				// at the moment we assume that visual is simply RGB565 color
 				/*
@@ -647,11 +725,6 @@ struct RenderContext
 				color.b = float((visual>>11) & 0x1f) / 31.0;
 				color.a = 1;
 				*/
-
-				vec3 light_pos = normalize(lt);
-				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
-
-				color.rgb *= light;
 
 				{
 					// quad preview
@@ -759,6 +832,8 @@ struct RenderContext
 		qd_loc = glGetUniformLocation(prg, "qd");
 		pr_loc = glGetUniformLocation(prg, "pr");
 		lt_loc = glGetUniformLocation(prg, "lt");
+		//lc_loc = glGetUniformLocation(prg, "lc");
+		fz_loc = glGetUniformLocation(prg, "fz");
 	}
 
 	void Delete()
@@ -776,13 +851,56 @@ struct RenderContext
 		if (!br)
 			br = br_off;
 
+		/*
+		float* c1;
+		float* c2;
+		float w;
+		if (lit_time < 6)
+		{
+			w = lit_time / 6.0f;
+			c1 = midnight_color;
+			c2 = dawn_color;
+		}
+		else
+		if (lit_time < 12)
+		{
+			w = powf((lit_time-6) / 6.0f, 0.3f);
+			c1 = dawn_color;
+			c2 = noon_color;
+		}
+		else
+		if (lit_time < 18)
+		{
+			w = 1.0f - powf(1.0f - (lit_time - 12) / 6.0f, 0.3f);
+			c1 = noon_color;
+			c2 = dusk_color;
+		}
+		else
+		{
+			w = (lit_time - 18) / 6.0f;
+			c1 = dusk_color;
+			c2 = midnight_color;
+		}
+
+		float lit_color[3];
+		for (int c=0; c<3; c++)
+			lit_color[c] = c1[c]*(1-w) + c2[c]*w;
+		*/
+
 		//glUniformMatrix4dv(tm_loc, 1, GL_FALSE, tm);
 		float ftm[16];// NV bug! workaround
 		for (int i = 0; i < 16; i++)
 			ftm[i] = (float)tm[i];
 
+		double font_zoom; // calc using lengths of diagonals
+
+		font_zoom = font[active_font].width * font[active_font].width + font[active_font].height * font[active_font].height;
+		font_zoom /= 512.0 * font_size * font_size; 
+		font_zoom = sqrt(font_zoom);
+
 		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
 		glUniform3fv(lt_loc, 1, lt);
+		//glUniform3fv(lc_loc, 1, lit_color);
 		glUniform1i(z_tex_loc, 0);
 		glUniform1i(v_tex_loc, 1);
 		glUniform1i(m_tex_loc, 2);
@@ -790,6 +908,7 @@ struct RenderContext
 		glUniform4fv(br_loc, 1, br);
 		glUniform3fv(qd_loc, 1, qd);
 		glUniform3fv(pr_loc, 1, pr);
+		glUniform1f(fz_loc, (float)font_zoom);
 		glBindVertexArray(vao);
 
 		glBindTextureUnit(2, MyMaterial::tex);
@@ -903,6 +1022,7 @@ struct RenderContext
 
 	GLint tm_loc; // uniform
 	GLint lt_loc;
+	//GLint lc_loc;
 	GLint z_tex_loc;
 	GLint v_tex_loc;
 	GLint m_tex_loc;
@@ -911,6 +1031,8 @@ struct RenderContext
 	GLint br_loc;
 	GLint qd_loc;
 	GLint pr_loc;
+
+	GLint fz_loc;
 
 	GLuint prg;
 	GLuint vao;
@@ -1310,11 +1432,12 @@ void my_render()
 			}
 		};
 
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
-		ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
+//		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+//		ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
 		//ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(0,0),Dock::Size,0);
-		ImGui::Begin("MAIN TOOLS",0,ImGuiWindowFlags_AlwaysAutoResize);
-		ImGui::PopStyleVar();
+//		ImGui::PopStyleVar();
+
+		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
 		if (ImGui::CollapsingHeader("View Control", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -1323,58 +1446,35 @@ void my_render()
 			ImGui::SliderFloat("VIEW YAW", &rot_yaw, -180.0f, +180.0f); ImGui::SameLine();
 			ImGui::Checkbox("Spin", &spin_anim);
 
-			ImGui::SliderFloat("ZOOM", &font_size, 0.16f, 16.0f);
+			ImGui::SliderFloat("ZOOM", &font_size, 1.0f, 32.0f);
 			ImGui::SameLine();
 			ImGui::Text("%dx%d", (int)round(io.DisplaySize.x/font_size), (int)round(io.DisplaySize.y / font_size));
 		}
 
+		if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
+			ImGui::Text("RENDER TIME: %6jd [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
+			ImGui::Text("%zu BYTES", GetTerrainBytes(terrain));
+		}
+
 		if (ImGui::CollapsingHeader("Light Control", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::SliderFloat("LIGHT PITCH", &lit_pitch, -90.0f, +90.0f);
-			ImGui::SliderFloat("LIGHT YAW", &lit_yaw, -180.0f, +180.0f);
+			ImGui::SliderFloat("NOON PITCH", &lit_pitch, 0.0f, +90.0f);
+			ImGui::SliderFloat("NOON YAW", &lit_yaw, -180.0f, +180.0f);
 			ImGui::SliderFloat("LIGHT TIME", &lit_time, 0, 24);
+
+			/*
+			ImGui::ColorEdit3("DAWN", dawn_color);
+			ImGui::ColorEdit3("NOON", noon_color);
+			ImGui::ColorEdit3("DUSK", dusk_color);
+			ImGui::ColorEdit3("MIDNIGHT", midnight_color);
+			*/
 		}
 
-		if (ImGui::CollapsingHeader("Brush", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			const char* mode = "";
-
-			if (!painting && io.KeyCtrl && io.KeyShift)
-			{
-				mode = "HEIGHT PROBE";
-			}
-			else
-			if (!painting && io.KeyCtrl)
-				mode = "DIAGONAL FLIP";
-			else
-			{
-				if (io.KeyShift)
-					mode = br_alpha >= 0 ? "BLURRING" : "SHARPENING";
-				else
-					mode = br_alpha >= 0 ? "ASCENT" : "DESCENT";
-			}
-
-			ImGui::Text("MODE (shift/ctrl): %s", mode);
-			ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 5.f, 100.f);
-			ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -0.5f, +0.5f);
-
-
-			ImGui::Checkbox("BRUSH HEIGHT LIMIT",&br_limit);
-			ImGui::SameLine();
-
-			// Arrow buttons with Repeater
-			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-			ImGui::PushButtonRepeat(true);
-			if (ImGui::ArrowButton("##probe_left", ImGuiDir_Left)) { if (probe_z>0) probe_z-=1; }
-			ImGui::SameLine(0.0f, spacing);
-			if (ImGui::ArrowButton("##probe_right", ImGuiDir_Right)) { if (probe_z<0xffff) probe_z+=1; }
-			ImGui::PopButtonRepeat();
-			ImGui::SameLine();
-			ImGui::Text("%d", probe_z);
-			ImGui::Text("%s", "ctrl+shift to probe");
-
-			// ImGui::SliderFloat("BRUSH HEIGHT", &probe_z, 0.0f, 65535.0f);
-		}
+		ImGui::End();
+		/// end of window?
+		ImGui::Begin("EDIT", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
 		if (ImGui::CollapsingHeader("Undo / Redo", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -1425,22 +1525,158 @@ void my_render()
 				ImGui::PopItemFlag();
 			}
 			else
-			if (ImGui::Button("PURGE"))
-				URDO_Purge();
+				if (ImGui::Button("PURGE"))
+					URDO_Purge();
 			ImGui::SameLine();
 			ImGui::Text("%zu BYTES", URDO_Bytes());
 		}
 
-		if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader("Brush", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::Text("PATCHES: %d, DRAWS: %d, CHANGES: %d", render_context.patches, render_context.draws, render_context.changes);
-			ImGui::Text("RENDER TIME: %6jd [" /*micro*/"\xc2\xb5"/*utf8*/ "s]", render_context.render_time);
-			ImGui::Text("%zu BYTES", GetTerrainBytes(terrain));
+			ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
+			if (ImGui::BeginTabBar("MyTabBar", tab_bar_flags))
+			{
+				static int which = -1;
+				bool pushed = false;
+
+				if (which != 0)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				}
+				if (ImGui::BeginTabItem("SCULPT"))
+				{
+					which = 0;
+					ImGui::Text("Sculpting modifies terrain height map \n ");
+
+					const char* mode = "";
+
+					if (!painting && io.KeyCtrl && io.KeyShift)
+					{
+						mode = "HEIGHT PROBE";
+					}
+					else
+					if (!painting && io.KeyCtrl)
+						mode = "DIAGONAL FLIP";
+					else
+					{
+						if (io.KeyShift)
+							mode = br_alpha >= 0 ? "BLURRING" : "SHARPENING";
+						else
+							mode = br_alpha >= 0 ? "ASCENT" : "DESCENT";
+					}
+
+					ImGui::Text("MODE (shift/ctrl): %s", mode);
+					ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 5.f, 100.f);
+					ImGui::SliderFloat("BRUSH ALPHA", &br_alpha, -0.5f, +0.5f);
+
+
+					ImGui::Checkbox("BRUSH HEIGHT LIMIT",&br_limit);
+					ImGui::SameLine();
+
+					// Arrow buttons with Repeater
+					float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+					ImGui::PushButtonRepeat(true);
+					if (ImGui::ArrowButton("##probe_left", ImGuiDir_Left)) { if (probe_z>0) probe_z-=1; }
+					ImGui::SameLine(0.0f, spacing);
+					if (ImGui::ArrowButton("##probe_right", ImGuiDir_Right)) { if (probe_z<0xffff) probe_z+=1; }
+					ImGui::PopButtonRepeat();
+					ImGui::SameLine();
+					ImGui::Text("%d", probe_z);
+					ImGui::Text("%s", "ctrl+shift to probe");
+
+					// ImGui::SliderFloat("BRUSH HEIGHT", &probe_z, 0.0f, 65535.0f);
+
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
+				if (which != 1)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				}
+				if (ImGui::BeginTabItem("MAT-id"))
+				{
+					which = 1;
+					ImGui::Text("Material channel selects which material \ndefinition should be used (0-255)");
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
+				if (which != 2)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				}
+				if (ImGui::BeginTabItem("sh-MODE"))
+				{
+					which = 2;
+					ImGui::Text("Shade mode channel specifies how lighting \naffects shading ramp (0-3)");
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
+				if (which != 3)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				}
+				if (ImGui::BeginTabItem("sh-RAMP"))
+				{
+					which = 3;
+					ImGui::Text("Shade ramp channel selects a cell \nhorizontaly from a material ramps (0-15)");
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
+
+				if (which != 4)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				}
+				if (ImGui::BeginTabItem("ELEV"))
+				{
+					which = 4;
+					ImGui::Text("Elevation bits are used to choose ramps \nvertically from material by bit difference");
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
+				ImGui::EndTabBar();
+				ImGui::Separator();
+
+			}
 		}
 
+		ImGui::End();
+		/// end of window?
+		ImGui::Begin("FONT", 0, ImGuiWindowFlags_AlwaysAutoResize);
+
 		// fonts related stuff
-		float font_width = font[active_font].width;
-		float font_height = font[active_font].height;
+		float font_width = (float)font[active_font].width;
+		float font_height = (float)font[active_font].height;
 		if (font_width<256)
 		{
 			font_width = 256;
@@ -1555,6 +1791,10 @@ void my_render()
 
 			ImGui::PopStyleVar();
 		}
+
+		ImGui::End();
+		/// end of window?
+		ImGui::Begin("SKIN", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
 		if (ImGui::CollapsingHeader("Palettes", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -1863,7 +2103,7 @@ void my_render()
 	{
 		if (zoom_wheel)
 		{
-			font_size *= pow(1.1, zoom_wheel);
+			font_size *= powf(1.1f, zoom_wheel);
 			zoom_wheel = 0;
 		}
 
@@ -1872,28 +2112,28 @@ void my_render()
 			double mdx = spinning_x - round(io.MousePos.x);
 			double mdy = -(spinning_y - round(io.MousePos.y));
 
-			rot_yaw += mdx * 0.1;
+			rot_yaw += (float)(mdx * 0.1);
 			if (rot_yaw < -180)
 				rot_yaw += 360;
 			if (rot_yaw > 180)
 				rot_yaw -= 360;
 
-			rot_pitch += mdy * 0.1;
+			rot_pitch += (float)(mdy * 0.1);
 			if (rot_pitch > 90)
 				rot_pitch = 90;
 			if (rot_pitch < 30)
 				rot_pitch = 30;
 
 
-			spinning_x = round(io.MousePos.x);
-			spinning_y = round(io.MousePos.y);
+			spinning_x = (int)roundf(io.MousePos.x);
+			spinning_y = (int)roundf(io.MousePos.y);
 		}
 		else
 		if (io.MouseDown[1])
 		{
 			spinning = 1;
-			spinning_x = round(io.MousePos.x);
-			spinning_y = round(io.MousePos.y);
+			spinning_x = (int)roundf(io.MousePos.x);
+			spinning_y = (int)roundf(io.MousePos.y);
 		}
 	}
 	else
@@ -1922,11 +2162,11 @@ void my_render()
 		{
 			double mdx = panning_x - round(io.MousePos.x);
 			double mdy = -(panning_y - round(io.MousePos.y)) / sin(pitch);
-			pos_x = panning_dx + (mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
-			pos_y = panning_dy + (mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+			pos_x = (float)(panning_dx + (mdx*cos(yaw) - mdy * sin(yaw)) / font_size);
+			pos_y = (float)(panning_dy + (mdx*sin(yaw) + mdy * cos(yaw)) / font_size);
 
-			panning_x = round(io.MousePos.x);
-			panning_y = round(io.MousePos.y);
+			panning_x = (int)roundf(io.MousePos.x);
+			panning_y = (int)roundf(io.MousePos.y);
 
 			panning_dx = pos_x;
 			panning_dy = pos_y;
@@ -1935,8 +2175,8 @@ void my_render()
 		if (io.MouseDown[2])
 		{
 			panning = 1;
-			panning_x = round(io.MousePos.x);
-			panning_y = round(io.MousePos.y);
+			panning_x = (int)roundf(io.MousePos.x);
+			panning_y = (int)roundf(io.MousePos.y);
 			panning_dx = pos_x;
 			panning_dy = pos_y;
 		}
@@ -2002,14 +2242,14 @@ void my_render()
 			painting_x = (int)round(io.MousePos.x);
 			painting_y = (int)round(io.MousePos.y);
 
-			br_xyra[0] = x;
-			br_xyra[1] = y;
+			br_xyra[0] = (float)x;
+			br_xyra[1] = (float)y;
 
 			if (!io.MouseDown[0])
 			{
 				// DROP
 				float alpha = br_alpha;
-				br_alpha *= pow(paint_dist / (br_radius * STAMP_R) * STAMP_A,2.0);
+				br_alpha *= (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A,2.0);
 				Stamp(x, y);
 				br_alpha = alpha;
 				br_xyra[3] = 0;
@@ -2017,7 +2257,7 @@ void my_render()
 				URDO_Close();
 			}
 			else
-				br_xyra[3] = pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0) * br_alpha;
+				br_xyra[3] = (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0) * br_alpha;
 		}
 		else
 		{
@@ -2063,14 +2303,14 @@ void my_render()
 						{
 							// height-probe
 							probe_z = (int)round(hit[2]);
-							br_probe[0] = probe_z;
-							br_probe[1] = 0.5;
+							br_probe[0] = (float)probe_z;
+							br_probe[1] = 0.5f;
 						}
 						else
 						{
 							// preview
-							br_probe[0] = round(hit[2]);
-							br_probe[1] = 0.5;
+							br_probe[0] = (float)round(hit[2]);
+							br_probe[1] = 0.5f;
 						}
 					}
 					else
@@ -2113,8 +2353,8 @@ void my_render()
 						URDO_Open();
 						painting = 1;
 
-						painting_x = round(io.MousePos.x);
-						painting_y = round(io.MousePos.y);
+						painting_x = (int)roundf(io.MousePos.x);
+						painting_y = (int)roundf(io.MousePos.y);
 
 						painting_dx = hit[0];
 						painting_dy = hit[1];
@@ -2173,22 +2413,33 @@ void my_render()
 	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
+	double noon_yaw[2] =
+	{
+		// zero is behind viewer
+		-sin(-lit_yaw*M_PI / 180),
+		-cos(-lit_yaw*M_PI / 180),
+	};
+
+	double dusk_yaw[3] =
+	{
+		-noon_yaw[1],
+		noon_yaw[0],
+		0
+	};
+
 	double noon_pos[3] =
 	{
-		cos(lit_yaw*M_PI / 180)*cos(lit_pitch*M_PI / 180),
-		sin(lit_yaw*M_PI / 180)*cos(lit_pitch*M_PI / 180),
+		noon_yaw[0]*cos(lit_pitch*M_PI / 180),
+		noon_yaw[1]*cos(lit_pitch*M_PI / 180),
 		sin(lit_pitch*M_PI / 180)
 	};
 
-	double lit_norm[3] =
-	{
-		-noon_pos[0],
-		-noon_pos[1],
-		cos(lit_pitch*M_PI / 180)
-	};
+	double lit_axis[3];
+
+	CrossProduct(dusk_yaw, noon_pos, lit_axis);
 
 	double time_tm[16];
-	Rotation(lit_norm, -(lit_time - 12)*M_PI / 12, time_tm);
+	Rotation(lit_axis, (lit_time-12)*M_PI / 12, time_tm);
 
 	double lit_pos[4];
 	Product(time_tm, noon_pos, lit_pos);
@@ -2391,9 +2642,19 @@ void my_keyb_focus(bool set)
 
 void my_close()
 {
+	URDO_Purge();
 	DeleteTerrain(terrain);
 	MyFont::Free();
 	MyMaterial::Free();
+
+	if (gather)
+	{
+		if (gather->tmp_x)
+			free(gather->tmp_x);
+		if (gather->tmp_y)
+			free(gather->tmp_y);
+		free(gather);
+	}
 
 	a3dClose();
 

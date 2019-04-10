@@ -4,6 +4,8 @@
 #include <Windows.h>
 #pragma comment(lib,"OpenGL32.lib")
 
+#include <crtdbg.h>
+
 #include <stdint.h>
 
 #include "gl.h"
@@ -659,6 +661,8 @@ LONG WINAPI a3dExceptionProc(EXCEPTION_POINTERS *ExceptionInfo)
 // creates window & initialized GL
 bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/)
 {
+	//_CrtSetBreakAlloc(3828);
+
 	if (!pi || !gd)
 		return false;
 
@@ -689,7 +693,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (!h)
 	{
 		UnregisterClass(wc.lpszClassName, wc.hInstance);
-		return 0;
+		return false;
 	}
 
 	styles |= WS_POPUP; // add it later (hack to make CW_USEDEFAULT working)
@@ -782,6 +786,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	platform_api = *pi;
 
+	_CrtMemState mem_state;
+	_CrtMemCheckpoint(&mem_state);
+
 	if (platform_api.init)
 		platform_api.init();
 
@@ -805,6 +812,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		if (platform_api.render)
 			platform_api.render();
 	}
+
+	_CrtMemDumpAllObjectsSince(&mem_state);
 
 	wglMakeCurrent(0, 0);
 	wglDeleteContext(rc);
@@ -970,10 +979,14 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 	upng_t* upng;
 
 	upng = upng_new_from_file(path);
-
-	if (upng_get_error(upng) != UPNG_EOK) 
+	if (!upng)
 		return false;
 
+	if (upng_get_error(upng) != UPNG_EOK)
+	{
+		upng_free(upng);
+		return false;
+	}
 
 	if (upng_decode(upng) != UPNG_EOK)
 	{

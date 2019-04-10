@@ -199,3 +199,12 @@ inline void RandRot(R r[3], M m[16])
 	// R = random xy rot by 2Pi*r[0]
 	// v = {cos(2Pi*x[1])*sqrt(x[2]), sin(2Pi*x[1])*sqrt(x[2]), sqrt(1-x[2])}
 }
+
+template <typename V>
+inline void CrossProduct(const V a[3], const V b[3], V ab[3])
+{
+	ab[0] = a[1] * b[2] - a[2] * b[1];
+	ab[1] = a[2] * b[0] - a[0] * b[2];
+	ab[2] = a[0] * b[1] - a[1] * b[0];
+}
+

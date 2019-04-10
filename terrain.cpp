@@ -156,6 +156,30 @@ Terrain* CreateTerrain(int z)
 	return t;
 }
 
+static void DeleteTerrain(Node* n, int lev)
+{
+	if (lev == 0)
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			Patch* p = (Patch*)n->quad[i];
+			if (p)
+				free(p);
+		}
+	}
+	else
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			Node* c = (Node*)n->quad[i];
+			if (c)
+				DeleteTerrain(c, lev - 1);
+		}
+	}
+
+	free(n);
+}
+
 void DeleteTerrain(Terrain* t)
 {
 	if (!t)
@@ -183,6 +207,10 @@ void DeleteTerrain(Terrain* t)
 	int xy = 0;
 	Node* n = (Node*)t->root;
 	free(t);
+
+	DeleteTerrain(n, lev);
+
+	/*
 
 	while (true)
 	{
@@ -234,6 +262,7 @@ void DeleteTerrain(Terrain* t)
 			lev++;
 		}
 	}
+	*/
 }
 
 struct Tap3x3
