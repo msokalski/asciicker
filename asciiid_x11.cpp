@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <X11/X.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
 
@@ -1106,6 +1107,125 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 
 	upng_free(upng);
 	return true;
+}
+
+void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+{
+    static Atom netWmIcon = XInternAtom(dpy,"_NET_WM_ICON",False);
+
+	int wh = w*h;
+
+	unsigned long* wh_buf = (unsigned long*)malloc(sizeof(unsigned long)*(2+wh));
+	wh_buf[0]=w;
+	wh_buf[1]=h;
+
+	unsigned long* buf = wh_buf + 2;
+
+	// convert to 0x[0]AARRGGBB !!!
+
+	switch (f)
+	{
+		case A3D_RGB8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[3 * i + 2] | (src[3 * i + 1] << 8) | (src[3 * i + 0] << 16) | 0xFF000000;
+			break;
+		}
+		case A3D_RGB16:
+		{
+			const uint16_t* src = (const uint16_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = (src[3 * i + 2] >> 8) | ((src[3 * i + 1] >> 8) << 8) | ((src[3 * i + 0] >> 8) << 16) | 0xFF000000;
+			break;
+		}
+		case A3D_RGBA8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[4 * i + 2] | (src[4 * i + 1] << 8) | (src[4 * i + 0] << 16) | (src[4 * i + 3] << 24);
+			break;
+		}
+		case A3D_RGBA16:
+		{
+			const uint16_t* src = (const uint16_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = (src[4 * i + 2] >> 8) | ((src[4 * i + 1] >> 8) << 8) | ((src[4 * i + 0] >> 8) << 16) | ((src[4 * i + 3] >> 8) << 24);
+			break;
+		}
+		case A3D_LUMINANCE1:
+			break;
+		case A3D_LUMINANCE2:
+			break;
+		case A3D_LUMINANCE4:
+			break;
+		case A3D_LUMINANCE8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[i] | (src[i] << 8) | (src[i] << 16) | 0xFF000000;
+			break;
+		}
+		case A3D_LUMINANCE_ALPHA1:
+			break;
+		case A3D_LUMINANCE_ALPHA2:
+			break;
+		case A3D_LUMINANCE_ALPHA4:
+			break;
+		case A3D_LUMINANCE_ALPHA8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[2 * i + 0] | (src[2 * i + 0] << 8) | (src[2 * i + 0] << 16) | (src[2 * i + 1] << 24);
+			break;
+		}
+
+		case A3D_INDEX1_RGB:
+		case A3D_INDEX1_RGBA:
+			break;
+
+		case A3D_INDEX2_RGB:
+		case A3D_INDEX2_RGBA:
+			break;
+
+		case A3D_INDEX4_RGB:
+		case A3D_INDEX4_RGBA:
+			break;
+
+		case A3D_INDEX8_RGB:
+		case A3D_INDEX8_RGBA:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+			{
+				if (src[i] >= palsize)
+					buf[i] = 0;
+				else
+				{
+					uint32_t p = ((uint32_t*)palbuf)[src[i]];
+					buf[i] = (p & 0xFF00FF00) | ((p << 16) & 0x00FF0000) | ((p>>16) & 0x000000FF);
+				}
+			}
+			break;
+		}
+	}
+
+    XChangeProperty(dpy, win, netWmIcon, XA_CARDINAL, 32, PropModeReplace, 
+					(const unsigned char*)wh_buf, 2 + wh);
+
+	free(wh_buf);
+}
+
+bool a3dSetIcon(const char* path)
+{
+	return a3dLoadImage(path, 0, _a3dSetIconData);
 }
 
 

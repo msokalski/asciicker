@@ -2616,6 +2616,8 @@ void my_init()
 	a3dSetRect(full, true);
 
 	a3dSetVisible(true);
+
+	a3dSetIcon("./icons/app.png");
 }
 
 void my_keyb_char(wchar_t chr)
