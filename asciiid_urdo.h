@@ -19,5 +19,9 @@ void URDO_Open();
 void URDO_Close();
 
 // patches
-void URDO_Patch(Patch* p);
-void URDO_Diag(Patch* p);
+
+Patch* URDO_Create(Terrain* t, int x, int y, int z); // replacement for AddTerrainPatch
+void URDO_Delete(Terrain* t, Patch* p); // replacement for DelTerrainPatch
+
+void URDO_Patch(Patch* p); // call before changing height map
+void URDO_Diag(Patch* p); // call before flipping diag

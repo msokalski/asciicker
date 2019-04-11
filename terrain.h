@@ -14,9 +14,17 @@ Terrain* CreateTerrain(int z=-1);
 void DeleteTerrain(Terrain* t);
 
 struct Patch;
+
 Patch* GetTerrainPatch(Terrain* t, int x, int y);
+void GetTerrainPatch(Terrain* t, Patch* p, int* x, int* y);
+
 Patch* AddTerrainPatch(Terrain* t, int x, int y, int z);
 bool DelTerrainPatch(Terrain* t, int x, int y);
+
+// don't  use, deticated to urdo only!
+size_t TerrainDetach(Terrain* t, Patch* p, int* x, int* y);
+size_t TerrainAttach(Terrain* t, Patch* p, int x, int y);
+size_t TerrainDispose(Patch* p);
 
 Patch* GetTerrainNeighbor(Patch* p, int sign_x, int sign_y);
 

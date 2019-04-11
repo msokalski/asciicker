@@ -441,6 +441,34 @@ Patch* GetTerrainPatch(Terrain* t, int x, int y)
 	return 0;
 }
 
+void GetTerrainPatch(Terrain* t, Patch* p, int* x, int* y)
+{
+	int px = 0, py = 0;
+
+	int lev = 0;
+	QuadItem* q = p;
+	Node* n = p->parent;
+	while (n)
+	{
+		for (int i=0; i<4; i++)
+			if (n->quad[i] == q)
+			{
+				px = px | ((i & 1) << lev);
+				py = py | (((i>>1) & 1) << lev);
+				break;
+			}
+
+		q = n;
+		n = n->parent;
+		lev++;
+	}
+
+	if (x)
+		*x = px - t->x;
+	if (x)
+		*y = py - t->y;
+}
+
 static void UpdateNodes(Patch* p)
 {
 	QuadItem* q = p;
@@ -478,7 +506,12 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 
 	int flags = p->flags;
 	Node* n = p->parent;
+
+#ifdef TEXHEAP
+	p->ta->Free();
+#endif
 	free(p);
+
 	t->patches--;
 
 	if (!n)
@@ -1763,6 +1796,9 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 
 Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 {
+	if (!t || !t->root)
+		return 0;
+
 	// p should be projected to the BOTTOM plane!
 	double ray[] =
 	{
@@ -1802,3 +1838,380 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 	return patch;
 }
 
+size_t TerrainDetach(Terrain* t, Patch* p, int* px, int* py)
+{
+	int x, y;
+	GetTerrainPatch(t, p, &x, &y);
+
+	if (px)
+		*px = x;
+	if (py)
+		*py = y;
+
+	int flags = p->flags;
+	Node* n = p->parent;
+
+	/////////////
+	// free(p);
+	t->patches--;
+	p->parent = 0;
+	/////////////
+
+	if (!n)
+	{
+		t->level = -1;
+		t->root = 0;
+		return sizeof(Patch);
+	}
+
+	// leaf trim
+
+	QuadItem* q = p;
+
+	while (true)
+	{
+		int c = 0;
+		for (int i = 0; i < 4; i++)
+		{
+			if (n->quad[i] == q)
+				n->quad[i] = 0;
+			else
+				if (n->quad[i])
+					c++;
+		}
+
+		if (!c)
+		{
+			q = n;
+			n = n->parent;
+			free((Node*)q);
+			t->nodes--;
+		}
+		else
+			break;
+	}
+
+	// root trim
+
+	n = (Node*)t->root;
+	while (true)
+	{
+		int c = 0;
+		int j = -1;
+		for (int i = 0; i < 4; i++)
+		{
+			if (n->quad[i])
+			{
+				j = i;
+				c++;
+			}
+		}
+
+		// lost ...
+		assert(j >= 0);
+
+		if (c > 1)
+			break;
+
+		t->level--;
+
+		if (j & 1)
+			t->x -= 1 << t->level;
+		if (j & 2)
+			t->y -= 1 << t->level;
+
+		t->root = n->quad[j];
+		t->root->parent = 0;
+		free(n);
+		t->nodes--;
+
+		if (t->level)
+			n = (Node*)t->root;
+		else
+			break;
+	}
+
+	Patch* np[8] =
+	{
+		flags & 0x01 ? GetTerrainPatch(t, x - 1, y - 1) : 0,
+		flags & 0x02 ? GetTerrainPatch(t, x, y - 1) : 0,
+		flags & 0x04 ? GetTerrainPatch(t, x + 1, y - 1) : 0,
+		flags & 0x08 ? GetTerrainPatch(t, x + 1, y) : 0,
+		flags & 0x10 ? GetTerrainPatch(t, x + 1, y + 1) : 0,
+		flags & 0x20 ? GetTerrainPatch(t, x, y + 1) : 0,
+		flags & 0x40 ? GetTerrainPatch(t, x - 1, y + 1) : 0,
+		flags & 0x80 ? GetTerrainPatch(t, x - 1, y) : 0,
+	};
+
+	for (int i = 0; i < 8; i++)
+	{
+		if (np[i])
+		{
+			int j = (i + 4) & 7;
+			np[i]->flags &= ~(1 << j);
+		}
+	}
+
+	return sizeof(Patch);
+}
+
+size_t TerrainAttach(Terrain* t, Patch* p, int x, int y)
+{
+	if (!t->root)
+	{
+		t->x = -x;
+		t->y = -y;
+		t->level = 0;
+
+		p->parent = 0;
+
+		t->root = p;
+		t->patches = 1;
+
+		return sizeof(Patch);
+	}
+
+	x += t->x;
+	y += t->y;
+
+	// create parents such root encloses x,y
+
+	int range = 1 << t->level;
+
+	while (x < 0)
+	{
+		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
+
+		if (2 * y < range)
+		{
+			n->quad[0] = 0;
+			n->quad[1] = 0;
+			n->quad[2] = 0;
+			n->quad[3] = t->root;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+
+			t->x += range;
+			x += range;
+
+			t->y += range;
+			y += range;
+		}
+		else
+		{
+			n->quad[0] = 0;
+			n->quad[1] = t->root;
+			n->quad[2] = 0;
+			n->quad[3] = 0;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+
+			t->x += range;
+			x += range;
+		}
+
+		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
+	}
+
+	while (y < 0)
+	{
+		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
+
+		if (2 * x < range)
+		{
+			n->quad[0] = 0;
+			n->quad[1] = 0;
+			n->quad[2] = 0;
+			n->quad[3] = t->root;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+
+			t->x += range;
+			x += range;
+
+			t->y += range;
+			y += range;
+		}
+		else
+		{
+			n->quad[0] = 0;
+			n->quad[1] = 0;
+			n->quad[2] = t->root;
+			n->quad[3] = 0;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+
+			t->y += range;
+			y += range;
+		}
+
+		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
+	}
+
+	while (x >= range)
+	{
+		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
+
+		if (2 * y > range)
+		{
+			n->quad[0] = t->root;
+			n->quad[1] = 0;
+			n->quad[2] = 0;
+			n->quad[3] = 0;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+		}
+		else
+		{
+			n->quad[0] = 0;
+			n->quad[1] = 0;
+			n->quad[2] = t->root;
+			n->quad[3] = 0;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+
+			t->y += range;
+			y += range;
+		}
+
+		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
+	}
+
+	while (y >= range)
+	{
+		Node* n = (Node*)malloc(sizeof(Node));
+		t->nodes++;
+
+		if (2 * x > range)
+		{
+			n->quad[0] = t->root;
+			n->quad[1] = 0;
+			n->quad[2] = 0;
+			n->quad[3] = 0;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+		}
+		else
+		{
+			n->quad[0] = 0;
+			n->quad[1] = t->root;
+			n->quad[2] = 0;
+			n->quad[3] = 0;
+
+			n->lo = t->root->lo;
+			n->hi = t->root->hi;
+
+			t->level++;
+
+			t->x += range;
+			x += range;
+		}
+
+		range *= 2;
+
+		n->parent = 0;
+		t->root->parent = n;
+		t->root = n;
+	}
+
+	int lev = t->level;
+
+	if (lev == 0)
+	{
+		// already exist
+		return 0;
+	}
+
+	// create children from root to x,y
+
+	Node* n = (Node*)t->root;
+	while (n)
+	{
+		lev--;
+		int i = ((x >> lev) & 1) | (((y >> lev) & 1) << 1);
+
+		if (lev)
+		{
+			if (!(Node*)n->quad[i])
+			{
+				Node* c = (Node*)malloc(sizeof(Node));
+				t->nodes++;
+
+				c->parent = n;
+				c->quad[0] = c->quad[1] = c->quad[2] = c->quad[3] = 0;
+				n->quad[i] = c;
+			}
+
+			n = (Node*)n->quad[i];
+		}
+		else
+		{
+			if (n->quad[i])
+			{
+				// already exist
+				return 0;
+			}
+
+			t->patches++;
+
+			n->quad[i] = p;
+			p->parent = n;
+
+			UpdateNodes(p);
+
+			return sizeof(Patch);
+		}
+	}
+
+	assert(0); // should never reach here
+	return 0;
+}
+
+size_t TerrainDispose(Patch* p)
+{
+	// MUST BE DETACHED!
+
+#ifdef TEXHEAP
+	p->ta->Free();
+#endif
+
+	free(p);
+
+	return sizeof(Patch);
+}

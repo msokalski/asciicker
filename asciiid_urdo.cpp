@@ -102,8 +102,9 @@ struct URDO
 	enum CMD
 	{
 		CMD_GROUP,
+		CMD_PATCH_CREATE,
 		CMD_PATCH_UPDATE,
-		CMD_PATCH_DIAG
+		CMD_PATCH_DIAG,
 	} cmd;
 
 	void Do(bool un);
@@ -118,6 +119,19 @@ struct URDO_Group : URDO
 
 	static void Open();
 	static void Close();
+	void Do(bool un);
+};
+
+struct URDO_PatchCreate : URDO
+{
+	int cx, cy;
+	Terrain* terrain;
+	Patch* patch;
+	bool attached;
+
+	static void Delete(Terrain* t, Patch* p);
+	static Patch* Create(Terrain* t, int x, int y, int z);
+
 	void Do(bool un);
 };
 
@@ -153,6 +167,7 @@ void URDO::Do(bool un)
 	switch (cmd)
 	{
 		case CMD_GROUP: ((URDO_Group*)this)->Do(un); break;
+		case CMD_PATCH_CREATE: ((URDO_PatchCreate*)this)->Do(un); break;
 		case CMD_PATCH_UPDATE: ((URDO_PatchUpdate*)this)->Do(un); break;
 		case CMD_PATCH_DIAG: ((URDO_PatchDiag*)this)->Do(un); break;
 		default:
@@ -177,6 +192,14 @@ void URDO::Free()
 			bytes -= sizeof(URDO_Group);
 			break;
 		}
+		case CMD_PATCH_CREATE:
+		{
+			URDO_PatchCreate* pc = (URDO_PatchCreate*)this;
+			if (!pc->attached)
+				bytes -= TerrainDispose(pc->patch);
+			bytes -= sizeof(URDO_PatchCreate);
+			break;
+		}
 		case CMD_PATCH_UPDATE: 
 			bytes -= sizeof(URDO_PatchUpdate); 
 			break;
@@ -197,6 +220,7 @@ URDO* URDO::Alloc(CMD c)
 	switch (c)
 	{
 		case CMD_GROUP: s = sizeof(URDO_Group); break;
+		case CMD_PATCH_CREATE: s = sizeof(URDO_PatchCreate); break;
 		case CMD_PATCH_UPDATE: s = sizeof(URDO_PatchUpdate); break;
 		case CMD_PATCH_DIAG: s = sizeof(URDO_PatchDiag); break;
 		default:
@@ -449,6 +473,19 @@ void URDO_Close()
 	URDO_Group::Close();
 }
 
+
+Patch* URDO_Create(Terrain* t, int x, int y, int z)
+{
+	assert(group_open < 64);
+	return URDO_PatchCreate::Create(t,x,y,z);
+}
+
+void URDO_Delete(Terrain* t, Patch* p)
+{
+	assert(group_open < 64);
+	URDO_PatchCreate::Delete(t,p);
+}
+
 void URDO_Patch(Patch* p)
 {
 	URDO_PatchUpdate::Open(p);
@@ -567,3 +604,46 @@ void URDO_PatchDiag::Do(bool un)
 	SetTerrainDiag(patch, d);
 }
 
+void URDO_PatchCreate::Delete(Terrain* t, Patch* p)
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_PatchCreate* urdo = (URDO_PatchCreate*)Alloc(CMD_PATCH_CREATE);
+
+	urdo->terrain = t;
+	urdo->patch = p;
+
+	bytes += TerrainDetach(t,p,&urdo->cx, &urdo->cy);
+	urdo->attached = false;
+}
+
+Patch* URDO_PatchCreate::Create(Terrain* t, int x, int y, int z)
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_PatchCreate* urdo = (URDO_PatchCreate*)Alloc(CMD_PATCH_CREATE);
+
+	urdo->terrain = t;
+	urdo->patch = AddTerrainPatch(t,x,y,z);
+	urdo->attached = true;
+	urdo->cx = x;
+	urdo->cy = y;
+
+	return urdo->patch;
+}
+
+void URDO_PatchCreate::Do(bool un)
+{
+	if (attached)
+	{
+		bytes += TerrainDetach(terrain, patch, &cx, &cy);
+		attached = false;
+	}
+	else
+	{
+		bytes -= TerrainAttach(terrain, patch, cx, cy);
+		attached = true;
+	}
+}

@@ -2294,6 +2294,21 @@ void my_render()
 
 			if (p)
 			{
+				if (io.KeyAlt)
+				{
+					if (io.MouseDown[0] && !diag_flipped)
+					{
+						diag_flipped = true;
+						URDO_Delete(terrain, p);
+						p = 0;
+					}
+					else
+					{
+						// paint similar preview as for diag flipping but 
+						// hilight entire PATCH (instead of quad) and use RED color
+					}
+				}
+				else
 				if (io.KeyCtrl)
 				{
 					if (io.KeyShift)
@@ -2366,6 +2381,34 @@ void my_render()
 						br_alpha = alpha;
 
 						// stamped, don't apply preview to it
+					}
+				}
+			}
+			else
+			{
+				if (io.KeyAlt)
+				{
+					// probably create 
+					if (io.MouseDown[0] && !diag_flipped)
+					{
+						diag_flipped = true;
+						// cut ray at probe_z to see visual x,y
+
+						double t = (probe_z - ray_p[2]) / ray_v[2];
+
+						// convert visual x,y to patch x,y
+						double vx = ray_p[0] + t * ray_v[0];
+						double vy = ray_p[1] + t * ray_v[1];
+
+						int px = (int)floor(vx / VISUAL_CELLS);
+						int py = (int)floor(vy / VISUAL_CELLS);
+
+						Patch* p = URDO_Create(terrain, px, py, probe_z);
+					}
+					else
+					{
+						// paint imaginary patch?
+						// that requires extra draw command!
 					}
 				}
 			}
@@ -2545,7 +2588,7 @@ void my_init()
 	// Setup Dear ImGui context
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
-	io.IniFilename = 0;
+	//io.IniFilename = 0;
 	io.BackendPlatformName = "imgui_impl_a3d";
 
 	io.KeyMap[ImGuiKey_Tab] = A3D_TAB;
@@ -2584,7 +2627,7 @@ void my_init()
 	// terrain = CreateTerrain(int x, int y, int w, int h, uint16_t* data);
 	// xywh coords are in patches, so data is w*4+1,h*4+1 !!!!!!!!!!!!!!!!
 
-	const int num1 = 32;
+	const int num1 = 1;// 32;
 	const int num2 = num1*num1;
 
 	uint32_t* rnd = (uint32_t*)malloc(sizeof(uint32_t)*num2);

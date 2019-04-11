@@ -1223,11 +1223,16 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 	free(wh_buf);
 }
 
+bool a3dSetIconData(A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+{
+	_a3dSetIconData(0, f, w, h, data, palsize, palbuf);
+	return true;
+}
+
 bool a3dSetIcon(const char* path)
 {
 	return a3dLoadImage(path, 0, _a3dSetIconData);
 }
-
 
 #include <dirent.h>
 

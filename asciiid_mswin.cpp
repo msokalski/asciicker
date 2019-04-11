@@ -535,6 +535,17 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 				platform_api.keyb_char((wchar_t)w);
 			break;
 
+		case WM_SYSCOMMAND:
+		{
+			// prevent enering sysmenu when
+			// F10 or ALT is released.
+			if (w == SC_KEYMENU)
+				return 0;
+			break;
+		}
+
+		case WM_SYSKEYDOWN:
+		case WM_SYSKEYUP:
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 			if (platform_api.keyb_key && w < 256)
@@ -558,7 +569,17 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 						ki = A3D_NUMPAD_ENTER;
 				}
 
-				platform_api.keyb_key(ki, m == WM_KEYDOWN);
+				platform_api.keyb_key(ki, m == WM_KEYDOWN || m == WM_SYSKEYDOWN);
+
+				/*
+				if (m == WM_SYSKEYUP || m == WM_KEYUP)
+				{
+					if (ki == A3D_LALT || ki == A3D_RALT)
+					{
+						return 0;
+					}
+				}
+				*/
 			}
 			break;
 
@@ -1010,6 +1031,163 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 
 	upng_free(upng);
 	return true;
+}
+
+void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+{
+	BITMAPV5HEADER bi;
+	bi.bV5Size = sizeof(BITMAPV5HEADER);
+	bi.bV5Width = w;
+	bi.bV5Height = h;
+	bi.bV5Planes = 1;
+	bi.bV5BitCount = 32;
+	bi.bV5Compression = BI_BITFIELDS;
+	bi.bV5RedMask = 0x00FF0000;
+	bi.bV5GreenMask = 0x0000FF00;
+	bi.bV5BlueMask = 0x000000FF;
+	bi.bV5AlphaMask = 0xFF000000;
+
+	HDC hdc;
+	hdc = GetDC(NULL);
+
+	uint32_t* buf = 0;
+
+	HBITMAP hBitmap;
+	hBitmap = CreateDIBSection(hdc, (BITMAPINFO *)&bi, DIB_RGB_COLORS,
+		(void **)&buf, NULL, (DWORD)0);
+
+	ReleaseDC(0, hdc);
+
+	switch (f)
+	{
+		case A3D_RGB8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[3 * i + 2] | (src[3 * i + 1] << 8) | (src[3 * i + 0] << 16) | 0xFF000000;
+			break;
+		}
+		case A3D_RGB16:
+		{
+			const uint16_t* src = (const uint16_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = (src[3 * i + 2] >> 8) | ((src[3 * i + 1] >> 8) << 8) | ((src[3 * i + 0] >> 8) << 16) | 0xFF000000;
+			break;
+		}
+		case A3D_RGBA8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[4 * i + 2] | (src[4 * i + 1] << 8) | (src[4 * i + 0] << 16) | (src[4 * i + 3] << 24);
+			break;
+		}
+		case A3D_RGBA16:
+		{
+			const uint16_t* src = (const uint16_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = (src[4 * i + 2] >> 8) | ((src[4 * i + 1] >> 8) << 8) | ((src[4 * i + 0] >> 8) << 16) | ((src[4 * i + 3] >> 8) << 24);
+			break;
+		}
+		case A3D_LUMINANCE1:
+			break;
+		case A3D_LUMINANCE2:
+			break;
+		case A3D_LUMINANCE4:
+			break;
+		case A3D_LUMINANCE8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[i] | (src[i] << 8) | (src[i] << 16) | 0xFF000000;
+			break;
+		}
+		case A3D_LUMINANCE_ALPHA1:
+			break;
+		case A3D_LUMINANCE_ALPHA2:
+			break;
+		case A3D_LUMINANCE_ALPHA4:
+			break;
+		case A3D_LUMINANCE_ALPHA8:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+				buf[i] = src[2 * i + 0] | (src[2 * i + 0] << 8) | (src[2 * i + 0] << 16) | (src[2 * i + 1] << 24);
+			break;
+		}
+
+		case A3D_INDEX1_RGB:
+		case A3D_INDEX1_RGBA:
+			break;
+
+		case A3D_INDEX2_RGB:
+		case A3D_INDEX2_RGBA:
+			break;
+
+		case A3D_INDEX4_RGB:
+		case A3D_INDEX4_RGBA:
+			break;
+
+		case A3D_INDEX8_RGB:
+		case A3D_INDEX8_RGBA:
+		{
+			const uint8_t* src = (const uint8_t*)data;
+			int n = w * h;
+			for (int i = 0; i < n; i++)
+			{
+				if (src[i] >= palsize)
+					buf[i] = 0;
+				else
+				{
+					uint32_t p = ((uint32_t*)palbuf)[src[i]];
+					buf[i] = (p & 0xFF00FF00) | ((p << 16) & 0x00FF0000) | ((p>>16) & 0x000000FF);
+				}
+			}
+			break;
+		}
+	}
+
+	HBITMAP hMonoBitmap = CreateBitmap(w, h, 1, 1, NULL);
+
+	ICONINFO ii;
+	ii.fIcon = TRUE;
+	ii.xHotspot = 0;
+	ii.yHotspot = 0;
+	ii.hbmMask = hMonoBitmap;
+	ii.hbmColor = hBitmap;
+
+	HICON hIcon = CreateIconIndirect(&ii);
+
+	DeleteObject(hBitmap);
+	DeleteObject(hMonoBitmap);
+
+	HICON hSmall, hBig;
+
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	hSmall = (HICON)SendMessage(hWnd, WM_SETICON, 0, (LPARAM)hIcon);
+	hBig = (HICON)SendMessage(hWnd, WM_SETICON, 1, (LPARAM)hIcon);
+
+	if (hSmall)
+		DestroyIcon(hSmall);
+
+	if (hBig && hBig!=hSmall)
+		DestroyIcon(hBig);
+}
+
+bool a3dSetIconData(A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+{
+	_a3dSetIconData(0, f, w, h, data, palsize, palbuf);
+	return true;
+}
+
+bool a3dSetIcon(const char* path)
+{
+	return a3dLoadImage(path, 0, _a3dSetIconData);
 }
 
 int a3dListDir(const char* dir_path, bool(*cb)(const char* name, void* cookie), void* cookie)

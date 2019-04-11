@@ -106,9 +106,9 @@ void TexAlloc::Free()
 	int on_page = y * h->cap_x + x;
 
 	// not last alloc on last page?
-	if (page != h->tail || on_page != h->allocs % cap)
+	if (page != h->tail || on_page != (h->allocs-1) % cap)
 	{
-		TexAlloc* last = h->tail->alloc[h->allocs % cap];
+		TexAlloc* last = h->tail->alloc[(h->allocs-1) % cap];
 		for (int t = 0; t < h->num; t++)
 		{
 			glCopyImageSubData(
