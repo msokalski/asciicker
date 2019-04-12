@@ -58,7 +58,7 @@ struct QuadItem
 {
 	Node* parent;
 	uint16_t lo, hi;
-	uint16_t flags; // 8 bits of neighbors, bit0 is on (-,-), bit7 is on (-,0)
+	uint16_t flags; // 8 bits of neighbors, CCW, bit0 is on (-,-), bit7 is on (-,0)
 };
 
 struct Node : QuadItem

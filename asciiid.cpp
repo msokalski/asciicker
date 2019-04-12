@@ -356,6 +356,8 @@ int spinning = 0;
 int spinning_x = 0;
 int spinning_y = 0;
 
+int creating = 0; // +1 = add, -1 = del
+
 int painting = 0; 
 const float STAMP_R = 0.50;
 const float STAMP_A = 1.00;
@@ -726,14 +728,27 @@ struct RenderContext
 				color.a = 1;
 				*/
 
+				if (qd.z>0)
 				{
-					// quad preview
+					// diagonal flip preview
 					float d = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
 					if (world_xyuv.x >= qd.x && world_xyuv.x < qd.x + d &&
 						world_xyuv.y >= qd.y && world_xyuv.y < qd.y + d)
 					{
 						//color.rb = mix(color.rb, color.rb * 0.5, qd.z);
 						color.rgb = mix(color.rgb, vec3(0, 1, 0), qd.z*0.25);
+					}
+				}
+				else
+				if (qd.z < 0)
+				{
+					float d = float(VISUAL_CELLS);
+					// patch delete preview
+					if (world_xyuv.x >= qd.x && world_xyuv.x < qd.x + d &&
+						world_xyuv.y >= qd.y && world_xyuv.y < qd.y + d)
+					{
+						//color.rb = mix(color.rb, color.rb * 0.5, qd.z);
+						color.rgb = mix(color.rgb, vec3(1, .8, 0), -qd.z*0.25);
 					}
 				}
 
@@ -1710,7 +1725,7 @@ void my_render()
 			ImGui::Text("CELL SIZE: %dx%d px", font[active_font].width/16, font[active_font].height/16);
 			//ImGui::Image((void*)(intptr_t)font.tex, ImVec2(font.width,font.height), ImVec2(0,1), ImVec2(1,0));
 
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1,1));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 			ImVec4 tint_normal(1, 1, 1, 0.33f);
 			ImVec4 tint_onedim(1, 1, 1, 0.50f);
 			ImVec4 tint_active(1, 1, 1, 1.00f);
@@ -1764,7 +1779,7 @@ void my_render()
 			ImGui::Text("0x%02X (%d)", active_glyph, active_glyph);
 
 
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
 			for (int y = 0; y < glyph_h ; y++)
 			{
@@ -1807,7 +1822,7 @@ void my_render()
 			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d)", active_palette, active_palette);
 
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
 			for (int y = 0; y < 16; y++)
 			{
@@ -1868,7 +1883,7 @@ void my_render()
 			static float paint_mat_fg[3] = { .2f, .3f, .4f };
 			static float paint_mat_bg[3] = { .2f, .2f, .1f };
 
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1, 1));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
 			for (int y = 0; y < 3; y++)
 			{
@@ -2205,59 +2220,106 @@ void my_render()
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
-		if (painting)
+		if (painting || creating)
 		{
-			//DRAG and/or DROP
-			double mdx = painting_x - round(io.MousePos.x);
-			double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
-			double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
-			double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
-			double x = painting_dx + dx;
-			double y = painting_dy + dy;
-
-			double dist = paint_dist + sqrt(dx*dx + dy * dy);
-
-			int i = 0;
-			float alpha = br_alpha;
-			br_alpha *= STAMP_A;
-			while (1)
+			if (creating)
 			{
-				double w = ((i + 1) * br_radius * STAMP_R - paint_dist) / (dist - paint_dist);
+				double mdx = painting_x - round(io.MousePos.x);
+				double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
+				double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+				double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+				double x = painting_dx + dx;
+				double y = painting_dy + dy;
 
-				if (w >= 1)
-					break;
+				if (creating < 0)
+				{
+					// LOCATE & DELETE PATCH IF EXIST
 
-				double sx = painting_dx + w * dx;
-				double sy = painting_dy + w * dy;
+					int px = (int)floor(x / VISUAL_CELLS);
+					int py = (int)floor(y / VISUAL_CELLS);
 
-				Stamp(sx, sy);
+					Patch* p = GetTerrainPatch(terrain, px, py);
+					if (p)
+						URDO_Delete(terrain, p);
+				}
+				else
+				{
+					// IF NO PATCH THERE, CREATE ONE
 
-				i++;
+					int px = (int)floor(x / VISUAL_CELLS);
+					int py = (int)floor(y / VISUAL_CELLS);
+
+					Patch* p = GetTerrainPatch(terrain, px, py);
+
+					if (!p)
+						p = URDO_Create(terrain, px, py, probe_z);
+				}
+
+				painting_dx = x;
+				painting_dy = y;
+				painting_x = (int)round(io.MousePos.x);
+				painting_y = (int)round(io.MousePos.y);
+
+				if (!io.MouseDown[0])
+				{
+					creating = 0;
+					URDO_Close();
+				}
 			}
-			br_alpha = alpha;
-
-			paint_dist = dist - i * br_radius * STAMP_R;
-			painting_dx = x;
-			painting_dy = y;
-			painting_x = (int)round(io.MousePos.x);
-			painting_y = (int)round(io.MousePos.y);
-
-			br_xyra[0] = (float)x;
-			br_xyra[1] = (float)y;
-
-			if (!io.MouseDown[0])
+			else // painting
 			{
-				// DROP
+				//DRAG and/or DROP
+				double mdx = painting_x - round(io.MousePos.x);
+				double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
+				double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+				double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+				double x = painting_dx + dx;
+				double y = painting_dy + dy;
+
+				double dist = paint_dist + sqrt(dx*dx + dy * dy);
+
+				int i = 0;
 				float alpha = br_alpha;
-				br_alpha *= (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A,2.0);
-				Stamp(x, y);
+				br_alpha *= STAMP_A;
+				while (1)
+				{
+					double w = ((i + 1) * br_radius * STAMP_R - paint_dist) / (dist - paint_dist);
+
+					if (w >= 1)
+						break;
+
+					double sx = painting_dx + w * dx;
+					double sy = painting_dy + w * dy;
+
+					Stamp(sx, sy);
+
+					i++;
+				}
 				br_alpha = alpha;
-				br_xyra[3] = 0;
-				painting = 0;
-				URDO_Close();
+
+				paint_dist = dist - i * br_radius * STAMP_R;
+				painting_dx = x;
+				painting_dy = y;
+				painting_x = (int)round(io.MousePos.x);
+				painting_y = (int)round(io.MousePos.y);
+
+				br_xyra[0] = (float)x;
+				br_xyra[1] = (float)y;
+
+				if (!io.MouseDown[0])
+				{
+					// DROP
+					float alpha = br_alpha;
+					br_alpha *= (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0);
+					Stamp(x, y);
+					br_alpha = alpha;
+					br_xyra[3] = 0;
+					painting = 0;
+					URDO_Close();
+				}
+				else
+					br_xyra[3] = (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0) * br_alpha;
 			}
-			else
-				br_xyra[3] = (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0) * br_alpha;
 		}
 		else
 		{
@@ -2298,14 +2360,26 @@ void my_render()
 				{
 					if (io.MouseDown[0] && !diag_flipped)
 					{
-						diag_flipped = true;
-						URDO_Delete(terrain, p);
-						p = 0;
+						URDO_Open();
+						creating = -1;
+
+						painting_x = (int)roundf(io.MousePos.x);
+						painting_y = (int)roundf(io.MousePos.y);
+
+						painting_dx = hit[0];
+						painting_dy = hit[1];
 					}
 					else
 					{
 						// paint similar preview as for diag flipping but 
 						// hilight entire PATCH (instead of quad) and use RED color
+
+						// add here quad preview
+						double qx = floor(hit[0] / VISUAL_CELLS) * VISUAL_CELLS;
+						double qy = floor(hit[1] / VISUAL_CELLS) * VISUAL_CELLS;
+						br_quad[0] = (float)qx;
+						br_quad[1] = (float)qy;
+						br_quad[2] = -1.0f;
 					}
 				}
 				else
@@ -2339,9 +2413,25 @@ void my_render()
 
 						if (!diag_flipped && io.MouseDown[0])
 						{
+							struct mod_floor
+							{
+								mod_floor(int d) : y(d) {}
+								int mod(int x)
+								{
+									int r = x % y;
+									if (/*(r != 0) && ((r < 0) != (y < 0))*/ r && (r^y)<0) 
+										r += y;
+									return r;
+								}
+								int y;
+							} mf(HEIGHT_CELLS);
+
 							// floor xy hit coords to height cells
-							int hx = (int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
-							int hy = (int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
+							//int hx = (int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
+							//int hy = (int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
+
+							int hx = mf.mod((int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS));
+							int hy = mf.mod((int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS));
 
 							{
 								uint16_t diag = GetTerrainDiag(p);
@@ -2391,19 +2481,20 @@ void my_render()
 					// probably create 
 					if (io.MouseDown[0] && !diag_flipped)
 					{
-						diag_flipped = true;
-						// cut ray at probe_z to see visual x,y
-
 						double t = (probe_z - ray_p[2]) / ray_v[2];
 
 						// convert visual x,y to patch x,y
 						double vx = ray_p[0] + t * ray_v[0];
 						double vy = ray_p[1] + t * ray_v[1];
 
-						int px = (int)floor(vx / VISUAL_CELLS);
-						int py = (int)floor(vy / VISUAL_CELLS);
+						URDO_Open();
+						creating = +1;
 
-						Patch* p = URDO_Create(terrain, px, py, probe_z);
+						painting_x = (int)roundf(io.MousePos.x);
+						painting_y = (int)roundf(io.MousePos.y);
+
+						painting_dx = vx;
+						painting_dy = vy;
 					}
 					else
 					{
