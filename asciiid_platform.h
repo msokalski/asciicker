@@ -265,6 +265,12 @@ enum A3D_ImageFormat
 bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf));
 
 bool a3dSetIcon(const char* path);
-void a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf);
+bool a3dSetIconData(A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf);
 
-int a3dListDir(const char* dir_path, bool (*cb)(const char* name, void* cookie), void* cookie);
+enum A3D_DirItem
+{
+	A3D_DIRECTORY,
+	A3D_FILE
+};
+
+int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* name, void* cookie), void* cookie);

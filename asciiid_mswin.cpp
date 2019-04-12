@@ -1190,7 +1190,7 @@ bool a3dSetIcon(const char* path)
 	return a3dLoadImage(path, 0, _a3dSetIconData);
 }
 
-int a3dListDir(const char* dir_path, bool(*cb)(const char* name, void* cookie), void* cookie)
+int a3dListDir(const char* dir_path, bool(*cb)(A3D_DirItem item, const char* name, void* cookie), void* cookie)
 {
 	WIN32_FIND_DATAA wfd;
 
@@ -1208,7 +1208,8 @@ int a3dListDir(const char* dir_path, bool(*cb)(const char* name, void* cookie), 
 	do
 	{
 		num++;
-		if (!cb(wfd.cFileName, cookie))
+		A3D_DirItem item = wfd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ? A3D_DIRECTORY : A3D_FILE;
+		if (!cb(item, wfd.cFileName, cookie))
 			break;
 	} while (FindNextFileA(h, &wfd));
 

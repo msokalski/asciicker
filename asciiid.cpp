@@ -17,6 +17,7 @@
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h" // beta: ImGuiItemFlags_Disabled
+
 #include "imgui_impl_opengl3.h"
 
 #include "asciiid_platform.h"
@@ -146,8 +147,11 @@ struct MyPalette
 				p[j].rgb[i] = fast_rand() & 0xFF;
 	}
 
-	static bool Scan(const char* name, void* cookie)
+	static bool Scan(A3D_DirItem item, const char* name, void* cookie)
 	{
+		if (!(item&A3D_FILE))
+			return true;
+
 		char buf[4096];
 		snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
 		buf[4095] = 0;
@@ -192,8 +196,11 @@ struct MyPalette
 
 struct MyFont
 {
-	static bool Scan(const char* name, void* cookie)
+	static bool Scan(A3D_DirItem item, const char* name, void* cookie)
 	{
+		if (!(item&A3D_FILE))
+			return true;
+
 		char buf[4096];
 		snprintf(buf,4095,"%s/%s",(char*)cookie,name);
 		buf[4095]=0;
@@ -392,12 +399,56 @@ struct RenderContext
 		glCreateVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glVertexAttribIPointer(0, 4, GL_UNSIGNED_INT, sizeof(GLint[5]), (void*)0);
+		glVertexAttribIPointer(0, 4, GL_INT, sizeof(GLint[5]), (void*)0);
 		glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, sizeof(GLint[5]), (void*)sizeof(GLint[4]));
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
 		glBindVertexArray(0);
+
+		glCreateBuffers(1, &ghost_vbo);
+		err = glGetError();
+		glNamedBufferStorage(ghost_vbo, sizeof(GLint[3*4*HEIGHT_CELLS]), 0, GL_DYNAMIC_STORAGE_BIT);
+		err = glGetError();
+
+		glCreateVertexArrays(1, &ghost_vao);
+		glBindVertexArray(ghost_vao);
+		glBindBuffer(GL_ARRAY_BUFFER, ghost_vbo);
+		glVertexAttribIPointer(0, 3, GL_INT, sizeof(GLint[3]), (void*)0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glEnableVertexAttribArray(0);
+		glBindVertexArray(0);
+
+		const char* ghost_vs_src =
+			CODE(#version 450\n)
+			DEFN(HEIGHT_SCALE)
+			DEFN(HEIGHT_CELLS)
+			DEFN(VISUAL_CELLS)
+			CODE(
+				layout(location = 0) in ivec3 xyz;
+				uniform mat4 tm;
+				void main()
+				{
+					float scale = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
+					vec4 pos = vec4(xyz, 1.0);
+					pos.xy *= scale;
+					gl_Position = tm * pos;
+				}
+			);
+
+		const char* ghost_fs_src =
+			CODE(#version 450\n)
+			DEFN(HEIGHT_SCALE)
+			DEFN(HEIGHT_CELLS)
+			DEFN(VISUAL_CELLS)
+			CODE(
+				layout(location = 0) out vec4 color;
+				uniform vec4 cl;
+				void main()
+				{
+					color = cl;
+				}
+			);
 
 		const char* vs_src = 
 		CODE(#version 450\n)
@@ -406,9 +457,9 @@ struct RenderContext
 		DEFN(VISUAL_CELLS)
 		CODE(
 			layout(location = 0) in ivec4 in_xyuv;
-			layout(location = 1) in int in_diag;
+			layout(location = 1) in uint in_diag;
 			out ivec4 xyuv;
-			out int diag;
+			out uint diag;
 
 			void main()
 			{
@@ -434,7 +485,7 @@ struct RenderContext
 
 
 			in ivec4 xyuv[];
-			in int diag[];
+			in uint diag[];
 
 			out vec4 world_xyuv;
 			out vec3 uvh;
@@ -457,7 +508,7 @@ struct RenderContext
 				// should allow having upto 6x6 patches -> 12 scalars * 6 strips * (6+1) cols * 2 verts = 1008 components (out of 1024)
 				// currently max is 4x4 -> 12 scalars * 4*4 quads * 4 verts -> 768 components
 
-				int rot = diag[0];
+				uint rot = diag[0];
 				ivec4 order[2] = ivec4[2](ivec4(0, 1, 2, 3), ivec4(1, 3, 0, 2));
 
 				for (int y = 0; y < HEIGHT_CELLS; y++)
@@ -544,7 +595,7 @@ struct RenderContext
 						norm[2] = cross(xyz[3] - xyz[1], xyz[0] - xyz[1]);
 						norm[3] = cross(xyz[0] - xyz[2], xyz[3] - xyz[2]);
 
-						int r = rot & 1;
+						uint r = rot & 1;
 
 						normal = norm[2 * r];
 						normal.xy *= 1.0 / HEIGHT_SCALE;
@@ -748,7 +799,7 @@ struct RenderContext
 						world_xyuv.y >= qd.y && world_xyuv.y < qd.y + d)
 					{
 						//color.rb = mix(color.rb, color.rb * 0.5, qd.z);
-						color.rgb = mix(color.rgb, vec3(1, .8, 0), -qd.z*0.25);
+						color.rgb = mix(color.rgb, vec3(1, .2, 0), -qd.z*0.25);
 					}
 				}
 
@@ -800,14 +851,51 @@ struct RenderContext
 		);
 
 		err = glGetError();
+
+		GLsizei loglen = 999;
+		char logstr[1000];
+
+		GLenum ghost_st[3] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
+		const char* ghost_src[3] = { ghost_vs_src, ghost_fs_src };
+		ghost_prg = glCreateProgram();
+		GLuint shader[3];
+
+		for (int i = 0; i < 2; i++)
+		{
+			shader[i] = glCreateShader(ghost_st[i]);
+			GLint len = (GLint)strlen(ghost_src[i]);
+			glShaderSource(shader[i], 1, &(ghost_src[i]), &len);
+			glCompileShader(shader[i]);
+
+			loglen = 999;
+			glGetShaderInfoLog(shader[i], loglen, &loglen, logstr);
+			logstr[loglen] = 0;
+
+			if (loglen)
+				printf("%s", logstr);
+
+			glAttachShader(ghost_prg, shader[i]);
+		}
+
+		glLinkProgram(ghost_prg);
+
+		for (int i = 0; i < 2; i++)
+			glDeleteShader(shader[i]);
+
+		loglen = 999;
+		glGetProgramInfoLog(ghost_prg, loglen, &loglen, logstr);
+		logstr[loglen] = 0;
+
+		if (loglen)
+			printf("%s", logstr);
+
+		ghost_tm_loc = glGetUniformLocation(ghost_prg, "tm");
+		ghost_cl_loc = glGetUniformLocation(ghost_prg, "cl");
+
 		prg = glCreateProgram();
 
 		GLenum st[3] = { GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER };
 		const char* src[3] = { vs_src, gs_src, fs_src };
-		GLuint shader[3];
-
-		GLsizei loglen = 999;
-		char logstr[1000];
 
 		for (int i = 0; i < 3; i++)
 		{
@@ -856,6 +944,80 @@ struct RenderContext
 		glDeleteVertexArrays(1, &vao);
 		glDeleteBuffers(1, &vbo);
 		glDeleteProgram(prg);
+
+		glDeleteVertexArrays(1, &ghost_vao);
+		glDeleteBuffers(1, &ghost_vbo);
+		glDeleteProgram(ghost_prg);
+
+	}
+
+	void PaintGhost(const double* tm, int px, int py, int pz, uint16_t ghost[4 * HEIGHT_CELLS])
+	{
+		GLint buf[3 * 4 * HEIGHT_CELLS];
+		int g = 0, b = 0;
+
+		px *= HEIGHT_CELLS;
+		py *= HEIGHT_CELLS;
+
+		for (int x = 0; x < HEIGHT_CELLS; x++)
+		{
+			buf[b++] = px + x;
+			buf[b++] = py;
+			buf[b++] = ghost[g++];
+		}
+
+		for (int y = 0; y < HEIGHT_CELLS; y++)
+		{
+			buf[b++] = px + HEIGHT_CELLS;
+			buf[b++] = py + y;
+			buf[b++] = ghost[g++];
+		}
+
+		for (int x = HEIGHT_CELLS; x > 0; x--)
+		{
+			buf[b++] = px + x;
+			buf[b++] = py + HEIGHT_CELLS;
+			buf[b++] = ghost[g++];
+		}
+
+		for (int y = HEIGHT_CELLS; y > 0; y--)
+		{
+			buf[b++] = px;
+			buf[b++] = py + y;
+			buf[b++] = ghost[g++];
+		}
+
+		float ftm[16];// NV bug! workaround
+		for (int i = 0; i < 16; i++)
+			ftm[i] = (float)tm[i];
+
+		glBindVertexArray(ghost_vao);
+		glUseProgram(ghost_prg);
+
+		glUniformMatrix4fv(ghost_tm_loc, 1, GL_FALSE, ftm);
+
+		glNamedBufferSubData(ghost_vbo, 0, sizeof(GLint[3 * 4 * HEIGHT_CELLS]), buf);
+
+		glUniform4f(ghost_cl_loc, 0, 0, 0, 1.0f);
+		glLineWidth(2.0f);
+		glDrawArrays(GL_LINE_LOOP, 0, 4 * HEIGHT_CELLS);
+		glLineWidth(1.0f);
+
+		// flatten
+		for (b = 0; b < 4 * HEIGHT_CELLS; b++)
+			buf[3 * b + 2] = pz;
+		glNamedBufferSubData(ghost_vbo, 0, sizeof(GLint[3 * 4 * HEIGHT_CELLS]), buf);
+
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		glUniform4f(ghost_cl_loc, 0, 0, 0, 0.2f);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4 * HEIGHT_CELLS);
+
+		glDisable(GL_BLEND);
+
+		glUseProgram(0);
+		glBindVertexArray(0);
 	}
 
 	void BeginPatches(const double* tm, const float* lt, const float* br, const float* qd, const float* pr)
@@ -1052,6 +1214,12 @@ struct RenderContext
 	GLuint prg;
 	GLuint vao;
 	GLuint vbo;
+
+	GLuint ghost_prg;
+	GLuint ghost_vbo;
+	GLuint ghost_vao;
+	GLint ghost_tm_loc;
+	GLint ghost_cl_loc;
 
 	TexPage* page_tex;
 	TexPage* head;
@@ -1437,15 +1605,6 @@ void my_render()
 			// Start the frame
 			ImGui::NewFrame();
 		}
-
-		struct Dock
-		{
-			static void Size(ImGuiSizeCallbackData* data)
-			{
-				data->DesiredSize.x = data->CurrentSize.x;
-				data->DesiredSize.y = 100;
-			}
-		};
 
 //		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
 //		ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
@@ -2218,6 +2377,11 @@ void my_render()
 	float br_quad[3] = { 0,0,0 };
 	float br_probe[3] = { (float)probe_z, 1.0f, br_limit ? br_alpha : 0.0f };
 
+	bool create_preview = false;
+	int create_preview_px = 0;
+	int create_preview_py = 0;
+
+
 	if (!io.WantCaptureMouse && mouse_in)
 	{
 		if (painting || creating)
@@ -2231,13 +2395,12 @@ void my_render()
 				double x = painting_dx + dx;
 				double y = painting_dy + dy;
 
+				int px = (int)floor(x / VISUAL_CELLS);
+				int py = (int)floor(y / VISUAL_CELLS);
+
 				if (creating < 0)
 				{
 					// LOCATE & DELETE PATCH IF EXIST
-
-					int px = (int)floor(x / VISUAL_CELLS);
-					int py = (int)floor(y / VISUAL_CELLS);
-
 					Patch* p = GetTerrainPatch(terrain, px, py);
 					if (p)
 						URDO_Delete(terrain, p);
@@ -2245,12 +2408,7 @@ void my_render()
 				else
 				{
 					// IF NO PATCH THERE, CREATE ONE
-
-					int px = (int)floor(x / VISUAL_CELLS);
-					int py = (int)floor(y / VISUAL_CELLS);
-
 					Patch* p = GetTerrainPatch(terrain, px, py);
-
 					if (!p)
 						p = URDO_Create(terrain, px, py, probe_z);
 				}
@@ -2358,7 +2516,7 @@ void my_render()
 			{
 				if (io.KeyAlt)
 				{
-					if (io.MouseDown[0] && !diag_flipped)
+					if (io.MouseDown[0])
 					{
 						URDO_Open();
 						creating = -1;
@@ -2478,15 +2636,13 @@ void my_render()
 			{
 				if (io.KeyAlt)
 				{
+					double t = (probe_z - ray_p[2]) / ray_v[2];
+					double vx = ray_p[0] + t * ray_v[0];
+					double vy = ray_p[1] + t * ray_v[1];
+
 					// probably create 
-					if (io.MouseDown[0] && !diag_flipped)
+					if (io.MouseDown[0])
 					{
-						double t = (probe_z - ray_p[2]) / ray_v[2];
-
-						// convert visual x,y to patch x,y
-						double vx = ray_p[0] + t * ray_v[0];
-						double vy = ray_p[1] + t * ray_v[1];
-
 						URDO_Open();
 						creating = +1;
 
@@ -2498,6 +2654,10 @@ void my_render()
 					}
 					else
 					{
+						create_preview = true;
+						create_preview_px = (int)floor(vx / VISUAL_CELLS);
+						create_preview_py = (int)floor(vy / VISUAL_CELLS);
+
 						// paint imaginary patch?
 						// that requires extra draw command!
 					}
@@ -2591,8 +2751,19 @@ void my_render()
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 	rc->EndPatches();
-	glDisable(GL_DEPTH_TEST);
 
+	// overlay patch creation
+	// slihouette of newly created patch 
+
+	if (create_preview)
+	{
+		uint16_t ghost[4 * HEIGHT_CELLS];
+		bool exist = CalcTerrainGhost(terrain, create_preview_px, create_preview_py, probe_z, ghost);
+		if (!exist)
+			rc->PaintGhost(tm, create_preview_px, create_preview_py, probe_z, ghost);
+	}
+
+	glDisable(GL_DEPTH_TEST);
 
 	//glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound, but prefer using the GL3+ code.
 	

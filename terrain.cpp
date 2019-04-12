@@ -1166,6 +1166,150 @@ uint16_t* GetTerrainVisualMap(Patch* p)
 	return (uint16_t*)p->visual;
 }
 
+Patch* CalcTerrainGhost(Terrain* t, int x, int y, int z, uint16_t ghost[4 * HEIGHT_CELLS])
+{
+	Patch* p = GetTerrainPatch(t, x, y);
+	if (p)
+	{
+		int i = 0;
+		for (int x = 0; x < HEIGHT_CELLS; x++)
+			ghost[i++] = p->height[0][x];
+		for (int y = 0; y < HEIGHT_CELLS; y++)
+			ghost[i++] = p->height[y][HEIGHT_CELLS];
+		for (int x = HEIGHT_CELLS; x > 0; x--)
+			ghost[i++] = p->height[HEIGHT_CELLS][x];
+		for (int y = HEIGHT_CELLS; y > 0; y--)
+			ghost[i++] = p->height[y][0];
+
+		return p;
+	}
+
+	int nx = x, ny = y;
+
+	Patch* np[8] =
+	{
+		GetTerrainPatch(t, nx - 1, ny - 1),
+		GetTerrainPatch(t, nx, ny - 1),
+		GetTerrainPatch(t, nx + 1, ny - 1),
+		GetTerrainPatch(t, nx + 1, ny),
+		GetTerrainPatch(t, nx + 1, ny + 1),
+		GetTerrainPatch(t, nx, ny + 1),
+		GetTerrainPatch(t, nx - 1, ny + 1),
+		GetTerrainPatch(t, nx - 1, ny),
+	};
+
+	int flags = 0;
+
+	for (int i = 0; i < 8; i++)
+	{
+		if (np[i])
+		{
+			flags |= 1 << i;
+
+			// fill shared vertices
+
+			switch (i)
+			{
+			case 0:
+				ghost[0] = np[i]->height[HEIGHT_CELLS][HEIGHT_CELLS];
+				break;
+
+			case 1:
+				for (int x = 0; x <= HEIGHT_CELLS; x++)
+					ghost[x] = np[i]->height[HEIGHT_CELLS][x];
+				break;
+
+			case 2:
+				ghost[HEIGHT_CELLS] = np[i]->height[HEIGHT_CELLS][0];
+				break;
+
+			case 3:
+				for (int y = 0; y <= HEIGHT_CELLS; y++)
+					ghost[HEIGHT_CELLS+y] = np[i]->height[y][0];
+				break;
+
+			case 4:
+				ghost[2*HEIGHT_CELLS] = np[i]->height[0][0];
+				break;
+
+			case 5:
+				for (int x = 0; x <= HEIGHT_CELLS; x++)
+					ghost[3*HEIGHT_CELLS-x] = np[i]->height[0][x];
+				break;
+
+			case 6:
+				ghost[3*HEIGHT_CELLS] = np[i]->height[0][HEIGHT_CELLS];
+				break;
+
+			case 7:
+				ghost[0] = np[i]->height[0][HEIGHT_CELLS];
+				for (int y = 1; y <= HEIGHT_CELLS; y++)
+					ghost[4*HEIGHT_CELLS-y] = np[i]->height[y][HEIGHT_CELLS];
+				break;
+			}
+		}
+	}
+
+	// set free corners
+
+	if (!(flags & 0x83))
+		ghost[0] = z;
+
+	if (!(flags & 0x0E))
+		ghost[HEIGHT_CELLS] = z;
+
+	if (!(flags & 0x38))
+		ghost[2*HEIGHT_CELLS] = z;
+
+	if (!(flags & 0xE0))
+		ghost[3*HEIGHT_CELLS] = z;
+
+	// interpolate free edges
+
+	if (!(flags & 0x02))
+	{
+		// bottom
+		int y = 0;
+		int h0 = ghost[0];
+		int h1 = ghost[HEIGHT_CELLS];
+		for (int x = 1; x < HEIGHT_CELLS; x++)
+			ghost[x] = (h0 * (HEIGHT_CELLS - x) + h1 * x + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
+	}
+
+	if (!(flags & 0x08))
+	{
+		// right
+		int x = HEIGHT_CELLS;
+		int h0 = ghost[HEIGHT_CELLS];
+		int h1 = ghost[2*HEIGHT_CELLS];;
+		for (int y = 1; y < HEIGHT_CELLS; y++)
+			ghost[HEIGHT_CELLS+y] = (h0 * (HEIGHT_CELLS - y) + h1 * y + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
+	}
+
+	if (!(flags & 0x20))
+	{
+		// top
+		int y = HEIGHT_CELLS;
+		int h0 = ghost[3*HEIGHT_CELLS];
+		int h1 = ghost[2*HEIGHT_CELLS];
+		for (int x = 1; x < HEIGHT_CELLS; x++)
+			ghost[3*HEIGHT_CELLS-x] = (h0 * (HEIGHT_CELLS - x) + h1 * x + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
+	}
+
+	if (!(flags & 0x80))
+	{
+		// left
+		int x = 0;
+		int h0 = ghost[0];
+		int h1 = ghost[3*HEIGHT_CELLS];
+		for (int y = 1; y < HEIGHT_CELLS; y++)
+			ghost[4*HEIGHT_CELLS-y] = (h0 * (HEIGHT_CELLS - y) + h1 * y + HEIGHT_CELLS / 2) / HEIGHT_CELLS;
+	}
+
+	return 0;
+}
+
+
 void GetTerrainLimits(Patch* p, uint16_t* lo, uint16_t* hi)
 {
 	if (lo)

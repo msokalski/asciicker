@@ -31,6 +31,8 @@ Patch* GetTerrainNeighbor(Patch* p, int sign_x, int sign_y);
 uint16_t* GetTerrainHeightMap(Patch* p);
 uint16_t* GetTerrainVisualMap(Patch* p);
 
+Patch* CalcTerrainGhost(Terrain* t, int x, int y, int z, uint16_t ghost[4 * HEIGHT_CELLS]);
+
 void UpdateTerrainHeightMap(Patch* p);
 void UpdateTerrainVisualMap(Patch* p);
 

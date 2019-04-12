@@ -1234,6 +1234,7 @@ bool a3dSetIcon(const char* path)
 	return a3dLoadImage(path, 0, _a3dSetIconData);
 }
 
+
 #include <dirent.h>
 
 int a3dListDir(const char* dir_path, bool (*cb)(const char* name, void* cookie), void* cookie)
