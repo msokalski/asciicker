@@ -1121,7 +1121,7 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 
 	unsigned long* buf = wh_buf + 2;
 
-	// convert to 0x[0]AARRGGBB !!!
+	// convert to 0x[0]AARRGGBB unsigned long!!!
 
 	switch (f)
 	{
@@ -1236,8 +1236,9 @@ bool a3dSetIcon(const char* path)
 
 
 #include <dirent.h>
+#include <sys/stat.h>
 
-int a3dListDir(const char* dir_path, bool (*cb)(const char* name, void* cookie), void* cookie)
+int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* name, void* cookie), void* cookie)
 {
     DIR* d;
     struct dirent* dir;
@@ -1249,8 +1250,36 @@ int a3dListDir(const char* dir_path, bool (*cb)(const char* name, void* cookie),
 	int num = 0;
 	while ((dir = readdir(d)) != 0)
 	{
+		A3D_DirItem item;
+		if (dir->d_type == DT_UNKNOWN)
+		{
+			char fullpath[4096];
+			snprintf(fullpath,4095,"%s/%s",dir_path,dir->d_name);
+			struct stat s;
+			if (0!=lstat(fullpath,&s))
+				continue;
+
+			if (s.st_mode == S_IFDIR)
+				item = A3D_DIRECTORY;
+			else
+			if (dir->d_type == S_IFREG)
+				item = A3D_FILE;
+			else
+				continue;				
+		}
+		else
+		{
+			if (dir->d_type == DT_DIR)
+				item = A3D_DIRECTORY;
+			else
+			if (dir->d_type == DT_REG)
+				item = A3D_FILE;
+			else
+				continue;
+		}
+		 
 		printf("%s\n", dir->d_name);
-		if (cb && !cb(dir->d_name,cookie))
+		if (cb && !cb(item, dir->d_name,cookie))
 			break;
 		num++;
 	}
