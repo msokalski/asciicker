@@ -1,6 +1,147 @@
 #include <string.h>
 #include "rgba8.h"
 
+#define L_UNPACK1(w,h,data,buf) \
+{ \
+	int in_row = (w+7) >> 3; \
+	const uint8_t* in_line = (const uint8_t*)data; \
+	uint32_t* out_line = (uint32_t*)buf; \
+	int wq = w>>3; \
+	int wr = (8 - (w&0x7)) & 0x7; \
+	for (int y = 0; y < h; y++) \
+	{ \
+		int x = 0; \
+		for (int i = 0; i < wq; i++) \
+		{ \
+			uint8_t l; \
+			uint8_t v = in_line[i]; \
+			l = 255*((v>>7)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 255*((v>>6)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 255*((v>>5)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 255*((v>>4)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 255*((v>>3)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 255*((v>>2)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 255*((v>>1)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 255*(v&1);      out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+		} \
+		if (wr) \
+		{ \
+			uint8_t l; \
+			uint8_t v = in_line[wq]; \
+			for (int i = 7; i >= wr; i--) \
+			{ \
+				l = 255*((v>>i)&1); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			} \
+		} \
+		in_line += in_row; \
+		out_line += w; \
+	} \
+}
+
+#define L_UNPACK2(w,h,data,buf) \
+{ \
+	int in_row = (w+3) >> 2; \
+	const uint8_t* in_line = (const uint8_t*)data; \
+	uint32_t* out_line = (uint32_t*)buf; \
+	int wq = w>>2; \
+	int wr = 2*((4 - (w&0x3)) & 0x3); \
+	for (int y = 0; y < h; y++) \
+	{ \
+		int x = 0; \
+		for (int i = 0; i < wq; i++) \
+		{ \
+			uint8_t l; \
+			uint8_t v = in_line[i]; \
+			l = 85*((v>>6)&3); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 85*((v>>4)&3); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 85*((v>>2)&3); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 85*(v&3);      out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+		} \
+		if (wr) \
+		{ \
+			uint8_t l; \
+			uint8_t v = in_line[wq]; \
+			for (int i = 6; i >= wr; i-=2) \
+			{ \
+				l = 85*((v>>i)&3); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			} \
+		} \
+		in_line += in_row; \
+		out_line += w; \
+	} \
+}
+
+#define L_UNPACK4(w,h,data,buf) \
+{ \
+	int in_row = (w+1) >> 1; \
+	const uint8_t* in_line = (const uint8_t*)data; \
+	uint32_t* out_line = (uint32_t*)buf; \
+	int wq = w>>1; \
+	int wr = 4*((2 - (w&0x1)) & 0x1); \
+	for (int y = 0; y < h; y++) \
+	{ \
+		int x = 0; \
+		for (int i = 0; i < wq; i++) \
+		{ \
+			uint8_t l; \
+			uint8_t v = in_line[i]; \
+			l = 17*((v>>4)&0xF); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+			l = 17*(v&0xF);        out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+		} \
+		if (wr) \
+		{ \
+			uint8_t l; \
+			uint8_t v = in_line[wq]; \
+			l = 17*((v>>4)&0xF); out_line[x++] = l | (l<<8) | (l<<16) | 0xFF000000; \
+		} \
+		in_line += in_row; \
+		out_line += w; \
+	} \
+}
+
+#define LA_UNPACK(w,h,bits,data,buf) \
+{ \
+	const int q = 8 / bits - 1; \
+	const int m = (1 << bits) - 1; \
+	const int mul = 255 / m; \
+	const int r = 2-bits/4; \
+	int in_row = (bits * w + 7) >> 3; \
+	const uint8_t* in_line = (const uint8_t*)data; \
+	uint32_t* out_line = (uint32_t*)buf; \
+	for (int y = 0; y < h; y++) \
+	{ \
+		for (int x = 0; x < w; x++) \
+		{ \
+			int L = mul * ( (in_line[x >> r] >> ((x&q)*bits)) & m ); \
+			int A = mul * ( (in_line[x >> r] >> ((x&q)*bits+bits)) & m ); \
+			out_line[x] = L | (L<<8) | (L<<16) | (A<<24); \
+		} \
+		in_line += in_row; \
+		out_line += w; \
+	} \
+}
+
+#define I_UNPACK(w,h,bits,data,buf,palsize,palbuf) \
+{ \
+	const int q = 8 / bits - 1; \
+	const int m = (1 << bits) - 1; \
+	const int mul = 255 / m; \
+	const int r = 3-bits/2; /* log2(8/bits) == 3-bits/2 for bits=1,2,4 only! */ \
+	int in_row = (bits * w + 7) >> 3; \
+	const uint8_t* in_line = (const uint8_t*)data; \
+	uint32_t* out_line = (uint32_t*)buf; \
+	for (int y = 0; y < h; y++) \
+	{ \
+		for (int x = 0; x < w; x++) \
+		{ \
+			int I = mul * ( (in_line[x >> r] >> ((x&q)*bits)) & m ); \
+			out_line[x] = I>=palsize ? 0 : ((uint32_t*)palbuf)[I]; \
+		} \
+		in_line += in_row; \
+		out_line += w; \
+	} \
+}
+
 void Convert_RGBA8(uint32_t* buf, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
 	int bits = 0;
@@ -21,7 +162,7 @@ void Convert_RGBA8(uint32_t* buf, A3D_ImageFormat f, int w, int h, const void* d
 			const uint16_t* src = (const uint16_t*)data;
 			int n = w * h;
 			for (int i = 0; i < n; i++)
-				buf[i] = (src[3 * i + 0] >> 8) | ((src[3 * i + 1] >> 8) << 8) | ((src[3 * i + 2] >> 8) << 16) | 0xFF000000;
+				buf[i] = (src[3 * i + 0] & 0xFF) | ((src[3 * i + 1] &0xFF) << 8) | ((src[3 * i + 2] &0xFF) << 16) | 0xFF000000;
 			break;
 		}
 		case A3D_RGBA8:
@@ -32,15 +173,12 @@ void Convert_RGBA8(uint32_t* buf, A3D_ImageFormat f, int w, int h, const void* d
 			const uint16_t* src = (const uint16_t*)data;
 			int n = w * h;
 			for (int i = 0; i < n; i++)
-				buf[i] = (src[4 * i + 0] >> 8) | ((src[4 * i + 1] >> 8) << 8) | ((src[4 * i + 2] >> 8) << 16) | ((src[4 * i + 3] >> 8) << 24);
+				buf[i] = (src[4 * i + 0] && 0xFF) | ((src[4 * i + 1] && 0xFF) << 8) | ((src[4 * i + 2] && 0xFF) << 16) | 0xFF000000;// ((src[4 * i + 3] && 0xFF) << 24);
 			break;
 		}
-		case A3D_LUMINANCE1:
-			break;
-		case A3D_LUMINANCE2:
-			break;
-		case A3D_LUMINANCE4:
-			break;
+		case A3D_LUMINANCE1: L_UNPACK1(w,h,data,buf) break;
+		case A3D_LUMINANCE2: L_UNPACK2(w,h,data,buf) break;
+		case A3D_LUMINANCE4: L_UNPACK4(w,h,data,buf) break;
 		case A3D_LUMINANCE8:
 		{
 			const uint8_t* src = (const uint8_t*)data;
@@ -49,12 +187,6 @@ void Convert_RGBA8(uint32_t* buf, A3D_ImageFormat f, int w, int h, const void* d
 				buf[i] = src[i] | (src[i] << 8) | (src[i] << 16) | 0xFF000000;
 			break;
 		}
-		case A3D_LUMINANCE_ALPHA1:
-			break;
-		case A3D_LUMINANCE_ALPHA2:
-			break;
-		case A3D_LUMINANCE_ALPHA4:
-			break;
 		case A3D_LUMINANCE_ALPHA8:
 		{
 			const uint8_t* src = (const uint8_t*)data;
@@ -63,18 +195,15 @@ void Convert_RGBA8(uint32_t* buf, A3D_ImageFormat f, int w, int h, const void* d
 				buf[i] = src[2 * i + 0] | (src[2 * i + 0] << 8) | (src[2 * i + 0] << 16) | (src[2 * i + 1] << 24);
 			break;
 		}
+		case A3D_LUMINANCE_ALPHA16:
+			break;
 
 		case A3D_INDEX1_RGB:
-		case A3D_INDEX1_RGBA:
-			break;
-
+		case A3D_INDEX1_RGBA: break;
 		case A3D_INDEX2_RGB:
-		case A3D_INDEX2_RGBA:
-			break;
-
+		case A3D_INDEX2_RGBA: break;
 		case A3D_INDEX4_RGB:
-		case A3D_INDEX4_RGBA:
-			break;
+		case A3D_INDEX4_RGBA: break;
 
 		case A3D_INDEX8_RGB:
 		case A3D_INDEX8_RGBA:
@@ -227,12 +356,6 @@ void ConvertLuminanceToAlpha_RGBA8(uint32_t* buf, const uint8_t rgb[3], A3D_Imag
 				buf[i] = (src[i] << 24) | const_rgb;
 			break;
 		}
-		case A3D_LUMINANCE_ALPHA1:
-			break;
-		case A3D_LUMINANCE_ALPHA2:
-			break;
-		case A3D_LUMINANCE_ALPHA4:
-			break;
 		case A3D_LUMINANCE_ALPHA8:
 		{
 			const uint8_t* src = (const uint8_t*)data;
@@ -240,7 +363,8 @@ void ConvertLuminanceToAlpha_RGBA8(uint32_t* buf, const uint8_t rgb[3], A3D_Imag
 				buf[i] = (src[2 * i + 0] << 24) | const_rgb;
 			break;
 		}
-
+		case A3D_LUMINANCE_ALPHA16:
+			break;
 		case A3D_INDEX1_RGB:
 			break;
 		case A3D_INDEX2_RGB:

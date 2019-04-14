@@ -1106,12 +1106,6 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 				buf[i] = src[i] | (src[i] << 8) | (src[i] << 16) | 0xFF000000;
 			break;
 		}
-		case A3D_LUMINANCE_ALPHA1:
-			break;
-		case A3D_LUMINANCE_ALPHA2:
-			break;
-		case A3D_LUMINANCE_ALPHA4:
-			break;
 		case A3D_LUMINANCE_ALPHA8:
 		{
 			const uint8_t* src = (const uint8_t*)data;
@@ -1120,6 +1114,8 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 				buf[i] = src[2 * i + 0] | (src[2 * i + 0] << 8) | (src[2 * i + 0] << 16) | (src[2 * i + 1] << 24);
 			break;
 		}
+		case A3D_LUMINANCE_ALPHA16:
+			break;
 
 		case A3D_INDEX1_RGB:
 		case A3D_INDEX1_RGBA:

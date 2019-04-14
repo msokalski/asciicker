@@ -856,6 +856,8 @@ static upng_format determine_format(upng_t* upng) {
 			return UPNG_LUMINANCE4;
 		case 8:
 			return UPNG_LUMINANCE8;
+		case 16:
+			return UPNG_LUMINANCE16;			
 		default:
 			return UPNG_BADFORMAT;
 		}
@@ -904,14 +906,10 @@ static upng_format determine_format(upng_t* upng) {
 
 	case UPNG_LUMA:
 		switch (upng->color_depth) {
-		case 1:
-			return UPNG_LUMINANCE_ALPHA1;
-		case 2:
-			return UPNG_LUMINANCE_ALPHA2;
-		case 4:
-			return UPNG_LUMINANCE_ALPHA4;
 		case 8:
 			return UPNG_LUMINANCE_ALPHA8;
+		case 16:
+			return UPNG_LUMINANCE_ALPHA16;
 		default:
 			return UPNG_BADFORMAT;
 		}
@@ -1271,9 +1269,15 @@ upng_t* upng_new_from_file(const char *filename)
 		SET_ERROR(upng, UPNG_ENOMEM);
 		return upng;
 	}
-	fread(buffer, 1, (unsigned long)size, file);
+	
+	int ret = fread(buffer, 1, (unsigned long)size, file);
 	fclose(file);
-
+	if (ret != size)
+	{
+		free(buffer);
+		SET_ERROR(upng, UPNG_EMALFORMED);
+		return upng;
+	}
 	/* set the read buffer as our source buffer, with owning flag set */
 	upng->source.buffer = buffer;
 	upng->source.size = size;

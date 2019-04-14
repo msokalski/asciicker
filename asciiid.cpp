@@ -2824,8 +2824,42 @@ void my_resize(int w, int h)
 	io.DisplaySize = ImVec2((float)w, (float)h);
 }
 
+
+void PngTest(void *cookie, A3D_ImageFormat f, int w, int h, const void *data, int palsize, const void *palbuf)
+{
+	uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
+	Convert_RGBA8(buf,f,w,h,data,palsize,palbuf);
+	a3dSetIconData(A3D_RGBA8, w,h, buf, 0,0);
+	free(buf);
+}
+
 void my_init()
 {
+//	a3dLoadImage("./icons/basn0g01.png",0,PngTest); // fixed (flip bits?)
+//	a3dLoadImage("./icons/basn0g02.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn0g04.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn0g08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn0g16.png",0,PngTest); // unsupported grey-16
+
+//	a3dLoadImage("./icons/basn2c08.png",0,PngTest); // ok
+
+//	a3dLoadImage("./icons/basn2c16.png",0,PngTest); // fixed (swap bytes?)
+//	a3dLoadImage("./icons/basn3p01.png",0,PngTest); // bad (flip bits?)
+//	a3dLoadImage("./icons/basn3p02.png",0,PngTest); // bad (flip bits?)
+//	a3dLoadImage("./icons/basn3p04.png",0,PngTest); // bad (flip bits?)
+
+//	a3dLoadImage("./icons/basn3p08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn4a08.png",0,PngTest); // ok
+
+//	a3dLoadImage("./icons/basn4a16.png",0,PngTest); // unsupported lum-alpha-16
+
+//	a3dLoadImage("./icons/basn6a08.png",0,PngTest); // ok
+
+	a3dLoadImage("./icons/basn6a16.png",0,PngTest); // bad (swap bytes?)
+
+
+
+
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
@@ -2889,7 +2923,7 @@ void my_init()
 	// terrain = CreateTerrain(int x, int y, int w, int h, uint16_t* data);
 	// xywh coords are in patches, so data is w*4+1,h*4+1 !!!!!!!!!!!!!!!!
 
-	const int num1 = 256;
+	const int num1 = 8;
 	const int num2 = num1*num1;
 
 	uint32_t* rnd = (uint32_t*)malloc(sizeof(uint32_t)*num2);
@@ -2922,7 +2956,7 @@ void my_init()
 
 	a3dSetVisible(true);
 
-	a3dSetIcon("./icons/app.png");
+	//a3dSetIcon("./icons/app.png");
 }
 
 void my_keyb_char(wchar_t chr)

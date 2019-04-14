@@ -965,30 +965,47 @@ bool a3dGetKeyb(KeyInfo ki)
 	return ( bits[kc >> 3] & (1 << (kc & 7)) ) != 0;
 }
 
+int cc_set_window_title(const char *title)
+{
+#ifdef X_HAVE_UTF8_STRING
+	size_t len;
+#else
+	char *titleCopy;
+	XTextProperty titleProperty;
+#endif
+	Atom wm_name_atom, wm_icon_name_atom, utf8_string_atom;
+
+	wm_name_atom = XInternAtom(dpy, "WM_NAME", True);
+	wm_icon_name_atom = XInternAtom(dpy, "WM_ICON_NAME", True);
+	utf8_string_atom = XInternAtom(dpy, "UTF8_STRING", True);
+
+#ifdef X_HAVE_UTF8_STRING
+	len = strlen(title);
+	int rc;
+	rc = XChangeProperty(dpy, win, wm_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)title, len);
+	rc = XChangeProperty(dpy, win, wm_icon_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)title, len);
+#else
+	titleCopy = strdup(title);
+	if(!XStringListToTextProperty(&titleCopy, 1, &titleProperty)) {
+		return 0;
+	}
+	free(titleCopy);
+
+	XSetTextProperty(dpy, win, &titleProperty, _WM_NAME);
+	XSetTextProperty(dpy, win, &titleProperty, _WM_ICON_NAME);
+	XSetWMName(dpy, win, &titleProperty);
+	XSetWMIconName(dpy, win, &titleProperty);
+	XFree(titleProperty.value);
+#endif
+
+	return 1;
+}
+
 void a3dSetTitle(const wchar_t* name)
 {
-//	snprintf(title,255,"%ls", name);
-//	XStoreName(dpy, win, title);
-
-    /* This variable will store the window name property. */
-    XTextProperty window_name_property;
-    /* This variable will store the icon name property. */
-	XTextProperty icon_name_property;
-
-    char window_name[] = "hello, world";
-	char icon_name[] = "small world";
-
-	char* window_name_ptr = window_name;
-	char* icon_name_ptr = icon_name;
-
-	int rc;
-    //rc = XStringListToTextProperty(&window_name_ptr, 1, &window_name_property);		
-    rc = XStringListToTextProperty(&icon_name_ptr, 1, &icon_name_property);		
-
-    //XSetWMName(dpy, win, &window_name_property);
-	XSetWMIconName(dpy, win, &icon_name_property);	
-
-	XFlush(dpy);
+	snprintf(title,255,"%ls",name);
+	title[255]=0;
+	cc_set_window_title(title);
 }
 
 int a3dGetTitle(wchar_t* name, int size)
@@ -1171,12 +1188,6 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 				buf[i] = src[i] | (src[i] << 8) | (src[i] << 16) | 0xFF000000;
 			break;
 		}
-		case A3D_LUMINANCE_ALPHA1:
-			break;
-		case A3D_LUMINANCE_ALPHA2:
-			break;
-		case A3D_LUMINANCE_ALPHA4:
-			break;
 		case A3D_LUMINANCE_ALPHA8:
 		{
 			const uint8_t* src = (const uint8_t*)data;
@@ -1185,6 +1196,9 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 				buf[i] = src[2 * i + 0] | (src[2 * i + 0] << 8) | (src[2 * i + 0] << 16) | (src[2 * i + 1] << 24);
 			break;
 		}
+
+		case A3D_LUMINANCE_ALPHA16:
+			break;
 
 		case A3D_INDEX1_RGB:
 		case A3D_INDEX1_RGBA:

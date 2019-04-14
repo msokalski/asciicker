@@ -2,6 +2,7 @@ if [ ! -d .run ]
 then
 	mkdir .run
 fi
+#g++ -O3 -o .run/asciiid \
 g++ -g -o .run/asciiid \
 asciiid.cpp \
 asciiid_x11.cpp \
