@@ -1040,7 +1040,7 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 	BITMAPV5HEADER bi;
 	bi.bV5Size = sizeof(BITMAPV5HEADER);
 	bi.bV5Width = w;
-	bi.bV5Height = h;
+	bi.bV5Height = -h;
 	bi.bV5Planes = 1;
 	bi.bV5BitCount = 32;
 	bi.bV5Compression = BI_BITFIELDS;

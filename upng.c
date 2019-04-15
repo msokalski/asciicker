@@ -1270,7 +1270,7 @@ upng_t* upng_new_from_file(const char *filename)
 		return upng;
 	}
 	
-	int ret = fread(buffer, 1, (unsigned long)size, file);
+	size_t ret = fread(buffer, 1, (unsigned long)size, file);
 	fclose(file);
 	if (ret != size)
 	{

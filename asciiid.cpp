@@ -2851,7 +2851,7 @@ void my_init()
 //	a3dLoadImage("./icons/basn6a08.png",0,PngTest); // ok
 //	a3dLoadImage("./icons/basn6a16.png",0,PngTest); // fixed (swap bytes?)
 
-//	a3dSetIcon("./icons/basn0g01.png"); // fixed (flip bits?)
+	a3dSetIcon("./icons/basn0g01.png"); // fixed (flip bits?)
 //	a3dLoadImage("./icons/basn0g02.png",0,PngTest); // ok
 //	a3dLoadImage("./icons/basn0g04.png",0,PngTest); // ok
 //	a3dLoadImage("./icons/basn0g08.png",0,PngTest); // ok
@@ -2961,7 +2961,7 @@ void my_init()
 
 	int full[] = { -1280,0,800,600};
 	//int full[] = { 0,0,1920,1080};
-	a3dSetRect(full, true);
+	//a3dSetRect(full, true);
 
 	a3dSetVisible(true);
 
