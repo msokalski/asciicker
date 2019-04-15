@@ -168,7 +168,7 @@ struct MyPalette
 		MyPalette* p = (MyPalette*)GetPaletteArr() + palettes_loaded;
 
 		uint32_t* buf = (uint32_t*)malloc(w*h * sizeof(uint32_t));
-		Convert_RGBA8_UI32_AABBGGRR(buf, f, w, h, data, palsize, palbuf);
+		Convert_UI32_AABBGGRR(buf, f, w, h, data, palsize, palbuf);
 
 		// extract palette by sampling at centers of w/16 x h/16 patches
 		int hx = (w + 16) / 32;
@@ -246,7 +246,7 @@ struct MyFont
 		uint32_t* buf = (uint32_t*)malloc(w * h * sizeof(uint32_t));
 
 		uint8_t rgb[3] = { 0xff,0xff,0xff };
-		ConvertLuminanceToAlpha_RGBA8(buf, rgb, f, w, h, data, palsize, palbuf);
+		ConvertLuminance_UI32_LLZZYYXX(buf, rgb, f, w, h, data, palsize, palbuf);
 
 		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
 		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
@@ -2828,7 +2828,7 @@ void my_resize(int w, int h)
 void PngTest(void *cookie, A3D_ImageFormat f, int w, int h, const void *data, int palsize, const void *palbuf)
 {
 	uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
-	Convert_RGBA8_UI32_AABBGGRR(buf,f,w,h,data,palsize,palbuf);
+	Convert_UI32_AABBGGRR(buf,f,w,h,data,palsize,palbuf);
 	a3dSetIconData(A3D_RGBA8, w,h, buf, 0,0);
 	free(buf);
 }

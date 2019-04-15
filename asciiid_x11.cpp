@@ -1140,7 +1140,7 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 	unsigned long* buf = wh_buf + 2;
 
 	// convert to 0x[0]AARRGGBB unsigned long!!!
-	Convert_RGBA8_UL_AARRGGBB(buf,f,w,h,data,palsize,palbuf);
+	Convert_UL_AARRGGBB(buf,f,w,h,data,palsize,palbuf);
 
     XChangeProperty(dpy, win, netWmIcon, XA_CARDINAL, 32, PropModeReplace, 
 					(const unsigned char*)wh_buf, 2 + wh);

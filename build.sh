@@ -2,8 +2,8 @@ if [ ! -d .run ]
 then
 	mkdir .run
 fi
-#g++ -O3 -o .run/asciiid \
-g++ -g -o .run/asciiid \
+#g++ -g -o .run/asciiid \
+g++ -g -O3 -o .run/asciiid \
 asciiid.cpp \
 asciiid_x11.cpp \
 asciiid_urdo.cpp \
@@ -21,3 +21,5 @@ imgui/imgui_widgets.cpp \
 	-lX11 
 #	-L/usr/X11R6/lib \
 #	-I/usr/X11R6/include
+
+objdump -d .run/asciiid -l > .run/asciiid.s
