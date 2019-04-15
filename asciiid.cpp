@@ -168,7 +168,7 @@ struct MyPalette
 		MyPalette* p = (MyPalette*)GetPaletteArr() + palettes_loaded;
 
 		uint32_t* buf = (uint32_t*)malloc(w*h * sizeof(uint32_t));
-		Convert_RGBA8(buf, f, w, h, data, palsize, palbuf);
+		Convert_RGBA8_UI32_AABBGGRR(buf, f, w, h, data, palsize, palbuf);
 
 		// extract palette by sampling at centers of w/16 x h/16 patches
 		int hx = (w + 16) / 32;
@@ -2828,7 +2828,7 @@ void my_resize(int w, int h)
 void PngTest(void *cookie, A3D_ImageFormat f, int w, int h, const void *data, int palsize, const void *palbuf)
 {
 	uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
-	Convert_RGBA8(buf,f,w,h,data,palsize,palbuf);
+	Convert_RGBA8_UI32_AABBGGRR(buf,f,w,h,data,palsize,palbuf);
 	a3dSetIconData(A3D_RGBA8, w,h, buf, 0,0);
 	free(buf);
 }
@@ -2839,24 +2839,33 @@ void my_init()
 //	a3dLoadImage("./icons/basn0g02.png",0,PngTest); // ok
 //	a3dLoadImage("./icons/basn0g04.png",0,PngTest); // ok
 //	a3dLoadImage("./icons/basn0g08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn0g16.png",0,PngTest); // unsupported grey-16
-
+//	a3dLoadImage("./icons/basn0g16.png",0,PngTest); // fixed (unsupported grey-16)
 //	a3dLoadImage("./icons/basn2c08.png",0,PngTest); // ok
-
 //	a3dLoadImage("./icons/basn2c16.png",0,PngTest); // fixed (swap bytes?)
-//	a3dLoadImage("./icons/basn3p01.png",0,PngTest); // bad (flip bits?)
-//	a3dLoadImage("./icons/basn3p02.png",0,PngTest); // bad (flip bits?)
-//	a3dLoadImage("./icons/basn3p04.png",0,PngTest); // bad (flip bits?)
-
+//	a3dLoadImage("./icons/basn3p01.png",0,PngTest); // fixed (flip bits?)
+//	a3dLoadImage("./icons/basn3p02.png",0,PngTest); // fixed (flip bits?)
+//	a3dLoadImage("./icons/basn3p04.png",0,PngTest); // fixed (flip bits?)
 //	a3dLoadImage("./icons/basn3p08.png",0,PngTest); // ok
 //	a3dLoadImage("./icons/basn4a08.png",0,PngTest); // ok
-
-//	a3dLoadImage("./icons/basn4a16.png",0,PngTest); // unsupported lum-alpha-16
-
+//	a3dLoadImage("./icons/basn4a16.png",0,PngTest); // fixed (unsupported lum-alpha-16) ERRRRRRRRRRRRR
 //	a3dLoadImage("./icons/basn6a08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn6a16.png",0,PngTest); // fixed (swap bytes?)
 
-	a3dLoadImage("./icons/basn6a16.png",0,PngTest); // bad (swap bytes?)
-
+//	a3dSetIcon("./icons/basn0g01.png"); // fixed (flip bits?)
+//	a3dLoadImage("./icons/basn0g02.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn0g04.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn0g08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn0g16.png",0,PngTest); // fixed (unsupported grey-16)
+//	a3dLoadImage("./icons/basn2c08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn2c16.png",0,PngTest); // fixed (swap bytes?)
+//	a3dLoadImage("./icons/basn3p01.png",0,PngTest); // fixed (flip bits?)
+//	a3dLoadImage("./icons/basn3p02.png",0,PngTest); // fixed (flip bits?)
+//	a3dLoadImage("./icons/basn3p04.png",0,PngTest); // fixed (flip bits?)
+//	a3dLoadImage("./icons/basn3p08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn4a08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn4a16.png",0,PngTest); // fixed (unsupported lum-alpha-16) ERRRRRRRRRRRRR
+//	a3dLoadImage("./icons/basn6a08.png",0,PngTest); // ok
+//	a3dLoadImage("./icons/basn6a16.png",0,PngTest); // fixed (swap bytes?)
 
 
 

@@ -8,6 +8,8 @@
 
 #include <stdint.h>
 
+#include "rgba8.h"
+
 #include "gl.h"
 #include "wglext.h"
 
@@ -1058,95 +1060,7 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 
 	ReleaseDC(0, hdc);
 
-	switch (f)
-	{
-		case A3D_RGB8:
-		{
-			const uint8_t* src = (const uint8_t*)data;
-			int n = w * h;
-			for (int i = 0; i < n; i++)
-				buf[i] = src[3 * i + 2] | (src[3 * i + 1] << 8) | (src[3 * i + 0] << 16) | 0xFF000000;
-			break;
-		}
-		case A3D_RGB16:
-		{
-			const uint16_t* src = (const uint16_t*)data;
-			int n = w * h;
-			for (int i = 0; i < n; i++)
-				buf[i] = (src[3 * i + 2] >> 8) | ((src[3 * i + 1] >> 8) << 8) | ((src[3 * i + 0] >> 8) << 16) | 0xFF000000;
-			break;
-		}
-		case A3D_RGBA8:
-		{
-			const uint8_t* src = (const uint8_t*)data;
-			int n = w * h;
-			for (int i = 0; i < n; i++)
-				buf[i] = src[4 * i + 2] | (src[4 * i + 1] << 8) | (src[4 * i + 0] << 16) | (src[4 * i + 3] << 24);
-			break;
-		}
-		case A3D_RGBA16:
-		{
-			const uint16_t* src = (const uint16_t*)data;
-			int n = w * h;
-			for (int i = 0; i < n; i++)
-				buf[i] = (src[4 * i + 2] >> 8) | ((src[4 * i + 1] >> 8) << 8) | ((src[4 * i + 0] >> 8) << 16) | ((src[4 * i + 3] >> 8) << 24);
-			break;
-		}
-		case A3D_LUMINANCE1:
-			break;
-		case A3D_LUMINANCE2:
-			break;
-		case A3D_LUMINANCE4:
-			break;
-		case A3D_LUMINANCE8:
-		{
-			const uint8_t* src = (const uint8_t*)data;
-			int n = w * h;
-			for (int i = 0; i < n; i++)
-				buf[i] = src[i] | (src[i] << 8) | (src[i] << 16) | 0xFF000000;
-			break;
-		}
-		case A3D_LUMINANCE_ALPHA8:
-		{
-			const uint8_t* src = (const uint8_t*)data;
-			int n = w * h;
-			for (int i = 0; i < n; i++)
-				buf[i] = src[2 * i + 0] | (src[2 * i + 0] << 8) | (src[2 * i + 0] << 16) | (src[2 * i + 1] << 24);
-			break;
-		}
-		case A3D_LUMINANCE_ALPHA16:
-			break;
-
-		case A3D_INDEX1_RGB:
-		case A3D_INDEX1_RGBA:
-			break;
-
-		case A3D_INDEX2_RGB:
-		case A3D_INDEX2_RGBA:
-			break;
-
-		case A3D_INDEX4_RGB:
-		case A3D_INDEX4_RGBA:
-			break;
-
-		case A3D_INDEX8_RGB:
-		case A3D_INDEX8_RGBA:
-		{
-			const uint8_t* src = (const uint8_t*)data;
-			int n = w * h;
-			for (int i = 0; i < n; i++)
-			{
-				if (src[i] >= palsize)
-					buf[i] = 0;
-				else
-				{
-					uint32_t p = ((uint32_t*)palbuf)[src[i]];
-					buf[i] = (p & 0xFF00FF00) | ((p << 16) & 0x00FF0000) | ((p>>16) & 0x000000FF);
-				}
-			}
-			break;
-		}
-	}
+	Convert_RGBA8_UI32_AARRGGBB(buf,f,w,h,data,palsize,palbuf);
 
 	HBITMAP hMonoBitmap = CreateBitmap(w, h, 1, 1, NULL);
 
