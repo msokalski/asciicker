@@ -832,7 +832,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			DispatchMessage(&msg);
 		}
 
-		if (platform_api.render)
+		if (!closing && platform_api.render)
 			platform_api.render();
 	}
 
@@ -879,18 +879,34 @@ bool a3dGetKeyb(KeyInfo ki)
 	return false;
 }
 
-void a3dSetTitle(const wchar_t* name)
+void a3dSetTitle(const char* utf8_name)
 {
+	int wchars_num = MultiByteToWideChar(CP_UTF8, 0, utf8_name, -1, NULL, 0);
+	wchar_t* wstr = (wchar_t*)malloc(sizeof(wchar_t)*(1+wchars_num));
+	MultiByteToWideChar(CP_UTF8, 0, utf8_name, -1, wstr, wchars_num);
+	wstr[wchars_num]=0;
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	SetWindowText(hWnd, name);
+	SetWindowTextW(hWnd, wstr);
+	free(wstr);
 }
 
-int a3dGetTitle(wchar_t* name, int size)
+int a3dGetTitle(char* utf8_name, int size)
 {
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	if (name)
-		GetWindowText(hWnd, name, size);
-	return GetWindowTextLength(hWnd)+1;
+	int wchars_num = GetWindowTextLength(hWnd);
+	if (utf8_name && size>0)
+	{
+		wchar_t* wstr = (wchar_t*)malloc(sizeof(wchar_t)*(1+wchars_num));
+		GetWindowTextW(hWnd,wstr,1+wchars_num);
+		wstr[wchars_num]=0;
+		BOOL incomplete = FALSE;
+		int bytes = WideCharToMultiByte(CP_UTF8, 0, wstr, wchars_num, utf8_name, size, '?', &incomplete);
+		utf8_name[size-1]=0;
+		free(wstr);
+		return bytes;
+	}
+	
+	return 3*wchars_num; // 3 bytes / char is enough to store BMP 
 }
 
 void a3dSetVisible(bool visible)

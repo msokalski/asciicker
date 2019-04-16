@@ -1,10 +1,6 @@
 
 // PLATFORM: LINUX
 
-// sudo apt install libx11-dev
-// sudo apt-get install libglu1-mesa-dev
-// gcc -o asciiid_x11 asciiid_x11.cpp -lGL -lX11 -L/usr/X11R6/lib -I/usr/X11R6/include
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <X11/X.h>
@@ -12,6 +8,9 @@
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
+
+#include <dirent.h>
+#include <sys/stat.h>
 
 #include <time.h>
 #include <unistd.h> // usleep
@@ -31,7 +30,7 @@
 
 bool wndmode = false;
 bool mapped = false;
-char title[256]="A3D";
+
 Display* dpy;
 Window win;
 
@@ -635,7 +634,28 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
  	// XMapWindow(dpy, win);
 	mapped = false;
 
-	XStoreName(dpy, win, "asciiid");
+	char app_name[]="asciiid";
+	XStoreName(dpy, win, app_name);
+
+	// surpress 'UNKNOWN' 
+	// name will be taken from 'Name' property set in ~/.local/share/application/*.desktop file 
+	// if there is no such file it will use class name 'A3D'
+	/*
+	[Desktop Entry]
+			Name=ASCIIID <--- this will be used
+			Exec=/home/user/asciiid/.run/asciiid
+			Path=/home/user/asciiid
+			Icon=/home/user/asciiid/icons/app.png
+			Type=Application
+			Categories=Games;Utilities
+	*/
+
+	XClassHint* ch = XAllocClassHint();
+	char cls_name[] = "A3D";
+	ch->res_class=cls_name;
+	ch->res_name=app_name;
+	XSetClassHint(dpy, win, ch);
+	XFree(ch);
 
 	int nelements;
 	GLXFBConfig *fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), 0, &nelements);	
@@ -680,7 +700,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 	while (!closing)
 	{
-		if (XPending(dpy))
+		while (!closing && XPending(dpy))
 		{
 			XNextEvent(dpy, &xev);
 
@@ -688,10 +708,17 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			{
 				if ((Atom)xev.xclient.data.l[0] == wm_delete_window) 
 				{
-					glXMakeCurrent(dpy, None, NULL);
-					glXDestroyContext(dpy, glc);
-					XDestroyWindow(dpy,win);
-					break;
+					if (platform_api.close)
+						platform_api.close();
+					else
+					{
+						closing = true;
+						memset(&platform_api,0,sizeof(PlatformInterface));
+						glXMakeCurrent(dpy, None, NULL);
+						glXDestroyContext(dpy, glc);
+						XDestroyWindow(dpy,win);
+						break;
+					}
 				}
 			}
 
@@ -891,29 +918,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					platform_api.mouse(xev.xmotion.x,xev.xmotion.y,mi);
 			}
 		}
-		else
-		{
-			/*
-			int c=0;
-			char bits[32]={0};
-			XQueryKeymap(dpy, bits);
-			for (int i=0; i<256; i++)
-			{
-				if (bits[i>>3] & (1<<(i&7)))
-				{
-					printf("%d",i);
-					c++;
-				}
-			}
-			if (c)
-				printf("\n");
-			*/
 
-			if (platform_api.render && mapped)
-				platform_api.render();
-//			else
-//				usleep(20000); // 1/50s
-		}
+		if (!closing && platform_api.render && mapped)
+			platform_api.render();
 	}
 
 	XCloseDisplay(dpy);
@@ -966,54 +973,44 @@ bool a3dGetKeyb(KeyInfo ki)
 	return ( bits[kc >> 3] & (1 << (kc & 7)) ) != 0;
 }
 
-int cc_set_window_title(const char *title)
+void a3dSetTitle(const char* name)
 {
-#ifdef X_HAVE_UTF8_STRING
-	size_t len;
-#else
-	char *titleCopy;
-	XTextProperty titleProperty;
-#endif
+	int rc;
+	size_t len = strlen(name);
+
 	Atom wm_name_atom, wm_icon_name_atom, utf8_string_atom;
 
-	wm_name_atom = XInternAtom(dpy, "WM_NAME", True);
-	wm_icon_name_atom = XInternAtom(dpy, "WM_ICON_NAME", True);
-	utf8_string_atom = XInternAtom(dpy, "UTF8_STRING", True);
+	wm_name_atom = XInternAtom(dpy, "_NET_WM_NAME", False);
+	wm_icon_name_atom = XInternAtom(dpy, "_NET_WM_ICON_NAME", False);
+	utf8_string_atom = XInternAtom(dpy, "UTF8_STRING", False);
 
-#ifdef X_HAVE_UTF8_STRING
-	len = strlen(title);
-	int rc;
-	rc = XChangeProperty(dpy, win, wm_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)title, len);
-	rc = XChangeProperty(dpy, win, wm_icon_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)title, len);
-#else
-	titleCopy = strdup(title);
-	if(!XStringListToTextProperty(&titleCopy, 1, &titleProperty)) {
-		return 0;
+	rc = XChangeProperty(dpy, win, wm_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
+	rc = XChangeProperty(dpy, win, wm_icon_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
+}
+
+int a3dGetTitle(char* utf8_name, int size)
+{
+	Atom wm_name_atom = XInternAtom(dpy,"_NET_WM_NAME", False);
+	Atom utf8_string_atom = XInternAtom(dpy,"UTF8_STRING", False);
+	Atom type;
+	int format;
+	unsigned long nitems, after;
+	char* data = 0;
+
+	if (Success == XGetWindowProperty(dpy, win, wm_name_atom, 0, 65536, false, utf8_string_atom, &type, &format, &nitems, &after, (unsigned char**)&data)) 
+	{
+		if (data) 
+		{
+			size_t len = strlen(data);
+			len = len < size-1 ? len : size-1;
+			memcpy(utf8_name, data, len+1);
+			utf8_name[len] = 0;
+			XFree(data);
+			return len;
+		}
 	}
-	free(titleCopy);
 
-	XSetTextProperty(dpy, win, &titleProperty, _WM_NAME);
-	XSetTextProperty(dpy, win, &titleProperty, _WM_ICON_NAME);
-	XSetWMName(dpy, win, &titleProperty);
-	XSetWMIconName(dpy, win, &titleProperty);
-	XFree(titleProperty.value);
-#endif
-
-	return 1;
-}
-
-void a3dSetTitle(const wchar_t* name)
-{
-	snprintf(title,255,"%ls",name);
-	title[255]=0;
-	cc_set_window_title(title);
-}
-
-int a3dGetTitle(wchar_t* name, int size)
-{
-	if (!name)
-		return strlen(title);
-	return swprintf(name,size,L"%s",title);
+	return 0;
 }
 
 void a3dSetVisible(bool visible)
@@ -1045,8 +1042,47 @@ bool a3dGetRect(int* xywh)
 void a3dSetRect(const int* xywh, bool wnd_mode)
 {
 	wndmode = wnd_mode;
+	
 	// todo: handle decorations
-	XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+	if (!wnd_mode)
+	{
+		/*
+		XSetWindowAttributes  xattr;
+		xattr.override_redirect = True;
+		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
+		*/
+
+		a3dSetVisible(false);
+		Atom atoms[2] = { XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False), None };
+		Atom state_atom = XInternAtom(dpy, "_NET_WM_STATE", False);
+		XChangeProperty(dpy, win, state_atom, XA_ATOM, 32, PropModeReplace, (const unsigned char*)atoms, 1);
+
+		XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+
+		a3dSetVisible(mapped);
+
+
+		/*
+		xattr.override_redirect = False;
+		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
+		*/
+	}
+	else
+	{
+		XSetWindowAttributes  xattr;
+		xattr.override_redirect = True;
+		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
+
+		Atom atoms[1] = { None };
+		Atom state_atom = XInternAtom(dpy, "_NET_WM_STATE", False);
+		XChangeProperty(dpy, win, state_atom, XA_ATOM, 32, PropModeReplace, (const unsigned char*)atoms, 0);
+
+		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
+		XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+
+		xattr.override_redirect = False;
+		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
+	}
 }
 
 // mouse
@@ -1129,7 +1165,7 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 
 void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
-    static Atom netWmIcon = XInternAtom(dpy,"_NET_WM_ICON",False);
+    static Atom netWmIcon = XInternAtom(dpy,"_NET_WM_ICON", False);
 
 	int wh = w*h;
 
@@ -1158,10 +1194,6 @@ bool a3dSetIcon(const char* path)
 {
 	return a3dLoadImage(path, 0, _a3dSetIconData);
 }
-
-
-#include <dirent.h>
-#include <sys/stat.h>
 
 int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* name, void* cookie), void* cookie)
 {

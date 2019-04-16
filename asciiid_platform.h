@@ -217,8 +217,8 @@ void a3dClose(); // if PlatformInterface::close==null it is called automaticaly 
 void a3dSwapBuffers();
 uint64_t a3dGetTime(); // in microsecs, wraps every 584542 years
 
-void a3dSetTitle(const wchar_t* name);
-int a3dGetTitle(wchar_t* name, int size);
+void a3dSetTitle(const char* utf8_name);
+int a3dGetTitle(char* utf8_name, int size);
 
 void a3dSetVisible(bool set);
 bool a3dGetVisible();

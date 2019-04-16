@@ -363,8 +363,8 @@ int spinning = 0;
 int spinning_x = 0;
 int spinning_y = 0;
 
+int edit_mode = 0;
 int creating = 0; // +1 = add, -1 = del
-
 int painting = 0; 
 const float STAMP_R = 0.50;
 const float STAMP_A = 1.00;
@@ -1710,17 +1710,16 @@ void my_render()
 			ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
 			if (ImGui::BeginTabBar("MyTabBar", tab_bar_flags))
 			{
-				static int which = -1;
 				bool pushed = false;
 
-				if (which != 0)
+				if (edit_mode != 0)
 				{
 					pushed = true;
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 				}
 				if (ImGui::BeginTabItem("SCULPT"))
 				{
-					which = 0;
+					edit_mode = 0;
 					ImGui::Text("Sculpting modifies terrain height map \n ");
 
 					const char* mode = "";
@@ -1769,15 +1768,29 @@ void my_render()
 					ImGui::PopStyleVar();
 				}
 
-				if (which != 1)
+				if (edit_mode != 1)
 				{
 					pushed = true;
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 				}
 				if (ImGui::BeginTabItem("MAT-id"))
 				{
-					which = 1;
+					edit_mode = 1;
 					ImGui::Text("Material channel selects which material \ndefinition should be used (0-255)");
+
+					ImGui::Text("MODE (shift/ctrl): %s", "NORMAL");
+					ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 1.f, 100.f);
+
+					float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+					ImGui::PushButtonRepeat(true);
+					if (ImGui::ArrowButton("##matid_left", ImGuiDir_Left)) { if (active_material>0) active_material-=1; }
+					ImGui::SameLine(0.0f, spacing);
+					if (ImGui::ArrowButton("##matid_right", ImGuiDir_Right)) { if (active_material<0xff) active_material+=1; }
+					ImGui::PopButtonRepeat();
+					ImGui::SameLine();
+					ImGui::Text("MAT-id 0x%02X (%d)", active_material, active_material);
+					ImGui::Text("%s", "ctrl+shift to probe");
+
 					ImGui::EndTabItem();
 				}
 				if (pushed)
@@ -1786,14 +1799,14 @@ void my_render()
 					ImGui::PopStyleVar();
 				}
 
-				if (which != 2)
+				if (edit_mode != 2)
 				{
 					pushed = true;
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 				}
 				if (ImGui::BeginTabItem("sh-MODE"))
 				{
-					which = 2;
+					edit_mode = 2;
 					ImGui::Text("Shade mode channel specifies how lighting \naffects shading ramp (0-3)");
 					ImGui::EndTabItem();
 				}
@@ -1803,14 +1816,14 @@ void my_render()
 					ImGui::PopStyleVar();
 				}
 
-				if (which != 3)
+				if (edit_mode != 3)
 				{
 					pushed = true;
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 				}
 				if (ImGui::BeginTabItem("sh-RAMP"))
 				{
-					which = 3;
+					edit_mode = 3;
 					ImGui::Text("Shade ramp channel selects a cell \nhorizontaly from a material ramps (0-15)");
 					ImGui::EndTabItem();
 				}
@@ -1821,14 +1834,14 @@ void my_render()
 				}
 
 
-				if (which != 4)
+				if (edit_mode != 4)
 				{
 					pushed = true;
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 				}
 				if (ImGui::BeginTabItem("ELEV"))
 				{
-					which = 4;
+					edit_mode = 4;
 					ImGui::Text("Elevation bits are used to choose ramps \nvertically from material by bit difference");
 					ImGui::EndTabItem();
 				}
@@ -1839,8 +1852,6 @@ void my_render()
 				}
 
 				ImGui::EndTabBar();
-				ImGui::Separator();
-
 			}
 		}
 
@@ -2824,51 +2835,8 @@ void my_resize(int w, int h)
 	io.DisplaySize = ImVec2((float)w, (float)h);
 }
 
-
-void PngTest(void *cookie, A3D_ImageFormat f, int w, int h, const void *data, int palsize, const void *palbuf)
-{
-	uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
-	Convert_UI32_AABBGGRR(buf,f,w,h,data,palsize,palbuf);
-	a3dSetIconData(A3D_RGBA8, w,h, buf, 0,0);
-	free(buf);
-}
-
 void my_init()
 {
-//	a3dLoadImage("./icons/basn0g01.png",0,PngTest); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn0g02.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn0g04.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn0g08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn0g16.png",0,PngTest); // fixed (unsupported grey-16)
-//	a3dLoadImage("./icons/basn2c08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn2c16.png",0,PngTest); // fixed (swap bytes?)
-//	a3dLoadImage("./icons/basn3p01.png",0,PngTest); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn3p02.png",0,PngTest); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn3p04.png",0,PngTest); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn3p08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn4a08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn4a16.png",0,PngTest); // fixed (unsupported lum-alpha-16) ERRRRRRRRRRRRR
-//	a3dLoadImage("./icons/basn6a08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn6a16.png",0,PngTest); // fixed (swap bytes?)
-
-	a3dSetIcon("./icons/basn0g01.png"); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn0g02.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn0g04.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn0g08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn0g16.png",0,PngTest); // fixed (unsupported grey-16)
-//	a3dLoadImage("./icons/basn2c08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn2c16.png",0,PngTest); // fixed (swap bytes?)
-//	a3dLoadImage("./icons/basn3p01.png",0,PngTest); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn3p02.png",0,PngTest); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn3p04.png",0,PngTest); // fixed (flip bits?)
-//	a3dLoadImage("./icons/basn3p08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn4a08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn4a16.png",0,PngTest); // fixed (unsupported lum-alpha-16) ERRRRRRRRRRRRR
-//	a3dLoadImage("./icons/basn6a08.png",0,PngTest); // ok
-//	a3dLoadImage("./icons/basn6a16.png",0,PngTest); // fixed (swap bytes?)
-
-
-
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
@@ -2957,15 +2925,24 @@ void my_init()
 	pos_y = num1 * VISUAL_CELLS / 2;
 	pos_z = 0x0;
 
-	a3dSetTitle(L"ASCIIID");
+	const char* utf8 = "gugu\xC5\xBB\xC3\xB3\xC5\x82\xC4\x87";
+	a3dSetTitle(utf8/*"ASCIIID"*/);
 
-	int full[] = { -1280,0,800,600};
-	//int full[] = { 0,0,1920,1080};
-	//a3dSetRect(full, true);
+	//int full[] = { -1280,0,800,600};
+
+	int dx = 200;
+	int dy = 200;
+
+	int full[] = { 0,0,2*1920,1080};
 
 	a3dSetVisible(true);
+	a3dSetRect(full, false);
 
-	//a3dSetIcon("./icons/app.png");
+	a3dSetIcon("./icons/app.png");
+
+	char buf[4]="CCC";
+	a3dGetTitle(buf,4);
+	printf("%s\n",buf);
 }
 
 void my_keyb_char(wchar_t chr)
