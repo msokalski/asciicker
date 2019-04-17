@@ -1,4 +1,4 @@
-
+#ifdef _WIN32
 // PLATFORM: MS-WINDOWS 
 
 #include <Windows.h>
@@ -1147,3 +1147,5 @@ int a3dListDir(const char* dir_path, bool(*cb)(A3D_DirItem item, const char* nam
 	FindClose(h);
 	return num;
 }
+
+#endif // __WIN32__

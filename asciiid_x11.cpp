@@ -1,4 +1,4 @@
-
+#ifdef __linux__
 // PLATFORM: LINUX
 
 #include <stdio.h>
@@ -11,7 +11,8 @@
 
 #include <X11/extensions/Xinerama.h>
 
-// better but incompatible with _NET_WM_FULLSCREEN_MONITORS
+// better than Xinerama but incompatible 
+// with _NET_WM_FULLSCREEN_MONITORS
 //#include <X11/extensions/Xrandr.h>
 
 #include <dirent.h>
@@ -28,8 +29,7 @@
 #include "gl.h"
 
 #include <GL/glx.h>
-
-#include <GL/glxext.h> // <- we'll need it to request versioned context
+#include <GL/glxext.h>
 
 #include "asciiid_platform.h"
 
@@ -1381,3 +1381,4 @@ int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* na
 	closedir(d);
 	return num;	
 }
+#endif // __linux__

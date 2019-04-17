@@ -1,6 +1,7 @@
 // nvbug.cpp : Defines the entry point for the console application.
 //
 
+#include <wchar.h>
 #include <stdio.h>
 
 #define _USE_MATH_DEFINES
@@ -1630,7 +1631,8 @@ void my_render()
 		{
 			ImGui::SliderFloat("VIEW PITCH", &rot_pitch, +30.0f, +90.0f);
 
-			ImGui::SliderFloat("VIEW YAW", &rot_yaw, -180.0f, +180.0f); ImGui::SameLine();
+			ImGui::SliderFloat("VIEW YAW", &rot_yaw, -180.0f, +180.0f); 
+			ImGui::SameLine();
 			ImGui::Checkbox("Spin", &spin_anim);
 
 			ImGui::SliderFloat("ZOOM", &font_size, 1.0f, 32.0f);
