@@ -236,6 +236,7 @@ bool a3dGetKeyb(KeyInfo ki); // return true if vk is down, keyb_char has no stat
 // keyb_focus
 bool a3dGetFocus();
 
+void a3dCharSync(); // call in case of internal widget input re-focusing
 
 enum A3D_ImageFormat
 {

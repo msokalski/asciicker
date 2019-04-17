@@ -38,6 +38,7 @@ bool mapped = false;
 
 Display* dpy;
 Window win;
+XIC ic;
 
 static PlatformInterface platform_api;
 static int mouse_b = 0;
@@ -434,138 +435,6 @@ static const unsigned char kc_to_ki[128]=
 	A3D_PAUSE,				// 127
 };
 
-/*
-LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
-{
-	int mi = 0;
-	int rep = 1;
-
-	switch (m)
-	{
-		case WM_SETFOCUS:
-			if (platform_api.keyb_focus)
-				platform_api.keyb_focus(true);
-			break;
-
-		case WM_KILLFOCUS:
-			if (platform_api.keyb_focus)
-				platform_api.keyb_focus(false);
-			break;
-
-		case WM_CHAR:
-			if (platform_api.keyb_char)
-				platform_api.keyb_char((wchar_t)w);
-			break;
-
-		case WM_KEYDOWN:
-		case WM_KEYUP:
-			if (platform_api.keyb_key && w < 256)
-			{
-				KeyInfo ki = (KeyInfo)vk_to_ki[w];
-				if (!ki)
-					break;
-
-				if ((l >> 24) & 1) // enh
-				{
-					if (ki == A3D_LSHIFT)
-						ki = A3D_RSHIFT;
-					else
-					if (ki == A3D_LCTRL)
-						ki = A3D_RCTRL;
-					else
-					if (ki == A3D_LALT)
-						ki = A3D_RALT;
-					else
-					if (ki == A3D_ENTER)
-						ki = A3D_NUMPAD_ENTER;
-				}
-
-				platform_api.keyb_key(ki, m == WM_KEYDOWN);
-			}
-			break;
-
-		case WM_MOUSELEAVE:
-			track = false;
-			if (platform_api.mouse)
-				platform_api.mouse(mouse_x, mouse_y, MouseInfo::LEAVE);
-			break;
-
-		case WM_MOUSEMOVE:
-			mouse_x = (short)LOWORD(l);
-			mouse_y = (short)HIWORD(l);
-			mi = MouseInfo::MOVE;
-			if (!track)
-			{
-				mi = MouseInfo::ENTER;
-				TRACKMOUSEEVENT tme;
-				tme.cbSize = sizeof(TRACKMOUSEEVENT);
-				tme.dwFlags = TME_LEAVE;
-				tme.dwHoverTime = HOVER_DEFAULT;
-				tme.hwndTrack = h;
-				TrackMouseEvent(&tme);
-				track = true;
-			}
-			break;
-
-		case WM_LBUTTONDOWN:
-			mouse_b |= MouseInfo::LEFT;
-			mi = MouseInfo::LEFT_DN;
-			SetCapture(h);
-			break;
-
-		case WM_LBUTTONUP:
-			mouse_b &= ~MouseInfo::LEFT;
-			mi = MouseInfo::LEFT_UP;
-			if (0 == (w & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)))
-				ReleaseCapture();
-			break;
-
-		case WM_RBUTTONDOWN:
-			mouse_b |= MouseInfo::RIGHT;
-			mi = MouseInfo::RIGHT_DN;
-			SetCapture(h);
-			break;
-
-		case WM_RBUTTONUP:
-			mouse_b &= ~MouseInfo::RIGHT;
-			mi = MouseInfo::RIGHT_UP;
-			if (0 == (w & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)))
-				ReleaseCapture();
-			break;
-
-		case WM_MBUTTONDOWN:
-			mouse_b |= MouseInfo::MIDDLE;
-			mi = MouseInfo::MIDDLE_DN;
-			SetCapture(h);
-			break;
-
-		case WM_MBUTTONUP:
-			mouse_b &= ~MouseInfo::MIDDLE;
-			mi = MouseInfo::MIDDLE_UP;
-			if (0 == (w & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)))
-				ReleaseCapture();
-			break;
-	}
-
-	if (mi && platform_api.mouse)
-	{
-		if (w & MK_LBUTTON)
-			mi |= MouseInfo::LEFT;
-		if (w & MK_RBUTTON)
-			mi |= MouseInfo::RIGHT;
-		if (w & MK_MBUTTON)
-			mi |= MouseInfo::MIDDLE;
-
-		for (int i=0; i<rep; i++)
-			platform_api.mouse(mouse_x, mouse_y, (MouseInfo)mi);
-
-		return 0;
-	}
-
-	return DefWindowProc(h, m, w, l);
-}
-*/
-
 // creates window & initialized GL
 bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/)
 {
@@ -582,6 +451,17 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	GLXContext              glc;
 	XWindowAttributes       gwa;
 	XEvent                  xev;
+
+
+	XIM im = 0;
+	bool im_ok = false;
+	if (XSupportsLocale())
+	{
+		if (XSetLocaleModifiers("@im=none"))
+		{
+			im_ok = true;
+		}
+	}	
 
 	// dpy is global
 	dpy = XOpenDisplay(NULL);
@@ -688,6 +568,45 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		return false;
 	}
 
+	// try to connect to IM, if anything fails here
+	// we'd simply stick ascii codes 
+
+	ic = 0;
+
+	if (im_ok)
+	{
+		im = XOpenIM(dpy, NULL, NULL, NULL);
+		if (im) 
+		{
+			char *failed_arg;
+			XIMStyles *styles;
+			failed_arg = XGetIMValues(im, XNQueryInputStyle, &styles, NULL);
+			if (!failed_arg)
+			{
+				for (int i = 0; i < styles->count_styles; i++) 
+					printf("style %d\n", (int)styles->supported_styles[i]);
+
+				ic = XCreateIC(im, XNInputStyle, XIMPreeditNothing | XIMStatusNothing, XNClientWindow, win, NULL);
+				if (!ic)
+				{
+					XCloseIM(im);
+					im = 0;
+				}
+			}
+			else
+			{
+				XCloseIM(im);
+				im = 0;
+			}
+		}
+	}
+
+	if (ic)
+		XSetICFocus(ic);
+	else
+		im_ok = false;
+	
+
 	platform_api = *pi;
 
 	if (platform_api.init)
@@ -700,14 +619,15 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (platform_api.resize)
 		platform_api.resize(w,h);
 
-	//int key_seq = 0;
-	//printf("%s:\n",caps[key_seq]);
-
 	while (!closing)
 	{
 		while (!closing && XPending(dpy))
 		{
 			XNextEvent(dpy, &xev);
+			if (XFilterEvent(&xev, win))
+			{
+				printf("%s","CONSUMED\n");
+			}
 
 			if (xev.type == ClientMessage)
 			{
@@ -726,7 +646,10 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					}
 				}
 			}
-
+			else
+        	if (xev.type == MappingNotify)
+            	XRefreshKeyboardMapping(&xev.xmapping);
+            else
 			if (xev.type == ConfigureNotify)
 			{
 				if (xev.xconfigure.width != w || xev.xconfigure.height != h)
@@ -742,12 +665,16 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			{
 				if (platform_api.keyb_focus)
 					platform_api.keyb_focus(true);
+				if (ic)
+					XSetICFocus(ic);					
 			}
 			else
 			if (xev.type == FocusOut)
 			{
 				if (platform_api.keyb_focus)
 					platform_api.keyb_focus(false);
+				if (ic)
+					XUnsetICFocus(ic);					
 			}
 			else
 			if (xev.type == Expose) 
@@ -793,19 +720,82 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					}
 				}
 
-                XComposeStatus composeStatus;
-                char asciiCode[ 32 ];
-                KeySym keySym;
-                int len;
+				if (ic)
+				{
+					int count = 0;
+					KeySym keysym = 0;
+					char buf[20];
+					Status status = 0;
+					count = Xutf8LookupString(ic, (XKeyPressedEvent*)&xev, buf, 20, &keysym, &status);
 
-				// todo switch to XwcLookupString ...
-				// thar will require use of: XOpenIM, XCreateIC, XSetICFocus, 
-                len = XLookupString( &xev.xkey, asciiCode, sizeof(asciiCode),
-                                     &keySym, &composeStatus);
+					printf("count: %d\n", count);
+					if (status==XBufferOverflow)
+						printf("BufferOverflow\n");
 
-				if (platform_api.keyb_char)
-					for (int i=0; i<len; i++)
-						platform_api.keyb_char((wchar_t)asciiCode[i]);
+					if (count)
+					{
+						if (platform_api.keyb_char)
+						{
+							uint8_t* c = (uint8_t*)buf;
+							for (int i=0; i<count;)
+							{
+								uint8_t* c = (uint8_t*)buf + i;
+								wchar_t w = 0;
+
+								if (*c==0)
+									break;
+								else
+								if (*c<0x80)
+								{
+									// 7bits
+									w = c[0]&0x7F;
+									i+=1;
+								}
+								else
+								if ( (*c & 0xF8) == 0xF0 )
+								{
+									// 21 bits
+									w = c[0]&0x7;
+									w = (w << 6) | (c[1] & 0x3F);
+									w = (w << 6) | (c[2] & 0x3F);
+									w = (w << 6) | (c[3] & 0x3F);
+									i+=4;
+								}
+								else
+								if ( (*c & 0xF0) == 0xE0 )
+								{
+									w = c[0]&0xF;
+									w = (w << 6) | (c[1] & 0x3F);
+									w = (w << 6) | (c[2] & 0x3F);
+									i+=3;
+								}
+								else
+								if ( (*c & 0xE0) == 0xC0 )
+								{
+									w = c[0]&0x1F;
+									w = (w << 6) | (c[1] & 0x3F);
+									i+=2;
+								}
+
+								platform_api.keyb_char(w);
+							}
+						}
+					}
+				}
+				else
+				{
+					XComposeStatus composeStatus;
+					char asciiCode[ 32 ];
+					KeySym keySym;
+					int len;
+
+					len = XLookupString( &xev.xkey, asciiCode, sizeof(asciiCode),
+										&keySym, &composeStatus);
+
+					if (platform_api.keyb_char)
+						for (int i=0; i<len; i++)
+							platform_api.keyb_char((wchar_t)asciiCode[i]);
+				}
 			}
 			else 
 			if(xev.type == KeyRelease) 
@@ -835,6 +825,19 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],false);
 					}			
 				}
+
+				/*
+                int count = 0;
+                KeySym keysym = 0;
+                char buf[20];
+                Status status = 0;
+                count = XLookupString((XKeyEvent*)&xev, buf, 20, &keysym, NULL);
+
+                if (count)
+                    printf("in release buffer: %.*s\n", count, buf);
+
+                printf("released KEY: %d\n", (int)keysym);				
+				*/
 			}
 			else
 			if (xev.type == ButtonPress)
@@ -926,6 +929,12 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 		if (!closing && platform_api.render && mapped)
 			platform_api.render();
+	}
+
+	if (ic)
+	{
+		XDestroyIC(ic);
+		XCloseIM(im);
 	}
 
 	XCloseDisplay(dpy);
@@ -1245,6 +1254,11 @@ bool a3dGetFocus()
 	return focused == win;
 }
 
+void a3dCharSync()
+{
+	if (ic)
+		Xutf8ResetIC(ic);					
+}
 
 #include "upng.h"
 

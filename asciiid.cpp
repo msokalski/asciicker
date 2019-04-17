@@ -1623,6 +1623,9 @@ void my_render()
 			a3dSetRect(0, true);
 		}
 
+		static char utf8_buf[1024]="Z\xC3\xB3pa";
+		ImGui::InputText("UTF8",utf8_buf,1024);
+
 		if (ImGui::CollapsingHeader("View Control", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::SliderFloat("VIEW PITCH", &rot_pitch, +30.0f, +90.0f);
@@ -2968,7 +2971,7 @@ void my_keyb_key(KeyInfo ki, bool down)
 		io.KeysDown[ki] = down;
 	
 	io.KeysDown[A3D_ENTER] = a3dGetKeyb(A3D_ENTER) || a3dGetKeyb(A3D_NUMPAD_ENTER);
-	io.KeyAlt = a3dGetKeyb(A3D_LALT) || a3dGetKeyb(A3D_RALT);
+	io.KeyAlt = a3dGetKeyb(A3D_LALT);// || a3dGetKeyb(A3D_RALT);
 	io.KeyCtrl = a3dGetKeyb(A3D_LCTRL) || a3dGetKeyb(A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(A3D_LSHIFT) || a3dGetKeyb(A3D_RSHIFT);
 }

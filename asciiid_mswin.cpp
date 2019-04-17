@@ -1011,6 +1011,11 @@ bool a3dGetFocus()
 	return GetFocus() == hWnd;
 }
 
+void a3dCharSync()
+{
+	// seams to be handled by OS
+}
+
 #include "upng.h"
 
 bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf))
