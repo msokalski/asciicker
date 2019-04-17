@@ -8,7 +8,11 @@
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
-#include <X11/extensions/Xrandr.h>
+
+#include <X11/extensions/Xinerama.h>
+
+// better but incompatible with _NET_WM_FULLSCREEN_MONITORS
+//#include <X11/extensions/Xrandr.h>
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -1073,22 +1077,20 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 		int best_mon = -1;
 
 		int num;
-		XRRMonitorInfo * mi = XRRGetMonitors(dpy, win, True, &num);
+		XineramaScreenInfo* xi = XineramaQueryScreens(dpy, &num);
 
 		printf("%d MONITORS\n",num);
 		for (int i=0; i<num; i++)
 		{
-			printf("%d (%lu) -> %d,%d[px] %dx%d[px] %dx%d[mm] (%s)\n",
-				i, mi[i].name,
-				mi[i].x,mi[i].y,
-				mi[i].width,mi[i].height, 
-				mi[i].mwidth,mi[i].mheight,
-				mi[i].primary ? "PRIMARY":"SECONDARY");
+			printf("%d (%d) -> %d,%d[px] %dx%d[px]\n",
+				i,xi[i].screen_number,
+				xi[i].x_org,xi[i].y_org,
+				xi[i].width,xi[i].height);
 
-			int mrx =  mi[i].width/2;
-			int mry =  mi[i].height/2;
-			int mcx =  mi[i].x + mrx;
-			int mcy =  mi[i].y + mry;
+			int mrx =  xi[i].width/2;
+			int mry =  xi[i].height/2;
+			int mcx =  xi[i].x_org + mrx;
+			int mcy =  xi[i].y_org + mry;
 
 			int w = wrx + mrx - abs(wcx-mcx);
 			int h = wry + mry - abs(wcy-mcy);
@@ -1114,26 +1116,27 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 			if (i==best_mon)
 				continue;
 
-			int mrx =  mi[i].width/2;
-			int mry =  mi[i].height/2;
-			int mcx =  mi[i].x + mrx;
-			int mcy =  mi[i].y + mry;
+			int mrx =  xi[i].width/2;
+			int mry =  xi[i].height/2;
+			int mcx =  xi[i].x_org + mrx;
+			int mcy =  xi[i].y_org + mry;		
 
 			if (abs(mcx - wcx) < wrx)
 			{
-				if (mi[i].x < mi[left_mon].x)
+				if (xi[i].x_org < xi[left_mon].x_org)
 					left_mon = i;
-				if (mi[i].x + mi[i].width > mi[right_mon].x + mi[right_mon].width)
+				if (xi[i].x_org + xi[i].width > xi[right_mon].x_org + xi[right_mon].width)
 					right_mon = i;
 			}
 
 			if (abs(mcy - wcy) < wry)
 			{
-				if (mi[i].y < mi[top_mon].y)
+				if (xi[i].y_org < xi[top_mon].y_org)
 					top_mon = i;
-				if (mi[i].y + mi[i].height > mi[bottom_mon].y + mi[bottom_mon].height)
+				if (xi[i].y_org + xi[i].height > xi[bottom_mon].y_org + xi[bottom_mon].height)
 					bottom_mon = i;
 			}
+
 		}
 
 		XClientMessageEvent xcm;
@@ -1145,28 +1148,19 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 		xcm.message_type = XInternAtom(dpy, "_NET_WM_FULLSCREEN_MONITORS", False);
 		xcm.format = 32;
 
-		xcm.data.l[0] = 2; /* topmost*/
-		xcm.data.l[1] = 2; /* bottommost */
-		xcm.data.l[2] = 2; /* leftmost */
-		xcm.data.l[3] = 2; /* rightmost */
+		xcm.data.l[0] = top_mon; /* topmost*/
+		xcm.data.l[1] = bottom_mon; /* bottommost */
+		xcm.data.l[2] = left_mon; /* leftmost */
+		xcm.data.l[3] = right_mon; /* rightmost */
 		xcm.data.l[4] = 1; /* source indication */
 
-		#if 0
-		xcm.data.l[0] = mi[top_mon].noutput; /* topmost*/
-		xcm.data.l[1] = mi[bottom_mon].noutput; /* bottommost */
-		xcm.data.l[2] = mi[left_mon].noutput; /* leftmost */
-		xcm.data.l[3] = mi[right_mon].noutput; /* rightmost */
-		xcm.data.l[4] = 1; /* source indication */
-		#endif
-
-		XRRFreeMonitors(mi);
+		XFree(xi);
 
 		XSendEvent(dpy,DefaultRootWindow(dpy),False,SubstructureRedirectMask | SubstructureNotifyMask,(XEvent*)&xcm);
 	}
 
 	wndmode = wnd_mode;
 
-	// todo: handle decorations
 	if (!wnd_mode)
 	{
 		XClientMessageEvent xcm;
