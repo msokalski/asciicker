@@ -8,6 +8,7 @@
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
+#include <X11/extensions/Xrandr.h>
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -1030,58 +1031,186 @@ bool a3dGetVisible()
 // resize
 bool a3dGetRect(int* xywh)
 {
-	XWindowAttributes gwa;
-    XGetWindowAttributes(dpy, win, &gwa);
-	xywh[0]=gwa.x;
-	xywh[1]=gwa.y;
-	xywh[2]=gwa.width;
-	xywh[3]=gwa.height;
+	if (xywh)
+	{
+		int rx, ry;
+		Window child;
+		XTranslateCoordinates( dpy, win, DefaultRootWindow(dpy), 0, 0, &rx, &ry, &child );			
+		XWindowAttributes gwa;
+		XGetWindowAttributes(dpy, win, &gwa);
+		xywh[0] = rx - gwa.x;
+		xywh[1] = ry - gwa.y;
+		xywh[2] = gwa.width;
+		xywh[3] = gwa.height;
+	}
 	return wndmode;
 }
 
 void a3dSetRect(const int* xywh, bool wnd_mode)
 {
+	// xywh=rect wnd_mode=true -> [exit from full screen] then resize
+	// xywh=NULL wnd_mode=true -> [exit from full screen]
+	// xywh=rect wnd_mode=false -> enter full screen on monitors crossing given rect
+	// xywh=NULL wnd_mode=false -> enter full screen on signle nearest monitor
+
+	if (!wnd_mode)
+	{
+		int wnd_xywh[4];
+		if (!xywh)
+		{
+			a3dGetRect(wnd_xywh);
+			xywh = wnd_xywh;
+		}
+
+		int wrx =  wnd_xywh[2]/2;
+		int wry =  wnd_xywh[3]/2;
+		int wcx =  wnd_xywh[0] + wrx;
+		int wcy =  wnd_xywh[1] + wry;
+
+		// - locate monitor which is covered with greatest area by win
+
+		int max_area = 0;
+		int best_mon = -1;
+
+		int num;
+		XRRMonitorInfo * mi = XRRGetMonitors(dpy, win, True, &num);
+
+		printf("%d MONITORS\n",num);
+		for (int i=0; i<num; i++)
+		{
+			printf("%d (%lu) -> %d,%d[px] %dx%d[px] %dx%d[mm] (%s)\n",
+				i, mi[i].name,
+				mi[i].x,mi[i].y,
+				mi[i].width,mi[i].height, 
+				mi[i].mwidth,mi[i].mheight,
+				mi[i].primary ? "PRIMARY":"SECONDARY");
+
+			int mrx =  mi[i].width/2;
+			int mry =  mi[i].height/2;
+			int mcx =  mi[i].x + mrx;
+			int mcy =  mi[i].y + mry;
+
+			int w = wrx + mrx - abs(wcx-mcx);
+			int h = wry + mry - abs(wcy-mcy);
+
+			if (w>0 && h>0)
+			{
+				int a = w*h;
+				if (a>max_area)
+				{
+					best_mon = i;
+					max_area = a;
+				}
+			}
+		}
+
+		int left_mon = best_mon;
+		int right_mon = best_mon;
+		int bottom_mon = best_mon;
+		int top_mon = best_mon;
+
+		for (int i=0; i<num; i++)
+		{
+			if (i==best_mon)
+				continue;
+
+			int mrx =  mi[i].width/2;
+			int mry =  mi[i].height/2;
+			int mcx =  mi[i].x + mrx;
+			int mcy =  mi[i].y + mry;
+
+			if (abs(mcx - wcx) < wrx)
+			{
+				if (mi[i].x < mi[left_mon].x)
+					left_mon = i;
+				if (mi[i].x + mi[i].width > mi[right_mon].x + mi[right_mon].width)
+					right_mon = i;
+			}
+
+			if (abs(mcy - wcy) < wry)
+			{
+				if (mi[i].y < mi[top_mon].y)
+					top_mon = i;
+				if (mi[i].y + mi[i].height > mi[bottom_mon].y + mi[bottom_mon].height)
+					bottom_mon = i;
+			}
+		}
+
+		XClientMessageEvent xcm;
+		xcm.type = ClientMessage;
+		xcm.serial = 0;	/* # of last request processed by server */
+		xcm.send_event=False;
+		xcm.display=dpy;
+		xcm.window=win;
+		xcm.message_type = XInternAtom(dpy, "_NET_WM_FULLSCREEN_MONITORS", False);
+		xcm.format = 32;
+
+		xcm.data.l[0] = 2; /* topmost*/
+		xcm.data.l[1] = 2; /* bottommost */
+		xcm.data.l[2] = 2; /* leftmost */
+		xcm.data.l[3] = 2; /* rightmost */
+		xcm.data.l[4] = 1; /* source indication */
+
+		#if 0
+		xcm.data.l[0] = mi[top_mon].noutput; /* topmost*/
+		xcm.data.l[1] = mi[bottom_mon].noutput; /* bottommost */
+		xcm.data.l[2] = mi[left_mon].noutput; /* leftmost */
+		xcm.data.l[3] = mi[right_mon].noutput; /* rightmost */
+		xcm.data.l[4] = 1; /* source indication */
+		#endif
+
+		XRRFreeMonitors(mi);
+
+		XSendEvent(dpy,DefaultRootWindow(dpy),False,SubstructureRedirectMask | SubstructureNotifyMask,(XEvent*)&xcm);
+	}
+
 	wndmode = wnd_mode;
-	
+
 	// todo: handle decorations
 	if (!wnd_mode)
 	{
-		/*
-		XSetWindowAttributes  xattr;
-		xattr.override_redirect = True;
-		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
-		*/
+		XClientMessageEvent xcm;
 
-		a3dSetVisible(false);
-		Atom atoms[2] = { XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False), None };
-		Atom state_atom = XInternAtom(dpy, "_NET_WM_STATE", False);
-		XChangeProperty(dpy, win, state_atom, XA_ATOM, 32, PropModeReplace, (const unsigned char*)atoms, 1);
+		xcm.type = ClientMessage;
+		xcm.serial = 0;	/* # of last request processed by server */
+		xcm.send_event=False;
+		xcm.display=dpy;
+		xcm.window=win;
+		xcm.message_type = XInternAtom(dpy, "_NET_WM_STATE", False);
+		xcm.format=32;
+		xcm.data.l[0]=1;//XInternAtom(dpy, "_NET_WM_STATE_ADD", False);
+		xcm.data.l[1]=XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
+		xcm.data.l[2]=0; // no second property
+		xcm.data.l[3]=1; // source indication (1=normal)
+		xcm.data.l[4]=0; // 0 tail fill
 
-		XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+		// don't resize window when entering fullscreen!
+		// XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
 
-		a3dSetVisible(mapped);
-
-
-		/*
-		xattr.override_redirect = False;
-		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
-		*/
+		XSendEvent(dpy,DefaultRootWindow(dpy),False,SubstructureRedirectMask | SubstructureNotifyMask,(XEvent*)&xcm);
 	}
 	else
 	{
-		XSetWindowAttributes  xattr;
-		xattr.override_redirect = True;
-		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
+		XClientMessageEvent xcm;
 
-		Atom atoms[1] = { None };
-		Atom state_atom = XInternAtom(dpy, "_NET_WM_STATE", False);
-		XChangeProperty(dpy, win, state_atom, XA_ATOM, 32, PropModeReplace, (const unsigned char*)atoms, 0);
+		xcm.type = ClientMessage;
+		xcm.serial = 0;	/* # of last request processed by server */
+		xcm.send_event=False;
+		xcm.display=dpy;
+		xcm.window=win;
+		xcm.message_type = XInternAtom(dpy, "_NET_WM_STATE", False);
+		xcm.format=32;
+		xcm.data.l[0]=0;//XInternAtom(dpy, "_NET_WM_STATE_REMOVE", False);
+		xcm.data.l[1]=XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
+		xcm.data.l[2]=0; // no second property
+		xcm.data.l[3]=1; // source indication (1=normal)
+		xcm.data.l[4]=0; // 0 tail fill
 
-		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
-		XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+		XSendEvent(dpy,DefaultRootWindow(dpy),False,SubstructureRedirectMask | SubstructureNotifyMask,(XEvent*)&xcm);
 
-		xattr.override_redirect = False;
-		XChangeWindowAttributes(dpy,win,CWOverrideRedirect, &xattr);
+		// resize if requested, after exiting fullscreen!
+		if (xywh)
+			XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
 	}
 }
 

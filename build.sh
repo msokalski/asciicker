@@ -17,7 +17,8 @@ imgui/imgui_demo.cpp \
 imgui/imgui_draw.cpp \
 imgui/imgui_widgets.cpp \
 	-lGL \
-	-lX11 
+	-lX11 \
+	-lXrandr
 #	-L/usr/X11R6/lib \
 #	-I/usr/X11R6/include
 

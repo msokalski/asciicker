@@ -1613,6 +1613,16 @@ void my_render()
 
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
+		if (ImGui::Button("FULL"))
+		{
+			a3dSetRect(0, false);
+		}
+
+		if (ImGui::Button("NORM"))
+		{
+			a3dSetRect(0, true);
+		}
+
 		if (ImGui::CollapsingHeader("View Control", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::SliderFloat("VIEW PITCH", &rot_pitch, +30.0f, +90.0f);
@@ -2933,10 +2943,10 @@ void my_init()
 	int dx = 200;
 	int dy = 200;
 
-	int full[] = { 0,0,2*1920,1080};
+	//int full[] = { 0,0,2*1920,1080};
+	//a3dSetRect(full, false);
 
 	a3dSetVisible(true);
-	a3dSetRect(full, false);
 
 	a3dSetIcon("./icons/app.png");
 
