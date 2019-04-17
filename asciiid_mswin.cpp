@@ -900,7 +900,7 @@ int a3dGetTitle(char* utf8_name, int size)
 		GetWindowTextW(hWnd,wstr,1+wchars_num);
 		wstr[wchars_num]=0;
 		BOOL incomplete = FALSE;
-		int bytes = WideCharToMultiByte(CP_UTF8, 0, wstr, wchars_num, utf8_name, size, '?', &incomplete);
+		int bytes = WideCharToMultiByte(CP_UTF8, 0, wstr, wchars_num, utf8_name, size, "?", &incomplete);
 		utf8_name[size-1]=0;
 		free(wstr);
 		return bytes;
@@ -1076,7 +1076,7 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 
 	ReleaseDC(0, hdc);
 
-	Convert_RGBA8_UI32_AARRGGBB(buf,f,w,h,data,palsize,palbuf);
+	Convert_UI32_AARRGGBB(buf,f,w,h,data,palsize,palbuf);
 
 	HBITMAP hMonoBitmap = CreateBitmap(w, h, 1, 1, NULL);
 
