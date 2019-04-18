@@ -230,6 +230,8 @@ enum WndMode
 	A3D_WND_FULLSCREEN,
 };
 
+bool a3dIsMaximized();
+
 // resize
 WndMode a3dGetRect(int* xywh); // returns wnd_mode
 bool a3dSetRect(const int* xywh, WndMode wnd_mode); // can fail if not visible!

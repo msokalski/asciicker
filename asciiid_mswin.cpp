@@ -27,7 +27,7 @@ static uint64_t coarse_micro;
 
 static bool mapped = false;
 static WndMode wndmode = A3D_WND_NORMAL;
-static int exit_full_xywh[4] = { 0,0,0,0 };
+static int exit_full_xywh[4] = { 0,0,0,0 }; // always a3dGetRect
 
 static const unsigned char ki_to_vk[256] =
 {
@@ -929,23 +929,54 @@ bool a3dGetVisible()
 }
 
 // resize
+static void _a3dSaveRect(int* xywh)
+{
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+
+	RECT c, r;
+	GetClientRect(hWnd, &c);
+
+	// return full rect, except normal-max -> remove borders
+
+	if (wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd, GWL_STYLE)))
+	{
+		ClientToScreen(hWnd, (POINT*)&c);
+		r.left = c.left;
+		r.top = c.top - GetSystemMetrics(SM_CYCAPTION);
+		r.right = c.left + c.right;
+		r.bottom = c.top + c.bottom;
+	}
+	else
+		GetWindowRect(hWnd, &r);
+
+	xywh[0] = r.left;
+	xywh[1] = r.top;
+	xywh[2] = r.right-r.left;
+	xywh[3] = r.bottom-r.top;
+}
+
 WndMode a3dGetRect(int* xywh)
 {
 	if (xywh)
 	{
 		HWND hWnd = WindowFromDC(wglGetCurrentDC());
 
-		RECT c;
+		RECT c,r;
 		GetClientRect(hWnd, &c);
-		ClientToScreen(hWnd, (POINT*)&c);
 
-		int cap = wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+		// xy points to full rect wh is client size
+		// with 1 exception: normal mode in maximized state -> we remove borders from xy
+		if (wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd,GWL_STYLE)))
+		{
+			ClientToScreen(hWnd, (POINT*)&c);
+			r.left = c.left;
+			r.top = c.top - GetSystemMetrics(SM_CYCAPTION);
+		}
+		else
+			GetWindowRect(hWnd, &r);
 
-		// xy points to upper-left corner of title, wh is pure client size
-		// so setting y=0 moves frame outside screen!
-
-		xywh[0] = c.left;
-		xywh[1] = c.top - cap;
+		xywh[0] = r.left;
+		xywh[1] = r.top;
 		xywh[2] = c.right;
 		xywh[3] = c.bottom;
 	}
@@ -953,19 +984,16 @@ WndMode a3dGetRect(int* xywh)
 	return wndmode;
 }
 
+bool a3dIsMaximized()
+{
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	return wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd, GWL_STYLE));
+}
+
 bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 {
 	if (!mapped)
 		return false;
-
-	// TODO:
-	// during frameless/fullscreen transition to normal
-	// - if maximized expand normal with frames
-	// - if not maximized use same rect
-
-	// during transition normal to frameless/fullscreen
-	// - if maximized remove frames
-	// - if not maximized use same rect
 
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
 
@@ -977,11 +1005,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		// KEEP ORIGINAL RECT!!!!
 		if (wndmode != A3D_WND_FULLSCREEN)
 		{
-			a3dGetRect(exit_full_xywh);
-
-			// exit_full_xywh ALWAYS includes caption and NEVER borders
-			int cap = wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
-			exit_full_xywh[3] += cap;
+			_a3dSaveRect(exit_full_xywh);
 		}
 
 		wndmode = wnd_mode;
@@ -1015,7 +1039,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			a3dGetRect(wnd_xywh);
+			_a3dSaveRect(wnd_xywh);
 			xywh = wnd_xywh;
 		}
 
@@ -1092,7 +1116,11 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 
 		// remove decorations
 		SetWindowLong(hWnd, GWL_STYLE, s);
-		SetWindowPos(hWnd, 0, wnd_xywh[0], wnd_xywh[1], wnd_xywh[2], wnd_xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
+		SetWindowPos(hWnd, 0, wnd_xywh[0], wnd_xywh[1], wnd_xywh[2], wnd_xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING);
+
+		RECT r;
+		GetWindowRect(hWnd, &r);
+
 		return true;
 	}
 
@@ -1114,8 +1142,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			}
 			else
 			{
-				a3dGetRect(wnd_xywh);
-				wnd_xywh[3] += wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+				_a3dSaveRect(wnd_xywh);
 			}
 			xywh = wnd_xywh;
 		}
@@ -1145,41 +1172,50 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			}
 			else
 			{
-				a3dGetRect(wnd_xywh);
-				wnd_xywh[3] += wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+				_a3dSaveRect(wnd_xywh);
 			}
 
 			xywh = wnd_xywh;
 		}
 		else
 		{
+			// adjust to fullrect - given size is client only
+			RECT r;
+			r.left = 0;
+			r.top = 0;
+			r.right = xywh[2];
+			r.bottom = xywh[3];
+
+			AdjustWindowRectEx(&r, s, FALSE, 0);
+
 			wnd_xywh[0] = xywh[0];
 			wnd_xywh[1] = xywh[1];
-			wnd_xywh[2] = xywh[2];
-			wnd_xywh[3] = xywh[3];
-
-			wnd_xywh[3] += wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+			wnd_xywh[2] = r.right-r.left;
+			wnd_xywh[3] = r.bottom-r.top;
 
 			xywh = wnd_xywh;
 		}
 
-		int cap = GetSystemMetrics(SM_CYCAPTION);
+		if (s&WS_MAXIMIZE)
+		{
+			// we need to add borders only if maxmized!
+			int cap = GetSystemMetrics(SM_CYCAPTION);
 
-		// add borders
-		RECT r;
-		r.left = xywh[0];
-		r.top = xywh[1] + cap;
-		r.right = xywh[0] + xywh[2];
-		r.bottom = xywh[1] + xywh[3];
+			RECT r;
+			r.left = xywh[0];
+			r.top = xywh[1] + cap;
+			r.right = xywh[0] + xywh[2];
+			r.bottom = xywh[1] + xywh[3];
 
-		AdjustWindowRectEx(&r, s, FALSE, 0);
+			AdjustWindowRectEx(&r, s, FALSE, 0);
 
-		wnd_xywh[0] = r.left;
-		wnd_xywh[1] = r.top;
-		wnd_xywh[2] = r.right - r.left;
-		wnd_xywh[3] = r.bottom - r.top;
+			wnd_xywh[0] = r.left;
+			wnd_xywh[1] = r.top;
+			wnd_xywh[2] = r.right - r.left;
+			wnd_xywh[3] = r.bottom - r.top;
 
-		xywh = wnd_xywh;
+			xywh = wnd_xywh;
+		}
 
 		wndmode = wnd_mode;
 

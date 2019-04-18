@@ -1614,6 +1614,8 @@ void my_render()
 
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
+		ImGui::Text("%s", a3dIsMaximized() ? "MAXIMIZED" : "normal");
+
 		if (ImGui::Button("FULL"))
 		{
 			a3dSetRect(0, A3D_WND_FULLSCREEN);
