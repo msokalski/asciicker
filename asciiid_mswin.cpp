@@ -25,6 +25,10 @@ static bool closing = false;
 static LARGE_INTEGER coarse_perf, timer_freq;
 static uint64_t coarse_micro;
 
+static bool mapped = false;
+static WndMode wndmode = A3D_WND_NORMAL;
+static int exit_full_xywh[4] = { 0,0,0,0 };
+
 static const unsigned char ki_to_vk[256] =
 {
 	0,
@@ -812,6 +816,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	_CrtMemState mem_state;
 	_CrtMemCheckpoint(&mem_state);
 
+	bool mapped = false;
+	wndmode = A3D_WND_NORMAL;
+
 	if (platform_api.init)
 		platform_api.init();
 
@@ -912,72 +919,276 @@ int a3dGetTitle(char* utf8_name, int size)
 void a3dSetVisible(bool visible)
 {
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	mapped = visible;
 	ShowWindow(hWnd, visible ? SW_SHOW : SW_HIDE);
 }
 
 bool a3dGetVisible()
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	if (GetWindowLong(hWnd, GWL_STYLE) & WS_VISIBLE)
-		return true;
-	return false;
+	return mapped;
 }
 
 // resize
-bool a3dGetRect(int* xywh)
+WndMode a3dGetRect(int* xywh)
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
 	if (xywh)
 	{
-		RECT r,c;
-		GetWindowRect(hWnd, &r);
+		HWND hWnd = WindowFromDC(wglGetCurrentDC());
+
+		RECT c;
 		GetClientRect(hWnd, &c);
-		xywh[0] = r.left;
-		xywh[1] = r.top;
-		xywh[2] = c.right - c.left;
-		xywh[3] = c.bottom - c.top;
+		ClientToScreen(hWnd, (POINT*)&c);
+
+		int cap = wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+
+		// xy points to upper-left corner of title, wh is pure client size
+		// so setting y=0 moves frame outside screen!
+
+		xywh[0] = c.left;
+		xywh[1] = c.top - cap;
+		xywh[2] = c.right;
+		xywh[3] = c.bottom;
 	}
 
-	if (GetWindowLong(hWnd, GWL_STYLE) & WS_CAPTION)
-		return true;
-	return false;
+	return wndmode;
 }
 
-void a3dSetRect(const int* xywh, bool wnd_mode)
+bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 {
+	if (!mapped)
+		return false;
+
+	// TODO:
+	// during frameless/fullscreen transition to normal
+	// - if maximized expand normal with frames
+	// - if not maximized use same rect
+
+	// during transition normal to frameless/fullscreen
+	// - if maximized remove frames
+	// - if not maximized use same rect
+
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	DWORD s = GetWindowLong(hWnd, GWL_STYLE);
-	DWORD ns = s;
 
-	RECT r;
-	RECT nr;
-	GetWindowRect(hWnd, &r);
-
-	nr.left = xywh[0];
-	nr.top = xywh[1];
-	nr.right = xywh[2] + xywh[0];
-	nr.bottom = xywh[3] + xywh[1];
-
-	if (!wnd_mode)
-		ns |= WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
-	else
-		ns &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
-
-	if (r.left != nr.left || r.top != nr.top ||
-		r.right != nr.right || r.bottom != nr.bottom)
+	if (wnd_mode == A3D_WND_FULLSCREEN)
 	{
-		if (ns != s)
+		DWORD s = GetWindowLong(hWnd, GWL_STYLE);
+		s &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
+
+		// KEEP ORIGINAL RECT!!!!
+		if (wndmode != A3D_WND_FULLSCREEN)
 		{
-			SetWindowLong(hWnd, GWL_STYLE, ns);
-			SetWindowPos(hWnd, 0, nr.left, nr.top, nr.right - nr.left, nr.bottom - nr.top,
-				SWP_NOZORDER | SWP_FRAMECHANGED | SWP_DRAWFRAME);
+			a3dGetRect(exit_full_xywh);
+
+			// exit_full_xywh ALWAYS includes caption and NEVER borders
+			int cap = wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+			exit_full_xywh[3] += cap;
+		}
+
+		wndmode = wnd_mode;
+
+		struct EnumMon
+		{
+			EnumMon() : num(0) {}
+			static BOOL Enum(HMONITOR h, HDC dc, LPRECT pr, LPARAM em)
+			{
+				EnumMon* e = (EnumMon*)em;
+				if (e->num < 16)
+				{
+					e->r[e->num][0] = pr->left;
+					e->r[e->num][1] = pr->top;
+					e->r[e->num][2] = pr->right - pr->left;
+					e->r[e->num][3] = pr->bottom - pr->top;
+				}
+				e->num++;
+				return TRUE;
+			}
+			int r[16][4];
+			int num;
+		};
+
+		EnumMon em;
+		EnumDisplayMonitors(NULL, 0, EnumMon::Enum, (LPARAM)&em);
+
+		if (em.num > 16)
+			em.num = 16;
+
+		int wnd_xywh[4];
+		if (!xywh)
+		{
+			a3dGetRect(wnd_xywh);
+			xywh = wnd_xywh;
+		}
+
+		int wrx = xywh[2] / 2;
+		int wry = xywh[3] / 2;
+		int wcx = xywh[0] + wrx;
+		int wcy = xywh[1] + wry;
+
+		// - locate monitor which is covered with greatest area by win
+
+		int max_area = 0;
+		int best_mon = -1;
+
+		int num = em.num;
+
+		for (int i = 0; i < num; i++)
+		{
+			int mrx = em.r[i][2] / 2;
+			int mry = em.r[i][3] / 2;
+			int mcx = em.r[i][0] + mrx;
+			int mcy = em.r[i][1] + mry;
+
+			int w = wrx + mrx - abs(wcx - mcx);
+			int h = wry + mry - abs(wcy - mcy);
+
+			if (w > 0 && h > 0)
+			{
+				int a = w * h;
+				if (a > max_area)
+				{
+					best_mon = i;
+					max_area = a;
+				}
+			}
+		}
+
+		int left_mon = best_mon;
+		int right_mon = best_mon;
+		int bottom_mon = best_mon;
+		int top_mon = best_mon;
+
+		for (int i = 0; i < num; i++)
+		{
+			if (i == best_mon)
+				continue;
+
+			int mrx = em.r[i][2] / 2;
+			int mry = em.r[i][3] / 2;
+			int mcx = em.r[i][0] + mrx;
+			int mcy = em.r[i][1] + mry;
+
+			if (abs(mcx - wcx) < wrx)
+			{
+				if (em.r[i][0] < em.r[left_mon][0])
+					left_mon = i;
+				if (em.r[i][0] + em.r[i][2] > em.r[right_mon][0] + em.r[right_mon][2])
+					right_mon = i;
+			}
+
+			if (abs(mcy - wcy) < wry)
+			{
+				if (em.r[i][1] < em.r[top_mon][1])
+					top_mon = i;
+				if (em.r[i][1] + em.r[i][3] > em.r[bottom_mon][1] + em.r[bottom_mon][3])
+					bottom_mon = i;
+			}
+
+		}
+
+		wnd_xywh[0] = em.r[left_mon][0];
+		wnd_xywh[1] = em.r[top_mon][1];
+		wnd_xywh[2] = em.r[right_mon][0] + em.r[right_mon][2] - em.r[left_mon][0];
+		wnd_xywh[3] = em.r[bottom_mon][1] + em.r[bottom_mon][3] - em.r[top_mon][1];
+
+		// remove decorations
+		SetWindowLong(hWnd, GWL_STYLE, s);
+		SetWindowPos(hWnd, 0, wnd_xywh[0], wnd_xywh[1], wnd_xywh[2], wnd_xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
+		return true;
+	}
+
+	if (wnd_mode == A3D_WND_FRAMELESS)
+	{
+		// remove decorations
+		DWORD s = GetWindowLong(hWnd, GWL_STYLE);
+		s &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
+
+		int wnd_xywh[4];
+		if (!xywh)
+		{
+			if (wndmode == A3D_WND_FULLSCREEN)
+			{
+				wnd_xywh[0] = exit_full_xywh[0];
+				wnd_xywh[1] = exit_full_xywh[1];
+				wnd_xywh[2] = exit_full_xywh[2];
+				wnd_xywh[3] = exit_full_xywh[3];
+			}
+			else
+			{
+				a3dGetRect(wnd_xywh);
+				wnd_xywh[3] += wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+			}
+			xywh = wnd_xywh;
+		}
+
+		wndmode = wnd_mode;
+
+		SetWindowLong(hWnd, GWL_STYLE, s);
+		SetWindowPos(hWnd, 0, xywh[0], xywh[1], xywh[2], xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
+		return true;
+	}
+
+	if (wnd_mode == A3D_WND_NORMAL)
+	{
+		// add decorations
+		DWORD s = GetWindowLong(hWnd, GWL_STYLE);
+		s |= (WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
+
+		int wnd_xywh[4];
+		if (!xywh)
+		{
+			if (wndmode == A3D_WND_FULLSCREEN)
+			{
+				wnd_xywh[0] = exit_full_xywh[0];
+				wnd_xywh[1] = exit_full_xywh[1];
+				wnd_xywh[2] = exit_full_xywh[2];
+				wnd_xywh[3] = exit_full_xywh[3];
+			}
+			else
+			{
+				a3dGetRect(wnd_xywh);
+				wnd_xywh[3] += wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+			}
+
+			xywh = wnd_xywh;
 		}
 		else
-			SetWindowPos(hWnd, 0, nr.left, nr.top, nr.right - nr.left, nr.bottom - nr.top, SWP_NOZORDER);
+		{
+			wnd_xywh[0] = xywh[0];
+			wnd_xywh[1] = xywh[1];
+			wnd_xywh[2] = xywh[2];
+			wnd_xywh[3] = xywh[3];
+
+			wnd_xywh[3] += wndmode == A3D_WND_NORMAL ? GetSystemMetrics(SM_CYCAPTION) : 0;
+
+			xywh = wnd_xywh;
+		}
+
+		int cap = GetSystemMetrics(SM_CYCAPTION);
+
+		// add borders
+		RECT r;
+		r.left = xywh[0];
+		r.top = xywh[1] + cap;
+		r.right = xywh[0] + xywh[2];
+		r.bottom = xywh[1] + xywh[3];
+
+		AdjustWindowRectEx(&r, s, FALSE, 0);
+
+		wnd_xywh[0] = r.left;
+		wnd_xywh[1] = r.top;
+		wnd_xywh[2] = r.right - r.left;
+		wnd_xywh[3] = r.bottom - r.top;
+
+		xywh = wnd_xywh;
+
+		wndmode = wnd_mode;
+
+		SetWindowLong(hWnd, GWL_STYLE, s);
+		SetWindowPos(hWnd, 0, xywh[0], xywh[1], xywh[2], xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
+		return true;
 	}
-	else
-	if (ns != s)
-		SetWindowPos(hWnd, 0, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_DRAWFRAME);
+
+	return false;
 }
 
 

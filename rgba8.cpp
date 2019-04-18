@@ -138,7 +138,7 @@
 		int x = 0; \
 		for (int i = 0; i < wq; i++) \
 		{ \
-			unsigned int l; \
+			int l; \
 			uint8_t v = in_line[i]; \
 			l = 4*((v>>7)&1); out_line[x++] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
 			l = 4*((v>>6)&1); out_line[x++] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
@@ -151,7 +151,7 @@
 		} \
 		if (wr) \
 		{ \
-			unsigned int l; \
+			int l; \
 			uint8_t v = in_line[wq]; \
 			for (int i = 7; i >= wr; i--) \
 			{ \
@@ -177,7 +177,7 @@
 		int x = 0; \
 		for (int i = 0; i < wq; i++) \
 		{ \
-			unsigned int l; \
+			int l; \
 			uint8_t v = in_line[i]; \
 			l = 4*((v>>6)&3); out_line[x++] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
 			l = 4*((v>>4)&3); out_line[x++] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
@@ -186,7 +186,7 @@
 		} \
 		if (wr) \
 		{ \
-			unsigned int l; \
+			int l; \
 			uint8_t v = in_line[wq]; \
 			for (int i = 6; i >= wr; i-=2) \
 			{ \
@@ -212,14 +212,14 @@
 		int x = 0; \
 		for (int i = 0; i < wq; i++) \
 		{ \
-			unsigned int l; \
+			int l; \
 			uint8_t v = in_line[i]; \
 			l = 4*((v>>4)&0xF); 	out_line[x++] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
 			l = 4*(v&0xF);        	out_line[x++] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
 		} \
 		if (wr) \
 		{ \
-			unsigned int l; \
+			int l; \
 			uint8_t v = in_line[wq]; \
 			l = 4*((v>>4)&0xF); 	out_line[x++] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
 		} \
@@ -237,7 +237,7 @@
 	int n = w * h; \
 	for (int i = 0; i < n; i++) \
 	{ \
-		unsigned int l = 4*src[i]; \
+		int l = 4*src[i]; \
 		out_buf[i] = l>=palsize ? 0 : (pal[l+0]<<R) | (pal[l+1]<<G) | (pal[l+2]<<B) | (pal[l+3]<<A); \
 	} \
 }
