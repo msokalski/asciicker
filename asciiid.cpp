@@ -1616,12 +1616,24 @@ void my_render()
 
 		if (ImGui::Button("FULL"))
 		{
-			a3dSetRect(0, false);
+			a3dSetRect(0, A3D_WND_FULLSCREEN);
 		}
 
 		if (ImGui::Button("NORM"))
 		{
-			a3dSetRect(0, true);
+			a3dSetRect(0, A3D_WND_NORMAL);
+		}
+
+		if (ImGui::Button("PURE"))
+		{
+			a3dSetRect(0, A3D_WND_FRAMELESS);
+		}
+
+		if (ImGui::Button("KEEP"))
+		{
+			int r[4];
+			WndMode mode = a3dGetRect(r);
+			a3dSetRect(r, mode);
 		}
 
 		static char utf8_buf[1024]="Z\xC3\xB3pa";
@@ -2943,20 +2955,14 @@ void my_init()
 	const char* utf8 = "gugu\xC5\xBB\xC3\xB3\xC5\x82\xC4\x87";
 	a3dSetTitle(utf8/*"ASCIIID"*/);
 
-	//int full[] = { -1280,0,800,600};
-
-	int dx = 200;
-	int dy = 200;
-
-	//int full[] = { 0,0,2*1920,1080};
-	//a3dSetRect(full, false);
-
+	int full[] = { 100,100,2*1920-200,1080-200};
 	a3dSetVisible(true);
+	//a3dSetRect(full, A3D_WND_FRAMELESS);
 
 	a3dSetIcon("./icons/app.png");
 
-	char buf[4]="CCC";
-	a3dGetTitle(buf,4);
+	char buf[14]="CCC";
+	a3dGetTitle(buf,14);
 	printf("%s\n",buf);
 }
 

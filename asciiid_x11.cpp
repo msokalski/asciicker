@@ -33,7 +33,7 @@
 
 #include "asciiid_platform.h"
 
-bool wndmode = false;
+WndMode wndmode = A3D_WND_NORMAL;
 bool mapped = false;
 
 Display* dpy;
@@ -506,7 +506,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		LeaveWindowMask;
 
 	// win is global
-	wndmode = true;
+	wndmode = A3D_WND_NORMAL;
 	win = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
 	if (!win)
 	{
@@ -1042,31 +1042,81 @@ bool a3dGetVisible()
 }
 
 // resize
-bool a3dGetRect(int* xywh)
+WndMode a3dGetRect(int* xywh)
 {
 	if (xywh)
 	{
-		int rx, ry;
-		Window child;
-		XTranslateCoordinates( dpy, win, DefaultRootWindow(dpy), 0, 0, &rx, &ry, &child );			
-		XWindowAttributes gwa;
-		XGetWindowAttributes(dpy, win, &gwa);
-		xywh[0] = rx - gwa.x;
-		xywh[1] = ry - gwa.y;
-		xywh[2] = gwa.width;
-		xywh[3] = gwa.height;
+		bool ext = false;
+		
+		int lrtb[4] = {0,0,0,0};
+		// deduce offsetting
+		if (wndmode != A3D_WND_FRAMELESS)
+		{
+			long* extents;
+			Atom actual_type;
+			int actual_format;
+			unsigned long nitems, bytes_after;
+			unsigned char* data = 0;
+			int result;
+
+			Atom frame_extends_atom = XInternAtom(dpy, "_NET_FRAME_EXTENTS", False);
+
+			if (frame_extends_atom)
+			{
+				result = XGetWindowProperty(
+					dpy, win, frame_extends_atom,
+					0, 4, False, AnyPropertyType, 
+					&actual_type, &actual_format, 
+					&nitems, &bytes_after, &data);
+
+				if (result == Success) 
+				{
+					if ((nitems == 4) && (bytes_after == 0)) 
+					{
+						extents = (long *)data;
+						lrtb[0] = (int)extents[0];
+						lrtb[1] = (int)extents[1];
+						lrtb[2] = (int)extents[2];
+						lrtb[3] = (int)extents[3];
+						ext = true;
+					}
+					XFree(data);			
+				}
+			}
+		}
+
+		Window root;
+		
+		int x,y;
+		unsigned int w,h,b,d;
+		XGetGeometry(dpy,win,&root,&x,&y,&w,&h,&b,&d);
+
+		int rx,ry;
+		Window c;
+		XTranslateCoordinates(dpy,win,root,0,0,&rx,&ry,&c);
+
+		// if _MOTIF_WM_HINTS and/or _NET_FRAME_EXTENTS are unsupported
+		// this may lead to unconsistent rect setter with getter !!!
+
+		xywh[0] = rx - lrtb[0];
+		xywh[1] = ry - lrtb[2];
+		xywh[2] = w;
+		xywh[3] = h;
 	}
 	return wndmode;
 }
 
-void a3dSetRect(const int* xywh, bool wnd_mode)
+bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 {
+	if (!mapped)
+		return false;
+
 	// xywh=rect wnd_mode=true -> [exit from full screen] then resize
 	// xywh=NULL wnd_mode=true -> [exit from full screen]
 	// xywh=rect wnd_mode=false -> enter full screen on monitors crossing given rect
 	// xywh=NULL wnd_mode=false -> enter full screen on signle nearest monitor
 
-	if (!wnd_mode)
+	if (wnd_mode == A3D_WND_FULLSCREEN)
 	{
 		int wnd_xywh[4];
 		if (!xywh)
@@ -1075,10 +1125,10 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 			xywh = wnd_xywh;
 		}
 
-		int wrx =  wnd_xywh[2]/2;
-		int wry =  wnd_xywh[3]/2;
-		int wcx =  wnd_xywh[0] + wrx;
-		int wcy =  wnd_xywh[1] + wry;
+		int wrx =  xywh[2]/2;
+		int wry =  xywh[3]/2;
+		int wcx =  xywh[0] + wrx;
+		int wcy =  xywh[1] + wry;
 
 		// - locate monitor which is covered with greatest area by win
 
@@ -1167,10 +1217,31 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 
 		XSendEvent(dpy,DefaultRootWindow(dpy),False,SubstructureRedirectMask | SubstructureNotifyMask,(XEvent*)&xcm);
 	}
+	else
+	if ( wnd_mode == A3D_WND_NORMAL ||  wnd_mode == A3D_WND_FRAMELESS)
+	{
+		struct MotifHints
+		{
+			unsigned long   flags;
+			unsigned long   functions;
+			unsigned long   decorations;
+			long            inputMode;
+			unsigned long   status;
+		} hints;
+
+		//code to remove decoration
+		hints.flags = 2;
+		hints.functions = 0;
+		hints.decorations = wnd_mode == A3D_WND_NORMAL;
+		hints.inputMode = 0;
+		hints.status = 0;
+		Atom motif_hints_atom = XInternAtom(dpy, "_MOTIF_WM_HINTS", False);
+		XChangeProperty(dpy,win,motif_hints_atom,motif_hints_atom,32,PropModeReplace,(unsigned char *)&hints,5);
+	}
 
 	wndmode = wnd_mode;
 
-	if (!wnd_mode)
+	if (wnd_mode == A3D_WND_FULLSCREEN)
 	{
 		XClientMessageEvent xcm;
 
@@ -1211,9 +1282,11 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 
 		XSendEvent(dpy,DefaultRootWindow(dpy),False,SubstructureRedirectMask | SubstructureNotifyMask,(XEvent*)&xcm);
 
-		// resize if requested, after exiting fullscreen!
 		if (xywh)
+		{
+			// resize if requested, after exiting fullscreen!
 			XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+		}
 	}
 }
 

@@ -223,9 +223,16 @@ int a3dGetTitle(char* utf8_name, int size);
 void a3dSetVisible(bool set);
 bool a3dGetVisible();
 
+enum WndMode
+{
+	A3D_WND_NORMAL,
+	A3D_WND_FRAMELESS,
+	A3D_WND_FULLSCREEN,
+};
+
 // resize
-bool a3dGetRect(int* xywh); // returns wnd_mode
-void a3dSetRect(const int* xywh, bool wnd_mode);
+WndMode a3dGetRect(int* xywh); // returns wnd_mode
+bool a3dSetRect(const int* xywh, WndMode wnd_mode); // can fail if not visible!
 
 // mouse
 MouseInfo a3dGetMouse(int* x, int* y); // returns but flags, mouse wheel has no state

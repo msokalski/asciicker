@@ -927,14 +927,15 @@ bool a3dGetVisible()
 bool a3dGetRect(int* xywh)
 {
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	RECT r;
-	GetWindowRect(hWnd, &r);
 	if (xywh)
 	{
+		RECT r,c;
+		GetWindowRect(hWnd, &r);
+		GetClientRect(hWnd, &c);
 		xywh[0] = r.left;
 		xywh[1] = r.top;
-		xywh[2] = r.right - r.left;
-		xywh[3] = r.bottom - r.top;
+		xywh[2] = c.right - c.left;
+		xywh[3] = c.bottom - c.top;
 	}
 
 	if (GetWindowLong(hWnd, GWL_STYLE) & WS_CAPTION)
@@ -957,7 +958,7 @@ void a3dSetRect(const int* xywh, bool wnd_mode)
 	nr.right = xywh[2] + xywh[0];
 	nr.bottom = xywh[3] + xywh[1];
 
-	if (wnd_mode)
+	if (!wnd_mode)
 		ns |= WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
 	else
 		ns &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
