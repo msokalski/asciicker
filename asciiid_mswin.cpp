@@ -1210,7 +1210,12 @@ MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no s
 	return (MouseInfo)fl;
 }
 
-// keyb_focus
+void a3dSetFocus()
+{
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	SetFocus(hWnd);
+}
+
 bool a3dGetFocus()
 {
 	HWND hWnd = WindowFromDC(wglGetCurrentDC());

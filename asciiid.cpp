@@ -30,6 +30,20 @@
 
 #include "fast_rand.h"
 
+#define MOUSE_QUEUE
+
+#ifdef MOUSE_QUEUE
+struct MouseQueue
+{
+	int x, y;
+	MouseInfo mi;
+};
+
+int mouse_queue_len=0;
+const int mouse_queue_size = 256; // enough to handle 15K samples / sec
+MouseQueue mouse_queue[mouse_queue_size];
+#endif
+
 ImFont* pFont = 0;
 
 Terrain* terrain = 0;
@@ -1594,8 +1608,85 @@ void my_render()
 {
 	ImGuiIO& io = ImGui::GetIO();
 
+	#ifdef MOUSE_QUEUE
+	while (mouse_queue_len) // accumulate wheel sequence only
+	{
+		mouse_queue_len--;
+
+		bool sync = false;
+
+		int x = mouse_queue[0].x;
+		int y = mouse_queue[0].y;
+		MouseInfo mi = mouse_queue[0].mi;
+
+		if ((mi & 0xF) == MouseInfo::LEAVE)
+		{
+			sync = true;
+			mouse_in = 0;
+		}
+		else
+		{
+			if ((mi & 0xF) == MouseInfo::ENTER)
+			{
+				sync = true;
+				mouse_in = 1;
+			}
+
+			io.MousePos = ImVec2((float)x, (float)y);
+
+			switch (mi & 0xF)
+			{
+				case MouseInfo::WHEEL_DN:
+					zoom_wheel--;
+					io.MouseWheel -= 1.0;
+					break;
+				case MouseInfo::WHEEL_UP:
+					zoom_wheel++;
+					io.MouseWheel += 1.0;
+					break;
+
+				case MouseInfo::LEFT_DN:
+					sync=true;
+					io.MouseDown[0] = true;
+					break;
+				case MouseInfo::LEFT_UP:
+					sync=true;
+					io.MouseDown[0] = false;
+					break;
+				case MouseInfo::RIGHT_DN:
+					sync=true;
+					io.MouseDown[1] = true;
+					break;
+				case MouseInfo::RIGHT_UP:
+					sync=true;
+					io.MouseDown[1] = false;
+					break;
+				case MouseInfo::MIDDLE_DN:
+					sync=true;
+					io.MouseDown[2] = true;
+					break;
+				case MouseInfo::MIDDLE_UP:
+					sync=true;
+					io.MouseDown[2] = false;
+					break;
+			}
+		}
+
+		for (int i=0; i<mouse_queue_len; i++)
+			mouse_queue[i] = mouse_queue[i+1];
+
+		if (sync)
+			break;
+	}
+	#endif
+
 	// THINGZ
-	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+	const float clear_in[4]={0.45f, 0.55f, 0.60f, 1.00f};
+	const float clear_out[4]={0.40f, 0.50f, 0.55f, 0.95f};
+
+	const float* clear_color = mouse_in ? clear_in : clear_out;
+
+
 	{
 		ImGui_ImplOpenGL3_NewFrame();
 		{
@@ -1868,7 +1959,6 @@ void my_render()
 					ImGui::PopStyleVar();
 				}
 
-
 				if (edit_mode != 4)
 				{
 					pushed = true;
@@ -1913,8 +2003,6 @@ void my_render()
 
 		float but16_w = font_width / 16;
 		float but16_h = font_height / 16;
-
-
 
 		if (fonts_loaded && ImGui::CollapsingHeader("Fonts", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -2296,7 +2384,7 @@ void my_render()
 	ImGui::Render();
 
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
-	glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+	glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
 	glClearDepth(0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
@@ -2798,7 +2886,6 @@ void my_render()
 	glDepthFunc(GL_GEQUAL);
 	rc->BeginPatches(tm, lt, br_xyra, br_quad, br_probe);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
-	//printf("rendered %d patches / %d total\n", rc.patches, GetTerrainPatches(terrain));
 	rc->EndPatches();
 
 	// overlay patch creation
@@ -2823,18 +2910,46 @@ void my_render()
 
 void my_mouse(int x, int y, MouseInfo mi)
 {
+	#ifdef MOUSE_QUEUE
+
+	// allow overwriting mouse moves
+	if (mouse_queue_len)
+	{
+		MouseQueue* mq = mouse_queue + mouse_queue_len - 1;
+		if ((mi & 0xF) == 0 && (mq->mi & 0xF) == 0)
+		{
+			mq->x = x;
+			mq->y = x;
+			mq->mi = mi;
+			return;
+		}
+	}
+
+	if (mouse_queue_len==mouse_queue_size)
+	{
+		mouse_queue_len--;
+		for (int i=0; i<mouse_queue_len; i++)
+			mouse_queue[i] = mouse_queue[i+1];
+	}
+	mouse_queue[mouse_queue_len].x = x;
+	mouse_queue[mouse_queue_len].y = y;
+	mouse_queue[mouse_queue_len].mi = mi;
+	mouse_queue_len++;
+
+	#else
+
 	if ((mi & 0xF) == MouseInfo::LEAVE)
 	{
 		mouse_in = 0;
 		return;
 	}
-	else
-	if ((mi & 0xF) == MouseInfo::ENTER)
-		mouse_in = 1;
 
 	ImGuiIO& io = ImGui::GetIO();
 
 	io.MousePos = ImVec2((float)x, (float)y);
+
+	if ((mi & 0xF) == MouseInfo::ENTER)
+		mouse_in = 1;
 
 	switch (mi & 0xF)
 	{
@@ -2846,6 +2961,17 @@ void my_mouse(int x, int y, MouseInfo mi)
 			zoom_wheel++;
 			io.MouseWheel += 1.0;
 			break;
+
+		default:
+			if (mouse_queue_len==mouse_queue_size)
+			{
+				mouse_queue_len--;
+				for (int i=0; i<mouse_queue_len; i++)
+					mouse_queue[i] = mouse_queue[i+1];
+			}
+			mouse_queue[mouse_queue_len++] = mi & 0xF;
+			break;
+
 		case MouseInfo::LEFT_DN:
 			io.MouseDown[0] = true;
 			break;
@@ -2865,6 +2991,8 @@ void my_mouse(int x, int y, MouseInfo mi)
 			io.MouseDown[2] = false;
 			break;
 	}
+
+	#endif
 }
 
 void my_resize(int w, int h)
@@ -2968,17 +3096,10 @@ void my_init()
 	pos_z = 0x0;
 
 	const char* utf8 = "gugu\xC5\xBB\xC3\xB3\xC5\x82\xC4\x87";
+
 	a3dSetTitle(utf8/*"ASCIIID"*/);
-
-	int full[] = { 100,100,2*1920-200,1080-200};
-	a3dSetVisible(true);
-	//a3dSetRect(full, A3D_WND_FRAMELESS);
-
 	a3dSetIcon("./icons/app.png");
-
-	char buf[14]="CCC";
-	a3dGetTitle(buf,14);
-	printf("%s\n",buf);
+	a3dSetVisible(true);
 }
 
 void my_keyb_char(wchar_t chr)
@@ -3046,6 +3167,10 @@ int main(int argc, char *argv[])
 	gd.depth_bits = 24;
 	gd.stencil_bits = 8;
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
+
+	int rc[] = {0,0,1920*2,1080+2*1080};
+	gd.wnd_mode = A3D_WND_NORMAL;
+	gd.wnd_xywh = 0;
 
 	a3dOpen(&pi, &gd);
 

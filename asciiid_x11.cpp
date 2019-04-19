@@ -33,8 +33,10 @@
 
 #include "asciiid_platform.h"
 
-WndMode wndmode = A3D_WND_NORMAL;
 bool mapped = false;
+WndMode wndmode = A3D_WND_NORMAL;
+int wndrect[4] = {0,0,0,0}; 
+bool wnddirty = false;
 
 Display* dpy;
 Window win;
@@ -505,9 +507,25 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		EnterWindowMask |
 		LeaveWindowMask;
 
-	// win is global
-	wndmode = A3D_WND_NORMAL;
-	win = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
+	if (gd->wnd_xywh)
+	{
+		wndrect[0] = gd->wnd_xywh[0];
+		wndrect[1] = gd->wnd_xywh[1];
+		wndrect[2] = gd->wnd_xywh[2];
+		wndrect[3] = gd->wnd_xywh[3];
+	}
+	else
+	{
+		wndrect[0] = 0;
+		wndrect[1] = 0;
+		wndrect[2] = 800;
+		wndrect[3] = 600;
+	}
+	
+	wndmode = gd->wnd_mode == A3D_WND_CURRENT ? A3D_WND_NORMAL : gd->wnd_mode;
+	wnddirty = true;
+
+	win = XCreateWindow(dpy, root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
 	if (!win)
 	{
 		XCloseDisplay(dpy);
@@ -547,7 +565,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	int attribs[] = {
 		GLX_CONTEXT_FLAGS_ARB, gd->flags & GraphicsDesc::DEBUG_CONTEXT ? GLX_CONTEXT_DEBUG_BIT_ARB : 0,
 		GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 6,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 5,
 		0};
 
 	glc = glXCreateContextAttribsARB(dpy, *fbc, 0, true, attribs);
@@ -583,9 +601,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			failed_arg = XGetIMValues(im, XNQueryInputStyle, &styles, NULL);
 			if (!failed_arg)
 			{
-				for (int i = 0; i < styles->count_styles; i++) 
-					printf("style %d\n", (int)styles->supported_styles[i]);
-
 				ic = XCreateIC(im, XNInputStyle, XIMPreeditNothing | XIMStatusNothing, XNClientWindow, win, NULL);
 				if (!ic)
 				{
@@ -605,16 +620,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		XSetICFocus(ic);
 	else
 		im_ok = false;
-	
-
-	platform_api = *pi;
-
-	if (platform_api.init)
-		platform_api.init();
-
-	// send initial notifications:
-	XGetWindowAttributes(dpy, win, &gwa);
-	int w = gwa.width, h = gwa.height;
 
 	/*
 	// HAS NO EFFECT, only going fullscreen on all monitors at once results in FLIP mode
@@ -636,6 +641,15 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	}
 	*/
 
+	platform_api = *pi;
+
+	if (platform_api.init)
+		platform_api.init();
+
+	// send initial notifications:
+	XGetWindowAttributes(dpy, win, &gwa);
+	int w = gwa.width, h = gwa.height;
+
 	if (platform_api.resize)
 		platform_api.resize(w,h);
 
@@ -646,7 +660,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			XNextEvent(dpy, &xev);
 			if (XFilterEvent(&xev, win))
 			{
-				printf("%s","CONSUMED\n");
+				printf("%s","XFilter CONSUMED!\n");
 			}
 
 			if (xev.type == ClientMessage)
@@ -668,7 +682,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			}
 			else
         	if (xev.type == MappingNotify)
+			{
             	XRefreshKeyboardMapping(&xev.xmapping);
+			}
             else
 			if (xev.type == ConfigureNotify)
 			{
@@ -732,8 +748,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					int kc = xev.xkey.keycode;
 					if (kc>=0 && kc<128) 
 					{
-						//printf("PRESS: %s\n",caps[kc_to_ki[kc]]);
-
 						force_key = kc_to_ki[kc];
 						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],true);
 						force_key = A3D_NONE;
@@ -747,10 +761,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					char buf[20];
 					Status status = 0;
 					count = Xutf8LookupString(ic, (XKeyPressedEvent*)&xev, buf, 20, &keysym, &status);
-
-					printf("count: %d\n", count);
-					if (status==XBufferOverflow)
-						printf("BufferOverflow\n");
 
 					if (count)
 					{
@@ -841,7 +851,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					int kc = xev.xkey.keycode;
 					if (kc>=0 && kc<128) 
 					{
-						//printf("RELEASE: %s\n",caps[kc_to_ki[kc]]);
 						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],false);
 					}			
 				}
@@ -1051,9 +1060,15 @@ void a3dSetVisible(bool visible)
 {
 	mapped = visible;
 	if (visible)
+	{
 		XMapWindow(dpy, win);
+		if (wnddirty)
+			a3dSetRect(wndrect,wndmode);
+	}
 	else
+	{
 		XUnmapWindow(dpy, win);
+	}
 }
 
 bool a3dGetVisible()
@@ -1130,8 +1145,28 @@ WndMode a3dGetRect(int* xywh)
 
 bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 {
+	if (wnd_mode == A3D_WND_CURRENT)
+		wnd_mode = wndmode;
+
 	if (!mapped)
-		return false;
+	{
+		// emulate success, 
+		// even on unmapped windows
+
+		wndmode = wnd_mode;
+		wnddirty = true;
+		if (!xywh)
+			a3dGetRect(wndrect);
+		else
+		{
+			wndrect[0] = xywh[0];
+			wndrect[1] = xywh[1];
+			wndrect[2] = xywh[2];
+			wndrect[3] = xywh[3];
+		}
+		
+		return true;
+	}
 
 	// xywh=rect wnd_mode=true -> [exit from full screen] then resize
 	// xywh=NULL wnd_mode=true -> [exit from full screen]
@@ -1147,78 +1182,47 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			xywh = wnd_xywh;
 		}
 
-		int wrx =  xywh[2]/2;
-		int wry =  xywh[3]/2;
-		int wcx =  xywh[0] + wrx;
-		int wcy =  xywh[1] + wry;
-
 		// - locate monitor which is covered with greatest area by win
-
-		int max_area = 0;
-		int best_mon = -1;
 
 		int num;
 		XineramaScreenInfo* xi = XineramaQueryScreens(dpy, &num);
 
-		printf("%d MONITORS\n",num);
-		for (int i=0; i<num; i++)
-		{
-			printf("%d (%d) -> %d,%d[px] %dx%d[px]\n",
-				i,xi[i].screen_number,
-				xi[i].x_org,xi[i].y_org,
-				xi[i].width,xi[i].height);
-
-			int mrx =  xi[i].width/2;
-			int mry =  xi[i].height/2;
-			int mcx =  xi[i].x_org + mrx;
-			int mcy =  xi[i].y_org + mry;
-
-			int w = wrx + mrx - abs(wcx-mcx);
-			int h = wry + mry - abs(wcy-mcy);
-
-			if (w>0 && h>0)
-			{
-				int a = w*h;
-				if (a>max_area)
-				{
-					best_mon = i;
-					max_area = a;
-				}
-			}
-		}
-
-		int left_mon = best_mon;
-		int right_mon = best_mon;
-		int bottom_mon = best_mon;
-		int top_mon = best_mon;
+		int left_mon = -1;
+		int right_mon = -1;
+		int bottom_mon = -1;
+		int top_mon = -1;
 
 		for (int i=0; i<num; i++)
 		{
-			if (i==best_mon)
-				continue;
+			int a,b;
 
-			int mrx =  xi[i].width/2;
-			int mry =  xi[i].height/2;
-			int mcx =  xi[i].x_org + mrx;
-			int mcy =  xi[i].y_org + mry;		
+			a = xywh[0]+xywh[2]; b = xi[i].x_org + xi[i].width;
+			int min_x = a < b ? a : b;
+			a =  xywh[0]; b = xi[i].x_org;
+			int max_x = a > b ? a : b;
+			a = xywh[1]+xywh[3]; b = xi[i].y_org + xi[i].height;
+			int min_y = a < b ? a : b;
+			a = xywh[1]; b = xi[i].y_org;
+			int max_y = a > b ? a : b;
 
-			if (abs(mcx - wcx) < wrx)
+			if (max_x < min_x && max_y < min_y)
 			{
-				if (xi[i].x_org < xi[left_mon].x_org)
+				if (left_mon < 0 || xi[i].x_org < xi[left_mon].x_org)
 					left_mon = i;
-				if (xi[i].x_org + xi[i].width > xi[right_mon].x_org + xi[right_mon].width)
-					right_mon = i;
-			}
 
-			if (abs(mcy - wcy) < wry)
-			{
-				if (xi[i].y_org < xi[top_mon].y_org)
+				if (right_mon < 0 || xi[i].x_org + xi[i].width > xi[right_mon].x_org + xi[right_mon].width)
+					right_mon = i;
+
+				if (top_mon < 0 || xi[i].y_org < xi[top_mon].y_org)
 					top_mon = i;
-				if (xi[i].y_org + xi[i].height > xi[bottom_mon].y_org + xi[bottom_mon].height)
+
+				if (bottom_mon < 0 || xi[i].y_org + xi[i].height > xi[bottom_mon].y_org + xi[bottom_mon].height)
 					bottom_mon = i;
 			}
-
 		}
+
+		if (left_mon < 0)
+			return false;
 
 		XClientMessageEvent xcm;
 		xcm.type = ClientMessage;
@@ -1378,7 +1382,11 @@ MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no s
 	return (MouseInfo)0;
 }
 
-// keyb_focus
+void a3dSetFocus()
+{
+	XSetInputFocus(dpy, win, RevertToNone, CurrentTime);
+}
+
 bool a3dGetFocus()
 {
 	Window focused;
@@ -1505,7 +1513,6 @@ int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* na
 				continue;
 		}
 		 
-		printf("%s\n", dir->d_name);
 		if (cb && !cb(item, dir->d_name,cookie))
 			break;
 		num++;

@@ -17,6 +17,14 @@ struct ImageDesc
 };
 */
 
+enum WndMode
+{
+	A3D_WND_CURRENT = 0,
+	A3D_WND_NORMAL,
+	A3D_WND_FRAMELESS,
+	A3D_WND_FULLSCREEN,
+};
+
 struct GraphicsDesc
 {
 	enum FLAGS
@@ -31,6 +39,11 @@ struct GraphicsDesc
 	int alpha_bits;
 	int depth_bits;
 	int stencil_bits;
+
+	// intial wnd spec
+	// can be null for defaults: [0,0,800,600], A3D_WND_NORMAL
+	const int* wnd_xywh;
+	WndMode wnd_mode;
 };
 
 enum MouseInfo
@@ -223,13 +236,6 @@ int a3dGetTitle(char* utf8_name, int size);
 void a3dSetVisible(bool set);
 bool a3dGetVisible();
 
-enum WndMode
-{
-	A3D_WND_NORMAL,
-	A3D_WND_FRAMELESS,
-	A3D_WND_FULLSCREEN,
-};
-
 bool a3dIsMaximized();
 
 // resize
@@ -244,6 +250,7 @@ bool a3dGetKeyb(KeyInfo ki); // return true if vk is down, keyb_char has no stat
 
 // keyb_focus
 bool a3dGetFocus();
+void a3dSetFocus();
 
 void a3dCharSync(); // call in case of internal widget input re-focusing
 
