@@ -1041,16 +1041,19 @@ bool a3dGetVisible()
 	return mapped;
 }
 
+bool a3dIsMaximized()
+{
+	return false;
+}
+
 // resize
 WndMode a3dGetRect(int* xywh)
 {
 	if (xywh)
 	{
-		bool ext = false;
-		
 		int lrtb[4] = {0,0,0,0};
 		// deduce offsetting
-		if (wndmode != A3D_WND_FRAMELESS)
+		if (wndmode == A3D_WND_NORMAL)
 		{
 			long* extents;
 			Atom actual_type;
@@ -1078,7 +1081,6 @@ WndMode a3dGetRect(int* xywh)
 						lrtb[1] = (int)extents[1];
 						lrtb[2] = (int)extents[2];
 						lrtb[3] = (int)extents[3];
-						ext = true;
 					}
 					XFree(data);			
 				}
@@ -1100,8 +1102,8 @@ WndMode a3dGetRect(int* xywh)
 
 		xywh[0] = rx - lrtb[0];
 		xywh[1] = ry - lrtb[2];
-		xywh[2] = w;
-		xywh[3] = h;
+		xywh[2] = lrtb[0] + w + lrtb[1];
+		xywh[3] = lrtb[2] + h + lrtb[3];
 	}
 	return wndmode;
 }
@@ -1285,7 +1287,45 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		if (xywh)
 		{
 			// resize if requested, after exiting fullscreen!
-			XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+			if (wnd_mode==A3D_WND_NORMAL)
+			{
+				int lrtb[4]={0,0,0,0};
+
+				long* extents;
+				Atom actual_type;
+				int actual_format;
+				unsigned long nitems, bytes_after;
+				unsigned char* data = 0;
+				int result;
+
+				Atom frame_extends_atom = XInternAtom(dpy, "_NET_FRAME_EXTENTS", False);
+
+				if (frame_extends_atom)
+				{
+					result = XGetWindowProperty(
+						dpy, win, frame_extends_atom,
+						0, 4, False, AnyPropertyType, 
+						&actual_type, &actual_format, 
+						&nitems, &bytes_after, &data);
+
+					if (result == Success) 
+					{
+						if ((nitems == 4) && (bytes_after == 0)) 
+						{
+							extents = (long *)data;
+							lrtb[0] = (int)extents[0];
+							lrtb[1] = (int)extents[1];
+							lrtb[2] = (int)extents[2];
+							lrtb[3] = (int)extents[3];
+						}
+						XFree(data);			
+					}
+				}
+
+				XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2] - lrtb[0] - lrtb[1], xywh[3] - lrtb[2] - lrtb[3]);
+			}
+			else
+				XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
 		}
 	}
 }
