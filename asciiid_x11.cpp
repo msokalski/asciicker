@@ -616,6 +616,26 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	XGetWindowAttributes(dpy, win, &gwa);
 	int w = gwa.width, h = gwa.height;
 
+	/*
+	// HAS NO EFFECT, only going fullscreen on all monitors at once results in FLIP mode
+	// anything else uses BLIT mode even with this hint enabled :(
+	Atom bypass_wm_atom = XInternAtom(dpy,"_NET_WM_BYPASS_COMPOSITOR",False);
+
+	if (bypass_wm_atom)
+	{
+		static const unsigned long bypassCompositor = 1;
+
+		XChangeProperty(dpy,
+						win,
+						bypass_wm_atom,
+						XA_CARDINAL,
+						32,
+						PropModeReplace,
+						(const unsigned char*)&bypassCompositor,
+						1);
+	}
+	*/
+
 	if (platform_api.resize)
 		platform_api.resize(w,h);
 

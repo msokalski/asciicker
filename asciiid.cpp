@@ -30,6 +30,8 @@
 
 #include "fast_rand.h"
 
+ImFont* pFont = 0;
+
 Terrain* terrain = 0;
 int fonts_loaded = 0;
 int palettes_loaded = 0;
@@ -1607,6 +1609,10 @@ void my_render()
 			ImGui::NewFrame();
 		}
 
+
+//		if (pFont)
+//			ImGui::PushFont(pFont);		
+
 //		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
 //		ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
 		//ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(0,0),Dock::Size,0);
@@ -2282,6 +2288,9 @@ void my_render()
 			ImGui::End();
 		}
 		*/
+
+//		if (pFont)
+//			ImGui::PopFont();
 	}
 
 	ImGui::Render();
@@ -2923,6 +2932,10 @@ void my_init()
 
 	ImGui_ImplOpenGL3_Init();
 
+	ImWchar range[]={0x0020, 0x03FF, 0};
+	pFont = io.Fonts->AddFontFromFileTTF("./fonts/Roboto-Medium.ttf", 16, NULL, range/*io.Fonts->GetGlyphRangesDefault()*/);	
+	io.Fonts->Build();
+
 	terrain = CreateTerrain();
 
 	// ALTERNATIVE:
@@ -3005,6 +3018,7 @@ void my_close()
 			free(gather->tmp_y);
 		free(gather);
 	}
+
 
 	a3dClose();
 
