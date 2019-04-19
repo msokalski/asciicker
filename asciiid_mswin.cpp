@@ -928,57 +928,30 @@ bool a3dGetVisible()
 	return mapped;
 }
 
-// resize
-static void _a3dSaveRect(int* xywh)
-{
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-
-	RECT c, r;
-	GetClientRect(hWnd, &c);
-
-	// return full rect, except normal-max -> remove borders
-
-	if (wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd, GWL_STYLE)))
-	{
-		ClientToScreen(hWnd, (POINT*)&c);
-		r.left = c.left;
-		r.top = c.top - GetSystemMetrics(SM_CYCAPTION);
-		r.right = c.left + c.right;
-		r.bottom = c.top + c.bottom;
-	}
-	else
-		GetWindowRect(hWnd, &r);
-
-	xywh[0] = r.left;
-	xywh[1] = r.top;
-	xywh[2] = r.right-r.left;
-	xywh[3] = r.bottom-r.top;
-}
-
 WndMode a3dGetRect(int* xywh)
 {
 	if (xywh)
 	{
 		HWND hWnd = WindowFromDC(wglGetCurrentDC());
 
-		RECT c,r;
-		GetClientRect(hWnd, &c);
+		RECT r;
 
 		// xy points to full rect wh is client size
 		// with 1 exception: normal mode in maximized state -> we remove borders from xy
 		if (wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd,GWL_STYLE)))
 		{
-			ClientToScreen(hWnd, (POINT*)&c);
-			r.left = c.left;
-			r.top = c.top - GetSystemMetrics(SM_CYCAPTION);
+			GetClientRect(hWnd, &r);
+			r.top -= GetSystemMetrics(SM_CYCAPTION);
+			ClientToScreen(hWnd, (POINT*)&r + 0);
+			ClientToScreen(hWnd, (POINT*)&r + 1);
 		}
 		else
 			GetWindowRect(hWnd, &r);
 
 		xywh[0] = r.left;
 		xywh[1] = r.top;
-		xywh[2] = c.right;
-		xywh[3] = c.bottom;
+		xywh[2] = r.right - r.left;
+		xywh[3] = r.bottom - r.top;
 	}
 
 	return wndmode;
@@ -1005,7 +978,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		// KEEP ORIGINAL RECT!!!!
 		if (wndmode != A3D_WND_FULLSCREEN)
 		{
-			_a3dSaveRect(exit_full_xywh);
+			a3dGetRect(exit_full_xywh);
 		}
 
 		wndmode = wnd_mode;
@@ -1039,7 +1012,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			_a3dSaveRect(wnd_xywh);
+			a3dGetRect(wnd_xywh);
 			xywh = wnd_xywh;
 		}
 
@@ -1142,9 +1115,13 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			}
 			else
 			{
-				_a3dSaveRect(wnd_xywh);
+				a3dGetRect(wnd_xywh);
 			}
 			xywh = wnd_xywh;
+		}
+		else
+		{
+			s &= ~WS_MAXIMIZE;
 		}
 
 		wndmode = wnd_mode;
@@ -1172,49 +1149,30 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			}
 			else
 			{
-				_a3dSaveRect(wnd_xywh);
+				a3dGetRect(wnd_xywh);
+			}
+
+			if (s&WS_MAXIMIZE)
+			{
+				// add extra borders
+				RECT r;
+				r.left = wnd_xywh[0];
+				r.top = wnd_xywh[1] + GetSystemMetrics(SM_CYCAPTION);
+				r.right = wnd_xywh[0] + wnd_xywh[2];
+				r.bottom = wnd_xywh[0] + wnd_xywh[3];
+				AdjustWindowRect(&r, s, FALSE);
+
+				wnd_xywh[0] = r.left;
+				wnd_xywh[1] = r.top;
+				wnd_xywh[2] = r.right - r.left;
+				wnd_xywh[3] = r.bottom - r.top;
 			}
 
 			xywh = wnd_xywh;
 		}
 		else
 		{
-			// adjust to fullrect - given size is client only
-			RECT r;
-			r.left = 0;
-			r.top = 0;
-			r.right = xywh[2];
-			r.bottom = xywh[3];
-
-			AdjustWindowRectEx(&r, s, FALSE, 0);
-
-			wnd_xywh[0] = xywh[0];
-			wnd_xywh[1] = xywh[1];
-			wnd_xywh[2] = r.right-r.left;
-			wnd_xywh[3] = r.bottom-r.top;
-
-			xywh = wnd_xywh;
-		}
-
-		if (s&WS_MAXIMIZE)
-		{
-			// we need to add borders only if maxmized!
-			int cap = GetSystemMetrics(SM_CYCAPTION);
-
-			RECT r;
-			r.left = xywh[0];
-			r.top = xywh[1] + cap;
-			r.right = xywh[0] + xywh[2];
-			r.bottom = xywh[1] + xywh[3];
-
-			AdjustWindowRectEx(&r, s, FALSE, 0);
-
-			wnd_xywh[0] = r.left;
-			wnd_xywh[1] = r.top;
-			wnd_xywh[2] = r.right - r.left;
-			wnd_xywh[3] = r.bottom - r.top;
-
-			xywh = wnd_xywh;
+			s &= ~WS_MAXIMIZE;
 		}
 
 		wndmode = wnd_mode;
