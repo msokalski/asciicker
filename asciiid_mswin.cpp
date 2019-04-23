@@ -975,13 +975,10 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		DWORD s = GetWindowLong(hWnd, GWL_STYLE);
 		s &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
 
-		// KEEP ORIGINAL RECT!!!!
 		if (wndmode != A3D_WND_FULLSCREEN)
 		{
 			a3dGetRect(exit_full_xywh);
 		}
-
-		wndmode = wnd_mode;
 
 		struct EnumMon
 		{
@@ -1016,79 +1013,69 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			xywh = wnd_xywh;
 		}
 
-		int wrx = xywh[2] / 2;
-		int wry = xywh[3] / 2;
-		int wcx = xywh[0] + wrx;
-		int wcy = xywh[1] + wry;
-
 		// - locate monitor which is covered with greatest area by win
 
-		int max_area = 0;
-		int best_mon = -1;
+		int left_mon = -1;
+		int right_mon = -1;
+		int bottom_mon = -1;
+		int top_mon = -1;
 
-		int num = em.num;
-
-		for (int i = 0; i < num; i++)
+		for (int i = 0; i < em.num; i++)
 		{
-			int mrx = em.r[i][2] / 2;
-			int mry = em.r[i][3] / 2;
-			int mcx = em.r[i][0] + mrx;
-			int mcy = em.r[i][1] + mry;
+			int a, b;
 
-			int w = wrx + mrx - abs(wcx - mcx);
-			int h = wry + mry - abs(wcy - mcy);
+			a = xywh[0] + xywh[2]; b = em.r[i][0] + em.r[i][2];
+			int min_x = a < b ? a : b;
+			a = xywh[0]; b = em.r[i][0];
+			int max_x = a > b ? a : b;
+			a = xywh[1] + xywh[3]; b = em.r[i][1] + em.r[i][3];
+			int min_y = a < b ? a : b;
+			a = xywh[1]; b = em.r[i][1];
+			int max_y = a > b ? a : b;
 
-			if (w > 0 && h > 0)
+			if (max_x < min_x && max_y < min_y)
 			{
-				int a = w * h;
-				if (a > max_area)
-				{
-					best_mon = i;
-					max_area = a;
-				}
-			}
-		}
-
-		int left_mon = best_mon;
-		int right_mon = best_mon;
-		int bottom_mon = best_mon;
-		int top_mon = best_mon;
-
-		for (int i = 0; i < num; i++)
-		{
-			if (i == best_mon)
-				continue;
-
-			int mrx = em.r[i][2] / 2;
-			int mry = em.r[i][3] / 2;
-			int mcx = em.r[i][0] + mrx;
-			int mcy = em.r[i][1] + mry;
-
-			if (abs(mcx - wcx) < wrx)
-			{
-				if (em.r[i][0] < em.r[left_mon][0])
+				if (left_mon < 0 || em.r[i][0] < em.r[left_mon][0])
 					left_mon = i;
-				if (em.r[i][0] + em.r[i][2] > em.r[right_mon][0] + em.r[right_mon][2])
-					right_mon = i;
-			}
 
-			if (abs(mcy - wcy) < wry)
-			{
-				if (em.r[i][1] < em.r[top_mon][1])
+				if (right_mon < 0 || em.r[i][0] + em.r[i][2] > em.r[right_mon][0] + em.r[right_mon][2])
+					right_mon = i;
+
+				if (top_mon < 0 || em.r[i][1] < em.r[top_mon][1])
 					top_mon = i;
-				if (em.r[i][1] + em.r[i][3] > em.r[bottom_mon][1] + em.r[bottom_mon][3])
+
+				if (bottom_mon < 0 || em.r[i][1] + em.r[i][3] > em.r[bottom_mon][1] + em.r[bottom_mon][3])
 					bottom_mon = i;
 			}
-
 		}
+
+		if (left_mon < 0)
+			return false;
 
 		wnd_xywh[0] = em.r[left_mon][0];
 		wnd_xywh[1] = em.r[top_mon][1];
 		wnd_xywh[2] = em.r[right_mon][0] + em.r[right_mon][2] - em.r[left_mon][0];
 		wnd_xywh[3] = em.r[bottom_mon][1] + em.r[bottom_mon][3] - em.r[top_mon][1];
 
-		// remove decorations
+		wndmode = wnd_mode;
+
+		s &= ~WS_MAXIMIZE;
 		SetWindowLong(hWnd, GWL_STYLE, s);
+
+		WINDOWPLACEMENT wp;
+		wp.length = sizeof(WINDOWPLACEMENT);
+		wp.showCmd = SW_RESTORE;
+		wp.flags = 0;
+		wp.ptMaxPosition.x = -1;
+		wp.ptMaxPosition.y = -1;
+		wp.ptMinPosition.x = -1;
+		wp.ptMinPosition.y = -1;
+		wp.rcNormalPosition.left = wnd_xywh[0];
+		wp.rcNormalPosition.top = wnd_xywh[1];
+		wp.rcNormalPosition.right = wnd_xywh[0] + wnd_xywh[2];
+		wp.rcNormalPosition.bottom = wnd_xywh[1] + wnd_xywh[3];
+		SetWindowPlacement(hWnd, &wp);
+
 		SetWindowPos(hWnd, 0, wnd_xywh[0], wnd_xywh[1], wnd_xywh[2], wnd_xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING);
 
 		RECT r;
@@ -1119,14 +1106,27 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			}
 			xywh = wnd_xywh;
 		}
-		else
-		{
-			s &= ~WS_MAXIMIZE;
-		}
 
 		wndmode = wnd_mode;
 
+		s &= ~WS_MAXIMIZE;
 		SetWindowLong(hWnd, GWL_STYLE, s);
+
+		WINDOWPLACEMENT wp;
+		wp.length = sizeof(WINDOWPLACEMENT);
+		wp.showCmd = SW_RESTORE;
+		wp.flags = 0;
+		wp.ptMaxPosition.x = -1;
+		wp.ptMaxPosition.y = -1;
+		wp.ptMinPosition.x = -1;
+		wp.ptMinPosition.y = -1;
+		wp.rcNormalPosition.left = wnd_xywh[0];
+		wp.rcNormalPosition.top = wnd_xywh[1];
+		wp.rcNormalPosition.right = wnd_xywh[0] + wnd_xywh[2];
+		wp.rcNormalPosition.bottom = wnd_xywh[1] + wnd_xywh[3];
+		SetWindowPlacement(hWnd, &wp);
+
+
 		SetWindowPos(hWnd, 0, xywh[0], xywh[1], xywh[2], xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
 		return true;
 	}
@@ -1152,6 +1152,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 				a3dGetRect(wnd_xywh);
 			}
 
+			/*
 			if (s&WS_MAXIMIZE)
 			{
 				// add extra borders
@@ -1167,15 +1168,29 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 				wnd_xywh[2] = r.right - r.left;
 				wnd_xywh[3] = r.bottom - r.top;
 			}
+			*/
 
 			xywh = wnd_xywh;
 		}
-		else
-		{
-			s &= ~WS_MAXIMIZE;
-		}
 
 		wndmode = wnd_mode;
+
+		s &= ~WS_MAXIMIZE;
+		SetWindowLong(hWnd, GWL_STYLE, s);
+
+		WINDOWPLACEMENT wp;
+		wp.length = sizeof(WINDOWPLACEMENT);
+		wp.showCmd = SW_RESTORE;
+		wp.flags = 0;
+		wp.ptMaxPosition.x = -1;
+		wp.ptMaxPosition.y = -1;
+		wp.ptMinPosition.x = -1;
+		wp.ptMinPosition.y = -1;
+		wp.rcNormalPosition.left = wnd_xywh[0];
+		wp.rcNormalPosition.top = wnd_xywh[1];
+		wp.rcNormalPosition.right = wnd_xywh[0] + wnd_xywh[2];
+		wp.rcNormalPosition.bottom = wnd_xywh[1] + wnd_xywh[3];
+		SetWindowPlacement(hWnd, &wp);
 
 		SetWindowLong(hWnd, GWL_STYLE, s);
 		SetWindowPos(hWnd, 0, xywh[0], xywh[1], xywh[2], xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
