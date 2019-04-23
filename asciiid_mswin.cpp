@@ -928,9 +928,9 @@ bool a3dGetVisible()
 	return mapped;
 }
 
-WndMode a3dGetRect(int* xywh)
+WndMode a3dGetRect(int* xywh, int* client_wh)
 {
-	if (xywh)
+	if (xywh || client_wh)
 	{
 		HWND hWnd = WindowFromDC(wglGetCurrentDC());
 
@@ -940,18 +940,42 @@ WndMode a3dGetRect(int* xywh)
 		// with 1 exception: normal mode in maximized state -> we remove borders from xy
 		if (wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd,GWL_STYLE)))
 		{
-			GetClientRect(hWnd, &r);
+			if (client_wh)
+			{
+				client_wh[0] = r.right;
+				client_wh[1] = r.bottom;
+			}
+
 			r.top -= GetSystemMetrics(SM_CYCAPTION);
 			ClientToScreen(hWnd, (POINT*)&r + 0);
 			ClientToScreen(hWnd, (POINT*)&r + 1);
+
+			if (xywh)
+			{			
+				xywh[0] = r.left;
+				xywh[1] = r.top;
+				xywh[2] = r.right - r.left;
+				xywh[3] = r.bottom - r.top;
+			}
 		}
 		else
-			GetWindowRect(hWnd, &r);
+		{
+			if (client_wh)
+			{
+				GetClientRect(hWnd, &r);
+				client_wh[0] = r.right;
+				client_wh[1] = r.bottom;				
+			}
 
-		xywh[0] = r.left;
-		xywh[1] = r.top;
-		xywh[2] = r.right - r.left;
-		xywh[3] = r.bottom - r.top;
+			if (xywh)
+			{
+				GetWindowRect(hWnd, &r);
+				xywh[0] = r.left;
+				xywh[1] = r.top;
+				xywh[2] = r.right - r.left;
+				xywh[3] = r.bottom - r.top;
+			}
+		}
 	}
 
 	return wndmode;

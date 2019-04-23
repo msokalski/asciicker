@@ -1731,7 +1731,7 @@ void my_render()
 		if (ImGui::Button("KEEP"))
 		{
 			int r[4];
-			WndMode mode = a3dGetRect(r);
+			WndMode mode = a3dGetRect(r, 0);
 			a3dSetRect(r, mode);
 		}
 

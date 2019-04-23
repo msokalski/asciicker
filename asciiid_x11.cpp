@@ -1082,13 +1082,13 @@ bool a3dIsMaximized()
 }
 
 // resize
-WndMode a3dGetRect(int* xywh)
+WndMode a3dGetRect(int* xywh, int* client_wh)
 {
-	if (xywh)
+	if (xywh || client_wh)
 	{
 		int lrtb[4] = {0,0,0,0};
 		// deduce offsetting
-		if (wndmode == A3D_WND_NORMAL)
+		if (wndmode == A3D_WND_NORMAL && xywh)
 		{
 			long* extents;
 			Atom actual_type;
@@ -1128,17 +1128,26 @@ WndMode a3dGetRect(int* xywh)
 		unsigned int w,h,b,d;
 		XGetGeometry(dpy,win,&root,&x,&y,&w,&h,&b,&d);
 
-		int rx,ry;
-		Window c;
-		XTranslateCoordinates(dpy,win,root,0,0,&rx,&ry,&c);
+		if (client_wh)
+		{
+			client_wh[0] = w;
+			client_wh[1] = h;
+		}
 
-		// if _MOTIF_WM_HINTS and/or _NET_FRAME_EXTENTS are unsupported
-		// this may lead to unconsistent rect setter with getter !!!
+		if (xywh)
+		{
+			int rx,ry;
+			Window c;
+			XTranslateCoordinates(dpy,win,root,0,0,&rx,&ry,&c);
 
-		xywh[0] = rx - lrtb[0];
-		xywh[1] = ry - lrtb[2];
-		xywh[2] = lrtb[0] + w + lrtb[1];
-		xywh[3] = lrtb[2] + h + lrtb[3];
+			// if _MOTIF_WM_HINTS and/or _NET_FRAME_EXTENTS are unsupported
+			// this may lead to unconsistent rect setter with getter !!!
+
+			xywh[0] = rx - lrtb[0];
+			xywh[1] = ry - lrtb[2];
+			xywh[2] = lrtb[0] + w + lrtb[1];
+			xywh[3] = lrtb[2] + h + lrtb[3];
+		}
 	}
 	return wndmode;
 }
@@ -1156,7 +1165,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		wndmode = wnd_mode;
 		wnddirty = true;
 		if (!xywh)
-			a3dGetRect(wndrect);
+			a3dGetRect(wndrect, 0);
 		else
 		{
 			wndrect[0] = xywh[0];
@@ -1178,7 +1187,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			a3dGetRect(wnd_xywh);
+			a3dGetRect(wnd_xywh, 0);
 			xywh = wnd_xywh;
 		}
 

@@ -239,8 +239,8 @@ bool a3dGetVisible();
 bool a3dIsMaximized();
 
 // resize
-WndMode a3dGetRect(int* xywh); // returns wnd_mode
-bool a3dSetRect(const int* xywh, WndMode wnd_mode); // can fail if not visible!
+WndMode a3dGetRect(int* xywh, int* client_wh);
+bool a3dSetRect(const int* xywh, WndMode wnd_mode);
 
 // mouse
 MouseInfo a3dGetMouse(int* x, int* y); // returns but flags, mouse wheel has no state
