@@ -7,14 +7,6 @@ struct AudioDesc
 	int channels;
 	int frequency;
 };
-
-struct ImageDesc
-{
-	int width;
-	int height;
-	int channels;
-	int depth;
-};
 */
 
 enum WndMode

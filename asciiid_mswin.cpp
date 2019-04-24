@@ -930,50 +930,67 @@ bool a3dGetVisible()
 
 WndMode a3dGetRect(int* xywh, int* client_wh)
 {
-	if (xywh || client_wh)
+	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	RECT r;
+
+	if (client_wh)
 	{
-		HWND hWnd = WindowFromDC(wglGetCurrentDC());
+		GetClientRect(hWnd, &r);
+		client_wh[0] = r.right;
+		client_wh[1] = r.bottom;
+	}
 
-		RECT r;
+	if (xywh)
+	{
+		GetWindowRect(hWnd, &r);
+		xywh[0] = r.left;
+		xywh[1] = r.top;
+		xywh[2] = r.right - r.left;
+		xywh[3] = r.bottom - r.top;
 
-		// xy points to full rect wh is client size
-		// with 1 exception: normal mode in maximized state -> we remove borders from xy
-		if (wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd,GWL_STYLE)))
+		if (wndmode == A3D_WND_NORMAL)
 		{
-			if (client_wh)
+			HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL);
+			if (mon)
 			{
-				client_wh[0] = r.right;
-				client_wh[1] = r.bottom;
-			}
+				WINDOWPLACEMENT wp;
+				wp.length = sizeof(WINDOWPLACEMENT);
+				GetWindowPlacement(hWnd, &wp);
 
-			r.top -= GetSystemMetrics(SM_CYCAPTION);
-			ClientToScreen(hWnd, (POINT*)&r + 0);
-			ClientToScreen(hWnd, (POINT*)&r + 1);
+				MONITORINFO nfo;
+				nfo.cbSize = sizeof(MONITORINFO);
+				GetMonitorInfo(mon, &nfo);
 
-			if (xywh)
-			{			
-				xywh[0] = r.left;
-				xywh[1] = r.top;
-				xywh[2] = r.right - r.left;
-				xywh[3] = r.bottom - r.top;
-			}
-		}
-		else
-		{
-			if (client_wh)
-			{
-				GetClientRect(hWnd, &r);
-				client_wh[0] = r.right;
-				client_wh[1] = r.bottom;				
-			}
+				if (wp.rcNormalPosition.left != xywh[0] - nfo.rcWork.left ||
+					wp.rcNormalPosition.top != xywh[1] - nfo.rcWork.top ||
+					wp.rcNormalPosition.right - wp.rcNormalPosition.left != xywh[2] ||
+					wp.rcNormalPosition.bottom - wp.rcNormalPosition.top != xywh[3])
+				{
+					int left = xywh[0] - nfo.rcWork.left;
+					int right = nfo.rcWork.right - (xywh[0] + xywh[2]);
+					int top = xywh[1] - nfo.rcWork.top;
+					int bottom = nfo.rcWork.bottom - (xywh[1] + xywh[3]);
 
-			if (xywh)
-			{
-				GetWindowRect(hWnd, &r);
-				xywh[0] = r.left;
-				xywh[1] = r.top;
-				xywh[2] = r.right - r.left;
-				xywh[3] = r.bottom - r.top;
+					// all this mess was to clip docked window rect to workarea of docking monitor :)
+
+					if (left < 0)
+					{
+						xywh[0] -= left;
+						xywh[2] += left;
+					}
+
+					if (top < 0)
+					{
+						xywh[1] -= top;
+						xywh[3] += top;
+					}
+
+					if (right < 0)
+						xywh[2] += right;
+
+					if (bottom < 0)
+						xywh[3] += bottom;
+				}
 			}
 		}
 	}
@@ -1001,7 +1018,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 
 		if (wndmode != A3D_WND_FULLSCREEN)
 		{
-			a3dGetRect(exit_full_xywh);
+			a3dGetRect(exit_full_xywh, 0);
 		}
 
 		struct EnumMon
@@ -1033,7 +1050,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			a3dGetRect(wnd_xywh);
+			a3dGetRect(wnd_xywh, 0);
 			xywh = wnd_xywh;
 		}
 
@@ -1085,26 +1102,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 
 		s &= ~WS_MAXIMIZE;
 		SetWindowLong(hWnd, GWL_STYLE, s);
-
-		WINDOWPLACEMENT wp;
-		wp.length = sizeof(WINDOWPLACEMENT);
-		wp.showCmd = SW_RESTORE;
-		wp.flags = 0;
-		wp.ptMaxPosition.x = -1;
-		wp.ptMaxPosition.y = -1;
-		wp.ptMinPosition.x = -1;
-		wp.ptMinPosition.y = -1;
-		wp.rcNormalPosition.left = wnd_xywh[0];
-		wp.rcNormalPosition.top = wnd_xywh[1];
-		wp.rcNormalPosition.right = wnd_xywh[0] + wnd_xywh[2];
-		wp.rcNormalPosition.bottom = wnd_xywh[1] + wnd_xywh[3];
-		SetWindowPlacement(hWnd, &wp);
-
 		SetWindowPos(hWnd, 0, wnd_xywh[0], wnd_xywh[1], wnd_xywh[2], wnd_xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING);
-
-		RECT r;
-		GetWindowRect(hWnd, &r);
-
 		return true;
 	}
 
@@ -1126,7 +1124,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			}
 			else
 			{
-				a3dGetRect(wnd_xywh);
+				a3dGetRect(wnd_xywh, 0);
 			}
 			xywh = wnd_xywh;
 		}
@@ -1135,22 +1133,6 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 
 		s &= ~WS_MAXIMIZE;
 		SetWindowLong(hWnd, GWL_STYLE, s);
-
-		WINDOWPLACEMENT wp;
-		wp.length = sizeof(WINDOWPLACEMENT);
-		wp.showCmd = SW_RESTORE;
-		wp.flags = 0;
-		wp.ptMaxPosition.x = -1;
-		wp.ptMaxPosition.y = -1;
-		wp.ptMinPosition.x = -1;
-		wp.ptMinPosition.y = -1;
-		wp.rcNormalPosition.left = wnd_xywh[0];
-		wp.rcNormalPosition.top = wnd_xywh[1];
-		wp.rcNormalPosition.right = wnd_xywh[0] + wnd_xywh[2];
-		wp.rcNormalPosition.bottom = wnd_xywh[1] + wnd_xywh[3];
-		SetWindowPlacement(hWnd, &wp);
-
-
 		SetWindowPos(hWnd, 0, xywh[0], xywh[1], xywh[2], xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
 		return true;
 	}
@@ -1173,26 +1155,8 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 			}
 			else
 			{
-				a3dGetRect(wnd_xywh);
+				a3dGetRect(wnd_xywh, 0);
 			}
-
-			/*
-			if (s&WS_MAXIMIZE)
-			{
-				// add extra borders
-				RECT r;
-				r.left = wnd_xywh[0];
-				r.top = wnd_xywh[1] + GetSystemMetrics(SM_CYCAPTION);
-				r.right = wnd_xywh[0] + wnd_xywh[2];
-				r.bottom = wnd_xywh[0] + wnd_xywh[3];
-				AdjustWindowRect(&r, s, FALSE);
-
-				wnd_xywh[0] = r.left;
-				wnd_xywh[1] = r.top;
-				wnd_xywh[2] = r.right - r.left;
-				wnd_xywh[3] = r.bottom - r.top;
-			}
-			*/
 
 			xywh = wnd_xywh;
 		}
@@ -1200,22 +1164,6 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		wndmode = wnd_mode;
 
 		s &= ~WS_MAXIMIZE;
-		SetWindowLong(hWnd, GWL_STYLE, s);
-
-		WINDOWPLACEMENT wp;
-		wp.length = sizeof(WINDOWPLACEMENT);
-		wp.showCmd = SW_RESTORE;
-		wp.flags = 0;
-		wp.ptMaxPosition.x = -1;
-		wp.ptMaxPosition.y = -1;
-		wp.ptMinPosition.x = -1;
-		wp.ptMinPosition.y = -1;
-		wp.rcNormalPosition.left = wnd_xywh[0];
-		wp.rcNormalPosition.top = wnd_xywh[1];
-		wp.rcNormalPosition.right = wnd_xywh[0] + wnd_xywh[2];
-		wp.rcNormalPosition.bottom = wnd_xywh[1] + wnd_xywh[3];
-		SetWindowPlacement(hWnd, &wp);
-
 		SetWindowLong(hWnd, GWL_STYLE, s);
 		SetWindowPos(hWnd, 0, xywh[0], xywh[1], xywh[2], xywh[3], SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
 		return true;

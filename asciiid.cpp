@@ -1711,23 +1711,27 @@ void my_render()
 
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
-		ImGui::Text("%s", a3dIsMaximized() ? "MAXIMIZED" : "normal");
+		int xywh[4],wh[2];
+		a3dGetRect(xywh, wh);
+		ImGui::Text("%d,%d,%d,%d %d,%d %s", 
+			xywh[0], xywh[1], xywh[2], xywh[3],
+			wh[0], wh[1], a3dIsMaximized() ? "MAXIMIZED" : "normal");
 
 		if (ImGui::Button("FULL"))
 		{
 			a3dSetRect(0, A3D_WND_FULLSCREEN);
 		}
-
+		ImGui::SameLine();
 		if (ImGui::Button("NORM"))
 		{
 			a3dSetRect(0, A3D_WND_NORMAL);
 		}
-
+		ImGui::SameLine();
 		if (ImGui::Button("PURE"))
 		{
 			a3dSetRect(0, A3D_WND_FRAMELESS);
 		}
-
+		ImGui::SameLine();
 		if (ImGui::Button("KEEP"))
 		{
 			int r[4];
