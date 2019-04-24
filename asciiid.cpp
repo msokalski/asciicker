@@ -556,7 +556,7 @@ struct RenderContext
 						xy = bxy + xy * VISUAL_CELLS;
 						xyz[3] = vec3(xy*dxy, z);
 
-						if (br.w != 0.0 && br.z>0)
+						if (br.w != 0.0 && br.z>0 && br.w<=1.0 && br.w>=-1.0)
 						{
 							for (int i = 0; i < 4; i++)
 							{
@@ -846,6 +846,29 @@ struct RenderContext
 				color.rgb = mix(vec3(0, 0, 1), color.rgb, grid);
 
 				// brush preview
+				if (br.w > 1.0)
+				{
+					// flat (no-alpha) matid brush
+					float abs_r = abs(br.z);
+					float len = length(world_xyuv.xy - br.xy);
+					float alf = (abs_r - len) / abs_r;
+
+					float dalf = fwidth(alf);
+
+					float lo = smoothstep(-dalf, 0, alf);
+					float hi = smoothstep(+dalf, 0, alf);
+					float silh =  lo * hi;
+
+					alf = max(0.0, lo);
+
+					if (br.z>0)
+						color.gb *= 1.0 - alf;
+					else
+						color.rg *= 1.0 - alf;
+
+					color.rgb *= 1.0 - silh*0.25;
+				}
+				else
 				if (br.w != 0.0)
 				{
 					float abs_r = abs(br.z);
@@ -864,6 +887,7 @@ struct RenderContext
 
 					color.rgb *= 1.0 - silh*0.25;
 				}
+
 			}
 		);
 
@@ -1909,7 +1933,7 @@ void my_render()
 					ImGui::Text("Material channel selects which material \ndefinition should be used (0-255)");
 
 					ImGui::Text("MODE (shift/ctrl): %s", "NORMAL");
-					ImGui::SliderFloat("BRUSH RADIUS", &br_radius, 1.f, 100.f);
+					ImGui::SliderFloat("BRUSH DIAMETER", &br_radius, 1.f, 100.f);
 
 					float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 					ImGui::PushButtonRepeat(true);
@@ -2655,107 +2679,140 @@ void my_render()
 
 			if (p)
 			{
-				if (io.KeyAlt)
+				if (edit_mode == 0)
 				{
-					if (io.MouseDown[0])
+					if (io.KeyAlt)
 					{
-						URDO_Open();
-						creating = -1;
-
-						painting_x = (int)roundf(io.MousePos.x);
-						painting_y = (int)roundf(io.MousePos.y);
-
-						painting_dx = hit[0];
-						painting_dy = hit[1];
-					}
-					else
-					{
-						// paint similar preview as for diag flipping but 
-						// hilight entire PATCH (instead of quad) and use RED color
-
-						// add here quad preview
-						double qx = floor(hit[0] / VISUAL_CELLS) * VISUAL_CELLS;
-						double qy = floor(hit[1] / VISUAL_CELLS) * VISUAL_CELLS;
-						br_quad[0] = (float)qx;
-						br_quad[1] = (float)qy;
-						br_quad[2] = -1.0f;
-					}
-				}
-				else
-				if (io.KeyCtrl)
-				{
-					if (io.KeyShift)
-					{
-						// add here probe preview
 						if (io.MouseDown[0])
 						{
-							// height-probe
-							probe_z = (int)round(hit[2]);
-							br_probe[0] = (float)probe_z;
-							br_probe[1] = 0.5f;
+							URDO_Open();
+							creating = -1;
+
+							painting_x = (int)roundf(io.MousePos.x);
+							painting_y = (int)roundf(io.MousePos.y);
+
+							painting_dx = hit[0];
+							painting_dy = hit[1];
 						}
 						else
 						{
-							// preview
-							br_probe[0] = (float)round(hit[2]);
-							br_probe[1] = 0.5f;
+							// paint similar preview as for diag flipping but 
+							// hilight entire PATCH (instead of quad) and use RED color
+
+							// add here quad preview
+							double qx = floor(hit[0] / VISUAL_CELLS) * VISUAL_CELLS;
+							double qy = floor(hit[1] / VISUAL_CELLS) * VISUAL_CELLS;
+							br_quad[0] = (float)qx;
+							br_quad[1] = (float)qy;
+							br_quad[2] = -1.0f;
+						}
+					}
+					else
+					if (io.KeyCtrl)
+					{
+						if (io.KeyShift)
+						{
+							// add here probe preview
+							if (io.MouseDown[0])
+							{
+								// height-probe
+								probe_z = (int)round(hit[2]);
+								br_probe[0] = (float)probe_z;
+								br_probe[1] = 0.5f;
+							}
+							else
+							{
+								// preview
+								br_probe[0] = (float)round(hit[2]);
+								br_probe[1] = 0.5f;
+							}
+						}
+						else
+						{
+							// add here quad preview
+							double qx = floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
+							double qy = floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
+							br_quad[0] = (float)qx;
+							br_quad[1] = (float)qy;
+							br_quad[2] = 1.0f;
+
+							if (!diag_flipped && io.MouseDown[0])
+							{
+								struct mod_floor
+								{
+									mod_floor(int d) : y(d) {}
+									int mod(int x)
+									{
+										int r = x % y;
+										if (/*(r != 0) && ((r < 0) != (y < 0))*/ r && (r^y)<0) 
+											r += y;
+										return r;
+									}
+									int y;
+								} mf(HEIGHT_CELLS);
+
+								// floor xy hit coords to height cells
+								//int hx = (int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
+								//int hy = (int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
+
+								int hx = mf.mod((int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS));
+								int hy = mf.mod((int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS));
+
+								{
+									uint16_t diag = GetTerrainDiag(p);
+									diag ^= 1 << (hx + hy * HEIGHT_CELLS);
+
+									URDO_Diag(p);
+									SetTerrainDiag(p, diag);
+								}
+
+								// one per click
+								diag_flipped = true;
+							}
 						}
 					}
 					else
 					{
-						// add here quad preview
-						double qx = floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
-						double qy = floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
-						br_quad[0] = (float)qx;
-						br_quad[1] = (float)qy;
-						br_quad[2] = 1.0f;
+						br_xyra[0] = (float)hit[0];
+						br_xyra[1] = (float)hit[1];
+						br_xyra[3] = br_alpha;
 
-						if (!diag_flipped && io.MouseDown[0])
+						if (io.MouseDown[0])
 						{
-							struct mod_floor
-							{
-								mod_floor(int d) : y(d) {}
-								int mod(int x)
-								{
-									int r = x % y;
-									if (/*(r != 0) && ((r < 0) != (y < 0))*/ r && (r^y)<0) 
-										r += y;
-									return r;
-								}
-								int y;
-							} mf(HEIGHT_CELLS);
+							//BEGIN
+							URDO_Open();
+							painting = 1;
 
-							// floor xy hit coords to height cells
-							//int hx = (int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
-							//int hy = (int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) % HEIGHT_CELLS;
+							painting_x = (int)roundf(io.MousePos.x);
+							painting_y = (int)roundf(io.MousePos.y);
 
-							int hx = mf.mod((int)floor(hit[0] * HEIGHT_CELLS / VISUAL_CELLS));
-							int hy = mf.mod((int)floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS));
+							painting_dx = hit[0];
+							painting_dy = hit[1];
+							paint_dist = 0.0;
 
-							{
-								uint16_t diag = GetTerrainDiag(p);
-								diag ^= 1 << (hx + hy * HEIGHT_CELLS);
+							float alpha = br_alpha;
+							br_alpha *= STAMP_A;
+							Stamp(hit[0], hit[1]);
+							br_alpha = alpha;
 
-								URDO_Diag(p);
-								SetTerrainDiag(p, diag);
-							}
-
-							// one per click
-							diag_flipped = true;
+							// stamped, don't apply preview to it
 						}
 					}
 				}
 				else
+				if (edit_mode == 1)
 				{
 					br_xyra[0] = (float)hit[0];
 					br_xyra[1] = (float)hit[1];
-					br_xyra[3] = br_alpha;
+					br_xyra[2] = (float)br_radius * 0.5;
+					br_xyra[3] = 2; // alpha>1 -> painting matid
 
 					if (io.MouseDown[0])
 					{
 						//BEGIN
+						/*
 						URDO_Open();
-						painting = 1;
+						painting = 2;
 
 						painting_x = (int)roundf(io.MousePos.x);
 						painting_y = (int)roundf(io.MousePos.y);
@@ -2770,7 +2827,23 @@ void my_render()
 						br_alpha = alpha;
 
 						// stamped, don't apply preview to it
+						*/
 					}
+				}
+				else
+				if (edit_mode == 2)
+				{
+					
+				}
+				else
+				if (edit_mode == 3)
+				{
+					
+				}
+				else
+				if (edit_mode == 4)
+				{
+					
 				}
 			}
 			else
@@ -2812,7 +2885,7 @@ void my_render()
 		br_xyra[3] = 0;
 	}
 
-	if (io.KeysDown[A3D_LSHIFT])
+	if (edit_mode==0 && io.KeysDown[A3D_LSHIFT])
 	{
 		br_xyra[2] = -br_xyra[2];
 	}
