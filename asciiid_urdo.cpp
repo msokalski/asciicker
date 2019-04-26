@@ -103,7 +103,8 @@ struct URDO
 	{
 		CMD_GROUP,
 		CMD_PATCH_CREATE,
-		CMD_PATCH_UPDATE,
+		CMD_PATCH_UPDATE_HEIGHT,
+		CMD_PATCH_UPDATE_VISUAL,
 		CMD_PATCH_DIAG,
 	} cmd;
 
@@ -135,11 +136,20 @@ struct URDO_PatchCreate : URDO
 	void Do(bool un);
 };
 
-struct URDO_PatchUpdate : URDO
+struct URDO_PatchUpdateHeight : URDO
 {
 	Patch* patch;
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
 	uint16_t diag;
+
+	static void Open(Patch* p); // alloc and copy original
+	void Do(bool un);
+};
+
+struct URDO_PatchUpdateVisual : URDO
+{
+	Patch* patch;
+	uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 
 	static void Open(Patch* p); // alloc and copy original
 	void Do(bool un);
@@ -168,7 +178,8 @@ void URDO::Do(bool un)
 	{
 		case CMD_GROUP: ((URDO_Group*)this)->Do(un); break;
 		case CMD_PATCH_CREATE: ((URDO_PatchCreate*)this)->Do(un); break;
-		case CMD_PATCH_UPDATE: ((URDO_PatchUpdate*)this)->Do(un); break;
+		case CMD_PATCH_UPDATE_HEIGHT: ((URDO_PatchUpdateHeight*)this)->Do(un); break;
+		case CMD_PATCH_UPDATE_VISUAL: ((URDO_PatchUpdateVisual*)this)->Do(un); break;
 		case CMD_PATCH_DIAG: ((URDO_PatchDiag*)this)->Do(un); break;
 		default:
 			assert(0);
@@ -200,8 +211,11 @@ void URDO::Free()
 			bytes -= sizeof(URDO_PatchCreate);
 			break;
 		}
-		case CMD_PATCH_UPDATE: 
-			bytes -= sizeof(URDO_PatchUpdate); 
+		case CMD_PATCH_UPDATE_HEIGHT: 
+			bytes -= sizeof(URDO_PatchUpdateHeight); 
+			break;
+		case CMD_PATCH_UPDATE_VISUAL: 
+			bytes -= sizeof(URDO_PatchUpdateVisual); 
 			break;
 		case CMD_PATCH_DIAG:
 			bytes -= sizeof(URDO_PatchDiag);
@@ -221,7 +235,8 @@ URDO* URDO::Alloc(CMD c)
 	{
 		case CMD_GROUP: s = sizeof(URDO_Group); break;
 		case CMD_PATCH_CREATE: s = sizeof(URDO_PatchCreate); break;
-		case CMD_PATCH_UPDATE: s = sizeof(URDO_PatchUpdate); break;
+		case CMD_PATCH_UPDATE_HEIGHT: s = sizeof(URDO_PatchUpdateHeight); break;
+		case CMD_PATCH_UPDATE_VISUAL: s = sizeof(URDO_PatchUpdateVisual); break;
 		case CMD_PATCH_DIAG: s = sizeof(URDO_PatchDiag); break;
 		default:
 			assert(0);
@@ -486,9 +501,12 @@ void URDO_Delete(Terrain* t, Patch* p)
 	URDO_PatchCreate::Delete(t,p);
 }
 
-void URDO_Patch(Patch* p)
+void URDO_Patch(Patch* p, bool visual)
 {
-	URDO_PatchUpdate::Open(p);
+	if (visual)
+		URDO_PatchUpdateVisual::Open(p);
+	else
+		URDO_PatchUpdateHeight::Open(p);
 }
 
 void URDO_Diag(Patch* p)
@@ -556,19 +574,30 @@ void URDO_Group::Do(bool un)
 	}
 }
 
-void URDO_PatchUpdate::Open(Patch* p)
+void URDO_PatchUpdateHeight::Open(Patch* p)
 {
 	if (!group_open)
 		PurgeRedo();
 
-	URDO_PatchUpdate* urdo = (URDO_PatchUpdate*)Alloc(CMD_PATCH_UPDATE);
+	URDO_PatchUpdateHeight* urdo = (URDO_PatchUpdateHeight*)Alloc(CMD_PATCH_UPDATE_HEIGHT);
 
 	urdo->patch = p;
 	memcpy(urdo->height, GetTerrainHeightMap(p), sizeof(uint16_t)*(HEIGHT_CELLS+1)*(HEIGHT_CELLS+1));
 	urdo->diag = GetTerrainDiag(p);
 }
 
-void URDO_PatchUpdate::Do(bool un)
+void URDO_PatchUpdateVisual::Open(Patch* p)
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_PatchUpdateVisual* urdo = (URDO_PatchUpdateVisual*)Alloc(CMD_PATCH_UPDATE_VISUAL);
+
+	urdo->patch = p;
+	memcpy(urdo->visual, GetTerrainVisualMap(p), sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
+}
+
+void URDO_PatchUpdateHeight::Do(bool un)
 {
 	uint16_t* t = GetTerrainHeightMap(patch);
 	uint16_t* u = (uint16_t*)height;
@@ -585,6 +614,21 @@ void URDO_PatchUpdate::Do(bool un)
 	UpdateTerrainHeightMap(patch);
 	SetTerrainDiag(patch,d);
 }
+
+void URDO_PatchUpdateVisual::Do(bool un)
+{
+	uint16_t* t = GetTerrainVisualMap(patch);
+	uint16_t* u = (uint16_t*)visual;
+	for (int i = 0; i < VISUAL_CELLS*VISUAL_CELLS; i++)
+	{
+		uint16_t s = t[i];
+		t[i] = u[i];
+		u[i] = s;
+	}
+
+	UpdateTerrainVisualMap(patch);
+}
+
 
 void URDO_PatchDiag::Open(Patch* p)
 {

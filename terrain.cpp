@@ -1938,6 +1938,83 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
+double HitTerrain(Patch* p, double u, double v)
+{
+	if (u<0 || u>1 || v<0 || v>1 || !p)
+		return -1;
+
+	int u0 = (int)floor(u*HEIGHT_CELLS), u1;
+	if (u0==HEIGHT_CELLS)
+	{
+		u0 = HEIGHT_CELLS-1;
+		u1 = HEIGHT_CELLS;
+		u = 1.0;
+	}
+	else
+	{
+		u1 = u0+1;
+		u = u * HEIGHT_CELLS - u0;
+	}
+
+	int v0 = (int)floor(v*HEIGHT_CELLS), v1;
+	if (v0==HEIGHT_CELLS)
+	{
+		v0 = HEIGHT_CELLS-1;
+		v1 = HEIGHT_CELLS;
+		v = 1.0;
+	}
+	else
+	{
+		v1 = v0+1;
+		v = v * HEIGHT_CELLS - v0;
+	}
+
+	if (p->diag & (1<<(u0+v0*HEIGHT_CELLS)))
+	{
+		// diagonal is u0,v0 - u1,v1
+
+		if (u+v<1)
+		{
+			// interp. u0,v0 u1,v0 u0,v1
+			int h00 = p->height[v0][u0];
+			int h10 = p->height[v1][u0];
+			int h01 = p->height[v0][u1];
+			return h00 + u*(h01 - h00) + v*(h10 - h00);
+		}
+		else
+		{
+			// interp. u1,v1 u0,v1 u1,v0
+			int h11 = p->height[v1][u1];
+			int h10 = p->height[v1][u0];
+			int h01 = p->height[v0][u1];
+			return h11 + (1-u)*(h10 - h11) + (1-v)*(h01 - h11);
+		}
+	}
+	else
+	{
+		// diagonal is u0,v1 - u1,v0
+
+		if (u-v>0)
+		{
+			// interp. u1,v0 u1,v1 u0,v0
+			int h01 = p->height[v0][u1];
+			int h11 = p->height[v1][u1];
+			int h00 = p->height[v0][u0];
+			return h01 + (1-u)*(h00 - h01) + v*(h11 - h01);
+		}
+		else
+		{
+			// interp. u0,v1 u0,v0 u1,v1
+			int h10 = p->height[v1][u0];
+			int h00 = p->height[v0][u0];
+			int h11 = p->height[v1][u1];
+			return h10 + u*(h11 - h10) + (1-v)*(h00 - h10);
+		}
+	}
+	
+	return -1;
+}
+
 Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 {
 	if (!t || !t->root)

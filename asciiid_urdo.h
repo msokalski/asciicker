@@ -23,5 +23,5 @@ void URDO_Close();
 Patch* URDO_Create(Terrain* t, int x, int y, int z); // replacement for AddTerrainPatch
 void URDO_Delete(Terrain* t, Patch* p); // replacement for DelTerrainPatch
 
-void URDO_Patch(Patch* p); // call before changing height map
+void URDO_Patch(Patch* p, bool visual = false); // call before changing height map
 void URDO_Diag(Patch* p); // call before flipping diag

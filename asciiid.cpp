@@ -685,9 +685,11 @@ struct RenderContext
 			uniform vec3 lt; // light pos
 			// uniform vec3 lc; // light rgb
 			uniform vec4 br; // brush
-			uniform vec3 qd; // quad diag
+			uniform vec3 qd; // quad diag (.z==1 height quad, .z==2 visual map quad)
 			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
 			uniform float fz; // font zoom
+
+			uniform uint br_matid;
 
 			flat in vec3 normal;
 			in vec3 uvh;
@@ -740,6 +742,32 @@ struct RenderContext
 					else
 					if (mode == 3)
 						shade = uint(round(light * 15.0)*(1 - shade) + shade);
+
+					// if we're painting matid
+					// replace matid if we're inside the brush
+					if (br.w > 1.0)
+					{
+						// flat (no-alpha) matid brush
+						float abs_r = abs(br.z);
+						float len = length(world_xyuv.xy - br.xy);
+
+						if (len<abs_r)
+						{
+							if (pr.z>0) // limit to above
+							{
+								if (uvh.z * HEIGHT_SCALE >= pr.x)
+									matid = br_matid;
+							}
+							else
+							if (pr.z<0) // limit to below
+							{
+								if (uvh.z * HEIGHT_SCALE < pr.x)
+									matid = br_matid;
+							}
+							else // no z-limit
+								matid = br_matid;
+						}
+					}
 
 					/*
 						we could define mode on 2 bits:
@@ -798,13 +826,25 @@ struct RenderContext
 
 				if (qd.z>0)
 				{
-					// diagonal flip preview
-					float d = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
-					if (world_xyuv.x >= qd.x && world_xyuv.x < qd.x + d &&
-						world_xyuv.y >= qd.y && world_xyuv.y < qd.y + d)
+					if (qd.z>1.5)
 					{
-						//color.rb = mix(color.rb, color.rb * 0.5, qd.z);
-						color.rgb = mix(color.rgb, vec3(0, 1, 0), qd.z*0.25);
+						// matid probe
+						vec2 pos = floor(world_xyuv.xy);
+						if (pos == qd.xy)
+						{
+							color.rgb = mix(color.rgb, vec3(0, 0, 1), 0.25);
+						}
+					}
+					else
+					{
+						// diagonal flip preview
+						float d = float(VISUAL_CELLS) / float(HEIGHT_CELLS);
+						if (world_xyuv.x >= qd.x && world_xyuv.x < qd.x + d &&
+							world_xyuv.y >= qd.y && world_xyuv.y < qd.y + d)
+						{
+							//color.rb = mix(color.rb, color.rb * 0.5, qd.z);
+							color.rgb = mix(color.rgb, vec3(0, 1, 0), 0.25);
+						}
 					}
 				}
 				else
@@ -822,10 +862,20 @@ struct RenderContext
 
 				{
 					// height probe
+
 					if (uvh.z * HEIGHT_SCALE < pr.x)
 					{
 						//color.g *= (1.0 - 0.25 * pr.y);
 						color.rgb = mix(color.rgb, vec3(0.25, 0.5, 0.75), 0.1 + 0.1 * pr.y);
+					}
+
+					if (pr.x>0)
+					{
+						float dz = 2.0 * fwidth(uvh.z) * HEIGHT_SCALE;
+						float lo = smoothstep(-dz, 0, uvh.z * HEIGHT_SCALE - pr.x);
+						float hi = smoothstep(+dz, 0, uvh.z * HEIGHT_SCALE - pr.x);
+						float silh = lo*hi;
+						color.rgb *= 1.0 - 0.5*silh*pr.y;
 					}
 				}
 
@@ -853,20 +903,13 @@ struct RenderContext
 					float len = length(world_xyuv.xy - br.xy);
 					float alf = (abs_r - len) / abs_r;
 
-					float dalf = fwidth(alf);
+					float dalf = fwidth(alf) * 2.0; // 2x thicker
 
 					float lo = smoothstep(-dalf, 0, alf);
 					float hi = smoothstep(+dalf, 0, alf);
 					float silh =  lo * hi;
 
-					alf = max(0.0, lo);
-
-					if (br.z>0)
-						color.gb *= 1.0 - alf;
-					else
-						color.rg *= 1.0 - alf;
-
-					color.rgb *= 1.0 - silh*0.25;
+					color.rgb *= 1.0 - 0.5*silh; // bit stronger (was .25)
 				}
 				else
 				if (br.w != 0.0)
@@ -887,7 +930,6 @@ struct RenderContext
 
 					color.rgb *= 1.0 - silh*0.25;
 				}
-
 			}
 		);
 
@@ -978,6 +1020,7 @@ struct RenderContext
 		lt_loc = glGetUniformLocation(prg, "lt");
 		//lc_loc = glGetUniformLocation(prg, "lc");
 		fz_loc = glGetUniformLocation(prg, "fz");
+		br_matid_loc = glGetUniformLocation(prg, "br_matid");
 	}
 
 	void Delete()
@@ -1127,6 +1170,7 @@ struct RenderContext
 		glUniform3fv(qd_loc, 1, qd);
 		glUniform3fv(pr_loc, 1, pr);
 		glUniform1f(fz_loc, (float)font_zoom);
+		glUniform1ui(br_matid_loc, (GLuint)active_material);
 		glBindVertexArray(vao);
 
 		glBindTextureUnit(2, MyMaterial::tex);
@@ -1251,6 +1295,7 @@ struct RenderContext
 	GLint pr_loc;
 
 	GLint fz_loc;
+	GLint br_matid_loc;
 
 	GLuint prg;
 	GLuint vao;
@@ -1708,8 +1753,8 @@ void my_render()
 	const float clear_in[4]={0.45f, 0.55f, 0.60f, 1.00f};
 	const float clear_out[4]={0.40f, 0.50f, 0.55f, 0.95f};
 
-	const float* clear_color = mouse_in ? clear_in : clear_out;
-
+	//const float* clear_color = mouse_in ? clear_in : clear_out;
+	const float* clear_color = clear_in;
 
 	{
 		ImGui_ImplOpenGL3_NewFrame();
@@ -1932,7 +1977,32 @@ void my_render()
 					edit_mode = 1;
 					ImGui::Text("Material channel selects which material \ndefinition should be used (0-255)");
 
-					ImGui::Text("MODE (shift/ctrl): %s", "NORMAL");
+					const char* mode = "";
+
+					// painting with shift (and enabled z-limit)
+					// could reverse painting above with below ....
+
+					if (!painting && io.KeyCtrl && io.KeyShift)
+					{
+						mode = "HEIGHT PROBE";
+					}
+					else
+					if (!painting && io.KeyCtrl)
+						mode = "MAT-id PROBE";
+					else
+					{
+						if (br_limit)
+						{
+							if (io.KeyShift)
+								mode = "PAINT BELOW";
+							else
+								mode = "PAINT ABOVE";
+						}
+						else
+							mode = "PAINT";
+					}
+
+					ImGui::Text("MODE (shift/ctrl): %s", mode);
 					ImGui::SliderFloat("BRUSH DIAMETER", &br_radius, 1.f, 100.f);
 
 					float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
@@ -1943,7 +2013,23 @@ void my_render()
 					ImGui::PopButtonRepeat();
 					ImGui::SameLine();
 					ImGui::Text("MAT-id 0x%02X (%d)", active_material, active_material);
+					ImGui::SameLine();
+					ImGui::Text("%s", "ctrl to probe");
+
+
+					ImGui::Checkbox("BRUSH HEIGHT LIMIT",&br_limit);
+					ImGui::SameLine();
+
+					// Arrow buttons with Repeater
+					ImGui::PushButtonRepeat(true);
+					if (ImGui::ArrowButton("##probe_left", ImGuiDir_Left)) { if (probe_z>0) probe_z-=1; }
+					ImGui::SameLine(0.0f, spacing);
+					if (ImGui::ArrowButton("##probe_right", ImGuiDir_Right)) { if (probe_z<0xffff) probe_z+=1; }
+					ImGui::PopButtonRepeat();
+					ImGui::SameLine();
+					ImGui::Text("%d", probe_z);
 					ImGui::Text("%s", "ctrl+shift to probe");
+					ImGui::Text("%s", "press shift to paint below limit");
 
 					ImGui::EndTabItem();
 				}
@@ -2679,35 +2765,35 @@ void my_render()
 
 			if (p)
 			{
-				if (edit_mode == 0)
+				if (io.KeyAlt)
 				{
-					if (io.KeyAlt)
+					if (io.MouseDown[0])
 					{
-						if (io.MouseDown[0])
-						{
-							URDO_Open();
-							creating = -1;
+						URDO_Open();
+						creating = -1;
 
-							painting_x = (int)roundf(io.MousePos.x);
-							painting_y = (int)roundf(io.MousePos.y);
+						painting_x = (int)roundf(io.MousePos.x);
+						painting_y = (int)roundf(io.MousePos.y);
 
-							painting_dx = hit[0];
-							painting_dy = hit[1];
-						}
-						else
-						{
-							// paint similar preview as for diag flipping but 
-							// hilight entire PATCH (instead of quad) and use RED color
-
-							// add here quad preview
-							double qx = floor(hit[0] / VISUAL_CELLS) * VISUAL_CELLS;
-							double qy = floor(hit[1] / VISUAL_CELLS) * VISUAL_CELLS;
-							br_quad[0] = (float)qx;
-							br_quad[1] = (float)qy;
-							br_quad[2] = -1.0f;
-						}
+						painting_dx = hit[0];
+						painting_dy = hit[1];
 					}
 					else
+					{
+						// paint similar preview as for diag flipping but 
+						// hilight entire PATCH (instead of quad) and use RED color
+
+						// add here quad preview
+						double qx = floor(hit[0] / VISUAL_CELLS) * VISUAL_CELLS;
+						double qy = floor(hit[1] / VISUAL_CELLS) * VISUAL_CELLS;
+						br_quad[0] = (float)qx;
+						br_quad[1] = (float)qy;
+						br_quad[2] = -1.0f; // indicates full patch
+					}
+				}
+				else
+				if (edit_mode == 0)
+				{
 					if (io.KeyCtrl)
 					{
 						if (io.KeyShift)
@@ -2734,7 +2820,7 @@ void my_render()
 							double qy = floor(hit[1] * HEIGHT_CELLS / VISUAL_CELLS) * VISUAL_CELLS / HEIGHT_CELLS;
 							br_quad[0] = (float)qx;
 							br_quad[1] = (float)qy;
-							br_quad[2] = 1.0f;
+							br_quad[2] = 1.0f; // indicates real height quad
 
 							if (!diag_flipped && io.MouseDown[0])
 							{
@@ -2802,32 +2888,175 @@ void my_render()
 				else
 				if (edit_mode == 1)
 				{
-					br_xyra[0] = (float)hit[0];
-					br_xyra[1] = (float)hit[1];
-					br_xyra[2] = (float)br_radius * 0.5;
-					br_xyra[3] = 2; // alpha>1 -> painting matid
-
-					if (io.MouseDown[0])
+					if (io.KeyCtrl)
 					{
-						//BEGIN
-						/*
-						URDO_Open();
-						painting = 2;
+						if (io.KeyShift)
+						{
+							// add here probe preview
+							if (io.MouseDown[0])
+							{
+								// height-probe
+								probe_z = (int)round(hit[2]);
+								br_probe[0] = (float)probe_z;
+								br_probe[1] = 0.5f;
+							}
+							else
+							{
+								// preview
+								br_probe[0] = (float)round(hit[2]);
+								br_probe[1] = 0.5f;
+							}
+						}
+						else
+						{
+							// add here quad preview of matid probe
+							double qx = floor(hit[0]);
+							double qy = floor(hit[1]);
+							br_quad[0] = (float)qx;
+							br_quad[1] = (float)qy;
+							br_quad[2] = 2.0f; // indicates quad on visual map
 
-						painting_x = (int)roundf(io.MousePos.x);
-						painting_y = (int)roundf(io.MousePos.y);
+							if (io.MouseDown[0])
+							{
+								struct mod_floor
+								{
+									mod_floor(int d) : y(d) {}
+									int mod(int x)
+									{
+										int r = x % y;
+										if (/*(r != 0) && ((r < 0) != (y < 0))*/ r && (r^y)<0) 
+											r += y;
+										return r;
+									}
+									int y;
+								} mf(VISUAL_CELLS);
 
-						painting_dx = hit[0];
-						painting_dy = hit[1];
-						paint_dist = 0.0;
+								// sample matid
+								int uv[2] = { mf.mod((int)qx), mf.mod((int)qy) };
+								uint16_t* visual = GetTerrainVisualMap(p);
+								active_material = visual[uv[0] + uv[1]*VISUAL_CELLS] & 0xFF;
+							}
+						}
+					}
+					else
+					{
+						br_xyra[0] = (float)hit[0];
+						br_xyra[1] = (float)hit[1];
+						br_xyra[2] = (float)br_radius * 0.5;
+						br_xyra[3] = 2; // alpha>1 -> painting matid
 
-						float alpha = br_alpha;
-						br_alpha *= STAMP_A;
-						Stamp(hit[0], hit[1]);
-						br_alpha = alpha;
+						if (br_limit)
+						{
+							if (io.KeyShift)
+								br_probe[2] = -1.0;
+							else
+								br_probe[2] = 1.0;
+						}
+						else
+							br_probe[2] = 0;
 
-						// stamped, don't apply preview to it
-						*/
+						if (io.MouseDown[0])
+						{
+							// let's start from naive stamp on click
+
+							// query patches around
+							// on CB:
+							// for each visual cell calc dist from brush
+							// - if below radius: change matid
+
+							struct Temp
+							{
+								static void SetMatCB(Patch* p, int x, int y, int view_flags, void* cookie)
+								{
+									Temp* t = (Temp*)cookie;
+
+									double r2 = t->r * t->r;
+									double* hit = t->hit;
+
+									uint16_t* visual = GetTerrainVisualMap(p);
+
+									bool diff = false;
+									diff = true;
+									URDO_Patch(p,true);
+									memset(visual,0xAA55,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
+
+									if (0)
+									for (int v=0, i=0; v<VISUAL_CELLS; v++)
+									{
+										for (int u=0; u<VISUAL_CELLS; u++, i++)
+										{
+											double dx = u+x - hit[0];
+											double dy = v+y - hit[1];
+											if (dx*dx+dy*dy < r2)
+											{
+												int old = visual[i] & 0xFF;
+												if (old != active_material)
+												{
+													if (t->z_lim > 0)
+													{
+														if (HitTerrain(p, (u+0.5)/VISUAL_CELLS, (v+0.5)/VISUAL_CELLS) < t->z)
+															continue;
+													}
+													else
+													if (t->z_lim < 0)
+													{
+														if (HitTerrain(p, (u+0.5)/VISUAL_CELLS, (v+0.5)/VISUAL_CELLS) >= t->z)
+															continue;
+													}
+
+													if (!diff)
+													{
+														URDO_Patch(p,true);
+														diff = true;
+													}
+
+													assert(i<VISUAL_CELLS*VISUAL_CELLS);
+													visual[i] = (visual[i] & ~0xFF) | active_material;
+												}
+											}
+										}
+									}
+
+									if (diff)
+										UpdateTerrainVisualMap(p);
+								}
+
+								int z_lim;
+								double z;
+								double r;
+								double* hit;
+							};
+
+							Temp temp;
+							temp.r = br_radius * 0.5;
+							temp.hit = hit;
+							temp.z = br_probe[0];
+							temp.z_lim = br_limit ? (io.KeyShift ? -1:1) : 0;
+
+							URDO_Open();
+							QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, Temp::SetMatCB, &temp);
+							URDO_Close();
+
+							//BEGIN
+							/*
+							URDO_Open();
+							painting = 2;
+
+							painting_x = (int)roundf(io.MousePos.x);
+							painting_y = (int)roundf(io.MousePos.y);
+
+							painting_dx = hit[0];
+							painting_dy = hit[1];
+							paint_dist = 0.0;
+
+							float alpha = br_alpha;
+							br_alpha *= STAMP_A;
+							Stamp(hit[0], hit[1]);
+							br_alpha = alpha;
+
+							// stamped, don't apply preview to it
+							*/
+						}
 					}
 				}
 				else
@@ -3138,7 +3367,7 @@ void my_init()
 	ImGui_ImplOpenGL3_Init();
 
 	ImWchar range[]={0x0020, 0x03FF, 0};
-	pFont = io.Fonts->AddFontFromFileTTF("./fonts/Roboto-Medium.ttf", 16, NULL, range/*io.Fonts->GetGlyphRangesDefault()*/);	
+	pFont = io.Fonts->AddFontFromFileTTF("./fonts/Roboto-Medium.ttf", 16, NULL, range);	
 	io.Fonts->Build();
 
 	terrain = CreateTerrain();

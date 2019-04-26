@@ -147,7 +147,7 @@ void TexAlloc::Update(int first, int count, const TexData data[])
 	for (int t = first; t < end; t++)
 	{
 		glTextureSubImage2D(page->tex[t], 0, x * h->tex[t].item_w, y * h->tex[t].item_h,
-			h->tex[t].item_w, h->tex[t].item_h, data[t].format, data[t].type, data[t].data);
+			h->tex[t].item_w, h->tex[t].item_h, data[t-first].format, data[t-first].type, data[t-first].data);
 	}
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }
