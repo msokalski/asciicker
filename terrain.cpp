@@ -158,7 +158,7 @@ Terrain* CreateTerrain(int z)
 
 static void DeleteTerrain(Node* n, int lev)
 {
-	if (lev == 0)
+	if (lev == 1)
 	{
 		for (int i = 0; i < 4; i++)
 		{
