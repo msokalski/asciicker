@@ -2976,11 +2976,7 @@ void my_render()
 									uint16_t* visual = GetTerrainVisualMap(p);
 
 									bool diff = false;
-									diff = true;
-									URDO_Patch(p,true);
-									memset(visual,0xAA55,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
 
-									if (0)
 									for (int v=0, i=0; v<VISUAL_CELLS; v++)
 									{
 										for (int u=0; u<VISUAL_CELLS; u++, i++)
@@ -3010,7 +3006,6 @@ void my_render()
 														diff = true;
 													}
 
-													assert(i<VISUAL_CELLS*VISUAL_CELLS);
 													visual[i] = (visual[i] & ~0xFF) | active_material;
 												}
 											}
