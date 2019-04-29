@@ -3059,25 +3059,6 @@ void my_render()
 
 						if (io.MouseDown[0])
 						{
-							// let's start from naive stamp on click
-
-							// query patches around
-							// on CB:
-							// for each visual cell calc dist from brush
-							// - if below radius: change matid
-
-							/*
-							MatIDStamp stamp;
-							stamp.r = br_radius * 0.5;
-							stamp.hit = hit;
-							stamp.z = br_probe[0];
-							stamp.z_lim = br_limit ? (io.KeyShift ? -1:1) : 0;
-
-							URDO_Open();
-							QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
-							URDO_Close();
-							*/
-
 							//BEGIN
 							URDO_Open();
 							painting = 2;
