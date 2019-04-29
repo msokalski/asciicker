@@ -1369,6 +1369,66 @@ void GL_APIENTRY glDebugCall(GLenum source, GLenum type, GLuint id, GLenum sever
 	printf("src:%s type:%s id:%d severity:%s\n%s\n\n", src, typ, id, sev, (const char*)message);
 }
 
+struct MatIDStamp
+{
+	static void SetMatCB(Patch* p, int x, int y, int view_flags, void* cookie)
+	{
+		MatIDStamp* t = (MatIDStamp*)cookie;
+
+		double r2 = t->r * t->r;
+		double* hit = t->hit;
+
+		uint16_t* visual = GetTerrainVisualMap(p);
+
+		bool diff = false;
+		diff = true;
+		URDO_Patch(p, true);
+
+		for (int v = 0, i = 0; v < VISUAL_CELLS; v++)
+		{
+			for (int u = 0; u < VISUAL_CELLS; u++, i++)
+			{
+				double dx = u + x - hit[0];
+				double dy = v + y - hit[1];
+				if (dx*dx + dy * dy < r2)
+				{
+					int old = visual[i] & 0xFF;
+					if (old != active_material)
+					{
+						if (t->z_lim > 0)
+						{
+							if (HitTerrain(p, (u + 0.5) / VISUAL_CELLS, (v + 0.5) / VISUAL_CELLS) < t->z)
+								continue;
+						}
+						else
+							if (t->z_lim < 0)
+							{
+								if (HitTerrain(p, (u + 0.5) / VISUAL_CELLS, (v + 0.5) / VISUAL_CELLS) >= t->z)
+									continue;
+							}
+
+						if (!diff)
+						{
+							URDO_Patch(p, true);
+							diff = true;
+						}
+
+						visual[i] = (visual[i] & ~0xFF) | active_material;
+					}
+				}
+			}
+		}
+
+		if (diff)
+			UpdateTerrainVisualMap(p);
+	}
+
+	int z_lim;
+	double z;
+	double r;
+	double* hit;
+};
+
 
 struct Gather
 {
@@ -1410,6 +1470,8 @@ struct Gather
 		return map[sx + sy * (HEIGHT_CELLS + 1)];
 	}
 };
+
+
 
 Gather* gather = 0;
 
@@ -2677,57 +2739,97 @@ void my_render()
 			}
 			else // painting
 			{
-				//DRAG and/or DROP
-				double mdx = painting_x - round(io.MousePos.x);
-				double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
-				double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
-				double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
-				double x = painting_dx + dx;
-				double y = painting_dy + dy;
-
-				double dist = paint_dist + sqrt(dx*dx + dy * dy);
-
-				int i = 0;
-				float alpha = br_alpha;
-				br_alpha *= STAMP_A;
-				while (1)
+				if (painting == 1)
 				{
-					double w = ((i + 1) * br_radius * STAMP_R - paint_dist) / (dist - paint_dist);
+					//DRAG and/or DROP
+					double mdx = painting_x - round(io.MousePos.x);
+					double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
+					double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+					double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+					double x = painting_dx + dx;
+					double y = painting_dy + dy;
 
-					if (w >= 1)
-						break;
+					double dist = paint_dist + sqrt(dx*dx + dy * dy);
 
-					double sx = painting_dx + w * dx;
-					double sy = painting_dy + w * dy;
-
-					Stamp(sx, sy);
-
-					i++;
-				}
-				br_alpha = alpha;
-
-				paint_dist = dist - i * br_radius * STAMP_R;
-				painting_dx = x;
-				painting_dy = y;
-				painting_x = (int)round(io.MousePos.x);
-				painting_y = (int)round(io.MousePos.y);
-
-				br_xyra[0] = (float)x;
-				br_xyra[1] = (float)y;
-
-				if (!io.MouseDown[0])
-				{
-					// DROP
+					int i = 0;
 					float alpha = br_alpha;
-					br_alpha *= (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0);
-					Stamp(x, y);
+					br_alpha *= STAMP_A;
+					while (1)
+					{
+						double w = ((i + 1) * br_radius * STAMP_R - paint_dist) / (dist - paint_dist);
+
+						if (w >= 1)
+							break;
+
+						double sx = painting_dx + w * dx;
+						double sy = painting_dy + w * dy;
+
+						Stamp(sx, sy);
+
+						i++;
+					}
 					br_alpha = alpha;
-					br_xyra[3] = 0;
-					painting = 0;
-					URDO_Close();
+
+					paint_dist = dist - i * br_radius * STAMP_R;
+					painting_dx = x;
+					painting_dy = y;
+					painting_x = (int)round(io.MousePos.x);
+					painting_y = (int)round(io.MousePos.y);
+
+					br_xyra[0] = (float)x;
+					br_xyra[1] = (float)y;
+
+					if (!io.MouseDown[0])
+					{
+						// DROP
+						float alpha = br_alpha;
+						br_alpha *= (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0);
+						Stamp(x, y);
+						br_alpha = alpha;
+						br_xyra[3] = 0;
+						painting = 0;
+						URDO_Close();
+					}
+					else
+						br_xyra[3] = (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0) * br_alpha;
 				}
 				else
-					br_xyra[3] = (float)pow(paint_dist / (br_radius * STAMP_R) * STAMP_A, 2.0) * br_alpha;
+				if (painting == 2)
+				{
+					double mdx = painting_x - round(io.MousePos.x);
+					double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
+
+					if (mdx || mdy)
+					{
+						double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+						double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+						double x = painting_dx + dx;
+						double y = painting_dy + dy;
+
+						double hit[2] = { x,y };
+						MatIDStamp stamp;
+						stamp.r = br_radius * 0.5;
+						stamp.hit = hit;
+						stamp.z = br_probe[0];
+						stamp.z_lim = br_limit ? (io.KeyShift ? -1 : 1) : 0;
+
+						URDO_Open();
+						QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
+						URDO_Close();
+
+						painting_dx = x;
+						painting_dy = y;
+						painting_x = (int)round(io.MousePos.x);
+						painting_y = (int)round(io.MousePos.y);
+					}
+
+					if (!io.MouseDown[0])
+					{
+						// DROP
+						painting = 0;
+						URDO_Close();
+					}
+				}
 			}
 		}
 		else
@@ -2942,7 +3044,7 @@ void my_render()
 					{
 						br_xyra[0] = (float)hit[0];
 						br_xyra[1] = (float)hit[1];
-						br_xyra[2] = (float)br_radius * 0.5;
+						br_xyra[2] = (float)br_radius * 0.5f;
 						br_xyra[3] = 2; // alpha>1 -> painting matid
 
 						if (br_limit)
@@ -2964,83 +3066,31 @@ void my_render()
 							// for each visual cell calc dist from brush
 							// - if below radius: change matid
 
-							struct Temp
-							{
-								static void SetMatCB(Patch* p, int x, int y, int view_flags, void* cookie)
-								{
-									Temp* t = (Temp*)cookie;
-
-									double r2 = t->r * t->r;
-									double* hit = t->hit;
-
-									uint16_t* visual = GetTerrainVisualMap(p);
-
-									bool diff = false;
-									diff = true;
-									URDO_Patch(p,true);
-									memset(visual,0xAA55,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
-
-									if (0)
-									for (int v=0, i=0; v<VISUAL_CELLS; v++)
-									{
-										for (int u=0; u<VISUAL_CELLS; u++, i++)
-										{
-											double dx = u+x - hit[0];
-											double dy = v+y - hit[1];
-											if (dx*dx+dy*dy < r2)
-											{
-												int old = visual[i] & 0xFF;
-												if (old != active_material)
-												{
-													if (t->z_lim > 0)
-													{
-														if (HitTerrain(p, (u+0.5)/VISUAL_CELLS, (v+0.5)/VISUAL_CELLS) < t->z)
-															continue;
-													}
-													else
-													if (t->z_lim < 0)
-													{
-														if (HitTerrain(p, (u+0.5)/VISUAL_CELLS, (v+0.5)/VISUAL_CELLS) >= t->z)
-															continue;
-													}
-
-													if (!diff)
-													{
-														URDO_Patch(p,true);
-														diff = true;
-													}
-
-													assert(i<VISUAL_CELLS*VISUAL_CELLS);
-													visual[i] = (visual[i] & ~0xFF) | active_material;
-												}
-											}
-										}
-									}
-
-									if (diff)
-										UpdateTerrainVisualMap(p);
-								}
-
-								int z_lim;
-								double z;
-								double r;
-								double* hit;
-							};
-
-							Temp temp;
-							temp.r = br_radius * 0.5;
-							temp.hit = hit;
-							temp.z = br_probe[0];
-							temp.z_lim = br_limit ? (io.KeyShift ? -1:1) : 0;
+							/*
+							MatIDStamp stamp;
+							stamp.r = br_radius * 0.5;
+							stamp.hit = hit;
+							stamp.z = br_probe[0];
+							stamp.z_lim = br_limit ? (io.KeyShift ? -1:1) : 0;
 
 							URDO_Open();
-							QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, Temp::SetMatCB, &temp);
+							QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
 							URDO_Close();
+							*/
 
 							//BEGIN
-							/*
 							URDO_Open();
 							painting = 2;
+
+							MatIDStamp stamp;
+							stamp.r = br_radius * 0.5;
+							stamp.hit = hit;
+							stamp.z = br_probe[0];
+							stamp.z_lim = br_limit ? (io.KeyShift ? -1 : 1) : 0;
+
+							URDO_Open();
+							QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
+							URDO_Close();
 
 							painting_x = (int)roundf(io.MousePos.x);
 							painting_y = (int)roundf(io.MousePos.y);
@@ -3048,14 +3098,6 @@ void my_render()
 							painting_dx = hit[0];
 							painting_dy = hit[1];
 							paint_dist = 0.0;
-
-							float alpha = br_alpha;
-							br_alpha *= STAMP_A;
-							Stamp(hit[0], hit[1]);
-							br_alpha = alpha;
-
-							// stamped, don't apply preview to it
-							*/
 						}
 					}
 				}
