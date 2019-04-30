@@ -1747,7 +1747,6 @@ void Palettize()
 		for (int G8 = 0; G8 < 256; G8++)
 		{
 			int R8 = 0;
-			int r;
 
 			int k = (B8 << 16) | (G8 << 8);
 
@@ -1772,7 +1771,7 @@ void Palettize()
 					diff = (diff & ~q) | (d & q);
 					*/
 
-					if (d < closest_dist)
+					if (d <= closest_dist)
 					{
 						almost_dist = closest_dist;
 						closest = j;
@@ -1784,15 +1783,14 @@ void Palettize()
 						almost_dist = d;
 					}
 				}
-
 				
-				r = 0;
+				int r = 0;
+				almost_dist = closest_dist;
 
 				while (closest_dist + r <= almost_dist - r)
 				{
-					lut[k++] = closest;
+					lut[k|(R8++)] = closest;
 					r += 2;// r++;
-					R8++;
 
 					if (R8 == 256)
 						break;
@@ -1828,7 +1826,7 @@ void Palettize()
 			diff = (diff & ~q) | (d & q);
 			*/
 
-			if (d < diff)
+			if (d <= diff)
 			{
 				idx = j;
 				diff = d;
