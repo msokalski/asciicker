@@ -1735,6 +1735,124 @@ void Stamp(double x, double y)
 	}
 }
 
+void Palettize()
+{
+	uint8_t* p = pal[active_palette].rgb;
+
+	uint8_t* lut = (uint8_t*)malloc(256 * 256 * 256);
+
+	uint64_t t0 = a3dGetTime();
+	for (int B8 = 0; B8 < 256; B8++)
+	{
+		for (int G8 = 0; G8 < 256; G8++)
+		{
+			int R8 = 0;
+			int r;
+
+			int k = (B8 << 16) | (G8 << 8);
+
+			while (R8 < 256)
+			{
+				int closest;
+				int closest_dist = 585226, almost_dist = 0;
+				
+				// find closest and almost closest
+				for (int j = 0; j < 256; j++)
+				{
+					int k = 3 * j;
+					int dr = R8 - p[k++];
+					int dg = G8 - p[k++];
+					int db = B8 - p[k];
+
+					int d = 2 * dr*dr + 4 * dg*dg + 3 * db*db;
+
+					/*
+					int q = (d - diff) >> 31;
+					idx = (idx & ~q) | (j & q);
+					diff = (diff & ~q) | (d & q);
+					*/
+
+					if (d < closest_dist)
+					{
+						almost_dist = closest_dist;
+						closest = j;
+						closest_dist = d;
+					}
+					else
+					if (d < almost_dist)
+					{
+						almost_dist = d;
+					}
+				}
+
+				
+				r = 0;
+
+				while (closest_dist + r <= almost_dist - r)
+				{
+					lut[k++] = closest;
+					r += 2;// r++;
+					R8++;
+
+					if (R8 == 256)
+						break;
+				}
+			}
+		}
+	}
+
+	uint64_t t1 = a3dGetTime();
+
+	for (int i = 0; i < 256 * 256 * 256; i++)
+	{
+		int R8 = i & 0xFF;
+		int G8 = (i >> 8) & 0xFF;
+		int B8 = (i >> 16) & 0xFF;
+
+		int diff = 585226; // greater than max possible diff
+		int idx = -1;
+
+		// find closest color in palette
+		for (int j = 0; j < 256; j++)
+		{
+			int k = 3 * j;
+			int dr = R8 - p[k++];
+			int dg = G8 - p[k++];
+			int db = B8 - p[k];
+
+			int d = 2 * dr*dr + 4 * dg*dg + 3 * db*db;
+
+			/*
+			int q = (d - diff) >> 31;
+			idx = (idx & ~q) | (j & q);
+			diff = (diff & ~q) | (d & q);
+			*/
+
+			if (d < diff)
+			{
+				idx = j;
+				diff = d;
+			}
+
+		}
+
+		if (lut[i] != idx)
+		{
+			printf("err\n");
+			return;
+		}
+		lut[i] = idx;
+
+//		if ((i & 0xFFFF) == 0)
+//			printf("slice %d / 256 done\n", (i >> 16) & 0xFF);
+	}
+
+	uint64_t t2 = a3dGetTime();
+
+	printf("OPT:%d FUL:%d\n", (int)((t1 - t0) / 1000), (int)((t2 - t1) / 1000));
+
+}
+
 void my_render()
 {
 	ImGuiIO& io = ImGui::GetIO();
@@ -1847,6 +1965,11 @@ void my_render()
 		ImGui::Text("%d,%d,%d,%d %d,%d %s", 
 			xywh[0], xywh[1], xywh[2], xywh[3],
 			wh[0], wh[1], a3dIsMaximized() ? "MAXIMIZED" : "normal");
+
+		if (ImGui::Button("PALETTIZE"))
+		{
+			Palettize();
+		}
 
 		if (ImGui::Button("FULL"))
 		{
