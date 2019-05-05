@@ -49,6 +49,7 @@ ImFont* pFont = 0;
 Terrain* terrain = 0;
 int fonts_loaded = 0;
 int palettes_loaded = 0;
+GLuint pal_tex = 0;
 
 void* GetMaterialArr();
 void* GetPaletteArr();
@@ -681,6 +682,7 @@ struct RenderContext
 			uniform usampler2D v_tex;
 			uniform usampler2D m_tex;
 			uniform sampler2D f_tex;
+			uniform sampler3D p_tex;
 
 			uniform vec3 lt; // light pos
 			// uniform vec3 lc; // light rgb
@@ -814,15 +816,8 @@ struct RenderContext
 						color.rgb *= light;
 				}
 
-				// color.rgb *= lc;
-
-				// at the moment we assume that visual is simply RGB565 color
-				/*
-				color.r = float(visual & 0x1f) / 31.0;
-				color.g = float((visual>>5) & 0x3f) / 63.0;
-				color.b = float((visual>>11) & 0x1f) / 31.0;
-				color.a = 1;
-				*/
+				// palettize
+				color.rgb = texture(p_tex, color.xyz).rgb;
 
 				if (qd.z>0)
 				{
@@ -1014,6 +1009,7 @@ struct RenderContext
 		v_tex_loc = glGetUniformLocation(prg, "v_tex");
 		m_tex_loc = glGetUniformLocation(prg, "m_tex");
 		f_tex_loc = glGetUniformLocation(prg, "f_tex");
+		p_tex_loc = glGetUniformLocation(prg, "p_tex");
 		br_loc = glGetUniformLocation(prg, "br");
 		qd_loc = glGetUniformLocation(prg, "qd");
 		pr_loc = glGetUniformLocation(prg, "pr");
@@ -1166,6 +1162,8 @@ struct RenderContext
 		glUniform1i(v_tex_loc, 1);
 		glUniform1i(m_tex_loc, 2);
 		glUniform1i(f_tex_loc, 3);
+		glUniform1i(p_tex_loc, 4);
+
 		glUniform4fv(br_loc, 1, br);
 		glUniform3fv(qd_loc, 1, qd);
 		glUniform3fv(pr_loc, 1, pr);
@@ -1175,6 +1173,7 @@ struct RenderContext
 
 		glBindTextureUnit(2, MyMaterial::tex);
 		glBindTextureUnit(3, font[active_font].tex);
+		glBindTextureUnit(4, pal_tex);
 
 		head = 0;
 		patches = 0;
@@ -1273,7 +1272,7 @@ struct RenderContext
 		page_tex = 0;
 		head = 0;
 
-		for (int u = 0; u < 4; u++)
+		for (int u = 0; u < 5; u++)
 			glBindTextureUnit(u,0);
 
 		glBindVertexArray(0);
@@ -1289,6 +1288,7 @@ struct RenderContext
 	GLint v_tex_loc;
 	GLint m_tex_loc;
 	GLint f_tex_loc;
+	GLint p_tex_loc;
 
 	GLint br_loc;
 	GLint qd_loc;
@@ -1739,67 +1739,7 @@ void Palettize()
 {
 	uint8_t* p = pal[active_palette].rgb;
 
-	uint8_t* lut = (uint8_t*)malloc(256 * 256 * 256);
-
-	uint64_t t0 = a3dGetTime();
-	for (int B8 = 0; B8 < 256; B8++)
-	{
-		for (int G8 = 0; G8 < 256; G8++)
-		{
-			int R8 = 0;
-
-			int k = (B8 << 16) | (G8 << 8);
-
-			while (R8 < 256)
-			{
-				int closest;
-				int closest_dist = 585226, almost_dist = 0;
-				
-				// find closest and almost closest
-				for (int j = 0; j < 256; j++)
-				{
-					int k = 3 * j;
-					int dr = R8 - p[k++];
-					int dg = G8 - p[k++];
-					int db = B8 - p[k];
-
-					int d = 2 * dr*dr + 4 * dg*dg + 3 * db*db;
-
-					/*
-					int q = (d - diff) >> 31;
-					idx = (idx & ~q) | (j & q);
-					diff = (diff & ~q) | (d & q);
-					*/
-
-					if (d <= closest_dist)
-					{
-						almost_dist = closest_dist;
-						closest = j;
-						closest_dist = d;
-					}
-					else
-					if (d < almost_dist)
-					{
-						almost_dist = d;
-					}
-				}
-				
-				int r = 0;
-				almost_dist = closest_dist;
-
-				while (closest_dist + r <= almost_dist - r)
-				{
-					lut[k|(R8++)] = closest;
-					r += 2;// r++;
-
-					if (R8 == 256)
-						break;
-				}
-			}
-		}
-	}
-
-	uint64_t t1 = a3dGetTime();
+	uint8_t* lut = (uint8_t*)malloc(256 * 256 * 256 * 4);
 
 	for (int i = 0; i < 256 * 256 * 256; i++)
 	{
@@ -1807,7 +1747,7 @@ void Palettize()
 		int G8 = (i >> 8) & 0xFF;
 		int B8 = (i >> 16) & 0xFF;
 
-		int diff = 585226; // greater than max possible diff
+		int diff = 100000000; // greater than max possible diff
 		int idx = -1;
 
 		// find closest color in palette
@@ -1818,37 +1758,31 @@ void Palettize()
 			int dg = G8 - p[k++];
 			int db = B8 - p[k];
 
-			int d = 2 * dr*dr + 4 * dg*dg + 3 * db*db;
+			#define max(a,b) ((a)>(b)?(a):(b))
 
-			/*
-			int q = (d - diff) >> 31;
-			idx = (idx & ~q) | (j & q);
-			diff = (diff & ~q) | (d & q);
-			*/
+			int d = max(max(R8,G8),B8) - max(max(p[3*j],p[3*j+1]),p[3*j+2]);
+			d *= 16*d; // mostly luminance
+ 			d += 2 * dr*dr + 4 * dg*dg + 3 * db*db; // bit of chrominance
+			
 
-			if (d <= diff)
+			if (d < diff)
 			{
 				idx = j;
 				diff = d;
 			}
-
 		}
 
-		if (lut[i] != idx)
-		{
-			printf("err\n");
-			return;
-		}
-		lut[i] = idx;
-
-//		if ((i & 0xFFFF) == 0)
-//			printf("slice %d / 256 done\n", (i >> 16) & 0xFF);
+		int j = 3*i;
+		int k = 3*idx;
+		lut[j++] = p[k++];
+		lut[j++] = p[k++];
+		lut[j] = p[k];
 	}
 
 	uint64_t t2 = a3dGetTime();
 
-	printf("OPT:%d FUL:%d\n", (int)((t1 - t0) / 1000), (int)((t2 - t1) / 1000));
-
+	glTextureSubImage3D(pal_tex,0, 0,0,0, 256,256,256, GL_RGB, GL_UNSIGNED_BYTE, lut);
+	free(lut);
 }
 
 void my_render()
@@ -3457,6 +3391,17 @@ void my_init()
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+
+	glCreateTextures(GL_TEXTURE_3D, 1, &pal_tex);
+
+	glTextureStorage3D(pal_tex, 1, GL_RGB8, 256, 256, 256);
+
+	glTextureParameteri(pal_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTextureParameteri(pal_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 	MyMaterial::Init();
 
