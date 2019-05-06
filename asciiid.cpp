@@ -1735,11 +1735,157 @@ void Stamp(double x, double y)
 	}
 }
 
-void Palettize()
+void Palettize(int pal_id)
 {
-	uint8_t* p = pal[active_palette].rgb;
+	//glFinish();
+	uint64_t t0 = a3dGetTime();
 
-	uint8_t* lut = (uint8_t*)malloc(256 * 256 * 256 * 4);
+	GLuint vbo;
+	glCreateBuffers(1, &vbo);
+	float quad[8] = { 0,0,1,0,1,1,0,1 };
+	glNamedBufferStorage(vbo, sizeof(float[2])*4, quad, 0);
+
+	GLuint vao;
+	glCreateVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float[2]), (void*)0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glEnableVertexAttribArray(0);
+	glBindVertexArray(0);
+
+	GLuint prg;
+
+	GLsizei loglen = 999;
+	char logstr[1000];
+
+	const char* vs_src =
+		CODE(#version 450\n)
+		CODE(
+			layout(location = 0) in vec2 pos; // 0.0 - 1.0
+			uniform float slice; // 0.0 - 255.0
+			out vec3 fpos;       // 0.0-0.5/255 - 1.0+0.5/255
+			void main()
+			{
+				float d0 = 0.0 - 0.5;
+				float d1 = 255.0 + 0.5;
+				fpos = vec3( mix(vec2(d0, d0), vec2(d1, d1), pos), slice );
+				gl_Position = vec4(2.0*pos-vec2(1.0),0.0,1.0);
+			}
+		);
+
+	const char* fs_src =
+		CODE(#version 450\n)
+		CODE(
+			uniform uvec3 pal[256]; // 0 - 255
+			uniform bool unpal;
+			layout(location = 0) out vec4 lut;
+			in vec3 fpos;
+			void main()
+			{
+				if (unpal)
+					lut = vec4(fpos / 255.0, 1.0);
+				else
+				{
+					float diff = 100000000; // greater than max possible diff
+					int idx = -1;
+
+					// find closest color in palette
+					for (int j = 0; j < 256; j++)
+					{
+						vec3 dd = fpos - vec3(pal[j]);
+						dd *= dd;
+
+						float d = max(max(fpos.r, fpos.g), fpos.b) - float(max(max(pal[j].r, pal[j].g), pal[j].b));
+						d *= 16 * d; // mostly luminance
+						d += 2 * dd.r + 4 * dd.g + 3 * dd.b; // bit of chrominance
+
+						if (d < diff)
+						{
+							idx = j;
+							diff = d;
+						}
+					}
+
+					lut = vec4(vec3(pal[idx]) / 255.0, 1.0);
+				}
+			}
+		);
+
+	GLenum st[3] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
+	const char* src[3] = { vs_src, fs_src };
+	prg = glCreateProgram();
+	GLuint shader[3];
+
+	for (int i = 0; i < 2; i++)
+	{
+		shader[i] = glCreateShader(st[i]);
+		GLint len = (GLint)strlen(src[i]);
+		glShaderSource(shader[i], 1, &(src[i]), &len);
+		glCompileShader(shader[i]);
+
+		loglen = 999;
+		glGetShaderInfoLog(shader[i], loglen, &loglen, logstr);
+		logstr[loglen] = 0;
+
+		if (loglen)
+			printf("%s", logstr);
+
+		glAttachShader(prg, shader[i]);
+	}
+
+	glLinkProgram(prg);
+
+	for (int i = 0; i < 2; i++)
+		glDeleteShader(shader[i]);
+
+	GLint slice_loc = glGetUniformLocation(prg,"slice");
+	GLint pal_loc = glGetUniformLocation(prg, "pal");
+	GLint unpal_loc = glGetUniformLocation(prg, "unpal");
+	glUseProgram(prg);
+
+	glUniform1i(unpal_loc, pal_id < 0);
+
+	if (pal_id >= 0)
+	{
+		GLuint uipal[768];
+		for (int i = 0; i < 768; i++)
+			uipal[i] = (GLuint)pal[pal_id].rgb[i];
+		glUniform3uiv(pal_loc, 256, uipal);
+	}
+
+	GLuint fbo;
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+	glBindVertexArray(vao);
+
+	glViewport(0, 0, 256, 256);
+	for (int slice = 0; slice < 256; slice++)
+	{
+		glFramebufferTexture3D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, pal_tex, 0, slice);
+		glUniform1f(slice_loc, (float)slice);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+	}
+
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteVertexArrays(1, &vao);
+	glDeleteBuffers(1, &vbo);
+	glDeleteProgram(prg);
+
+
+	//glFinish();
+	uint64_t t1 = a3dGetTime();
+	printf("palettized in %d us\n", (int)(t1 - t0));
+
+#if 0
+
+
+	uint8_t* p = pal[pal_id].rgb;
+
+	uint8_t* lut = (uint8_t*)malloc(256 * 256 * 256 * 3);
+
+	uint64_t t0 = a3dGetTime();
 
 	for (int i = 0; i < 256 * 256 * 256; i++)
 	{
@@ -1758,12 +1904,14 @@ void Palettize()
 			int dg = G8 - p[k++];
 			int db = B8 - p[k];
 
-			#define max(a,b) ((a)>(b)?(a):(b))
+#ifndef max
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif
 
-			int d = max(max(R8,G8),B8) - max(max(p[3*j],p[3*j+1]),p[3*j+2]);
-			d *= 16*d; // mostly luminance
- 			d += 2 * dr*dr + 4 * dg*dg + 3 * db*db; // bit of chrominance
-			
+			int d = max(max(R8, G8), B8) - max(max(p[3 * j], p[3 * j + 1]), p[3 * j + 2]);
+			d *= 16 * d; // mostly luminance
+			d += 2 * dr*dr + 4 * dg*dg + 3 * db*db; // bit of chrominance
+
 
 			if (d < diff)
 			{
@@ -1772,8 +1920,24 @@ void Palettize()
 			}
 		}
 
+
+		/*
 		int j = 3*i;
 		int k = 3*idx;
+		lut[j++] = p[k++];
+		lut[j++] = p[k++];
+		lut[j] = p[k];
+		*/
+
+		lut[3 * i] = idx;
+	}
+
+	uint64_t t1 = a3dGetTime();
+
+	for (int i = 0; i < 256*256*256; i++)
+	{
+		int j = 3 * i;
+		int k = lut[j] * 3;
 		lut[j++] = p[k++];
 		lut[j++] = p[k++];
 		lut[j] = p[k];
@@ -1781,8 +1945,13 @@ void Palettize()
 
 	uint64_t t2 = a3dGetTime();
 
-	glTextureSubImage3D(pal_tex,0, 0,0,0, 256,256,256, GL_RGB, GL_UNSIGNED_BYTE, lut);
+	glTextureSubImage3D(pal_tex, 0, 0, 0, 0, 256, 256, 256, GL_RGB, GL_UNSIGNED_BYTE, lut);
 	free(lut);
+
+	uint64_t t3 = a3dGetTime();
+
+	printf("%d / %d / %d\n", (int)(t1 - t0), (int)(t2 - t1), (int)(t3 - t2));
+#endif
 }
 
 void my_render()
@@ -1898,9 +2067,9 @@ void my_render()
 			xywh[0], xywh[1], xywh[2], xywh[3],
 			wh[0], wh[1], a3dIsMaximized() ? "MAXIMIZED" : "normal");
 
-		if (ImGui::Button("PALETTIZE"))
+		if (ImGui::Button(io.KeyShift ? "DEPALETTIZE" : "PALETTIZE"))
 		{
-			Palettize();
+			Palettize(io.KeyShift ? -1 : active_palette);
 		}
 
 		if (ImGui::Button("FULL"))

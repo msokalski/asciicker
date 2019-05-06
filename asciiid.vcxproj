@@ -203,6 +203,7 @@
     <ClCompile Include="terrain.cpp" />
     <ClCompile Include="texheap.cpp" />
     <ClCompile Include="upng.c" />
+    <ClCompile Include="water.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
