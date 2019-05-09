@@ -11,3 +11,30 @@
 
 // looks like we should start with objects before adding water!
 // we need OBJ importer, pure mesh with single UV channel (no normals, colors, smooth groups etc)
+
+
+/*
+CASCADED REFLECTION:
+
+given reflection plane:  A*x+B*y+C*z+D==0
+transformed P=[x,y,z,1] is: [x,y,-2*(A*x+B*y+D)/C-z,1]
+
+so matrix is (if needed at all):
+[  1     0     0     0  ]
+[  0     1     0     0  ]
+[-2A/C -2B/C  -1   -2D/C]
+[  0     0     0     1  ]
+
+what clipping planes should we use to query geomtery?
+- reflection of 4x viewport-edge planes
+- reflection of planes constructed from viewing vector and mirror boundary edges
+- mirror plane (reflection is same)
+
+
+note: sprites can be deformed!
+      if reflection plane's normal in view coords has non zero X coord
+	  (water flow is somewhat horizontal on screen)
+	  we'd need to render sprites z-column by z-column adjusting
+	  everytime column's screen space Y position
+*/
+

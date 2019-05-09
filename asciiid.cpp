@@ -1735,7 +1735,7 @@ void Stamp(double x, double y)
 	}
 }
 
-void Palettize(int pal_id)
+void Palettize(const uint8_t p[768])
 {
 	//glFinish();
 	uint64_t t0 = a3dGetTime();
@@ -1844,15 +1844,16 @@ void Palettize(int pal_id)
 	GLint unpal_loc = glGetUniformLocation(prg, "unpal");
 	glUseProgram(prg);
 
-	glUniform1i(unpal_loc, pal_id < 0);
-
-	if (pal_id >= 0)
+	if (p)
 	{
 		GLuint uipal[768];
 		for (int i = 0; i < 768; i++)
-			uipal[i] = (GLuint)pal[pal_id].rgb[i];
+			uipal[i] = (GLuint)p[i];
 		glUniform3uiv(pal_loc, 256, uipal);
+		glUniform1i(unpal_loc, false);
 	}
+	else
+		glUniform1i(unpal_loc, true);
 
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
@@ -2069,7 +2070,7 @@ void my_render()
 
 		if (ImGui::Button(io.KeyShift ? "DEPALETTIZE" : "PALETTIZE"))
 		{
-			Palettize(io.KeyShift ? -1 : active_palette);
+			Palettize(io.KeyShift ? 0 : pal[active_palette].rgb);
 		}
 
 		if (ImGui::Button("FULL"))
@@ -2106,6 +2107,7 @@ void my_render()
 			ImGui::Checkbox("Spin", &spin_anim);
 
 			ImGui::SliderFloat("ZOOM", &font_size, 1.0f, 32.0f);
+			ImGui::SameLine();
 			ImGui::SameLine();
 			ImGui::Text("%dx%d", (int)round(io.DisplaySize.x/font_size), (int)round(io.DisplaySize.y / font_size));
 		}
@@ -2325,6 +2327,40 @@ void my_render()
 					ImGui::PopStyleVar();
 				}
 
+				static bool add_verts = false;
+				static bool build_poly = false;
+
+				if (edit_mode != 2)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
+					add_verts = false;
+					build_poly = false;
+				}
+				if (ImGui::BeginTabItem("POLY"))
+				{
+					edit_mode = 2;
+
+					if (ImGui::Checkbox("Add Verts", &add_verts))
+					{
+						if (add_verts)
+							build_poly = false;
+					}
+
+					if (ImGui::Checkbox("Build Poly",&build_poly))
+					{
+						if (build_poly)
+							add_verts = false;
+					}
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
+				/*
 				if (edit_mode != 2)
 				{
 					pushed = true;
@@ -2375,6 +2411,7 @@ void my_render()
 					pushed = false;
 					ImGui::PopStyleVar();
 				}
+				*/
 
 				ImGui::EndTabBar();
 			}
@@ -3563,14 +3600,13 @@ void my_init()
 
 
 	glCreateTextures(GL_TEXTURE_3D, 1, &pal_tex);
-
 	glTextureStorage3D(pal_tex, 1, GL_RGB8, 256, 256, 256);
-
 	glTextureParameteri(pal_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTextureParameteri(pal_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	Palettize(0);
 
 	MyMaterial::Init();
 
