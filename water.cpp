@@ -38,3 +38,12 @@ note: sprites can be deformed!
 	  everytime column's screen space Y position
 */
 
+// HOW DO WE STORE POINTS, TRIANGLES, POLYGONS, PLANES ?
+/*
+
+// we will need fast queries:
+// by xy -> get z and trianle, from triangle: points and plane
+// by ray -> get xyz and closest triangle
+// by clipping planes -> callback with triangle
+
+*/

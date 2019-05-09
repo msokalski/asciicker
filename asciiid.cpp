@@ -2353,6 +2353,8 @@ void my_render()
 						if (build_poly)
 							add_verts = false;
 					}
+
+					ImGui::EndTabItem();
 				}
 				if (pushed)
 				{
@@ -3670,7 +3672,7 @@ void my_init()
 	// terrain = CreateTerrain(int x, int y, int w, int h, uint16_t* data);
 	// xywh coords are in patches, so data is w*4+1,h*4+1 !!!!!!!!!!!!!!!!
 
-	const int num1 = 8;
+	const int num1 = 16;
 	const int num2 = num1*num1;
 
 	uint32_t* rnd = (uint32_t*)malloc(sizeof(uint32_t)*num2);
