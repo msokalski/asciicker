@@ -1881,7 +1881,6 @@ void Palettize(const uint8_t p[768])
 
 #if 0
 
-
 	uint8_t* p = pal[pal_id].rgb;
 
 	uint8_t* lut = (uint8_t*)malloc(256 * 256 * 256 * 3);

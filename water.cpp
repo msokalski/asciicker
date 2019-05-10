@@ -1,4 +1,4 @@
-
+ 
 
 // we want ability of having super-lo-res mesh scattered over terrain (please: no more than 10 triangles in viewport)
 // in similar way we'd like to have object meshes (but instanced)
