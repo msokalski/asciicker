@@ -2144,6 +2144,7 @@ void my_render()
 
 		static int save = 0; // 0-no , 1-save, 2-save_as
 		static DirItem** dir_arr = 0;
+		static char save_path[4096]="";
 
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
@@ -2158,15 +2159,17 @@ void my_render()
 			Palettize(io.KeyShift ? 0 : pal[active_palette].rgb);
 		}
 
-		if (ImGui::Button(save ? "Cancel" : io.KeyShift ? "SAVE AS" : "SAVE"))
+		if (ImGui::Button(save ? "Cancel" : "SAVE AS"))
 		{
-			save = save ? 0 : io.KeyShift ? 2 : 1;
+			save = save ? 0 : 1;
 
 			if (save)
 			{
 				if (dir_arr)
 					FreeDir(dir_arr);
 				dir_arr = 0;
+
+				a3dGetCurDir(save_path,4096);
 				AllocDir(&dir_arr);
 			}
 			else
@@ -2245,36 +2248,48 @@ void my_render()
 			ImGui::Begin(save == 1 ? "SAVE" : "SAVE AS", &show);
 
 			DirItem* cwd = 0;
+			ImGui::InputText("###path",save_path,4096);
 
-			// fill from dir_arr
-			DirItem** di = dir_arr;
-			while (*di)
+
+			if (ImGui::ListBoxHeader("###dir"))
 			{
-				if ((*di)->item == A3D_DIRECTORY)
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,0,1));
-				if (ImGui::Button((*di)->name))
+				// fill from dir_arr
+				DirItem** di = dir_arr;
+				while (*di)
 				{
-					if ((*di)->item == A3D_FILE)
+					if ((*di)->item == A3D_DIRECTORY)
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,0,1));
+					if (ImGui::Selectable((*di)->name,false))
 					{
-						// just copy its path to editbox
+						if ((*di)->item == A3D_FILE)
+						{
+							// just copy its path to editbox
+							char cd[4096];
+							a3dGetCurDir(cd,4096);
+							snprintf(save_path,4096,"%s%s",cd,(*di)->name);
+						}
+						else
+						{
+							// change current directory and rescan after 
+							cwd = *di;
+						}
 					}
-					else
-					{
-						// change current directory and rescan after 
-						cwd = *di;
-					}
+					if ((*di)->item == A3D_DIRECTORY)
+						ImGui::PopStyleColor();
+					di++;
 				}
-				if ((*di)->item == A3D_DIRECTORY)
-					ImGui::PopStyleColor();
-				di++;
+				ImGui::ListBoxFooter();
 			}
 
 			if (cwd && show)
 			{
 				a3dSetCurDir(cwd->name);
+				a3dGetCurDir(save_path,4096);
 				if (dir_arr)
 					FreeDir(dir_arr);
 				dir_arr = 0;
+
+				a3dGetCurDir(save_path,4096);
 				AllocDir(&dir_arr);
 			}
 

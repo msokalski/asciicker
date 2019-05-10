@@ -42,8 +42,36 @@ note: sprites can be deformed!
 /*
 
 // we will need fast queries:
-// by xy -> get z and trianle, from triangle: points and plane
 // by ray -> get xyz and closest triangle
 // by clipping planes -> callback with triangle
 
 */
+
+// oct-tree?
+
+struct Plane
+{
+	double p[4]; // p[0]*x + p[0]*y + p[0]*z + p[0] = 0;
+	int tris; // auto-del if 0
+};
+
+struct Triangle
+{
+	Vertex* v[3];
+	Plane* p; // just constraint
+};
+
+struct OctTree
+{
+	union
+	{
+		OctTree* flat[8];
+		OctTree* tree[2][2][2];
+	};
+};
+
+struct Water
+{
+	OctTree* root;
+};
+
