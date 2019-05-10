@@ -282,3 +282,5 @@ enum A3D_DirItem
 };
 
 int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* name, void* cookie), void* cookie);
+
+bool a3dSetCurDir(const char* dir_path);

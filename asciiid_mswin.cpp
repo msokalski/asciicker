@@ -1346,4 +1346,9 @@ int a3dListDir(const char* dir_path, bool(*cb)(A3D_DirItem item, const char* nam
 	return num;
 }
 
+bool a3dSetCurDir(const char* dir_path)
+{
+	return SetCurrentDirectoryA(dir_path);
+}
+
 #endif // __WIN32__

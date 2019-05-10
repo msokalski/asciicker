@@ -1530,4 +1530,10 @@ int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* na
 	closedir(d);
 	return num;	
 }
+
+bool a3dSetCurDir(const char* dir_path)
+{
+	return ch_dir(dir_path) == 0;
+}
+
 #endif // __linux__

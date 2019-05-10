@@ -1955,6 +1955,88 @@ void Palettize(const uint8_t p[768])
 #endif
 }
 
+
+struct DirItem
+{
+	A3D_DirItem item;
+	DirItem* next;
+	char name[1];
+};
+
+void FreeDir(DirItem** dir)
+{
+	DirItem** i = dir;
+	while (*i)
+	{
+		free(*i);
+		i++;
+	}
+	free(dir);
+}
+
+int AllocDir(DirItem*** dir, DirItem** list = 0)
+{
+	if (!dir)
+		return -1;
+
+	struct X
+	{
+		struct Head
+		{
+			int num;
+			DirItem* list;
+		};
+
+		static int cmp(const void* a, const void* b)
+		{
+			const DirItem* p = *(const DirItem**)a;
+			const DirItem* q = *(const DirItem**)b;
+
+			if (p->item == A3D_DIRECTORY && q->item == A3D_FILE)
+				return -1;
+			if (p->item == A3D_FILE && q->item == A3D_DIRECTORY)
+				return 1;
+			return strcmp(p->name, q->name);
+		}
+
+
+		static bool Scan(A3D_DirItem item, const char* name, void* cookie)
+		{
+			Head* h = (Head*)cookie;
+			DirItem* i = (DirItem*)malloc(sizeof(DirItem) + strlen(name));
+
+			i->item = item;
+			i->next = h->list;
+			strcpy(i->name, name);
+			h->list = i;
+			h->num++;
+
+			return true;
+		}
+	};
+
+	X::Head head = { 0,0 };
+	a3dListDir(".", X::Scan, &head);
+
+	if (list)
+		*list = head.list;
+
+	DirItem* itm = head.list;
+	DirItem** arr = (DirItem**)malloc(sizeof(DirItem*)*(head.num+1));
+	for (int i = 0; i < head.num; i++)
+	{
+		arr[i] = itm;
+		itm = itm->next;
+	}
+
+	qsort(arr, head.num, sizeof(DirItem*), X::cmp);
+
+	arr[head.num] = 0;
+	*dir = arr;
+
+	return head.num;
+}
+
 void my_render()
 {
 	ImGuiIO& io = ImGui::GetIO();
@@ -2060,6 +2142,9 @@ void my_render()
 		//ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(0,0),Dock::Size,0);
 //		ImGui::PopStyleVar();
 
+		static int save = 0; // 0-no , 1-save, 2-save_as
+		static DirItem** dir_arr = 0;
+
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
 		int xywh[4],wh[2];
@@ -2071,6 +2156,25 @@ void my_render()
 		if (ImGui::Button(io.KeyShift ? "DEPALETTIZE" : "PALETTIZE"))
 		{
 			Palettize(io.KeyShift ? 0 : pal[active_palette].rgb);
+		}
+
+		if (ImGui::Button(save ? "Cancel" : io.KeyShift ? "SAVE AS" : "SAVE"))
+		{
+			save = save ? 0 : io.KeyShift ? 2 : 1;
+
+			if (save)
+			{
+				if (dir_arr)
+					FreeDir(dir_arr);
+				dir_arr = 0;
+				AllocDir(&dir_arr);
+			}
+			else
+			{
+				if (dir_arr)
+					FreeDir(dir_arr);
+				dir_arr = 0;
+			}
 		}
 
 		if (ImGui::Button("FULL"))
@@ -2134,6 +2238,59 @@ void my_render()
 		}
 
 		ImGui::End();
+
+		if (save)
+		{
+			bool show = true;
+			ImGui::Begin(save == 1 ? "SAVE" : "SAVE AS", &show);
+
+			DirItem* cwd = 0;
+
+			// fill from dir_arr
+			DirItem** di = dir_arr;
+			while (*di)
+			{
+				if ((*di)->item == A3D_DIRECTORY)
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,0,1));
+				if (ImGui::Button((*di)->name))
+				{
+					if ((*di)->item == A3D_FILE)
+					{
+						// just copy its path to editbox
+					}
+					else
+					{
+						// change current directory and rescan after 
+						cwd = *di;
+					}
+				}
+				if ((*di)->item == A3D_DIRECTORY)
+					ImGui::PopStyleColor();
+				di++;
+			}
+
+			if (cwd && show)
+			{
+				a3dSetCurDir(cwd->name);
+				if (dir_arr)
+					FreeDir(dir_arr);
+				dir_arr = 0;
+				AllocDir(&dir_arr);
+			}
+
+			ImGui::End();
+
+			if (!show)
+			{
+				if (dir_arr)
+					FreeDir(dir_arr);
+				dir_arr = 0;
+
+				save = 0;
+			}
+		}
+
+
 		/// end of window?
 		ImGui::Begin("EDIT", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
