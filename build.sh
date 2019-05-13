@@ -1,4 +1,4 @@
-make
+make -j16
 
 # if [ ! -d .run ]
 # then

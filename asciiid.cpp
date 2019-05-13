@@ -2311,7 +2311,9 @@ void my_render()
 						{
 							for (int i=0; i<256; i++)
 							{
-								fread(mat[i].shade,1,sizeof(Cell)*4*16,f);			
+								if ( fread(mat[i].shade,1,sizeof(Cell)*4*16,f) != sizeof(Cell)*4*16 )
+									break;
+
 								mat[i].Update();
 							}
 						}
@@ -2404,7 +2406,8 @@ void my_render()
 						{
 							for (int i=0; i<256; i++)
 							{
-								fread(mat[i].shade,1,sizeof(Cell)*4*16,f);			
+								if ( fread(mat[i].shade,1,sizeof(Cell)*4*16,f) != sizeof(Cell)*4*16 )
+									break;	
 								mat[i].Update();
 							}
 						}

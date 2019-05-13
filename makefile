@@ -48,11 +48,13 @@ DISTOUTPUT := $(BIN).tar.gz
 
 # intermediate directory for generated object files
 OBJDIR := .o
+
 # intermediate directory for generated dependency files
 DEPDIR := .d
 
 # object files, auto generated from sourcce files
 OBJS := $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))
+
 # dependency files, auto generated from source files
 DEPS := $(patsubst %,$(DEPDIR)/%.d,$(basename $(SRCS)))
 
@@ -79,10 +81,10 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-CPPFLAGS := -g #-O3
+CPPFLAGS := -g -O3
 
 # linker flags
-LDFLAGS := -g #-O3
+LDFLAGS := -g -O3
 
 # flags required for dependency generation; passed to compilers
 DEPFLAGS = -MT $@ -MD -MP -MF $(DEPDIR)/$*.Td
