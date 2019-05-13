@@ -614,9 +614,6 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 
 Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 {
-	if (z < 0)
-		return 0;
-
 	if (!t->root)
 	{
 		t->x = -x;
@@ -639,6 +636,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			for (int x = 0; x < VISUAL_CELLS; x++)
 				p->visual[y][x] = fast_rand();
 		*/
+	
 		memset(p->visual,0x00,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
 
 		t->root = p;
@@ -2435,4 +2433,111 @@ size_t TerrainDispose(Patch* p)
 	free(p);
 
 	return sizeof(Patch);
+}
+
+
+
+struct FileHeader
+{
+	uint32_t file_sign;
+	uint32_t header_size;
+	uint32_t num_patches;
+	uint32_t reserved;
+};
+
+struct FilePatch
+{
+	int32_t x,y; // 4
+	uint16_t visual[VISUAL_CELLS][VISUAL_CELLS]; // 2x64
+	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1]; //2x25
+	uint16_t diag; // 2
+};
+
+void SaveTree(FILE* f, int x, int y, int lev, const QuadItem* item)
+{
+	if (!lev)
+	{
+		const Patch* p = (const Patch*)item;
+		fwrite(&x,1,sizeof(int32_t),f);
+		fwrite(&y,1,sizeof(int32_t),f);
+		fwrite(p->visual,VISUAL_CELLS*VISUAL_CELLS,sizeof(uint16_t),f);
+		fwrite(p->height,(HEIGHT_CELLS+1)*(HEIGHT_CELLS+1),sizeof(uint16_t),f);
+		fwrite(&p->diag,1,sizeof(int16_t),f);
+		return;
+	}
+
+	const Node* n = (const Node*)item;
+	lev--;
+
+	int r = 1<<lev;
+
+	if (n->quad[0])
+		SaveTree(f,x,y,lev,n->quad[0]);
+	if (n->quad[1])
+		SaveTree(f,x+r,y,lev,n->quad[1]);
+	if (n->quad[2])
+		SaveTree(f,x,y+r,lev,n->quad[2]);
+	if (n->quad[3])
+		SaveTree(f,x+r,y+r,lev,n->quad[3]);
+}
+
+bool SaveTerrain(const Terrain* t, FILE* f)
+{
+	if (!t || !f)
+		return false;
+
+	FileHeader hdr =
+	{
+		*(uint32_t*)"AS3D",
+		(uint32_t)sizeof(FileHeader),
+		(uint32_t)t->patches,
+		(uint32_t)0
+	};
+
+	fwrite(&hdr,1,sizeof(FileHeader),f);
+
+	if (t->root)
+		SaveTree(f, -t->x, -t->y, t->level,t->root);
+
+	return true;
+}
+
+Terrain* LoadTerrain(FILE* f)
+{
+	if (!f)
+		return 0;
+
+	FileHeader hdr;
+	if (fread(&hdr,1,sizeof(FileHeader),f)!=sizeof(FileHeader))
+	{
+		return 0;
+	}
+
+	if (hdr.file_sign != *(uint32_t*)"AS3D" ||
+		hdr.header_size != sizeof(FileHeader))
+	{
+		return 0;
+	}
+
+	Terrain* t = CreateTerrain();
+	for (int i = 0; i < hdr.num_patches; i++)
+	{
+		FilePatch pch;
+		if (fread(&pch,1,sizeof(FilePatch),f)!=sizeof(FilePatch))
+		{
+			DeleteTerrain(t);
+			return 0;
+		}
+
+		Patch* p = AddTerrainPatch(t, pch.x, pch.y, 0);
+
+		memcpy(p->visual,pch.visual,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
+		memcpy(p->height,pch.height,sizeof(uint16_t)*(HEIGHT_CELLS+1)*(HEIGHT_CELLS+1));
+		p->diag = pch.diag;
+
+		UpdateTerrainVisualMap(p);
+		UpdateTerrainHeightMap(p);
+	}
+
+	return t;
 }

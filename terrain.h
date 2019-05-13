@@ -13,6 +13,9 @@ struct Terrain;
 Terrain* CreateTerrain(int z=-1);
 void DeleteTerrain(Terrain* t);
 
+bool SaveTerrain(const Terrain* t, FILE* f);
+Terrain* LoadTerrain(FILE* f);
+
 struct Patch;
 
 Patch* GetTerrainPatch(Terrain* t, int x, int y);
@@ -65,3 +68,4 @@ void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, voi
 Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4]);
 
 double HitTerrain(Patch* p, double u, double v); // u,v must be normalized
+

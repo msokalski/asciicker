@@ -364,6 +364,7 @@ float rot_pitch = 30;//90;
 float lit_yaw = 45;
 float lit_pitch = 30;//90;
 float lit_time = 12.0f;
+float ambience = 0.0;
 
 bool spin_anim = false;
 float pos_x = 0, pos_y = 0, pos_z = 0;
@@ -684,7 +685,7 @@ struct RenderContext
 			uniform sampler2D f_tex;
 			uniform sampler3D p_tex;
 
-			uniform vec3 lt; // light pos
+			uniform vec4 lt; // light pos
 			// uniform vec3 lc; // light rgb
 			uniform vec4 br; // brush
 			uniform vec3 qd; // quad diag (.z==1 height quad, .z==2 visual map quad)
@@ -726,8 +727,8 @@ struct RenderContext
 				uint visual = texelFetch(v_tex, ivec2(floor(world_xyuv.zw)), 0).r;
 				//visual = 12345;
 
-				vec3 light_pos = normalize(lt);
-				float light = 0.5 + 0.5*dot(light_pos, normalize(normal));
+				vec3 light_pos = normalize(lt.xyz);
+				float light = max(0.0, 0.5*lt.w + (1.0-0.5*lt.w)*dot(light_pos, normalize(normal)));
 
 				{
 					uint matid = visual & 0xFF;
@@ -1156,7 +1157,7 @@ struct RenderContext
 		font_zoom = sqrt(font_zoom);
 
 		glUniformMatrix4fv(tm_loc, 1, GL_FALSE, ftm);
-		glUniform3fv(lt_loc, 1, lt);
+		glUniform4fv(lt_loc, 1, lt);
 		//glUniform3fv(lc_loc, 1, lit_color);
 		glUniform1i(z_tex_loc, 0);
 		glUniform1i(v_tex_loc, 1);
@@ -2158,12 +2159,12 @@ void my_render()
 			Palettize(io.KeyShift ? 0 : pal[active_palette].rgb);
 		}
 
-		if (ImGui::Button(save ? "Cancel" : "SAVE AS"))
+		if (!save)
 		{
-			save = save ? 0 : 1;
-
-			if (save)
+			if (ImGui::Button("SAVE AS"))
 			{
+				save = 1;
+
 				if (dir_arr)
 					FreeDir(dir_arr);
 				dir_arr = 0;
@@ -2171,13 +2172,32 @@ void my_render()
 				a3dGetCurDir(save_path,4096);
 				AllocDir(&dir_arr);
 			}
-			else
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("LOAD"))
 			{
+				save = 2;
+
+				if (dir_arr)
+					FreeDir(dir_arr);
+				dir_arr = 0;
+
+				a3dGetCurDir(save_path,4096);
+				AllocDir(&dir_arr);
+			}
+		}
+		else
+		{
+			if (ImGui::Button("Cancel"))
+			{
+				save = 0;
 				if (dir_arr)
 					FreeDir(dir_arr);
 				dir_arr = 0;
 			}
 		}
+		
 
 		if (ImGui::Button("FULL"))
 		{
@@ -2230,6 +2250,7 @@ void my_render()
 			ImGui::SliderFloat("NOON PITCH", &lit_pitch, 0.0f, +90.0f);
 			ImGui::SliderFloat("NOON YAW", &lit_yaw, -180.0f, +180.0f);
 			ImGui::SliderFloat("LIGHT TIME", &lit_time, 0, 24);
+			ImGui::SliderFloat("AMBIENCE", &ambience, 0, 1);
 
 			/*
 			ImGui::ColorEdit3("DAWN", dawn_color);
@@ -2244,13 +2265,74 @@ void my_render()
 		if (save)
 		{
 			bool show = true;
-			ImGui::Begin(save == 1 ? "SAVE" : "SAVE AS", &show);
+			ImGui::Begin(save == 1 ? "SAVE" : "LOAD", &show);
 
 			DirItem* cwd = 0;
-			ImGui::InputText("###path",save_path,4096);
+			ImGui::PushItemWidth(-1);
+			if (ImGui::InputText("###path",save_path,4096,ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				if (save == 1)
+				{
+					// SAVE to save_path, warn if file exist?
+					FILE* f = fopen(save_path,"wb");
+					if (f)
+					{
+						if (SaveTerrain(terrain,f))
+						{
+							// save mats
+							for (int i=0; i<256; i++)
+								fwrite(mat[i].shade,1,sizeof(Cell)*4*16,f);
 
+							// close save dialog
+							save = 0;
+							if (dir_arr)
+								FreeDir(dir_arr);
+							dir_arr = 0;
+						}
 
-			if (ImGui::ListBoxHeader("###dir"))
+						fclose(f);
+					}
+				}
+				else
+				if (save == 2)
+				{
+					// load
+
+					URDO_Purge();
+					DeleteTerrain(terrain);
+					terrain = 0;
+
+					FILE* f = fopen(save_path,"rb");
+					if (f)
+					{
+						terrain = LoadTerrain(f);
+
+						if (terrain)
+						{
+							for (int i=0; i<256; i++)
+							{
+								fread(mat[i].shade,1,sizeof(Cell)*4*16,f);			
+								mat[i].Update();
+							}
+						}
+
+						fclose(f);
+					}
+
+					if (!terrain)
+					{
+						terrain = CreateTerrain();
+					}
+
+					// close save dialog
+					save = 0;
+					if (dir_arr)
+						FreeDir(dir_arr);
+					dir_arr = 0;					
+				}
+			}
+
+			if (save && ImGui::ListBoxHeader("###dir", ImVec2(-1, -ImGui::GetItemsLineHeightWithSpacing()) ))
 			{
 				// fill from dir_arr
 				DirItem** di = dir_arr;
@@ -2280,7 +2362,80 @@ void my_render()
 				ImGui::ListBoxFooter();
 			}
 
-			if (cwd && show)
+			if (save && ImGui::Button(save == 1 ? "SAVE" : "LOAD"))
+			{
+				if (save == 1)
+				{
+					// SAVE to save_path, warn if file exist?
+					FILE* f = fopen(save_path,"wb");
+					if (f)
+					{
+						if (SaveTerrain(terrain,f))
+						{
+							// save mats
+							for (int i=0; i<256; i++)
+								fwrite(mat[i].shade,1,sizeof(Cell)*4*16,f);
+
+							// close save dialog
+							save = 0;
+							if (dir_arr)
+								FreeDir(dir_arr);
+							dir_arr = 0;
+						}
+
+						fclose(f);
+					}
+				}
+				else
+				if (save == 2)
+				{
+					// load
+
+					URDO_Purge();
+					DeleteTerrain(terrain);
+					terrain = 0;
+
+					FILE* f = fopen(save_path,"rb");
+					if (f)
+					{
+						terrain = LoadTerrain(f);
+
+						if (terrain)
+						{
+							for (int i=0; i<256; i++)
+							{
+								fread(mat[i].shade,1,sizeof(Cell)*4*16,f);			
+								mat[i].Update();
+							}
+						}
+
+						fclose(f);
+					}
+
+					if (!terrain)
+					{
+						terrain = CreateTerrain();
+					}
+
+					// close save dialog
+					save = 0;
+					if (dir_arr)
+						FreeDir(dir_arr);
+					dir_arr = 0;					
+				}
+			}	
+
+			ImGui::SameLine();
+			if (save && ImGui::Button("CANCEL"))
+			{
+				// close save dialog
+				save = 0;
+				if (dir_arr)
+					FreeDir(dir_arr);
+				dir_arr = 0;
+			}				
+
+			if (save && cwd && show)
 			{
 				a3dSetCurDir(cwd->name);
 				a3dGetCurDir(save_path,4096);
@@ -3638,11 +3793,12 @@ void my_render()
 	double lit_pos[4];
 	Product(time_tm, noon_pos, lit_pos);
 
-	float lt[3] =
+	float lt[4] =
 	{
 		(float)lit_pos[0],
 		(float)lit_pos[1],
-		(float)lit_pos[2]
+		(float)lit_pos[2],
+		ambience
 	};
 
 	glEnable(GL_DEPTH_TEST);

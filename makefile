@@ -21,7 +21,7 @@
 
 
 # output binary
-BIN := .run/asciid
+BIN := .run/asciiid
 
 # source files
 SRCS :=	asciiid.cpp \
@@ -79,10 +79,10 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-CPPFLAGS := -g -O3
+CPPFLAGS := -g #-O3
 
 # linker flags
-LDFLAGS := -g -O3
+LDFLAGS := -g #-O3
 
 # flags required for dependency generation; passed to compilers
 DEPFLAGS = -MT $@ -MD -MP -MF $(DEPDIR)/$*.Td
