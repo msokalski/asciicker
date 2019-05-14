@@ -6,8 +6,8 @@
 	],
 	"settings": {
 		"disasexpl.associations": {
-			"**/*.c": "${workspaceFolder}/.run/asciiid.s",
-			"**/*.cpp": "${workspaceFolder}/.run/asciiid.s"
+			"**/*.c": "${workspaceFolder}/.o/${relativeFileDir}/${fileBasenameNoExtension}.s",
+			"**/*.cpp": "${workspaceFolder}/.o/${relativeFileDir}/${fileBasenameNoExtension}.s"
 		}	
 	}
 }

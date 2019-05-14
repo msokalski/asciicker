@@ -1,24 +1,5 @@
-# # BUILD is initially undefined
-# ifndef BUILD
-# 
-# # max equals 256 x's
-# sixteen := x x x x x x x x x x x x x x x x
-# MAX := $(foreach x,$(sixteen),$(sixteen))
-# 
-# # T estimates how many targets we are building by replacing BUILD with a special string
-# T := $(shell $(MAKE) -nrRf $(firstword $(MAKEFILE_LIST)) $(MAKECMDGOALS) \
-#             BUILD="COUNTTHIS" | grep -c "COUNTTHIS")
-# 
-# # N is the number of pending targets in base 1, well in fact, base x :-)
-# N := $(wordlist 1,$T,$(MAX))
-# 
-# # auto-decrementing counter that returns the number of pending targets in base 10
-# counter = $(words $N)$(eval N := $(wordlist 2,$(words $N),$N))
-# 
-# # BUILD is now defined to show the progress, this also avoids redefining T in loop
-# BUILD = @echo $(counter) of $(T)
-# endif
-
+# VAR := expands during assignment
+# VAR = expands when referenced
 
 # output binary
 BIN := .run/asciiid
@@ -81,10 +62,10 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-CPPFLAGS := -g -O3
+CPPFLAGS := -g -save-temps=obj -O3
 
 # linker flags
-LDFLAGS := -g -O3
+LDFLAGS := -g -save-temps=obj -O3
 
 # flags required for dependency generation; passed to compilers
 DEPFLAGS = -MT $@ -MD -MP -MF $(DEPDIR)/$*.Td
@@ -103,7 +84,6 @@ PRECOMPILE =
 
 # postcompile step
 POSTCOMPILE = mv -f $(DEPDIR)/$*.Td $(DEPDIR)/$*.d
-
 
 all: $(BIN)
 
@@ -140,7 +120,6 @@ help:
 $(BIN): $(OBJS)
 	@echo Linking: $(BIN)
 	@$(LINK.o) $^ $(LDLIBS)
-#	$(BUILD)
 
 $(OBJDIR)/%.o: %.c
 $(OBJDIR)/%.o: %.c $(DEPDIR)/%.d
@@ -148,7 +127,6 @@ $(OBJDIR)/%.o: %.c $(DEPDIR)/%.d
 	@$(PRECOMPILE)
 	@$(COMPILE.c) $<
 	@$(POSTCOMPILE)
-#	$(BUILD)
 
 $(OBJDIR)/%.o: %.cpp
 $(OBJDIR)/%.o: %.cpp $(DEPDIR)/%.d
@@ -156,7 +134,6 @@ $(OBJDIR)/%.o: %.cpp $(DEPDIR)/%.d
 	@$(PRECOMPILE)
 	@$(COMPILE.cc) $<
 	@$(POSTCOMPILE)
-#	$(BUILD)
 
 $(OBJDIR)/%.o: %.cc
 $(OBJDIR)/%.o: %.cc $(DEPDIR)/%.d
@@ -164,7 +141,6 @@ $(OBJDIR)/%.o: %.cc $(DEPDIR)/%.d
 	@$(PRECOMPILE)
 	@$(COMPILE.cc) $<
 	@$(POSTCOMPILE)
-#	$(BUILD)
 
 $(OBJDIR)/%.o: %.cxx
 $(OBJDIR)/%.o: %.cxx $(DEPDIR)/%.d
@@ -172,7 +148,6 @@ $(OBJDIR)/%.o: %.cxx $(DEPDIR)/%.d
 	@$(PRECOMPILE)
 	@$(COMPILE.cc) $<
 	@$(POSTCOMPILE)
-#	$(BUILD)
 
 .PRECIOUS = $(DEPDIR)/%.d
 $(DEPDIR)/%.d: ;
