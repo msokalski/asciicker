@@ -9,6 +9,8 @@ SRCS :=	asciiid.cpp \
 		asciiid_x11.cpp \
 		asciiid_urdo.cpp \
 		terrain.cpp \
+		mesh.cpp \
+		water.cpp \
 		texheap.cpp \
 		rgba8.cpp \
 		upng.c \
