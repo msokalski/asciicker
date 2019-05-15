@@ -150,6 +150,46 @@ struct MyMaterial
 	static GLuint tex; // single texture for all materials 128x256
 
 	Cell shade[4][16]; // each cell has 2 texels !!! shade[3] is currently spare space.
+
+	// althought we have only 16 cells, shade map has 7bits!
+	// that makes timed shading 8x more precise spatialy :)
+	// (last bit is left for elevation/transparency and depends on material mode)
+
+//	int time_scale; // -80..-1 , 0 , +1..+80
+
+	// TIMED SHADE_MAP EVALUATION:
+	/*	
+		uint64_t time64_usec = a4dGetTime();
+		int cell; // = ???
+		if (time_scale == 0)
+		{
+			cell = (shade_map >> 3) &0xF;
+		}
+		else
+		{
+			int mul_arr[] = { 470, 431, 395, 462, 332, 304, 279, 256 };
+			int abs_scale;
+
+			int multiplier;
+			if (time_scale>0)
+			{
+				abs_scale = time_scale;
+				multiplier = mul_arr[(abs_scale+6)&7];
+			}
+			else
+			{
+				abs_scale = -time_scale;
+				multiplier = -mul_arr[(abs_scale+6)&7];
+			}
+
+			int shift = 30 - ( ( abs_scale + 6 ) >> 3 );
+
+			cell = (( time64_usec * multiplier + (shade_map << (shift-3)) ) >> shift ) & 0xF;
+
+			// so at every frame every material should cache (time64_usec * multiplier) >> (shift-3)
+			// then during shading cell is simply = ((mat_cache + shade_map) >> 3 ) & 0xF
+		}
+	*/
 };
 
 GLuint MyMaterial::tex = 0;
@@ -364,7 +404,7 @@ float rot_pitch = 30;//90;
 float lit_yaw = 45;
 float lit_pitch = 30;//90;
 float lit_time = 12.0f;
-float ambience = 0.0;
+float ambience = 0.5;
 
 bool spin_anim = false;
 float pos_x = 0, pos_y = 0, pos_z = 0;
@@ -732,11 +772,10 @@ struct RenderContext
 
 				{
 					uint matid = visual & 0xFF;
-					uint shade = (visual >> 8) & 0xF;
-					uint elev  = (visual >> 12) & 0x1;
-					uint mode = (visual >> 13) & 0x3;
-					// 1 bit left
+					uint shade = (visual >> 8) & 0x7F;
+					uint elev  = (visual >> 15) & 0x1;
 
+					/*
 					if (mode == 1) // replace shade with lighting
 						shade = uint(round(light * 15.0));
 					else
@@ -745,6 +784,7 @@ struct RenderContext
 					else
 					if (mode == 3)
 						shade = uint(round(light * 15.0)*(1 - shade) + shade);
+					*/
 
 					// if we're painting matid
 					// replace matid if we're inside the brush
@@ -813,8 +853,8 @@ struct RenderContext
 					color = vec4(mix(vec3(fill_rgbp.rgb), vec3(fill_rgbc.rgb), glyph) / 255.0, 1.0);
 					//color = vec4(glyph_fract, 0.5, 1.0);
 
-					if (mode == 0) // editing
-						color.rgb *= light;
+					// if (mode == 0) // editing
+					color.rgb *= light;
 				}
 
 				// palettize

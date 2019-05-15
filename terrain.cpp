@@ -2533,10 +2533,11 @@ Terrain* LoadTerrain(FILE* f)
 
 		memcpy(p->visual,pch.visual,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
 		memcpy(p->height,pch.height,sizeof(uint16_t)*(HEIGHT_CELLS+1)*(HEIGHT_CELLS+1));
-		p->diag = pch.diag;
 
 		UpdateTerrainVisualMap(p);
 		UpdateTerrainHeightMap(p);
+
+		p->diag = pch.diag;
 	}
 
 	return t;
