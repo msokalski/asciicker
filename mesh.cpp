@@ -111,11 +111,14 @@ struct Inst : BSP
 
     Inst* share_next; // next instance sharing same mesh
 
-    int flags; 
-    // 0x1 - visible
-    // 0x2 - in-bsp
-    // 0x4 - put to bsp on next rebuild (consider it as static)
-    //       but any change to its mesh verts or inst-tm will remove it from bsp
+    enum FLAGS
+    {
+        INST_VISIBLE = 0x1,
+        INST_IN_TREE = 0x2,
+        INST_USE_TREE = 0x4,
+    };
+
+    int /*FLAGS*/ flags; 
 };
 
 /*
@@ -177,7 +180,7 @@ struct World
         if (bsp->type == BSP::BSP_TYPE_INST)
         {
             Inst* inst = (Inst*)bsp;
-            inst->flags &= ~0x2;
+            inst->flags &= ~Inst::INST_IN_TREE;
             bsp->parent = 0;
         }
     }
@@ -192,7 +195,7 @@ struct World
         
         for (Inst* inst = head_inst; inst; inst=inst->next)
         {
-            if (inst->flags & 0x4)
+            if (inst->flags & Inst::INST_USE_TREE)
                 arr[num++] = inst;
         }
 
@@ -253,9 +256,6 @@ struct World
         free(arr);
     }
 
-    // - project in both directions (+/-Z) starting from given point x,y,z
-    // - return 2 nearest hit Z values accompanied with Inst* and Face*
-
     struct Hit
     {
         Inst* inst;
@@ -263,23 +263,13 @@ struct World
         float abc_z[4]; // barycentric and world's z
     };
 
-    // ORTHO BI-HIT
-    int Query(double p[3], Hit* lo, Hit* hi)
-    {
-        // return:
-        // - 0 if no hit at all
-        // - 1 if only lower hit occured
-        // - 2 if only upper hit occured
-        // - 3 if both hits occured
-    }
-
     // RAY HIT
     bool Query(double p[3], double v[3], Hit* hit)
     {
-        // hit->abs_z[3] MUST be preinitialized to FAREST z
+        // hit->abc_z[3] MUST be preinitialized to FAREST z
     }
 
-    // INSTANCES IN HULL
+    // INSTS IN HULL
     void Query(int planes, double plane[][4], void (*cb)(Inst* inst, void* cookie), void* cookie)
     {
         // query possibly visible instances
