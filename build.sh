@@ -1,1 +1,1 @@
-/usr/bin/time -f "----------------------\nbuilt in %e sec" make -j16
+/usr/bin/time -f "----------------------\ndone in %e sec" make -j16

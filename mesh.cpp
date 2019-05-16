@@ -212,15 +212,26 @@ struct World
                 {
                     float bbox[6] =
                     {
-                        arr[a]->bbox[0] < arr[b]->bbox[0] ? arr[a]->bbox[0] : arr[b]->bbox[0],
-                        arr[a]->bbox[1] > arr[b]->bbox[1] ? arr[a]->bbox[1] : arr[b]->bbox[1],
-                        arr[a]->bbox[2] < arr[b]->bbox[2] ? arr[a]->bbox[2] : arr[b]->bbox[2],
-                        arr[a]->bbox[3] > arr[b]->bbox[3] ? arr[a]->bbox[3] : arr[b]->bbox[3],
-                        arr[a]->bbox[4] < arr[b]->bbox[4] ? arr[a]->bbox[4] : arr[b]->bbox[4],
-                        arr[a]->bbox[5] > arr[b]->bbox[5] ? arr[a]->bbox[5] : arr[b]->bbox[5]
+                        arr[a]->bbox[0] < arr[u]->bbox[0] ? arr[u]->bbox[0] : arr[v]->bbox[0],
+                        arr[a]->bbox[1] > arr[u]->bbox[1] ? arr[u]->bbox[1] : arr[v]->bbox[1],
+                        arr[a]->bbox[2] < arr[u]->bbox[2] ? arr[u]->bbox[2] : arr[v]->bbox[2],
+                        arr[a]->bbox[3] > arr[u]->bbox[3] ? arr[u]->bbox[3] : arr[v]->bbox[3],
+                        arr[a]->bbox[4] < arr[u]->bbox[4] ? arr[u]->bbox[4] : arr[v]->bbox[4],
+                        arr[a]->bbox[5] > arr[u]->bbox[5] ? arr[u]->bbox[5] : arr[v]->bbox[5]
                     };
 
                     float vol = (bbox[1]-bbox[0]) * (bbox[3]-bbox[2]) * (bbox[5]-bbox[4]);
+                    
+                    float u_vol = (arr[u]->bbox[1]-arr[u]->bbox[0]) * (arr[u]->bbox[3]-arr[u]->bbox[2]) * (arr[u]->bbox[5]-arr[u]->bbox[4]);
+                    float v_vol = (arr[v]->bbox[1]-arr[v]->bbox[0]) * (arr[v]->bbox[3]-arr[v]->bbox[2]) * (arr[v]->bbox[5]-arr[v]->bbox[4]);
+                    
+                    vol -= u_vol + v_vol; // minimize volumne expansion
+
+                    // minimize volume difference between children
+                    if (u_vol > v_vol)
+                        vol += u_vol-v_vol;
+                    else
+                        vol += v_vol-u_vol;
 
                     if (vol < e || e<0)
                     {
@@ -256,29 +267,64 @@ struct World
         free(arr);
     }
 
-    struct Hit
+    // closest to 'eye' intersecting face
+    struct FaceHit
     {
         Inst* inst;
         Face* face;
         float abc_z[4]; // barycentric and world's z
     };
 
+    // closest to ray isolated vert
+    struct IsolHit
+    {
+        Inst* inst;
+        Vert* vert;
+    };
+
+
     // RAY HIT
-    bool Query(double p[3], double v[3], Hit* hit)
+    bool Query(double p[3], double v[3], FaceHit* face_hit, IsolHit* isol_hit)
     {
         // hit->abc_z[3] MUST be preinitialized to FAREST z
+
+        // 1. find closest to eye intersecting face
+        // 2. closest vertex -> max(a,b,c)
+        // 3. closest edge -> min(a,b,c)
+
+        // what about isolated verts?
+        // they should form their own list
+        // and we can find one closest to ray in 3d
+
+        return false;
     }
 
     // INSTS IN HULL
     void Query(int planes, double plane[][4], void (*cb)(Inst* inst, void* cookie), void* cookie)
     {
         // query possibly visible instances
+
+        // temporarily report all insts
+        Inst* i = head_inst;
+        while (i)
+        {
+            cb(i,cookie);
+            i=i->next;
+        }
     }
  
     // FACES IN HULL
     void Query(Inst* inst, int planes, double plane[][4], void (*cb)(Face* face, void* cookie), void* cookie)
     {
         // query possibly visible faces of instance's mesh
+
+        // temporarily report all faces
+        Face* f = inst->mesh->head_face;
+        while (f)
+        {
+            cb(f,cookie);
+            f=f->next;
+        }
     }
 };
 
