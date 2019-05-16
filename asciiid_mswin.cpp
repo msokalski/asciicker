@@ -1351,4 +1351,15 @@ bool a3dSetCurDir(const char* dir_path)
 	return SetCurrentDirectoryA(dir_path);
 }
 
+bool a3dGetCurDir(char* dir_path, int size)
+{
+	int len = (int)GetCurrentDirectoryA(size, dir_path);
+	if (len + 1 < size)
+	{
+		dir_path[len] = '\\';
+		dir_path[len+1] = 0;
+	}
+	return len > 0 && len + 1 < size;
+}
+
 #endif // __WIN32__

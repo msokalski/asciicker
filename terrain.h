@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 #define HEIGHT_SCALE 16 // how may z-steps produces 1 visual cell
 #define HEIGHT_CELLS 4 // num of verts -1 along patch X and Y axis
 #define VISUAL_CELLS 8
