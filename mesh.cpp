@@ -783,7 +783,7 @@ Mesh* World::LoadMesh(const char* path)
                     p = end;
 
                     // looking for space,digit
-                    while (*p=='#' || *p=='\r' || *p=='\n' || *p=='\0')
+                    while (*p!='#' && *p!='\r' && *p!='\n' && *p!='\0')
                     {
                         if ((p[0]==' ' || p[0]=='\t') && (p[1]=='-' || p[1]=='+' || p[1]>='0' && p[1]<='9'))
                         {
@@ -819,4 +819,48 @@ Mesh* World::LoadMesh(const char* path)
 
     fclose(f);
     return m;
+}
+
+World* CreateWorld()
+{
+    World* w = (World*)malloc(sizeof(World));
+
+    w->meshes = 0;
+    w->head_mesh = 0;
+    w->tail_mesh = 0;
+    w->insts = 0;
+    w->head_inst = 0;
+    w->tail_inst = 0;
+    w->editable = 0;
+    w->root = 0;
+
+    return w;
+}
+
+void DeleteWorld(World* w)
+{
+    if (!w)
+        return;
+
+    if (w->root)
+        w->DeleteBSP(w->root);
+
+    // killing all meshes should kill all insts as well
+
+    while (w->meshes)
+        w->DelMesh(w->head_mesh);
+}
+
+Mesh* LoadMesh(World* w, const char* path)
+{
+    if (!w)
+        return 0;
+    return w->LoadMesh(path);
+}
+
+void DeleteMesh(Mesh* m)
+{
+    if (!m)
+        return;
+    m->world->DelMesh(m);
 }

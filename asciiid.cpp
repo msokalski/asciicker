@@ -24,6 +24,8 @@
 #include "asciiid_platform.h"
 #include "texheap.h"
 #include "terrain.h"
+#include "mesh.h"
+
 #include "asciiid_urdo.h"
 
 #include "matrix.h"
@@ -47,6 +49,8 @@ MouseQueue mouse_queue[mouse_queue_size];
 ImFont* pFont = 0;
 
 Terrain* terrain = 0;
+World* world = 0;
+
 int fonts_loaded = 0;
 int palettes_loaded = 0;
 GLuint pal_tex = 0;
@@ -2301,9 +2305,11 @@ void my_render()
 		}
 
 		ImGui::End();
+		
 
 		if (save)
 		{
+			bool save_do = false; // dbl click indicator
 			bool show = true;
 			ImGui::Begin(save == 1 ? "SAVE" : "LOAD", &show);
 
@@ -2382,7 +2388,8 @@ void my_render()
 				{
 					if ((*di)->item == A3D_DIRECTORY)
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,0,1));
-					if (ImGui::Selectable((*di)->name,false))
+						
+					if (ImGui::Selectable((*di)->name,false, ImGuiSelectableFlags_AllowDoubleClick))
 					{
 						if ((*di)->item == A3D_FILE)
 						{
@@ -2390,6 +2397,9 @@ void my_render()
 							char cd[4096];
 							a3dGetCurDir(cd,4096);
 							snprintf(save_path,4096,"%s%s",cd,(*di)->name);
+
+							if (ImGui::IsMouseDoubleClicked(0))
+								save_do = true;								
 						}
 						else
 						{
@@ -2404,7 +2414,7 @@ void my_render()
 				ImGui::ListBoxFooter();
 			}
 
-			if (save && ImGui::Button(save == 1 ? "SAVE" : "LOAD"))
+			if (save && (ImGui::Button(save == 1 ? "SAVE" : "LOAD") || save_do))
 			{
 				if (save == 1)
 				{
@@ -3970,6 +3980,29 @@ void my_init()
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
+
+	world = CreateWorld();
+
+	// scan meshes dir
+	struct MeshScan
+	{
+		static bool Scan(A3D_DirItem item, const char* name, void* cookie)
+		{
+			if (!(item&A3D_FILE))
+				return true;
+
+			char buf[4096];
+			snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
+			buf[4095] = 0;
+
+			Mesh* m = LoadMesh(world, buf);
+			return true;
+		}
+	};
+
+	char mesh_dirname[] = "./meshes";
+	a3dListDir(mesh_dirname, MeshScan::Scan, mesh_dirname);
+	
 
 	glCreateTextures(GL_TEXTURE_3D, 1, &pal_tex);
 	glTextureStorage3D(pal_tex, 1, GL_RGB8, 256, 256, 256);
