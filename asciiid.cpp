@@ -4131,6 +4131,8 @@ void my_keyb_focus(bool set)
 
 void my_close()
 {
+	DeleteWorld(world);
+	
 	URDO_Purge();
 	DeleteTerrain(terrain);
 	MyFont::Free();
