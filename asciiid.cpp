@@ -47,6 +47,7 @@ MouseQueue mouse_queue[mouse_queue_size];
 #endif
 
 ImFont* pFont = 0;
+char ini_path[4096];
 
 Terrain* terrain = 0;
 World* world = 0;
@@ -1143,6 +1144,29 @@ struct RenderContext
 
 		glUseProgram(0);
 		glBindVertexArray(0);
+	}
+
+	void BeginMeshes(const double* tm, const float* lt)
+	{
+		// setup prg, vao, etc..
+		// ...
+	}
+
+	static void Render(float coords[9], uint32_t visual, void* cookie)
+	{
+		RenderContext* rc = (RenderContext*)cookie;
+		// fill a buffo
+		// flush if full
+		// ...
+
+		// so last thing is to make ui for:
+		// inserting, selecting, moving, scaling, rotating & deleting INSTANCES!!!
+	}
+
+	void EndMeshes()
+	{
+		// flush buffo
+		// ...
 	}
 
 	void BeginPatches(const double* tm, const float* lt, const float* br, const float* qd, const float* pr)
@@ -3860,6 +3884,10 @@ void my_render()
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	rc->EndPatches();
 
+	rc->BeginMeshes(tm, lt);
+	QueryWorld(world, planes, clip_world, RenderContext::Render, rc);
+	rc->EndMeshes();
+
 	// overlay patch creation
 	// slihouette of newly created patch 
 
@@ -4032,7 +4060,16 @@ void my_init()
 	// Setup Dear ImGui context
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
-	//io.IniFilename = 0;
+
+	// keep it startup dir
+	{
+		char dir[4096];
+		a3dGetCurDir(dir,4096);
+		snprintf(ini_path,4096,"%s/imgui.ini",dir);
+		ini_path[4095]=0;
+		io.IniFilename = ini_path;
+	}
+
 	io.BackendPlatformName = "imgui_impl_a3d";
 
 	io.KeyMap[ImGuiKey_Tab] = A3D_TAB;

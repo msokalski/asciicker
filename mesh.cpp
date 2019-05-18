@@ -3,9 +3,14 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "mesh.h"
+#include "matrix.h"
+
 struct Line;
 struct Face;
-struct Mesh;
+
+#define INST_IN_TREE (1<<31)
+
 struct Vert
 {
     Mesh* mesh;
@@ -17,11 +22,9 @@ struct Vert
 	Face* face_list;
 	Line* line_list;
 
-    void Set(float x, float y, float z);
-
     // regardless of mesh type (2d/3d)
     // we keep z (makes it easier to switch mesh types back and forth)
-	float x,y,z;
+	float xyzw[4];
 
     bool sel;
 };
@@ -128,8 +131,6 @@ struct BSP_Node : BSP
 
 struct Inst : BSP
 {
-    World* world;
-
     // in world
 	Inst* next;
 	Inst* prev;    
@@ -138,13 +139,6 @@ struct Inst : BSP
     double tm[16]; // absoulte! mesh->world
 
     Inst* share_next; // next instance sharing same mesh
-
-    enum FLAGS
-    {
-        INST_VISIBLE = 0x1,
-        INST_IN_TREE = 0x2,
-        INST_USE_TREE = 0x4,
-    };
 
     int /*FLAGS*/ flags; 
     char* name;
@@ -225,7 +219,7 @@ struct World
             if (editable == i)
                 editable = 0;
 
-            if (i->flags & Inst::INST_IN_TREE)
+            if (i->flags & INST_IN_TREE)
             {
                 if (root == i)
                     root = 0;
@@ -298,7 +292,7 @@ struct World
     Inst* head_inst;
     Inst* tail_inst;
 
-    Inst* AddInst(Mesh* m, double tm[16], const char* name = 0)
+    Inst* AddInst(Mesh* m, const double tm[16], const char* name)
     {
         if (!m || m->world != this)
             return 0;
@@ -315,7 +309,6 @@ struct World
         
         i->name = name ? strdup(name) : 0;
 
-        i->world = this;
         i->mesh = m;
 
         i->type = BSP::BSP_TYPE_INST;
@@ -346,7 +339,7 @@ struct World
 
     bool DelInst(Inst* i)
     {
-        if (!i || i->world != this)
+        if (!i || !i->mesh || i->mesh->world != this)
             return false;
 
         if (i->mesh)
@@ -375,7 +368,7 @@ struct World
 
         bool kill_bsp = false;
 
-        if (i->flags & Inst::INST_IN_TREE)
+        if (i->flags & INST_IN_TREE)
         {
             if (root == i)
                 root = 0;
@@ -421,7 +414,7 @@ struct World
         if (bsp->type == BSP::BSP_TYPE_INST)
         {
             Inst* inst = (Inst*)bsp;
-            inst->flags &= ~Inst::INST_IN_TREE;
+            inst->flags &= ~INST_IN_TREE;
             bsp->bsp_parent = 0;
         }
     }
@@ -436,7 +429,7 @@ struct World
         
         for (Inst* inst = head_inst; inst; inst=inst->next)
         {
-            if (inst->flags & Inst::INST_USE_TREE)
+            if (inst->flags & INST_USE_TREE)
                 arr[num++] = inst;
         }
 
@@ -554,16 +547,27 @@ struct World
     }
  
     // FACES IN HULL
-    void Query(Inst* inst, int planes, double plane[][4], void (*cb)(Face* face, void* cookie), void* cookie)
+    void Query(int planes, double plane[][4], void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie)
     {
-        // query possibly visible faces of instance's mesh
-
         // temporarily report all faces
-        Face* f = inst->mesh->head_face;
-        while (f)
+        Inst* i = head_inst;
+
+        float coords[10];
+
+        while (i)
         {
-            cb(f,cookie);
-            f=f->next;
+            Face* f = i->mesh->head_face;
+            while (f)
+            {
+                Product(i->tm,f->abc[0]->xyzw,coords+0);
+                Product(i->tm,f->abc[1]->xyzw,coords+3);
+                Product(i->tm,f->abc[2]->xyzw,coords+6);
+
+                cb(coords, f->visual, cookie);
+                f=f->next;
+            }
+
+            i=i->next;
         }
     }
 };
@@ -609,25 +613,26 @@ Mesh* World::LoadMesh(const char* path)
             xyzw[3] = 1.0f;
 
         Vert* v = (Vert*)malloc(sizeof(Vert));
-        v->x = xyzw[0];
-        v->y = xyzw[1];
-        v->z = xyzw[2];
+        v->xyzw[0] = xyzw[0];
+        v->xyzw[1] = xyzw[1];
+        v->xyzw[2] = xyzw[2];
+        v->xyzw[3] = xyzw[3];
 
         if (m->verts && plannar)
         {
             if (plannar&1)
             {
-                if (v->x != m->head_vert->x)
+                if (v->xyzw[0] != m->head_vert->xyzw[0])
                     plannar&=~1;
             }
             if (plannar&2)
             {
-                if (v->y != m->head_vert->y)
+                if (v->xyzw[1] != m->head_vert->xyzw[1])
                     plannar&=~2;
             }
             if (plannar&4)
             {
-                if (v->z != m->head_vert->z)
+                if (v->xyzw[2] != m->head_vert->xyzw[2])
                     plannar&=~4;
             }
         }
@@ -645,21 +650,21 @@ Mesh* World::LoadMesh(const char* path)
 
         if (!m->verts)
         {
-            m->bbox[0] = v->x;
-            m->bbox[1] = v->x;
-            m->bbox[2] = v->y;
-            m->bbox[3] = v->y;
-            m->bbox[4] = v->z;
-            m->bbox[5] = v->z;
+            m->bbox[0] = v->xyzw[0];
+            m->bbox[1] = v->xyzw[0];
+            m->bbox[2] = v->xyzw[1];
+            m->bbox[3] = v->xyzw[1];
+            m->bbox[4] = v->xyzw[2];
+            m->bbox[5] = v->xyzw[2];
         }
         else
         {
-            m->bbox[0] = v->x < m->bbox[0] ? v->x : m->bbox[0];
-            m->bbox[1] = v->x > m->bbox[1] ? v->x : m->bbox[1];
-            m->bbox[2] = v->y < m->bbox[2] ? v->y : m->bbox[2];
-            m->bbox[3] = v->y > m->bbox[3] ? v->y : m->bbox[3];
-            m->bbox[4] = v->z < m->bbox[4] ? v->z : m->bbox[4];
-            m->bbox[5] = v->z > m->bbox[5] ? v->z : m->bbox[5];
+            m->bbox[0] = v->xyzw[0] < m->bbox[0] ? v->xyzw[0] : m->bbox[0];
+            m->bbox[1] = v->xyzw[0] > m->bbox[1] ? v->xyzw[0] : m->bbox[1];
+            m->bbox[2] = v->xyzw[1] < m->bbox[2] ? v->xyzw[1] : m->bbox[2];
+            m->bbox[3] = v->xyzw[1] > m->bbox[3] ? v->xyzw[1] : m->bbox[3];
+            m->bbox[4] = v->xyzw[2] < m->bbox[4] ? v->xyzw[2] : m->bbox[4];
+            m->bbox[5] = v->xyzw[2] > m->bbox[5] ? v->xyzw[2] : m->bbox[5];
         }
 
         v->sel = false;
@@ -864,3 +869,40 @@ void DeleteMesh(Mesh* m)
         return;
     m->world->DelMesh(m);
 }
+
+Inst* CreateInst(Mesh* m, const double tm[16], const char* name)
+{
+    if (!m)
+        return 0;
+    return m->world->AddInst(m,tm,name);
+}
+
+void DeleteInst(Inst* i)
+{
+    if (!i)
+        return;
+    i->mesh->world->DelInst(i);
+}
+
+int GetInstFlags(Inst* i)
+{
+    if (!i)
+        return 0;
+    return i->flags & ~INST_IN_TREE;
+}
+
+void SetInstFlags(Inst* i, int flags, int mask)
+{
+    if (!i)
+        return;
+    mask &= ~INST_IN_TREE;
+    i->flags = (i->flags & ~mask) | (flags & mask);
+}
+
+void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie)
+{
+    if (!w)
+        return;
+    w->Query(planes,plane,cb,cookie);
+}
+
