@@ -2520,7 +2520,7 @@ Terrain* LoadTerrain(FILE* f)
 	}
 
 	Terrain* t = CreateTerrain();
-	for (int i = 0; i < hdr.num_patches; i++)
+	for (unsigned i = 0; i < hdr.num_patches; i++)
 	{
 		FilePatch pch;
 		if (fread(&pch,1,sizeof(FilePatch),f)!=sizeof(FilePatch))

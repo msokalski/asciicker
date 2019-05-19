@@ -195,6 +195,7 @@
     <ClCompile Include="asciiid_mswin.cpp" />
     <ClCompile Include="asciiid_x11.cpp" />
     <ClCompile Include="gl.c" />
+    <ClCompile Include="mesh.cpp" />
     <ClCompile Include="rgba8.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_demo.cpp" />
