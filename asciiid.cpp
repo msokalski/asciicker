@@ -406,6 +406,9 @@ float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
 
+float inst_yaw_avr = 0.0;
+float inst_yaw_var = 0.0;
+
 float lit_yaw = 45;
 float lit_pitch = 30;//90;
 float lit_time = 12.0f;
@@ -481,13 +484,16 @@ struct RenderContext
 				layout(location = 1) in vec3 b;
 				layout(location = 2) in vec3 c;
 				layout(location = 3) in uint visual;
+
+				uniform mat4 inst_tm;
+
 				out vec3 va,vb,vc;
 				out uint vis;
 				void main()
 				{
-					va = a;
-					vb = b;
-					vc = c;
+					va = (inst_tm * vec4(a, 1.0)).xyz;
+					vb = (inst_tm * vec4(b, 1.0)).xyz;
+					vc = (inst_tm * vec4(c, 1.0)).xyz;
 					vis = visual;
 				}
 			);
@@ -544,6 +550,7 @@ struct RenderContext
 				uniform usampler2D m_tex;
 				uniform sampler2D f_tex;
 				uniform sampler3D p_tex;
+				uniform vec4 lt;
 
 				layout(location = 0) out vec4 color;
 
@@ -561,8 +568,10 @@ struct RenderContext
 					float glyph = 0.0; // at the moment pure bkgnd					
 					color = vec4(mix(vec3(fill_rgbp.rgb), vec3(fill_rgbc.rgb), glyph) / 255.0, 1.0);
 
-					// lighting (abs for 2 sided - no cullface)
-					color.rgb *= abs( normalize(nrm).z );
+					vec3 light_pos = normalize(lt.xyz);
+					float light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(light_pos, normalize(nrm)));
+
+					color.rgb *= light;
 
 					// palettize
 					color.rgb = texture(p_tex, color.xyz).rgb;
@@ -1124,7 +1133,9 @@ struct RenderContext
 		if (loglen)
 			printf("%s", logstr);
 
+		mesh_inst_tm_loc = glGetUniformLocation(mesh_prg, "inst_tm");
 		mesh_tm_loc = glGetUniformLocation(mesh_prg, "tm");
+		mesh_lt_loc = glGetUniformLocation(mesh_prg, "lt");
 		mesh_m_tex_loc = glGetUniformLocation(mesh_prg, "m_tex");
 		mesh_f_tex_loc = glGetUniformLocation(mesh_prg, "f_tex");
 		mesh_p_tex_loc = glGetUniformLocation(mesh_prg, "p_tex");
@@ -1528,7 +1539,9 @@ struct RenderContext
 	GLuint mesh_prg;
 	GLuint mesh_vbo;
 	GLuint mesh_vao;
+	GLint mesh_inst_tm_loc;
 	GLint mesh_tm_loc;
+	GLint mesh_lt_loc;
 	GLint mesh_m_tex_loc;
 	GLint mesh_f_tex_loc;
 	GLint mesh_p_tex_loc;
@@ -2446,15 +2459,15 @@ void my_render()
 				float bbox[6];
 				GetMeshBBox(mw->mesh, bbox);
 
-				float radius = 0.5 * sqrtf( (bbox[1]-bbox[0])*(bbox[1]-bbox[0]) + (bbox[3]-bbox[2])*(bbox[3]-bbox[2]) );
+				float radius = 0.5f * sqrtf( (bbox[1]-bbox[0])*(bbox[1]-bbox[0]) + (bbox[3]-bbox[2])*(bbox[3]-bbox[2]) );
 				// todo radius could be calculated from bounding circle on XY
 
 				// radius = 0.5 * fmaxf( (bbox[1]-bbox[0]), (bbox[3]-bbox[2]) );
 
 				float height = bbox[5]-bbox[4];
-				float alpha = atan2(2*radius,height);
-				if (alpha<M_PI/6)
-					alpha = M_PI/6;
+				float alpha = atan2f(2*radius,height);
+				if (alpha < (float)M_PI/6)
+					alpha = (float)M_PI/6;
 
 				float x_proj = 2*radius;
 				float y_proj = fmaxf(2*radius, height * cosf(alpha) + 2*radius*sinf(alpha));
@@ -2467,18 +2480,18 @@ void my_render()
 				if (box_aspect > vue_aspect)
 				{
 					// mesh is wider than view
-					s[0] = 2.0 / x_proj;
+					s[0] = 2.0f / x_proj;
 					s[1] = s[0] * vue_aspect;
 				}
 				else
 				{
 					// mesh is taller than view
-					s[1] = 2.0 / y_proj;
+					s[1] = 2.0f / y_proj;
 					s[0] = s[1] / vue_aspect;
 				}
 
 				// depth scaling, bit over estimated.
-				s[2] = -2.0 / (bbox[5]-bbox[4] + bbox[3]-bbox[2] + bbox[1]-bbox[0]); 
+				s[2] = -2.0f / (bbox[5]-bbox[4] + bbox[3]-bbox[2] + bbox[1]-bbox[0]); 
 
 				float vtm[16] = 
 				{
@@ -2507,21 +2520,79 @@ void my_render()
 				float rot[16];
 				MatProduct(rot1, rot2, rot);
 
-				float nrm[16];
-				MatProduct(rot, trn, nrm);
-
+				// projection matrix (based purely on viewing angles and widget canvas)
 				float ftm[16];
-				MatProduct(vtm, nrm, ftm);
+				MatProduct(vtm, rot, ftm);
+
+				// instance tm (based purely on mesh instance sliders)
+
+				MatProduct(rot1, rot2, rot);
+
+				float itm[16];
+
+				static float anim = 0.0;
+				float angle = (float)M_PI / 180 * inst_yaw_avr;
+				if (mw->show_var)
+				{
+					angle += (float)M_PI / 180 * inst_yaw_var * 0.5f * sinf(anim);
+					anim += 0.1f;
+				}
+				else
+					anim = 0;
+
+				Rotation(v2, angle, rot2);
+				MatProduct(rot2, trn, itm);
 
 				// draw!
 				RenderContext* rc = &render_context;
-			
+
+				double noon_yaw[2] =
+				{
+					// zero is behind viewer
+					-sin(-lit_yaw * M_PI / 180),
+					-cos(-lit_yaw * M_PI / 180),
+				};
+
+				double dusk_yaw[3] =
+				{
+					-noon_yaw[1],
+					noon_yaw[0],
+					0
+				};
+
+				double noon_pos[3] =
+				{
+					noon_yaw[0] * cos(lit_pitch*M_PI / 180),
+					noon_yaw[1] * cos(lit_pitch*M_PI / 180),
+					sin(lit_pitch*M_PI / 180)
+				};
+
+				double lit_axis[3];
+
+				CrossProduct(dusk_yaw, noon_pos, lit_axis);
+
+				double time_tm[16];
+				Rotation(lit_axis, (lit_time - 12)*M_PI / 12, time_tm);
+
+				double lit_pos[4];
+				Product(time_tm, noon_pos, lit_pos);
+
+				float lt[4] =
+				{
+					(float)lit_pos[0],
+					(float)lit_pos[1],
+					(float)lit_pos[2],
+					ambience
+				};
+
 				glClearDepth(1.0);
 				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 				glUseProgram(rc->mesh_prg);
 
+				glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, itm);
 				glUniformMatrix4fv(rc->mesh_tm_loc, 1, GL_FALSE, ftm);
+				glUniform4fv(rc->mesh_lt_loc, 1, lt);
 				glUniform1i(rc->mesh_m_tex_loc, 2);
 				glUniform1i(rc->mesh_f_tex_loc, 3);
 				glUniform1i(rc->mesh_p_tex_loc, 4);
@@ -2541,6 +2612,7 @@ void my_render()
 				mw->map = 0;
 
 				glBindBuffer(GL_ARRAY_BUFFER, rc->mesh_vbo);
+
 				QueryMesh(mw->mesh, query_cb, mw);
 
 				if (mw->faces)
@@ -2617,11 +2689,16 @@ void my_render()
 			#pragma pack(pop)
 
 			Face* map;
+			bool show_var;
 		};
+
+		static bool show_inst_yaw_var = false;
 
 		ImGui::Begin("MESH", 0, ImGuiWindowFlags_AlwaysAutoResize);
 		{
 			static MeshWidget mw;
+
+			mw.show_var = show_inst_yaw_var;
 
 			// Arrow buttons with Repeater
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
@@ -2651,7 +2728,9 @@ void my_render()
 
 			mw.Widget("zonk", ImVec2(320,320));
 
-			ImGui::Text("Zupa z bobra");
+			ImGui::SliderFloat("Avr", &inst_yaw_avr, -180.0f, +180.0f);
+			ImGui::SliderFloat("Var", &inst_yaw_var, 0, +360.0f);
+			show_inst_yaw_var = ImGui::IsItemActive(); //ImGui::IsMouseDown(0);
 		}
 		ImGui::End();
 

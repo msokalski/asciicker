@@ -188,8 +188,8 @@ inline int PositiveProduct(L l[4], R r[4])
 template <typename V, typename A, typename M>
 inline void Rotation(const V v[3], A a, M m[16])
 {
-	M c = cos(a);
-	M s = sin(a);
+	M c = (M)cos(a);
+	M s = (M)sin(a);
 	M d = 1 - c;
 
 	m[0] = v[0] * v[0] * d + c;

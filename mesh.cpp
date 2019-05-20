@@ -944,7 +944,7 @@ int GetMeshName(Mesh* m, char* buf, int size)
         return 0;
     }
 
-    int len = strlen(m->name);
+    int len = (int)strlen(m->name);
 
     if (buf && size>0)
         strncpy(buf,m->name,size);
