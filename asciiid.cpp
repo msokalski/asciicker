@@ -454,11 +454,125 @@ struct RenderContext
 {
 	void Create()
 	{
-		int err = glGetError();
+		// meshes
+		glCreateBuffers(1, &mesh_vbo);
+		int mesh_face_size = 3*sizeof(float[3]) + sizeof(uint32_t); // 3*pos_xyz, visual
+		glNamedBufferStorage(mesh_vbo, 1024 * mesh_face_size, 0, GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
+
+		glCreateVertexArrays(1, &mesh_vao);
+		glBindVertexArray(mesh_vao);
+		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)0);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)((char*)0 + sizeof(float[3])));
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)((char*)0 + 2*sizeof(float[3])));
+		glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT,   mesh_face_size, (void*)((char*)0 + 3*sizeof(float[3])));
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glEnableVertexAttribArray(2);
+		glEnableVertexAttribArray(3);
+		glBindVertexArray(0);
+
+		const char* mesh_vs_src =
+			CODE(#version 450\n)
+			CODE(
+				layout(location = 0) in vec3 a;
+				layout(location = 1) in vec3 b;
+				layout(location = 2) in vec3 c;
+				layout(location = 3) in uint visual;
+				out vec3 va,vb,vc;
+				out uint vis;
+				void main()
+				{
+					va = a;
+					vb = b;
+					vc = c;
+					vis = visual;
+				}
+			);
+
+		const char* mesh_gs_src =
+			CODE(#version 450\n)
+			CODE(
+				layout(points) in;
+				layout(triangle_strip, max_vertices = 3) out;				
+				uniform mat4 tm;
+				in vec3 va[];
+				in vec3 vb[];
+				in vec3 vc[];
+				in uint vis[];
+
+				flat out vec3 nrm;
+				flat out uint matid;
+
+				out float shade;
+				out float elev;
+
+				void main()
+				{
+					vec3 a = va[0];
+					vec3 b = vb[0];
+					vec3 c = vc[0];
+
+					matid = vis[0] & 0xFF;
+					nrm = normalize( cross( b-a, c-a ) );
+
+					shade = float((vis[0] >> 8) & 0x7f) / 8.0;
+					elev = float((vis[0] >> 15) & 0x1);
+					gl_Position = tm * vec4(a, 1.0);
+					EmitVertex();
+
+					shade = float((vis[0] >> 16) & 0x7f) / 8.0;
+					elev = float((vis[0] >> 23) & 0x1);
+					gl_Position = tm * vec4(b, 1.0);
+					EmitVertex();
+
+					shade = float((vis[0] >> 24) & 0x7f) / 8.0;
+					elev = float((vis[0] >> 31) & 0x1);
+					gl_Position = tm * vec4(c, 1.0);
+					EmitVertex();
+
+					EndPrimitive();
+				}
+			);
+
+
+		const char* mesh_fs_src =
+			CODE(#version 450\n)
+			CODE(
+				uniform usampler2D m_tex;
+				uniform sampler2D f_tex;
+				uniform sampler3D p_tex;
+
+				layout(location = 0) out vec4 color;
+
+				flat in vec3 nrm;
+				flat in uint matid;
+				in float shade;
+				in float elev;
+				
+				void main()
+				{
+					uint mat_x = 2 * (uint(round(shade)) & 0xF) + 32 * (uint(round(elev)) & 0x1);
+					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(0+mat_x, matid), 0);
+					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(1+mat_x, matid), 0);
+
+					float glyph = 0.0; // at the moment pure bkgnd					
+					color = vec4(mix(vec3(fill_rgbp.rgb), vec3(fill_rgbc.rgb), glyph) / 255.0, 1.0);
+
+					// lighting (abs for 2 sided - no cullface)
+					color.rgb *= abs( normalize(nrm).z );
+
+					// palettize
+					color.rgb = texture(p_tex, color.xyz).rgb;
+				}
+			);
+
+
+		// patches
 		glCreateBuffers(1, &vbo);
-		err = glGetError();
 		glNamedBufferStorage(vbo, TERRAIN_TEXHEAP_CAPACITY * sizeof(GLint[5]), 0, GL_DYNAMIC_STORAGE_BIT);
-		err = glGetError();
 
 		glCreateVertexArrays(1, &vao);
 		glBindVertexArray(vao);
@@ -470,10 +584,9 @@ struct RenderContext
 		glEnableVertexAttribArray(1);
 		glBindVertexArray(0);
 
+		// ghost
 		glCreateBuffers(1, &ghost_vbo);
-		err = glGetError();
 		glNamedBufferStorage(ghost_vbo, sizeof(GLint[3*4*HEIGHT_CELLS]), 0, GL_DYNAMIC_STORAGE_BIT);
-		err = glGetError();
 
 		glCreateVertexArrays(1, &ghost_vao);
 		glBindVertexArray(ghost_vao);
@@ -974,15 +1087,51 @@ struct RenderContext
 			}
 		);
 
-		err = glGetError();
-
 		GLsizei loglen = 999;
 		char logstr[1000];
+		GLuint shader[3];
+
+		GLenum mesh_st[3] = { GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER };
+		const char* mesh_src[3] = { mesh_vs_src, mesh_gs_src, mesh_fs_src };
+		mesh_prg = glCreateProgram();
+
+		for (int i = 0; i < 3; i++)
+		{
+			shader[i] = glCreateShader(mesh_st[i]);
+			GLint len = (GLint)strlen(mesh_src[i]);
+			glShaderSource(shader[i], 1, &(mesh_src[i]), &len);
+			glCompileShader(shader[i]);
+
+			loglen = 999;
+			glGetShaderInfoLog(shader[i], loglen, &loglen, logstr);
+			logstr[loglen] = 0;
+
+			if (loglen)
+				printf("%s", logstr);
+
+			glAttachShader(mesh_prg, shader[i]);
+		}
+
+		glLinkProgram(mesh_prg);
+
+		for (int i = 0; i < 2; i++)
+			glDeleteShader(shader[i]);
+
+		loglen = 999;
+		glGetProgramInfoLog(mesh_prg, loglen, &loglen, logstr);
+		logstr[loglen] = 0;
+
+		if (loglen)
+			printf("%s", logstr);
+
+		mesh_tm_loc = glGetUniformLocation(mesh_prg, "tm");
+		mesh_m_tex_loc = glGetUniformLocation(mesh_prg, "m_tex");
+		mesh_f_tex_loc = glGetUniformLocation(mesh_prg, "f_tex");
+		mesh_p_tex_loc = glGetUniformLocation(mesh_prg, "p_tex");
 
 		GLenum ghost_st[3] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
 		const char* ghost_src[3] = { ghost_vs_src, ghost_fs_src };
 		ghost_prg = glCreateProgram();
-		GLuint shader[3];
 
 		for (int i = 0; i < 2; i++)
 		{
@@ -1375,6 +1524,14 @@ struct RenderContext
 	GLuint ghost_vao;
 	GLint ghost_tm_loc;
 	GLint ghost_cl_loc;
+
+	GLuint mesh_prg;
+	GLuint mesh_vbo;
+	GLuint mesh_vao;
+	GLint mesh_tm_loc;
+	GLint mesh_m_tex_loc;
+	GLint mesh_f_tex_loc;
+	GLint mesh_p_tex_loc;
 
 	TexPage* page_tex;
 	TexPage* head;
@@ -2210,6 +2367,294 @@ void my_render()
 		//ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(0,0),Dock::Size,0);
 //		ImGui::PopStyleVar();
 
+		struct MeshWidget
+		{
+			MeshWidget()
+			{
+				mesh=GetFirstMesh(world);
+			}
+
+			static void query_cb(float coords[9], uint32_t visual, void* cookie)
+			{
+				MeshWidget* mw = (MeshWidget*)cookie;
+				RenderContext* rc = &render_context;
+
+				if (!mw->map)
+					mw->map = (Face*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+				
+				assert(mw->map);
+
+				memcpy(mw->map[mw->faces].abc, coords, sizeof(float[9]));
+				mw->map[mw->faces].visual = visual;
+				mw->faces++;
+
+				if (mw->faces == 1024)
+				{
+					// flush
+					glUnmapBuffer(GL_ARRAY_BUFFER);
+					glDrawArrays(GL_POINTS, 0, mw->faces);
+					mw->map=0;
+					mw->faces=0;
+				}
+			}
+
+			static void draw_cb(const ImDrawList* parent_list, const ImDrawCmd* cmd)
+			{
+				MeshWidget* mw = (MeshWidget*)cmd->UserCallbackData;
+				if (!mw)
+					return;
+
+				int vp[4];
+				glGetIntegerv(GL_VIEWPORT,vp);
+
+				int sc[4];
+				glGetIntegerv(GL_SCISSOR_BOX,sc);				
+
+				int vao;
+				glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &vao);
+
+				int vbo;
+				glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vbo);
+
+				int prg;
+				glGetIntegerv(GL_CURRENT_PROGRAM,&prg);
+
+				bool cull_face;
+				cull_face = glIsEnabled(GL_CULL_FACE);
+
+				int cull_mode;
+				glGetIntegerv(GL_CULL_FACE_MODE, &cull_mode);
+
+				int depth_func;
+				glGetIntegerv(GL_DEPTH_FUNC, &depth_func);
+
+				bool depth_test;
+				depth_test = glIsEnabled(GL_DEPTH_TEST);
+
+				glViewport(
+					(int)mw->rect.Min.x, 
+					vp[3] - (int)mw->rect.Max.y, 
+					(int)(mw->rect.Max.x - mw->rect.Min.x), 
+					(int)(mw->rect.Max.y - mw->rect.Min.y));
+
+				glScissor(
+					(int)mw->rect.Min.x, 
+					vp[3] - (int)mw->rect.Max.y, 
+					(int)(mw->rect.Max.x - mw->rect.Min.x), 
+					(int)(mw->rect.Max.y - mw->rect.Min.y));
+
+				float bbox[6];
+				GetMeshBBox(mw->mesh, bbox);
+
+				float radius = 0.5 * sqrtf( (bbox[1]-bbox[0])*(bbox[1]-bbox[0]) + (bbox[3]-bbox[2])*(bbox[3]-bbox[2]) );
+				// todo radius could be calculated from bounding circle on XY
+
+				// radius = 0.5 * fmaxf( (bbox[1]-bbox[0]), (bbox[3]-bbox[2]) );
+
+				float height = bbox[5]-bbox[4];
+				float alpha = atan2(2*radius,height);
+				if (alpha<M_PI/6)
+					alpha = M_PI/6;
+
+				float x_proj = 2*radius;
+				float y_proj = fmaxf(2*radius, height * cosf(alpha) + 2*radius*sinf(alpha));
+
+				float box_aspect = x_proj / y_proj;
+				float vue_aspect = (mw->rect.Max.x - mw->rect.Min.x) / (mw->rect.Max.y - mw->rect.Min.y);
+
+				float s[3];
+
+				if (box_aspect > vue_aspect)
+				{
+					// mesh is wider than view
+					s[0] = 2.0 / x_proj;
+					s[1] = s[0] * vue_aspect;
+				}
+				else
+				{
+					// mesh is taller than view
+					s[1] = 2.0 / y_proj;
+					s[0] = s[1] / vue_aspect;
+				}
+
+				// depth scaling, bit over estimated.
+				s[2] = -2.0 / (bbox[5]-bbox[4] + bbox[3]-bbox[2] + bbox[1]-bbox[0]); 
+
+				float vtm[16] = 
+				{
+					s[0], 0.0,  0.0,  0.0,
+					0.0,  s[1], 0.0,  0.0,
+					0.0,  0.0,  s[2], 0.0,
+					0.0,  0.0,  0.0,  1.0
+				};
+
+				float t[3] =
+				{
+					-0.5f*(bbox[0]+bbox[1]),
+					-0.5f*(bbox[2]+bbox[3]),
+					-0.5f*(bbox[4]+bbox[5])
+				};
+
+				float trn[16] = { 1,0,0,0, 0,1,0,0, 0,0,1,0, t[0], t[1], t[2], 1 };
+
+				float rot1[16];
+				float rot2[16];
+				float v1[3] = {1,0,0};
+				float v2[3] = {0,0,1};
+				Rotation(v1, M_PI/180 * (rot_pitch-90), rot1);
+				Rotation(v2, M_PI/180 * (-rot_yaw), rot2);
+
+				float rot[16];
+				MatProduct(rot1, rot2, rot);
+
+				float nrm[16];
+				MatProduct(rot, trn, nrm);
+
+				float ftm[16];
+				MatProduct(vtm, nrm, ftm);
+
+				// draw!
+				RenderContext* rc = &render_context;
+			
+				glClearDepth(1.0);
+				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+				glUseProgram(rc->mesh_prg);
+
+				glUniformMatrix4fv(rc->mesh_tm_loc, 1, GL_FALSE, ftm);
+				glUniform1i(rc->mesh_m_tex_loc, 2);
+				glUniform1i(rc->mesh_f_tex_loc, 3);
+				glUniform1i(rc->mesh_p_tex_loc, 4);
+
+				glBindVertexArray(rc->mesh_vao);
+
+				glBindTextureUnit(2, MyMaterial::tex);
+				glBindTextureUnit(3, font[active_font].tex);
+				glBindTextureUnit(4, pal_tex);
+
+				glEnable(GL_CULL_FACE);
+				glEnable(GL_DEPTH_TEST);
+				glDepthFunc(GL_LEQUAL);
+				glCullFace(GL_BACK);
+
+				mw->faces = 0;
+				mw->map = 0;
+
+				glBindBuffer(GL_ARRAY_BUFFER, rc->mesh_vbo);
+				QueryMesh(mw->mesh, query_cb, mw);
+
+				if (mw->faces)
+				{
+					// flush!!!
+					glUnmapBuffer(GL_ARRAY_BUFFER);
+					glDrawArrays(GL_POINTS, 0, mw->faces);
+					mw->map=0;
+					mw->faces=0;
+				}
+
+				// we should restore !!!!
+
+				glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+				glBindTextureUnit(2, 0);
+				glBindTextureUnit(3, 0);
+				glBindTextureUnit(4, 0);
+
+				glBindVertexArray(vao);
+				glUseProgram(prg);
+
+				glViewport(vp[0],vp[1],vp[2],vp[3]);
+				glScissor(sc[0],sc[1],sc[2],sc[3]);
+
+				if (!cull_face)
+					glDisable(GL_CULL_FACE);
+
+				glCullFace(cull_mode);
+
+				if (!depth_test)
+					glDisable(GL_DEPTH_TEST);
+
+				glDepthFunc(depth_func);
+
+				bool depth;
+				depth = glIsEnabled(GL_DEPTH_TEST);
+			}
+
+			bool Widget(const char* label, const ImVec2& size)
+			{
+				ImGuiWindow* window = ImGui::GetCurrentWindow();
+				if (window->SkipItems)
+					return false;
+
+				ImGuiContext& g = *GImGui;
+				const ImGuiStyle& style = g.Style;
+				const ImGuiID id = window->GetID(label);
+
+				ImVec2 pos = window->DC.CursorPos;
+				ImVec2 adv(pos.x+size.x,pos.y+size.y);
+				
+				const ImRect bb(pos, adv);
+				rect = bb;
+
+				ImGui::ItemSize(size, style.FramePadding.y);
+				if (!ImGui::ItemAdd(bb, id))
+					return false;
+
+				ImGui::GetWindowDrawList()->AddCallback(draw_cb, this);
+				return true;
+			}
+
+			Mesh* mesh;
+			ImRect rect;
+			int faces;
+			
+			#pragma pack(push,1)
+			struct Face
+			{
+				float abc[9];
+				uint32_t visual;
+			};
+			#pragma pack(pop)
+
+			Face* map;
+		};
+
+		ImGui::Begin("MESH", 0, ImGuiWindowFlags_AlwaysAutoResize);
+		{
+			static MeshWidget mw;
+
+			// Arrow buttons with Repeater
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			ImGui::PushButtonRepeat(true);
+			if (ImGui::ArrowButton("##mesh_prev", ImGuiDir_Left)) 
+			{ 
+				Mesh* prev = GetPrevMesh(mw.mesh);
+				if (prev) 
+					mw.mesh = prev; 
+			}
+
+			ImGui::SameLine(0.0f, spacing);
+
+			if (ImGui::ArrowButton("##mesh_next", ImGuiDir_Right)) 
+			{ 
+				Mesh* next = GetNextMesh(mw.mesh);
+				if (next) 
+					mw.mesh = next; 
+			}
+
+			ImGui::PopButtonRepeat();
+			ImGui::SameLine();
+			
+			char name[256];
+			GetMeshName(mw.mesh,name,256);
+			ImGui::Text("%s",name);
+
+			mw.Widget("zonk", ImVec2(320,320));
+
+			ImGui::Text("Zupa z bobra");
+		}
+		ImGui::End();
+
 		static int save = 0; // 0-no , 1-save, 2-save_as
 		static DirItem** dir_arr = 0;
 		static char save_path[4096]="";
@@ -2437,6 +2882,8 @@ void my_render()
 				}
 				ImGui::ListBoxFooter();
 			}
+
+			
 
 			if (save && (ImGui::Button(save == 1 ? "SAVE" : "LOAD") || save_do))
 			{
@@ -4023,7 +4470,7 @@ void my_init()
 			snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
 			buf[4095] = 0;
 
-			Mesh* m = LoadMesh(world, buf);
+			Mesh* m = LoadMesh(world, buf, name);
 			return true;
 		}
 	};
@@ -4031,6 +4478,10 @@ void my_init()
 	char mesh_dirname[] = "./meshes";
 	a3dListDir(mesh_dirname, MeshScan::Scan, mesh_dirname);
 	
+	// todo:
+	// build local array of SORTED meshes (similary to palettes)
+	// don't rely on order of mesh list!
+	// ...
 
 	glCreateTextures(GL_TEXTURE_3D, 1, &pal_tex);
 	glTextureStorage3D(pal_tex, 1, GL_RGB8, 256, 256, 256);

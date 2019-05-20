@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "mesh.h"
 #include "matrix.h"
@@ -153,7 +154,7 @@ struct World
     Mesh* head_mesh;
     Mesh* tail_mesh;
 
-    Mesh* LoadMesh(const char* path);
+    Mesh* LoadMesh(const char* path, const char* name);
 
     Mesh* AddMesh(const char* name = 0)
     {
@@ -573,14 +574,13 @@ struct World
     }
 };
 
-Mesh* World::LoadMesh(const char* path)
+Mesh* World::LoadMesh(const char* path, const char* name)
 {
     FILE* f = fopen(path,"rt");
     if (!f)
         return 0;
 
-
-    Mesh* m = AddMesh(path);
+    Mesh* m = AddMesh(name ? name : path);
     int plannar = 0x7;
 
     char buf[1024];
@@ -857,11 +857,11 @@ void DeleteWorld(World* w)
         w->DelMesh(w->head_mesh);
 }
 
-Mesh* LoadMesh(World* w, const char* path)
+Mesh* LoadMesh(World* w, const char* path, const char* name)
 {
     if (!w)
         return 0;
-    return w->LoadMesh(path);
+    return w->LoadMesh(path, name);
 }
 
 void DeleteMesh(Mesh* m)
@@ -907,3 +907,88 @@ void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(float coords
     w->Query(planes,plane,cb,cookie);
 }
 
+Mesh* GetFirstMesh(World* w)
+{
+    if (!w)
+        return 0;
+    return w->head_mesh;
+}
+
+Mesh* GetLastMesh(World* w)
+{
+    if (!w)
+        return 0;
+    return w->tail_mesh;
+}
+
+Mesh* GetPrevMesh(Mesh* m)
+{
+    if (!m)
+        return 0;
+    return m->prev;
+}
+
+Mesh* GetNextMesh(Mesh* m)
+{
+    if (!m)
+        return 0;
+    return m->next;
+}
+
+int GetMeshName(Mesh* m, char* buf, int size)
+{
+    if (!m)
+    {
+        if (buf && size>0)
+            *buf=0;
+        return 0;
+    }
+
+    int len = strlen(m->name);
+
+    if (buf && size>0)
+        strncpy(buf,m->name,size);
+
+    return len+1;
+}
+
+void GetMeshBBox(Mesh* m, float bbox[6])
+{
+    if (!m || !bbox)
+        return;
+
+    bbox[0] = m->bbox[0];
+    bbox[1] = m->bbox[1];
+    bbox[2] = m->bbox[2];
+    bbox[3] = m->bbox[3];
+    bbox[4] = m->bbox[4];
+    bbox[5] = m->bbox[5];
+}
+
+void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie)
+{
+    if (!m || !cb)
+        return;
+
+    float coords[9];
+
+    Face* f = m->head_face;
+    while (f)
+    {
+        coords[0] = f->abc[0]->xyzw[0];
+        coords[1] = f->abc[0]->xyzw[1];
+        coords[2] = f->abc[0]->xyzw[2];
+
+        coords[3] = f->abc[1]->xyzw[0];
+        coords[4] = f->abc[1]->xyzw[1];
+        coords[5] = f->abc[1]->xyzw[2];
+
+        coords[6] = f->abc[2]->xyzw[0];
+        coords[7] = f->abc[2]->xyzw[1];
+        coords[8] = f->abc[2]->xyzw[2];
+
+        cb(coords, f->visual, cookie);
+
+        f=f->next;
+    }
+}

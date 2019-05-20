@@ -8,8 +8,18 @@ struct Inst;
 World* CreateWorld();
 void DeleteWorld(World* w);
 
-Mesh* LoadMesh(World* w, const char* path);
+Mesh* LoadMesh(World* w, const char* path, const char* name = 0);
 void DeleteMesh(Mesh* m);
+
+Mesh* GetFirstMesh(World* w);
+Mesh* GetLastMesh(World* w);
+Mesh* GetPrevMesh(Mesh* m);
+Mesh* GetNextMesh(Mesh* m);
+
+int GetMeshName(Mesh* m, char* buf, int size);
+void GetMeshBBox(Mesh* m, float bbox[6]);
+
+void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie);
 
 Inst* CreateInst(Mesh* m, const double tm[16] = 0, const char* name = 0);
 void DeleteInst(Inst* i);
