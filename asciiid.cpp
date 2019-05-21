@@ -2529,26 +2529,37 @@ void my_render()
 
 				// instance tm (based purely on mesh instance sliders)
 
-				MatProduct(rot1, rot2, rot);
+				// 1. pretranslate (to have 0 in rot/scale center)
+				// 2. scale by constant_xyz * random_xyz 
+				// 2. rotate around z by given angle + random_z
+				// 3. rotate by given world's xy axis + random_xy (length is angle)
+				// 4. rotate toward terrain normal by given weight
+				// 5. post translate by constant xyz + random xyz
 
-				float itm[16];
+				ImGui::DragFloatRange2
 
-				float angle = (float)M_PI / 180 * inst_roll;
-				Rotation(v2, angle, rot2);
+				/*
+					MatProduct(rot1, rot2, rot);
 
-				angle = (float)M_PI / 180 * inst_pitch_avr;
-				if (mw->show_var==1)
-					angle += (float)M_PI / 180 * inst_pitch_var * ((float)fast_rand() / 0x7fff - 0.5f);
-				Rotation(v1, angle, rot1);
+					float itm[16];
 
-				MatProduct(rot1, rot2, rot);
+					float angle = (float)M_PI / 180 * inst_roll;
+					Rotation(v2, angle, rot2);
 
-				angle = (float)M_PI / 180 * inst_yaw;
-				Rotation(v2, angle, rot2);
+					angle = (float)M_PI / 180 * inst_pitch_avr;
+					if (mw->show_var==1)
+						angle += (float)M_PI / 180 * inst_pitch_var * ((float)fast_rand() / 0x7fff - 0.5f);
+					Rotation(v1, angle, rot1);
 
-				MatProduct(rot2, rot, rot1);
+					MatProduct(rot1, rot2, rot);
 
-				MatProduct(rot1, trn, itm);
+					angle = (float)M_PI / 180 * inst_yaw;
+					Rotation(v2, angle, rot2);
+
+					MatProduct(rot2, rot, rot1);
+
+					MatProduct(rot1, trn, itm);
+				*/
 
 				// draw!
 				RenderContext* rc = &render_context;
