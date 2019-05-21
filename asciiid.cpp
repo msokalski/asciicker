@@ -406,8 +406,11 @@ float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
 
-float inst_yaw_avr = 0.0;
-float inst_yaw_var = 0.0;
+float inst_yaw = 0.0;
+bool  inst_yaw_rnd = false;
+float inst_pitch_avr = 0.0;
+float inst_pitch_var = 0.0;
+float inst_roll = 0.0;
 
 float lit_yaw = 45;
 float lit_pitch = 30;//90;
@@ -2530,18 +2533,22 @@ void my_render()
 
 				float itm[16];
 
-				static float anim = 0.0;
-				float angle = (float)M_PI / 180 * inst_yaw_avr;
-				if (mw->show_var)
-				{
-					angle += (float)M_PI / 180 * inst_yaw_var * 0.5f * sinf(anim);
-					anim += 0.1f;
-				}
-				else
-					anim = 0;
-
+				float angle = (float)M_PI / 180 * inst_roll;
 				Rotation(v2, angle, rot2);
-				MatProduct(rot2, trn, itm);
+
+				angle = (float)M_PI / 180 * inst_pitch_avr;
+				if (mw->show_var==1)
+					angle += (float)M_PI / 180 * inst_pitch_var * ((float)fast_rand() / 0x7fff - 0.5f);
+				Rotation(v1, angle, rot1);
+
+				MatProduct(rot1, rot2, rot);
+
+				angle = (float)M_PI / 180 * inst_yaw;
+				Rotation(v2, angle, rot2);
+
+				MatProduct(rot2, rot, rot1);
+
+				MatProduct(rot1, trn, itm);
 
 				// draw!
 				RenderContext* rc = &render_context;
@@ -2689,16 +2696,16 @@ void my_render()
 			#pragma pack(pop)
 
 			Face* map;
-			bool show_var;
+			int show_var;
 		};
 
-		static bool show_inst_yaw_var = false;
+		static int show_inst_var = 0;
 
 		ImGui::Begin("MESH", 0, ImGuiWindowFlags_AlwaysAutoResize);
 		{
 			static MeshWidget mw;
 
-			mw.show_var = show_inst_yaw_var;
+			mw.show_var = show_inst_var;
 
 			// Arrow buttons with Repeater
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
@@ -2728,9 +2735,31 @@ void my_render()
 
 			mw.Widget("zonk", ImVec2(320,320));
 
-			ImGui::SliderFloat("Avr", &inst_yaw_avr, -180.0f, +180.0f);
-			ImGui::SliderFloat("Var", &inst_yaw_var, 0, +360.0f);
-			show_inst_yaw_var = ImGui::IsItemActive(); //ImGui::IsMouseDown(0);
+			show_inst_var = 0;
+			ImGui::SliderFloat("Yaw", &inst_yaw, -180.0f, +180.0f); 
+			if (ImGui::IsItemActive())
+				show_inst_var = 1;
+
+			ImGui::Checkbox("Yaw Rnd",&inst_yaw_rnd);
+			if (ImGui::IsItemActive())
+				show_inst_var = 1;
+
+			ImGui::Separator();
+
+			ImGui::SliderFloat("Pitch", &inst_pitch_avr, 0.0f, +180.0f); 
+			if (ImGui::IsItemActive())
+				show_inst_var = 1;
+
+			ImGui::SliderFloat("Pitch Rnd", &inst_pitch_var, 0.0f, +180.0f); 
+			if (ImGui::IsItemActive())
+				show_inst_var = 1;
+				
+
+			ImGui::Separator();
+
+			ImGui::SliderFloat("Roll", &inst_roll, -180.0f, +180.0f); 
+			if (ImGui::IsItemActive())
+				show_inst_var = 1;
 		}
 		ImGui::End();
 
