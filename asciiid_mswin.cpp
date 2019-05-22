@@ -688,7 +688,7 @@ LONG WINAPI a3dExceptionProc(EXCEPTION_POINTERS *ExceptionInfo)
 // creates window & initialized GL
 bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/)
 {
-	//_CrtSetBreakAlloc(3828);
+	//_CrtSetBreakAlloc(69);
 
 	if (!pi || !gd)
 		return false;

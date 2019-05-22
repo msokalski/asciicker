@@ -285,9 +285,11 @@ struct World
         free(m);
         meshes--;
 
-        if (kill_bsp && root)
-            DeleteBSP(root);
-        root = 0;
+		if (kill_bsp && root)
+		{
+			DeleteBSP(root);
+			root = 0;
+		}
 
         return true;
     }
@@ -435,9 +437,11 @@ struct World
         insts--;
         free(i);
 
-        if (kill_bsp && root)
-            DeleteBSP(root);        
-        root = 0;
+		if (kill_bsp && root)
+		{
+			DeleteBSP(root);
+			root = 0;
+		}
 
         return true;
     }
@@ -470,11 +474,14 @@ struct World
         }
     }
 
-    void Rebuild()
-    {
-        if (root)
-            DeleteBSP(root);
-        root = 0;
+	void Rebuild()
+	{
+		if (root)
+		{
+			DeleteBSP(root);
+			root = 0;
+		}
+
         if (!insts)
             return;
 
@@ -919,14 +926,18 @@ void DeleteWorld(World* w)
     if (!w)
         return;
 
-    if (w->root)
-        w->DeleteBSP(w->root);
-    w->root = 0;
+	if (w->root)
+	{
+		w->DeleteBSP(w->root);
+		w->root = 0;
+	}
 
     // killing all meshes should kill all insts as well
 
     while (w->meshes)
         w->DelMesh(w->head_mesh);
+
+	free(w);
 }
 
 Mesh* LoadMesh(World* w, const char* path, const char* name)
