@@ -16,6 +16,9 @@ Mesh* GetLastMesh(World* w);
 Mesh* GetPrevMesh(Mesh* m);
 Mesh* GetNextMesh(Mesh* m);
 
+void* GetMeshCookie(Mesh* m);
+void  SetMeshCookie(Mesh* m, void* cookie);
+
 int GetMeshName(Mesh* m, char* buf, int size);
 void GetMeshBBox(Mesh* m, float bbox[6]);
 
@@ -36,4 +39,4 @@ void SetInstFlags(Inst* i, int flags, int mask);
 void GetInstTM(Inst* i, double tm[16]);
 void SetInstTM(Inst* i, const double tm[16]);
 
-void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie);
+void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie);

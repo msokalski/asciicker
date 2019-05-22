@@ -67,7 +67,7 @@ void SetTerrainDiag(Patch* p, uint16_t diag);
 
 void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
 void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, void (*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
-Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4]);
+Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[4], double nrm[3]=0);
 
 double HitTerrain(Patch* p, double u, double v); // u,v must be normalized
 

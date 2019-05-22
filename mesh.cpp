@@ -70,6 +70,7 @@ struct Mesh
 {
     World* world;
     char* name; // in form of library path?
+    void* cookie;
 
     // in world
 	Mesh* next;
@@ -156,13 +157,14 @@ struct World
 
     Mesh* LoadMesh(const char* path, const char* name);
 
-    Mesh* AddMesh(const char* name = 0)
+    Mesh* AddMesh(const char* name = 0, void* cookie = 0)
     {
         Mesh* m = (Mesh*)malloc(sizeof(Mesh));
 
         m->world = this;
         m->type = Mesh::MESH_TYPE_3D;
         m->name = name ? strdup(name) : 0;
+        m->cookie = cookie;
 
         m->next = 0;
         m->prev = tail_mesh;
@@ -534,8 +536,8 @@ struct World
         return false;
     }
 
-    // INSTS IN HULL
-    void Query(int planes, double plane[][4], void (*cb)(Inst* inst, void* cookie), void* cookie)
+    // MESHES IN HULL
+    void Query(int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
     {
         // query possibly visible instances
 
@@ -543,7 +545,7 @@ struct World
         Inst* i = head_inst;
         while (i)
         {
-            cb(i,cookie);
+            cb(i->mesh, i->tm, cookie);
             i=i->next;
         }
     }
@@ -900,7 +902,7 @@ void SetInstFlags(Inst* i, int flags, int mask)
     i->flags = (i->flags & ~mask) | (flags & mask);
 }
 
-void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie)
+void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
 {
     if (!w)
         return;
@@ -991,4 +993,17 @@ void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint32_t visual, void* cooki
 
         f=f->next;
     }
+}
+
+void* GetMeshCookie(Mesh* m)
+{
+    if (!m)
+        return 0;
+    return m->cookie;
+}
+
+void  SetMeshCookie(Mesh* m, void* cookie)
+{
+    if (m)
+        m->cookie = cookie;
 }

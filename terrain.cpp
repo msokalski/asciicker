@@ -1651,7 +1651,7 @@ static inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[
 }
 
 int hit_patch_tests = 0;
-bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
+bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3], double nrm[3])
 {
 	hit_patch_tests ++;
 	static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
@@ -1684,6 +1684,13 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
 					ret[0] = r[0];
 					ret[1] = r[1];
 					ret[2] = r[2];
+
+					if (nrm)
+					{
+						double e1[3] = {v[0][0]-v[2][0],v[0][1]-v[2][1],v[0][2]-v[2][2]};
+						double e2[3] = {v[1][0]-v[2][0],v[1][1]-v[2][1],v[1][2]-v[2][2]};
+						CrossProduct(e1,e2,nrm);
+					}
 				}
 
 				if (RayIntersectsTriangle(ray, v[2], v[1], v[3], r) && r[2] > ret[2])
@@ -1692,6 +1699,13 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
 					ret[0] = r[0];
 					ret[1] = r[1];
 					ret[2] = r[2];
+
+					if (nrm)
+					{
+						double e1[3] = {v[1][0]-v[2][0],v[1][1]-v[2][1],v[1][2]-v[2][2]};
+						double e2[3] = {v[3][0]-v[2][0],v[3][1]-v[2][1],v[3][2]-v[2][2]};
+						CrossProduct(e1,e2,nrm);
+					}
 				}
 			}
 			else
@@ -1702,6 +1716,13 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
 					ret[0] = r[0];
 					ret[1] = r[1];
 					ret[2] = r[2];
+
+					if (nrm)
+					{
+						double e1[3] = {v[3][0]-v[0][0],v[3][1]-v[0][1],v[3][2]-v[0][2]};
+						double e2[3] = {v[2][0]-v[0][0],v[2][1]-v[0][1],v[2][2]-v[0][2]};
+						CrossProduct(e1,e2,nrm);
+					}
 				}
 
 				if (RayIntersectsTriangle(ray, v[0], v[1], v[3], r) && r[2] > ret[2])
@@ -1710,6 +1731,13 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
 					ret[0] = r[0];
 					ret[1] = r[1];
 					ret[2] = r[2];
+
+					if (nrm)
+					{
+						double e1[3] = {v[1][0]-v[0][0],v[1][1]-v[0][1],v[1][2]-v[0][2]};
+						double e2[3] = {v[3][0]-v[0][0],v[3][1]-v[0][1],v[3][2]-v[0][2]};
+						CrossProduct(e1,e2,nrm);
+					}
 				}
 			}
 
@@ -1720,7 +1748,7 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3])
 	return hit;
 }
 
-Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
+Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1736,7 +1764,7 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret))
+		if (HitPatch(p, x, y, ray, ret, nrm))
 			return p;
 		else
 			return 0;
@@ -1748,25 +1776,25 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain0(n->quad[0], x, y, range, ray, ret);
+		Patch* h = HitTerrain0(n->quad[0], x, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain0(n->quad[1], x+range, y, range, ray, ret);
+		Patch* h = HitTerrain0(n->quad[1], x+range, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain0(n->quad[2], x, y+range, range, ray, ret);
+		Patch* h = HitTerrain0(n->quad[2], x, y+range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain0(n->quad[3], x+range, y+range, range, ray, ret);
+		Patch* h = HitTerrain0(n->quad[3], x+range, y+range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
@@ -1774,7 +1802,7 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
+Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1790,7 +1818,7 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret))
+		if (HitPatch(p, x, y, ray, ret, nrm))
 			return p;
 		else
 			return 0;
@@ -1802,25 +1830,25 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain1(n->quad[0], x, y, range, ray, ret);
+		Patch* h = HitTerrain1(n->quad[0], x, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain1(n->quad[1], x + range, y, range, ray, ret);
+		Patch* h = HitTerrain1(n->quad[1], x + range, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain1(n->quad[2], x, y + range, range, ray, ret);
+		Patch* h = HitTerrain1(n->quad[2], x, y + range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain1(n->quad[3], x + range, y + range, range, ray, ret);
+		Patch* h = HitTerrain1(n->quad[3], x + range, y + range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
@@ -1828,7 +1856,7 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
+Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1844,7 +1872,7 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret))
+		if (HitPatch(p, x, y, ray, ret, nrm))
 			return p;
 		else
 			return 0;
@@ -1856,25 +1884,25 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain2(n->quad[0], x, y, range, ray, ret);
+		Patch* h = HitTerrain2(n->quad[0], x, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain2(n->quad[1], x + range, y, range, ray, ret);
+		Patch* h = HitTerrain2(n->quad[1], x + range, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain2(n->quad[2], x, y + range, range, ray, ret);
+		Patch* h = HitTerrain2(n->quad[2], x, y + range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain2(n->quad[3], x + range, y + range, range, ray, ret);
+		Patch* h = HitTerrain2(n->quad[3], x + range, y + range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
@@ -1882,7 +1910,7 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double ret[3])
+Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1898,7 +1926,7 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret))
+		if (HitPatch(p, x, y, ray, ret, nrm))
 			return p;
 		else
 			return 0;
@@ -1910,25 +1938,25 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain3(n->quad[0], x, y, range, ray, ret);
+		Patch* h = HitTerrain3(n->quad[0], x, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain3(n->quad[1], x + range, y, range, ray, ret);
+		Patch* h = HitTerrain3(n->quad[1], x + range, y, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain3(n->quad[2], x, y + range, range, ray, ret);
+		Patch* h = HitTerrain3(n->quad[2], x, y + range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain3(n->quad[3], x + range, y + range, range, ray, ret);
+		Patch* h = HitTerrain3(n->quad[3], x + range, y + range, range, ray, ret, nrm);
 		if (h)
 			p = h;
 	}
@@ -2013,7 +2041,7 @@ double HitTerrain(Patch* p, double u, double v)
 	return -1;
 }
 
-Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
+Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3], double nrm[3])
 {
 	if (!t || !t->root)
 		return 0;
@@ -2039,7 +2067,7 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 
 	assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
 
-	static Patch* (* const func_vect[])(QuadItem* q, int x, int y, int range, double ray[6], double ret[3]) =
+	static Patch* (* const func_vect[])(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3]) =
 	{
 		HitTerrain0, 
 		HitTerrain1, 
@@ -2053,7 +2081,7 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3])
 
 	hit_patch_tests = 0;
 	triangle_intersections = 0;
-	Patch* patch = func_vect[sign_case](t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, ray, ret);
+	Patch* patch = func_vect[sign_case](t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, ray, ret, nrm);
 	return patch;
 }
 

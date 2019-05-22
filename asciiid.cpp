@@ -51,6 +51,21 @@ char ini_path[4096];
 
 Terrain* terrain = 0;
 World* world = 0;
+Mesh* active_mesh;
+
+struct MeshPrefs
+{
+	// float pre_trans[3];
+	float scale_val[3];
+	float scale_rnd[3];
+	float rotate_locZ_val;
+	float rotate_locZ_rnd;
+	float rotate_XY_val[2];
+	float rotate_XY_rnd[2];
+	// float translate_val[3];
+	// float translate_rnd[3];
+	float rotate_align;
+};
 
 int fonts_loaded = 0;
 int palettes_loaded = 0;
@@ -411,6 +426,7 @@ bool  inst_yaw_rnd = false;
 float inst_pitch_avr = 0.0;
 float inst_pitch_var = 0.0;
 float inst_roll = 0.0;
+bool  inst_added = false;
 
 float lit_yaw = 45;
 float lit_pitch = 30;//90;
@@ -1311,25 +1327,103 @@ struct RenderContext
 
 	void BeginMeshes(const double* tm, const float* lt)
 	{
-		// setup prg, vao, etc..
-		// ...
+		float ftm[16];
+		for (int i=0; i<16; i++)
+			ftm[i] = (float)tm[i];
+
+		glUseProgram(mesh_prg);
+
+		glUniformMatrix4fv(mesh_tm_loc, 1, GL_FALSE, ftm);
+		glUniform4fv(mesh_lt_loc, 1, lt);
+		glUniform1i(mesh_m_tex_loc, 2);
+		glUniform1i(mesh_f_tex_loc, 3);
+		glUniform1i(mesh_p_tex_loc, 4);
+
+		glBindVertexArray(mesh_vao);
+
+		glBindTextureUnit(2, MyMaterial::tex);
+		glBindTextureUnit(3, font[active_font].tex);
+		glBindTextureUnit(4, pal_tex);
+
+//		glEnable(GL_CULL_FACE);
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_GEQUAL);
+		glCullFace(GL_BACK);
+
+		mesh_map=0;
+		mesh_faces=0;
+
+		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
 	}
 
-	static void Render(float coords[9], uint32_t visual, void* cookie)
+	static void RenderFace(float coords[9], uint32_t visual, void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
-		// fill a buffo
-		// flush if full
-		// ...
 
-		// so last thing is to make ui for:
-		// inserting, selecting, moving, scaling, rotating & deleting INSTANCES!!!
+		if (!rc->mesh_map)
+		{
+			//glBufferData(GL_ARRAY_BUFFER, sizeof(Face)*1024, 0, GL_STREAM_DRAW);
+			rc->mesh_map = (Face*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+		}
+		
+		assert(rc->mesh_map);
+
+		memcpy(rc->mesh_map[rc->mesh_faces].abc, coords, sizeof(float[9]));
+		rc->mesh_map[rc->mesh_faces].visual = visual;
+		rc->mesh_faces++;
+
+		if (rc->mesh_faces == 1024)
+		{
+			// flush
+			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
+			rc->mesh_map=0;
+			rc->mesh_faces=0;
+		}
+	}
+
+	static void RenderMesh(Mesh* m, const double tm[16], void* cookie)
+	{
+		RenderContext* rc = (RenderContext*)cookie;
+
+		if (rc->mesh_faces)
+		{
+			// flush
+			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
+			rc->mesh_map=0;
+			rc->mesh_faces=0;
+		}
+
+		float ftm[16];
+		for (int i=0; i<16; i++)
+			ftm[i] = (float)tm[i];
+		glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, ftm);
+		QueryMesh(m, RenderFace, rc);
 	}
 
 	void EndMeshes()
 	{
-		// flush buffo
-		// ...
+		if (mesh_faces)
+		{
+			// flush
+			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glDrawArrays(GL_POINTS, 0, mesh_faces);
+			mesh_map=0;
+			mesh_faces=0;
+		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glBindTextureUnit(2, 0);
+		glBindTextureUnit(3, 0);
+		glBindTextureUnit(4, 0);
+
+		glBindVertexArray(0);
+		glUseProgram(0);
+
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_DEPTH_TEST);
 	}
 
 	void BeginPatches(const double* tm, const float* lt, const float* br, const float* qd, const float* pr)
@@ -1548,6 +1642,13 @@ struct RenderContext
 	GLint mesh_m_tex_loc;
 	GLint mesh_f_tex_loc;
 	GLint mesh_p_tex_loc;
+
+	int mesh_faces;
+	struct Face
+	{
+		float abc[9];
+		uint32_t visual;
+	}* mesh_map;
 
 	TexPage* page_tex;
 	TexPage* head;
@@ -2385,18 +2486,16 @@ void my_render()
 
 		struct MeshWidget
 		{
-			MeshWidget()
-			{
-				mesh=GetFirstMesh(world);
-			}
-
 			static void query_cb(float coords[9], uint32_t visual, void* cookie)
 			{
 				MeshWidget* mw = (MeshWidget*)cookie;
 				RenderContext* rc = &render_context;
 
 				if (!mw->map)
+				{
+					//glBufferData(GL_ARRAY_BUFFER, sizeof(Face)*1024, 0, GL_STREAM_DRAW);
 					mw->map = (Face*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+				}
 				
 				assert(mw->map);
 
@@ -2460,7 +2559,7 @@ void my_render()
 					(int)(mw->rect.Max.y - mw->rect.Min.y));
 
 				float bbox[6];
-				GetMeshBBox(mw->mesh, bbox);
+				GetMeshBBox(active_mesh, bbox);
 
 				float radius = 0.5f * sqrtf( (bbox[1]-bbox[0])*(bbox[1]-bbox[0]) + (bbox[3]-bbox[2])*(bbox[3]-bbox[2]) );
 				// todo radius could be calculated from bounding circle on XY
@@ -2529,37 +2628,35 @@ void my_render()
 
 				// instance tm (based purely on mesh instance sliders)
 
-				// 1. pretranslate (to have 0 in rot/scale center)
-				// 2. scale by constant_xyz * random_xyz 
+				// here we do only:
 				// 2. rotate around z by given angle + random_z
 				// 3. rotate by given world's xy axis + random_xy (length is angle)
-				// 4. rotate toward terrain normal by given weight
-				// 5. post translate by constant xyz + random xyz
+				MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
 
-				ImGui::DragFloatRange2
+				float itm[16];
 
-				/*
-					MatProduct(rot1, rot2, rot);
+				float angle = (float)M_PI / 180 * mp->rotate_locZ_val;
+				Rotation(v2, angle, rot2);
 
-					float itm[16];
+				v1[0] = mp->rotate_XY_val[0];
+				v1[1] = mp->rotate_XY_val[1];
+				v1[2] = 0;
 
-					float angle = (float)M_PI / 180 * inst_roll;
-					Rotation(v2, angle, rot2);
+				angle = sqrtf(v1[0]*v1[0] + v1[1]*v1[1]);
+				if (angle != 0)
+				{
+					v1[0]/=angle;
+					v1[1]/=angle;
+				}
 
-					angle = (float)M_PI / 180 * inst_pitch_avr;
-					if (mw->show_var==1)
-						angle += (float)M_PI / 180 * inst_pitch_var * ((float)fast_rand() / 0x7fff - 0.5f);
-					Rotation(v1, angle, rot1);
+				if (angle>1)
+					angle = 1; 
 
-					MatProduct(rot1, rot2, rot);
+				Rotation(v1, angle * (float)M_PI, rot1);
 
-					angle = (float)M_PI / 180 * inst_yaw;
-					Rotation(v2, angle, rot2);
+				MatProduct(rot1, rot2, rot);
 
-					MatProduct(rot2, rot, rot1);
-
-					MatProduct(rot1, trn, itm);
-				*/
+				MatProduct(rot, trn, itm);
 
 				// draw!
 				RenderContext* rc = &render_context;
@@ -2631,7 +2728,7 @@ void my_render()
 
 				glBindBuffer(GL_ARRAY_BUFFER, rc->mesh_vbo);
 
-				QueryMesh(mw->mesh, query_cb, mw);
+				QueryMesh(active_mesh, query_cb, mw);
 
 				if (mw->faces)
 				{
@@ -2665,9 +2762,6 @@ void my_render()
 					glDisable(GL_DEPTH_TEST);
 
 				glDepthFunc(depth_func);
-
-				bool depth;
-				depth = glIsEnabled(GL_DEPTH_TEST);
 			}
 
 			bool Widget(const char* label, const ImVec2& size)
@@ -2694,83 +2788,49 @@ void my_render()
 				return true;
 			}
 
-			Mesh* mesh;
 			ImRect rect;
 			int faces;
 			
-			#pragma pack(push,1)
 			struct Face
 			{
 				float abc[9];
 				uint32_t visual;
 			};
-			#pragma pack(pop)
 
 			Face* map;
-			int show_var;
 		};
-
-		static int show_inst_var = 0;
 
 		ImGui::Begin("MESH", 0, ImGuiWindowFlags_AlwaysAutoResize);
 		{
 			static MeshWidget mw;
-
-			mw.show_var = show_inst_var;
 
 			// Arrow buttons with Repeater
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 			ImGui::PushButtonRepeat(true);
 			if (ImGui::ArrowButton("##mesh_prev", ImGuiDir_Left)) 
 			{ 
-				Mesh* prev = GetPrevMesh(mw.mesh);
+				Mesh* prev = GetPrevMesh(active_mesh);
 				if (prev) 
-					mw.mesh = prev; 
+					active_mesh = prev; 
 			}
 
 			ImGui::SameLine(0.0f, spacing);
 
 			if (ImGui::ArrowButton("##mesh_next", ImGuiDir_Right)) 
 			{ 
-				Mesh* next = GetNextMesh(mw.mesh);
+				Mesh* next = GetNextMesh(active_mesh);
 				if (next) 
-					mw.mesh = next; 
+					active_mesh = next; 
 			}
 
 			ImGui::PopButtonRepeat();
 			ImGui::SameLine();
 			
 			char name[256];
-			GetMeshName(mw.mesh,name,256);
+			GetMeshName(active_mesh,name,256);
 			ImGui::Text("%s",name);
 
 			mw.Widget("zonk", ImVec2(320,320));
-
-			show_inst_var = 0;
-			ImGui::SliderFloat("Yaw", &inst_yaw, -180.0f, +180.0f); 
-			if (ImGui::IsItemActive())
-				show_inst_var = 1;
-
-			ImGui::Checkbox("Yaw Rnd",&inst_yaw_rnd);
-			if (ImGui::IsItemActive())
-				show_inst_var = 1;
-
-			ImGui::Separator();
-
-			ImGui::SliderFloat("Pitch", &inst_pitch_avr, 0.0f, +180.0f); 
-			if (ImGui::IsItemActive())
-				show_inst_var = 1;
-
-			ImGui::SliderFloat("Pitch Rnd", &inst_pitch_var, 0.0f, +180.0f); 
-			if (ImGui::IsItemActive())
-				show_inst_var = 1;
-				
-
-			ImGui::Separator();
-
-			ImGui::SliderFloat("Roll", &inst_roll, -180.0f, +180.0f); 
-			if (ImGui::IsItemActive())
-				show_inst_var = 1;
 		}
 		ImGui::End();
 
@@ -3299,7 +3359,7 @@ void my_render()
 				static bool add_verts = false;
 				static bool build_poly = false;
 
-				if (edit_mode != 2)
+				if (active_mesh && edit_mode != 2)
 				{
 					pushed = true;
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
@@ -3307,25 +3367,39 @@ void my_render()
 					add_verts = false;
 					build_poly = false;
 				}
-				if (ImGui::BeginTabItem("POLY"))
+				if (active_mesh && ImGui::BeginTabItem("MESH"))
 				{
 					edit_mode = 2;
 
-					if (ImGui::Checkbox("Add Verts", &add_verts))
-					{
-						if (add_verts)
-							build_poly = false;
-					}
+					// when putting new instance we do:
+					// 1. pretranslate (to have 0 in rot/scale center)
+					// 2. scale by constant_xyz * random_xyz 
+					// 2. rotate around z by given angle + random_z
+					// 3. rotate by given world's xy axis + random_xy (length is angle)
+					// 4. rotate toward terrain normal by given weight
+					// 5. post translate by constant xyz + random xyz
 
-					if (ImGui::Checkbox("Build Poly",&build_poly))
-					{
-						if (build_poly)
-							add_verts = false;
-					}
+					MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
+
+					//ImGui::SliderFloat3("PreTranslate", mp->pre_trans, -1, +1);
+					//ImGui::Separator();
+					ImGui::SliderFloat3("ScaleValue", mp->scale_val, -5, +5); // pow of 2
+					ImGui::SliderFloat3("ScaleRand", mp->scale_rnd, 0, 1);  // pow of 2
+					ImGui::Separator();
+					ImGui::SliderFloat("RotateLocZValue", &mp->rotate_locZ_val, -180, 180);
+					ImGui::SliderFloat("RotateLocZRand", &mp->rotate_locZ_rnd, 0, 1);
+					ImGui::Separator();
+					ImGui::SliderFloat2("RotateXYValue", mp->rotate_XY_val, -180, +180);
+					ImGui::SliderFloat2("RotateXYRand", mp->rotate_XY_rnd, 0, 1);
+					ImGui::Separator();
+					//ImGui::SliderFloat3("TranslateValue", mp->translate_val, -1, +1);
+					//ImGui::SliderFloat3("TranslateRand", mp->translate_rnd, 0, 1);
+					ImGui::Separator();
+					ImGui::SliderFloat("RotateAlign", &mp->rotate_align, 0, 1);
 
 					ImGui::EndTabItem();
 				}
-				if (pushed)
+				if (active_mesh && pushed)
 				{
 					pushed = false;
 					ImGui::PopStyleVar();
@@ -3806,6 +3880,7 @@ void my_render()
 	if (!io.MouseDown[0])
 	{
 		diag_flipped = false;
+		inst_added = false;
 	}
 
 	if (!io.MouseDown[1])
@@ -3926,6 +4001,7 @@ void my_render()
 	int create_preview_px = 0;
 	int create_preview_py = 0;
 
+	Inst* preview_inst = 0;
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -4094,8 +4170,20 @@ void my_render()
 			ray_v[2] -= ray_p[2];
 
 			double hit[4];
+			double hit_nrm[3];
 
-			Patch* p = HitTerrain(terrain, ray_p, ray_v, hit);
+			Patch* p = HitTerrain(terrain, ray_p, ray_v, hit, hit_nrm);
+
+			if (p)
+			{
+				// normalize
+				hit_nrm[0] /= HEIGHT_SCALE;
+				hit_nrm[1] /= HEIGHT_SCALE;
+				double nrm_len = sqrt(hit_nrm[0]*hit_nrm[0]+hit_nrm[1]*hit_nrm[1]+hit_nrm[2]*hit_nrm[2]);
+				hit_nrm[0] /= nrm_len;
+				hit_nrm[1] /= nrm_len;
+				hit_nrm[2] /= nrm_len;
+			}
 
 			if (p)
 			{
@@ -4317,7 +4405,105 @@ void my_render()
 				else
 				if (edit_mode == 2)
 				{
-					
+					if (!inst_added || !io.MouseDown[0])
+					{
+						// pretranslate and scale
+						MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
+
+						double ptm[16] = {0};
+						ptm[0] = pow(2.0,mp->scale_val[0] + 2*mp->scale_rnd[0]*((double)fast_rand() / 0x7fff - 0.5) );
+						ptm[5] = pow(2.0,mp->scale_val[1] + 2*mp->scale_rnd[1]*((double)fast_rand() / 0x7fff - 0.5) );
+						ptm[10] = pow(2.0,mp->scale_val[2] + 2*mp->scale_rnd[2]*((double)fast_rand() / 0x7fff - 0.5) );
+						ptm[15] = 1;
+						ptm[12] = 0; //mp->pre_trans[0] * ptm[0];
+						ptm[13] = 0; //mp->pre_trans[1] * ptm[5];
+						ptm[14] = 0; //mp->pre_trans[2] * ptm[10];
+
+						// rot loc Z
+						double ztm[16];
+						double loc_z[3] = {0,0,1};
+						double ang_z = mp->rotate_locZ_val + 360*mp->rotate_locZ_rnd*((double)fast_rand() / 0x7fff - 0.5);
+						Rotation(loc_z, ang_z * M_PI / 180, ztm);
+
+						// rot xy
+						double rot[16]; //rtm[16];
+						double rot_xy[3] =
+						{
+							mp->rotate_XY_val[0]/180.0 + 2*mp->rotate_XY_rnd[0]*((double)fast_rand() / 0x7fff - 0.5),
+							mp->rotate_XY_val[1]/180.0 + 2*mp->rotate_XY_rnd[1]*((double)fast_rand() / 0x7fff - 0.5),
+							0
+						};
+
+						double ang_xy = sqrt(rot_xy[0]*rot_xy[0] + rot_xy[1]*rot_xy[1]);
+						if (ang_xy != 0)
+						{
+							rot_xy[0] /= ang_xy;
+							rot_xy[1] /= ang_xy;
+						}
+
+						if (ang_xy>1)
+							ang_xy = 1; 
+
+						Rotation(rot_xy, ang_xy * M_PI, rot/*rtm*/);
+
+						// last thing, align with terrain normal!
+						double up[4]={0,0,1,0};
+						double dir[4];
+						Product(rot,/*rtm,*/up,dir);
+
+						// alignment rot axis
+						double align_axis[3];
+						CrossProduct(dir,hit_nrm,align_axis);
+
+						// alignment angle
+						double align_len = sqrt( align_axis[0]*align_axis[0] + align_axis[1]*align_axis[1] + align_axis[2]*align_axis[2]);
+						double align_ang = asin( align_len );
+
+						if (align_len > 0)
+						{
+							align_axis[0] /= align_len; 
+							align_axis[1] /= align_len;
+							align_axis[2] /= align_len;
+						}
+
+						double atm[16];
+						Rotation(align_axis,align_ang * mp->rotate_align,atm);
+
+						double rtm[16];
+						MatProduct(atm,rot,rtm);
+
+						double itm[16] = {0};
+
+						// post-scale and translate
+						itm[0] = 1;
+						itm[5] = 1;
+						itm[10] = HEIGHT_SCALE;
+						itm[15] = 1;
+
+						itm[12] = hit[0];
+						itm[13] = hit[1];
+						itm[14] = hit[2];
+
+						double tm1[16];
+						double tm2[16];
+
+						// tm = itm * rtm * ztm * ptm
+						double tm[16];
+						MatProduct(itm,rtm,tm1);
+						MatProduct(ztm,ptm,tm2);
+						MatProduct(tm1,tm2,tm);
+
+						Inst* inst = CreateInst(active_mesh, tm, 0);
+
+						if (!inst_added && io.MouseDown[0])
+						{
+							inst_added = true;
+						}
+						else
+						{
+							preview_inst = inst;
+						}
+					}
 				}
 				else
 				if (edit_mode == 3)
@@ -4451,8 +4637,14 @@ void my_render()
 	rc->EndPatches();
 
 	rc->BeginMeshes(tm, lt);
-	QueryWorld(world, planes, clip_world, RenderContext::Render, rc);
+	QueryWorld(world, planes, clip_world, RenderContext::RenderMesh, rc);
 	rc->EndMeshes();
+
+	if (preview_inst)
+	{
+		DeleteInst(preview_inst);
+		preview_inst = 0;
+	}
 
 	// overlay patch creation
 	// slihouette of newly created patch 
@@ -4590,12 +4782,20 @@ void my_init()
 			buf[4095] = 0;
 
 			Mesh* m = LoadMesh(world, buf, name);
+			if (m)
+			{
+				MeshPrefs* mp = (MeshPrefs*)malloc(sizeof(MeshPrefs));
+				memset(mp,0,sizeof(MeshPrefs));
+				SetMeshCookie(m,mp);
+			}
 			return true;
 		}
 	};
 
 	char mesh_dirname[] = "./meshes";
 	a3dListDir(mesh_dirname, MeshScan::Scan, mesh_dirname);
+
+	active_mesh = GetFirstMesh(world);
 	
 	// todo:
 	// build local array of SORTED meshes (similary to palettes)
@@ -4738,6 +4938,13 @@ void my_keyb_focus(bool set)
 
 void my_close()
 {
+	Mesh* m = GetFirstMesh(world);
+	while (m)
+	{
+		MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(m);
+		free(mp);
+		m = GetNextMesh(m);
+	}
 	DeleteWorld(world);
 	
 	URDO_Purge();
