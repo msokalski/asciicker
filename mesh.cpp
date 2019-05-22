@@ -287,6 +287,7 @@ struct World
 
         if (kill_bsp && root)
             DeleteBSP(root);
+        root = 0;
 
         return true;
     }
@@ -296,7 +297,7 @@ struct World
     Inst* head_inst;
     Inst* tail_inst;
 
-    Inst* AddInst(Mesh* m, const double tm[16], const char* name)
+    Inst* AddInst(Mesh* m, int flags, const double tm[16], const char* name)
     {
         if (!m || m->world != this)
             return 0;
@@ -304,11 +305,56 @@ struct World
         Inst* i = (Inst*)malloc(sizeof(Inst));
 
         if (tm)
+        {
             memcpy(i->tm,tm,sizeof(double[16]));
+
+            for (int q=0; q<8; q++)
+            {
+                int qx = q&1;
+                int qy = ((q>>1)&1) + 2;
+                int qz = ((q>>2)&1) + 4;
+
+                float v[4] = 
+                {
+                    m->bbox[qx],
+                    m->bbox[qy],
+                    m->bbox[qz],
+                    1.0f
+                };
+
+                float p[4];
+                Product(tm,v,p);
+
+                if (q==0)
+                {
+                    i->bbox[0] = p[0];
+                    i->bbox[1] = p[0];
+                    i->bbox[2] = p[1];
+                    i->bbox[3] = p[1];
+                    i->bbox[4] = p[2];
+                    i->bbox[5] = p[2];
+                }
+                else
+                {
+                    i->bbox[0] = fminf(i->bbox[0],p[0]);
+                    i->bbox[1] = fmaxf(i->bbox[1],p[0]);
+                    i->bbox[2] = fminf(i->bbox[2],p[1]);
+                    i->bbox[3] = fmaxf(i->bbox[3],p[1]);
+                    i->bbox[4] = fminf(i->bbox[4],p[2]);
+                    i->bbox[5] = fmaxf(i->bbox[5],p[2]);
+                }
+            }
+        }
         else
         {
             memset(i->tm,0,sizeof(double[16]));
             i->tm[0] = i->tm[5] = i->tm[10] = i->tm[15] = 1.0;
+            i->bbox[0] = m->bbox[0];
+            i->bbox[1] = m->bbox[1];
+            i->bbox[2] = m->bbox[2];
+            i->bbox[3] = m->bbox[3];
+            i->bbox[4] = m->bbox[4];
+            i->bbox[5] = m->bbox[5];
         }
         
         i->name = name ? strdup(name) : 0;
@@ -316,7 +362,7 @@ struct World
         i->mesh = m;
 
         i->type = BSP::BSP_TYPE_INST;
-        i->flags = 0; // visible / in-bsp / use-bsp ?
+        i->flags = flags & ~INST_IN_TREE;
         i->bsp_parent = 0;
 
         if (m)
@@ -391,6 +437,7 @@ struct World
 
         if (kill_bsp && root)
             DeleteBSP(root);        
+        root = 0;
 
         return true;
     }
@@ -427,8 +474,12 @@ struct World
     {
         if (root)
             DeleteBSP(root);
+        root = 0;
+        if (!insts)
+            return;
 
         int num = 0;
+
         BSP** arr = (BSP**)malloc(sizeof(BSP*) * insts);
         
         for (Inst* inst = head_inst; inst; inst=inst->next)
@@ -450,12 +501,12 @@ struct World
                 {
                     float bbox[6] =
                     {
-                        arr[a]->bbox[0] < arr[u]->bbox[0] ? arr[u]->bbox[0] : arr[v]->bbox[0],
-                        arr[a]->bbox[1] > arr[u]->bbox[1] ? arr[u]->bbox[1] : arr[v]->bbox[1],
-                        arr[a]->bbox[2] < arr[u]->bbox[2] ? arr[u]->bbox[2] : arr[v]->bbox[2],
-                        arr[a]->bbox[3] > arr[u]->bbox[3] ? arr[u]->bbox[3] : arr[v]->bbox[3],
-                        arr[a]->bbox[4] < arr[u]->bbox[4] ? arr[u]->bbox[4] : arr[v]->bbox[4],
-                        arr[a]->bbox[5] > arr[u]->bbox[5] ? arr[u]->bbox[5] : arr[v]->bbox[5]
+                        fminf( arr[u]->bbox[0] , arr[v]->bbox[0] ),
+                        fmaxf( arr[u]->bbox[1] , arr[v]->bbox[1] ),
+                        fminf( arr[u]->bbox[2] , arr[v]->bbox[2] ),
+                        fmaxf( arr[u]->bbox[3] , arr[v]->bbox[3] ),
+                        fminf( arr[u]->bbox[4] , arr[v]->bbox[4] ),
+                        fmaxf( arr[u]->bbox[5] , arr[v]->bbox[5] )
                     };
 
                     float vol = (bbox[1]-bbox[0]) * (bbox[3]-bbox[2]) * (bbox[5]-bbox[4]);
@@ -488,12 +539,12 @@ struct World
             node->bsp_child[0] = arr[a];
             node->bsp_child[1] = arr[b];
 
-            node->bbox[0] = arr[a]->bbox[0] < arr[b]->bbox[0] ? arr[a]->bbox[0] : arr[b]->bbox[0];
-            node->bbox[1] = arr[a]->bbox[1] > arr[b]->bbox[1] ? arr[a]->bbox[1] : arr[b]->bbox[1];
-            node->bbox[2] = arr[a]->bbox[2] < arr[b]->bbox[2] ? arr[a]->bbox[2] : arr[b]->bbox[2];
-            node->bbox[3] = arr[a]->bbox[3] > arr[b]->bbox[3] ? arr[a]->bbox[3] : arr[b]->bbox[3];
-            node->bbox[4] = arr[a]->bbox[4] < arr[b]->bbox[4] ? arr[a]->bbox[4] : arr[b]->bbox[4];
-            node->bbox[5] = arr[a]->bbox[5] > arr[b]->bbox[5] ? arr[a]->bbox[5] : arr[b]->bbox[5];
+            node->bbox[0] = fminf( arr[a]->bbox[0] , arr[b]->bbox[0] );
+            node->bbox[1] = fmaxf( arr[a]->bbox[1] , arr[b]->bbox[1] );
+            node->bbox[2] = fminf( arr[a]->bbox[2] , arr[b]->bbox[2] );
+            node->bbox[3] = fmaxf( arr[a]->bbox[3] , arr[b]->bbox[3] );
+            node->bbox[4] = fminf( arr[a]->bbox[4] , arr[b]->bbox[4] );
+            node->bbox[5] = fmaxf( arr[a]->bbox[5] , arr[b]->bbox[5] );
 
             num--;
             if (b!=num)
@@ -502,6 +553,7 @@ struct World
             arr[a] = node;
         }
 
+        root = arr[0];
         free(arr);
     }
 
@@ -536,21 +588,37 @@ struct World
         return false;
     }
 
+    static void QueryBSP(BSP* bsp, int planes, double plane[][4], void (*cb)(const float bbox[6], void* cookie), void* cookie)
+    {
+        // temporarily don't check planes
+        cb(bsp->bbox,cookie);
+
+        if (bsp->type == BSP::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)bsp;
+
+            if (n->bsp_child[0])
+                QueryBSP(n->bsp_child[0], planes, plane, cb, cookie);
+            if (n->bsp_child[1])
+                QueryBSP(n->bsp_child[1], planes, plane, cb, cookie);
+        }
+    }
+
     // MESHES IN HULL
     void Query(int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
     {
-        // query possibly visible instances
-
-        // temporarily report all insts
+        //temp!
         Inst* i = head_inst;
         while (i)
         {
-            cb(i->mesh, i->tm, cookie);
+            if (i->flags & INST_VISIBLE)
+                cb(i->mesh, i->tm, cookie);
             i=i->next;
         }
     }
  
     // FACES IN HULL
+    /*
     void Query(int planes, double plane[][4], void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie)
     {
         // temporarily report all faces
@@ -574,6 +642,7 @@ struct World
             i=i->next;
         }
     }
+    */
 };
 
 Mesh* World::LoadMesh(const char* path, const char* name)
@@ -662,12 +731,12 @@ Mesh* World::LoadMesh(const char* path, const char* name)
         }
         else
         {
-            m->bbox[0] = v->xyzw[0] < m->bbox[0] ? v->xyzw[0] : m->bbox[0];
-            m->bbox[1] = v->xyzw[0] > m->bbox[1] ? v->xyzw[0] : m->bbox[1];
-            m->bbox[2] = v->xyzw[1] < m->bbox[2] ? v->xyzw[1] : m->bbox[2];
-            m->bbox[3] = v->xyzw[1] > m->bbox[3] ? v->xyzw[1] : m->bbox[3];
-            m->bbox[4] = v->xyzw[2] < m->bbox[4] ? v->xyzw[2] : m->bbox[4];
-            m->bbox[5] = v->xyzw[2] > m->bbox[5] ? v->xyzw[2] : m->bbox[5];
+            m->bbox[0] = fminf( m->bbox[0] , v->xyzw[0] );
+            m->bbox[1] = fmaxf( m->bbox[1] , v->xyzw[0] );
+            m->bbox[2] = fminf( m->bbox[2] , v->xyzw[1] );
+            m->bbox[3] = fmaxf( m->bbox[3] , v->xyzw[1] );
+            m->bbox[4] = fminf( m->bbox[4] , v->xyzw[2] );
+            m->bbox[5] = fmaxf( m->bbox[5] , v->xyzw[2] );
         }
 
         v->sel = false;
@@ -852,6 +921,7 @@ void DeleteWorld(World* w)
 
     if (w->root)
         w->DeleteBSP(w->root);
+    w->root = 0;
 
     // killing all meshes should kill all insts as well
 
@@ -873,11 +943,11 @@ void DeleteMesh(Mesh* m)
     m->world->DelMesh(m);
 }
 
-Inst* CreateInst(Mesh* m, const double tm[16], const char* name)
+Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name)
 {
     if (!m)
         return 0;
-    return m->world->AddInst(m,tm,name);
+    return m->world->AddInst(m,flags,tm,name);
 }
 
 void DeleteInst(Inst* i)
@@ -908,6 +978,14 @@ void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, con
         return;
     w->Query(planes,plane,cb,cookie);
 }
+
+void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(const float bbox[6], void* cookie), void* cookie)
+{
+    if (!w || !w->root)
+        return;
+    World::QueryBSP(w->root,planes,plane,cb,cookie);
+}
+
 
 Mesh* GetFirstMesh(World* w)
 {
@@ -1006,4 +1084,10 @@ void  SetMeshCookie(Mesh* m, void* cookie)
 {
     if (m)
         m->cookie = cookie;
+}
+
+void RebuildWorld(World* w)
+{
+    if (w)
+        w->Rebuild();
 }

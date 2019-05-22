@@ -476,7 +476,7 @@ struct RenderContext
 {
 	void Create()
 	{
-		// meshes
+		// meshes & bsp
 		glCreateBuffers(1, &mesh_vbo);
 		int mesh_face_size = 3*sizeof(float[3]) + sizeof(uint32_t); // 3*pos_xyz, visual
 		glNamedBufferStorage(mesh_vbo, 1024 * mesh_face_size, 0, GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
@@ -596,6 +596,86 @@ struct RenderContext
 					color.rgb = texture(p_tex, color.xyz).rgb;
 				}
 			);
+
+		const char* bsp_vs_src =
+			CODE(#version 450\n)
+			CODE(
+				layout(location = 0) in vec3 a;
+				layout(location = 1) in vec3 b;
+				layout(location = 2) in vec3 c;
+
+				out vec2 va,vb,vc;
+				void main()
+				{
+					va = a.xy;
+					vb = b.xy;
+					vc = c.xy;
+				}
+			);
+
+		const char* bsp_gs_src =
+			CODE(#version 450\n)
+			CODE(
+				layout(points) in;
+				layout(line_strip, max_vertices = 18) out;				
+				uniform mat4 tm;
+				in vec2 va[];
+				in vec2 vb[];
+				in vec2 vc[];
+
+				void main()
+				{
+					vec2 x = va[0];
+					vec2 y = vb[0];
+					vec2 z = vc[0];
+
+					vec4 v[8];
+					for (int i=0; i<8; i++)
+					{
+						int ix = i&1;
+						int iy = (i>>1)&1;
+						int iz = (i>>2)&1;
+						v[i] = tm * vec4(x[ix],y[iy],z[iz],1.0);
+					}
+
+					int quad[5] = int[5](0,1,3,2,0);
+
+					// 2 quads
+					for (int j=0; j<2; j++)
+					{
+						for (int i=0; i<5; i++)
+						{
+							gl_Position = v[quad[i]+4*j]; 
+							EmitVertex();
+						}
+						EndPrimitive();
+					}
+
+					// 4 joints
+					for (int i=0; i<4; i++)
+					{
+						gl_Position = v[i]; 
+						EmitVertex();
+						gl_Position = v[i+4]; 
+						EmitVertex();
+						EndPrimitive();
+					}
+				}
+			);
+
+
+		const char* bsp_fs_src =
+			CODE(#version 450\n)
+			CODE(
+
+				layout(location = 0) out vec4 color;
+
+				void main()
+				{
+					color = vec4(0,0,0,1);
+				}
+			);
+
 
 
 		// patches
@@ -1119,6 +1199,44 @@ struct RenderContext
 		char logstr[1000];
 		GLuint shader[3];
 
+
+
+		GLenum bsp_st[3] = { GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER };
+		const char* bsp_src[3] = { bsp_vs_src, bsp_gs_src, bsp_fs_src };
+		bsp_prg = glCreateProgram();
+
+		for (int i = 0; i < 3; i++)
+		{
+			shader[i] = glCreateShader(bsp_st[i]);
+			GLint len = (GLint)strlen(bsp_src[i]);
+			glShaderSource(shader[i], 1, &(bsp_src[i]), &len);
+			glCompileShader(shader[i]);
+
+			loglen = 999;
+			glGetShaderInfoLog(shader[i], loglen, &loglen, logstr);
+			logstr[loglen] = 0;
+
+			if (loglen)
+				printf("%s", logstr);
+
+			glAttachShader(bsp_prg, shader[i]);
+		}
+
+		glLinkProgram(bsp_prg);
+
+		for (int i = 0; i < 2; i++)
+			glDeleteShader(shader[i]);
+
+		loglen = 999;
+		glGetProgramInfoLog(bsp_prg, loglen, &loglen, logstr);
+		logstr[loglen] = 0;
+
+		if (loglen)
+			printf("%s", logstr);
+
+		bsp_tm_loc = glGetUniformLocation(bsp_prg, "tm");
+
+
 		GLenum mesh_st[3] = { GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER };
 		const char* mesh_src[3] = { mesh_vs_src, mesh_gs_src, mesh_fs_src };
 		mesh_prg = glCreateProgram();
@@ -1324,6 +1442,80 @@ struct RenderContext
 		glUseProgram(0);
 		glBindVertexArray(0);
 	}
+
+
+	void BeginBSP(const double* tm)
+	{
+		float ftm[16];
+		for (int i=0; i<16; i++)
+			ftm[i] = (float)tm[i];
+
+		glUseProgram(bsp_prg);
+
+		glUniformMatrix4fv(bsp_tm_loc, 1, GL_FALSE, ftm);
+
+		glBindVertexArray(mesh_vao);
+
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_GEQUAL);
+		glCullFace(GL_BACK);
+
+		mesh_map=0;
+		mesh_faces=0;
+
+		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
+	}
+
+	static void RenderBSP(const float bbox[6], void* cookie)
+	{
+		RenderContext* rc = (RenderContext*)cookie;
+
+		if (!rc->mesh_map)
+		{
+			//glBufferData(GL_ARRAY_BUFFER, sizeof(Face)*1024, 0, GL_STREAM_DRAW);
+			rc->mesh_map = (Face*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+		}
+		
+		assert(rc->mesh_map);
+
+		float* buf = rc->mesh_map[rc->mesh_faces].abc;
+		buf[0] = bbox[0];
+		buf[1] = bbox[1];
+		buf[3] = bbox[2];
+		buf[4] = bbox[3];
+		buf[6] = bbox[4];
+		buf[7] = bbox[5];
+		rc->mesh_faces++;
+
+		if (rc->mesh_faces == 1024)
+		{
+			// flush
+			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
+			rc->mesh_map=0;
+			rc->mesh_faces=0;
+		}
+	}
+
+	void EndBSP()
+	{
+		if (mesh_faces)
+		{
+			// flush
+			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glDrawArrays(GL_POINTS, 0, mesh_faces);
+			mesh_map=0;
+			mesh_faces=0;
+		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glBindVertexArray(0);
+		glUseProgram(0);
+
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_DEPTH_TEST);
+	}	
 
 	void BeginMeshes(const double* tm, const float* lt)
 	{
@@ -1642,6 +1834,9 @@ struct RenderContext
 	GLint mesh_m_tex_loc;
 	GLint mesh_f_tex_loc;
 	GLint mesh_p_tex_loc;
+
+	GLuint bsp_prg;
+	GLint bsp_tm_loc;
 
 	int mesh_faces;
 	struct Face
@@ -4493,11 +4688,13 @@ void my_render()
 						MatProduct(ztm,ptm,tm2);
 						MatProduct(tm1,tm2,tm);
 
-						Inst* inst = CreateInst(active_mesh, tm, 0);
+						int flags = INST_USE_TREE | INST_VISIBLE;
+						Inst* inst = CreateInst(active_mesh, flags, tm, 0);
 
 						if (!inst_added && io.MouseDown[0])
 						{
 							inst_added = true;
+							RebuildWorld(world);
 						}
 						else
 						{
@@ -4640,10 +4837,15 @@ void my_render()
 	QueryWorld(world, planes, clip_world, RenderContext::RenderMesh, rc);
 	rc->EndMeshes();
 
+	rc->BeginBSP(tm);
+	QueryWorldBSP(world, planes, clip_world, RenderContext::RenderBSP, rc);
+	rc->EndBSP();
+
 	if (preview_inst)
 	{
 		DeleteInst(preview_inst);
 		preview_inst = 0;
+		RebuildWorld(world); // stupid!
 	}
 
 	// overlay patch creation

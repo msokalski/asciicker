@@ -7,6 +7,7 @@ struct Inst;
 
 World* CreateWorld();
 void DeleteWorld(World* w);
+void RebuildWorld(World* w);
 
 Mesh* LoadMesh(World* w, const char* path, const char* name = 0);
 void DeleteMesh(Mesh* m);
@@ -24,7 +25,7 @@ void GetMeshBBox(Mesh* m, float bbox[6]);
 
 void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie);
 
-Inst* CreateInst(Mesh* m, const double tm[16] = 0, const char* name = 0);
+Inst* CreateInst(Mesh* m, int flags, const double tm[16] = 0, const char* name = 0);
 void DeleteInst(Inst* i);
 
 enum INST_FLAGS
@@ -40,3 +41,4 @@ void GetInstTM(Inst* i, double tm[16]);
 void SetInstTM(Inst* i, const double tm[16]);
 
 void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie);
+void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(const float bbox[6], void* cookie), void* cookie);
