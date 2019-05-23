@@ -34,11 +34,5 @@ enum INST_FLAGS
     INST_USE_TREE = 0x2,
 };
 
-int GetInstFlags(Inst* i);
-void SetInstFlags(Inst* i, int flags, int mask);
-
-void GetInstTM(Inst* i, double tm[16]);
-void SetInstTM(Inst* i, const double tm[16]);
-
 void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie);
-void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(const float bbox[6], void* cookie), void* cookie);
+void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie);

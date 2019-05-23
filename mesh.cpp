@@ -147,7 +147,9 @@ struct Inst : BSP
     char* name;
 };
 
-
+int bsp_tests=0;
+int bsp_insts=0;
+int bsp_nodes=0;
 
 struct World
 {
@@ -560,6 +562,9 @@ struct World
             arr[a] = node;
         }
 
+        // LET'S TRY:
+        // https://graphics.stanford.edu/~boulos/papers/togbvh.pdf
+
         root = arr[0];
         free(arr);
     }
@@ -595,26 +600,128 @@ struct World
         return false;
     }
 
-    static void QueryBSP(BSP* bsp, int planes, double plane[][4], void (*cb)(const float bbox[6], void* cookie), void* cookie)
+    static void QueryBSP(int level, BSP* bsp, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie)
     {
         // temporarily don't check planes
-        cb(bsp->bbox,cookie);
+        cb(level, bsp->bbox,cookie);
 
         if (bsp->type == BSP::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)bsp;
 
             if (n->bsp_child[0])
-                QueryBSP(n->bsp_child[0], planes, plane, cb, cookie);
+                QueryBSP(level+1, n->bsp_child[0], planes, plane, cb, cookie);
             if (n->bsp_child[1])
-                QueryBSP(n->bsp_child[1], planes, plane, cb, cookie);
+                QueryBSP(level+1, n->bsp_child[1], planes, plane, cb, cookie);
         }
     }
 
     // MESHES IN HULL
+
+    // recursive no clipping
+    static void Query(BSP* bsp, void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
+    {
+        if (bsp->type == BSP::BSP_TYPE_INST)
+        {
+            bsp_insts++;
+            Inst* i = (Inst*)bsp;
+            cb(i->mesh, i->tm, cookie);
+        }
+        else
+        {
+            bsp_nodes++;
+            BSP_Node* n = (BSP_Node*)bsp;
+            if (n->bsp_child[0])
+                Query(n->bsp_child[0],cb,cookie);
+            if (n->bsp_child[1])
+                Query(n->bsp_child[1],cb,cookie);
+        }
+    }
+
+    // recursive
+    static void Query(BSP* bsp, int planes, double* plane[], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
+    {
+        float c[4] = { bsp->bbox[0], bsp->bbox[2], bsp->bbox[4], 1 }; // 0,0,0
+
+        bsp_tests++;
+
+        for (int i = 0; i < planes; i++)
+        {
+            int neg_pos[2] = { 0,0 };
+
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[0] = bsp->bbox[1]; // 1,0,0
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[1] = bsp->bbox[3]; // 1,1,0
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[0] = bsp->bbox[0]; // 0,1,0
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[2] = bsp->bbox[5]; // 0,1,1
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[0] = bsp->bbox[1]; // 1,1,1
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[1] = bsp->bbox[2]; // 1,0,1
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[0] = bsp->bbox[0]; // 0,0,1
+            neg_pos[PositiveProduct(plane[i], c)] ++;
+
+            c[2] = bsp->bbox[4]; // 0,0,0
+
+            if (neg_pos[0] == 8)
+                return;
+
+            if (neg_pos[1] == 8)
+            {
+                planes--;
+                if (i < planes)
+                {
+                    double* swap = plane[i];
+                    plane[i] = plane[planes];
+                    plane[planes] = swap;
+                }
+                i--;
+            }
+        }
+
+        if (bsp->type == BSP::BSP_TYPE_INST)
+        {
+            bsp_insts++;
+            Inst* i = (Inst*)bsp;
+            cb(i->mesh, i->tm, cookie);
+        }
+        else
+        {
+            bsp_nodes++;
+            BSP_Node* n = (BSP_Node*)bsp;
+            if (planes)
+            {
+                if (n->bsp_child[0])
+                    Query(n->bsp_child[0],planes,plane,cb,cookie);
+                if (n->bsp_child[1])
+                    Query(n->bsp_child[1],planes,plane,cb,cookie);
+            }
+            else
+            {
+                if (n->bsp_child[0])
+                    Query(n->bsp_child[0],cb,cookie);
+                if (n->bsp_child[1])
+                    Query(n->bsp_child[1],cb,cookie);
+            }
+        }        
+    }
+
+    // main
     void Query(int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
     {
         //temp!
+        /*
         Inst* i = head_inst;
         while (i)
         {
@@ -622,34 +729,23 @@ struct World
                 cb(i->mesh, i->tm, cookie);
             i=i->next;
         }
-    }
- 
-    // FACES IN HULL
-    /*
-    void Query(int planes, double plane[][4], void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie)
-    {
-        // temporarily report all faces
-        Inst* i = head_inst;
+        */
 
-        float coords[10];
+        bsp_tests=0;
+        bsp_insts=0;
+        bsp_nodes=0;
 
-        while (i)
+        // assuming all insts are in tree
+        if (root)
         {
-            Face* f = i->mesh->head_face;
-            while (f)
-            {
-                Product(i->tm,f->abc[0]->xyzw,coords+0);
-                Product(i->tm,f->abc[1]->xyzw,coords+3);
-                Product(i->tm,f->abc[2]->xyzw,coords+6);
+            double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
 
-                cb(coords, f->visual, cookie);
-                f=f->next;
-            }
-
-            i=i->next;
+            if (planes>0)
+                Query(root, planes, pp, cb, cookie);
+            else
+                Query(root, cb, cookie);
         }
     }
-    */
 };
 
 Mesh* World::LoadMesh(const char* path, const char* name)
@@ -968,21 +1064,6 @@ void DeleteInst(Inst* i)
     i->mesh->world->DelInst(i);
 }
 
-int GetInstFlags(Inst* i)
-{
-    if (!i)
-        return 0;
-    return i->flags & ~INST_IN_TREE;
-}
-
-void SetInstFlags(Inst* i, int flags, int mask)
-{
-    if (!i)
-        return;
-    mask &= ~INST_IN_TREE;
-    i->flags = (i->flags & ~mask) | (flags & mask);
-}
-
 void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
 {
     if (!w)
@@ -990,11 +1071,11 @@ void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, con
     w->Query(planes,plane,cb,cookie);
 }
 
-void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(const float bbox[6], void* cookie), void* cookie)
+void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie)
 {
     if (!w || !w->root)
         return;
-    World::QueryBSP(w->root,planes,plane,cb,cookie);
+    World::QueryBSP(1, w->root,planes,plane,cb,cookie);
 }
 
 

@@ -1466,7 +1466,7 @@ struct RenderContext
 		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
 	}
 
-	static void RenderBSP(const float bbox[6], void* cookie)
+	static void RenderBSP(int level, const float bbox[6], void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
 
@@ -1487,10 +1487,11 @@ struct RenderContext
 		buf[7] = bbox[5];
 		rc->mesh_faces++;
 
-		if (rc->mesh_faces == 1024)
+		if (rc->mesh_faces/* == 1024*/)
 		{
 			// flush
 			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glLineWidth(level);
 			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
 			rc->mesh_map=0;
 			rc->mesh_faces=0;
@@ -3574,6 +3575,10 @@ void my_render()
 					// 4. rotate toward terrain normal by given weight
 					// 5. post translate by constant xyz + random xyz
 
+					extern int bsp_insts, bsp_nodes, bsp_tests;
+					ImGui::Text("INSTS:%d, NODES:%d, TESTS:%d", bsp_insts, bsp_nodes, bsp_tests);
+
+
 					MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
 
 					//ImGui::SliderFloat3("PreTranslate", mp->pre_trans, -1, +1);
@@ -4196,7 +4201,8 @@ void my_render()
 	int create_preview_px = 0;
 	int create_preview_py = 0;
 
-	Inst* preview_inst = 0;
+	double inst_tm[16];
+	Mesh* inst_preview = 0;
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -4682,23 +4688,23 @@ void my_render()
 						double tm1[16];
 						double tm2[16];
 
-						// tm = itm * rtm * ztm * ptm
-						double tm[16];
+						// inst_tm = itm * rtm * ztm * ptm
 						MatProduct(itm,rtm,tm1);
 						MatProduct(ztm,ptm,tm2);
-						MatProduct(tm1,tm2,tm);
-
-						int flags = INST_USE_TREE | INST_VISIBLE;
-						Inst* inst = CreateInst(active_mesh, flags, tm, 0);
+						MatProduct(tm1,tm2,inst_tm);
 
 						if (!inst_added && io.MouseDown[0])
 						{
+							int flags = INST_USE_TREE | INST_VISIBLE;
+							Inst* inst = CreateInst(active_mesh, flags, inst_tm, 0);
+
 							inst_added = true;
 							RebuildWorld(world);
 						}
 						else
 						{
-							preview_inst = inst;
+							// we'll need to paint active_mesh with inst_tm
+							inst_preview = active_mesh;
 						}
 					}
 				}
@@ -4835,18 +4841,14 @@ void my_render()
 
 	rc->BeginMeshes(tm, lt);
 	QueryWorld(world, planes, clip_world, RenderContext::RenderMesh, rc);
+	if (inst_preview)
+		RenderContext::RenderMesh(inst_preview, inst_tm, rc);
 	rc->EndMeshes();
 
 	rc->BeginBSP(tm);
 	QueryWorldBSP(world, planes, clip_world, RenderContext::RenderBSP, rc);
 	rc->EndBSP();
 
-	if (preview_inst)
-	{
-		DeleteInst(preview_inst);
-		preview_inst = 0;
-		RebuildWorld(world); // stupid!
-	}
 
 	// overlay patch creation
 	// slihouette of newly created patch 
@@ -4998,6 +5000,22 @@ void my_init()
 	a3dListDir(mesh_dirname, MeshScan::Scan, mesh_dirname);
 
 	active_mesh = GetFirstMesh(world);
+
+	for (int i=0; i<100; i++)
+	{
+		double tm[16]=
+		{
+			0.1,0,0,0,
+			0,0.1,0,0,
+			0,0,0.1*HEIGHT_SCALE,0,
+			(double)(fast_rand()&0x7F),
+			(double)(fast_rand()&0x7F),
+			(double)(fast_rand()&0x1F)*HEIGHT_SCALE,
+			1
+		};
+		CreateInst(active_mesh,INST_USE_TREE|INST_VISIBLE,tm,0);
+		RebuildWorld(world);
+	}
 	
 	// todo:
 	// build local array of SORTED meshes (similary to palettes)
@@ -5147,6 +5165,7 @@ void my_close()
 		free(mp);
 		m = GetNextMesh(m);
 	}
+
 	DeleteWorld(world);
 	
 	URDO_Purge();
