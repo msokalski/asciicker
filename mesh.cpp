@@ -4,14 +4,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <assert.h>
 
 #include "mesh.h"
 #include "matrix.h"
 
+#include "terrain.h"
+
 struct Line;
 struct Face;
-
-#define INST_IN_TREE (1<<31)
 
 struct Vert
 {
@@ -76,17 +77,6 @@ struct Mesh
 	Mesh* next;
 	Mesh* prev;
 
-/*
-    Face* AddFace(Vert* a, Vert* b, Vert* c);
-    void DelFace(uint32_t visual, Face* f);
-
-    Vert* AddVert(float x, float y, float z);
-    void DelVert(Vert* v);
-
-    Line* AddLine(Vert* a, Vert* b);
-    void DelLine(Line* l);
-*/
-
     enum TYPE
     {
         MESH_TYPE_2D,
@@ -113,18 +103,19 @@ struct Mesh
     Inst* share_list;
 };
 
-struct BSP_Node;
 struct BSP
 {
     enum TYPE
     {
         BSP_TYPE_NODE,
+        BSP_TYPE_NODE_SHARE,
+        BSP_TYPE_LEAF,
         BSP_TYPE_INST
     };
 
     TYPE type;    
-    BSP_Node* bsp_parent;
     float bbox[6]; // in world coords
+    BSP* bsp_parent; // BSP_Node or BSP_NodeShare or NULL if not attached to tree
 };
 
 struct BSP_Node : BSP
@@ -132,9 +123,23 @@ struct BSP_Node : BSP
     BSP* bsp_child[2];
 };
 
+struct BSP_NodeShare : BSP_Node
+{
+    // list of shared instances 
+    Inst* head; 
+    Inst* tail;
+};
+
+struct BSP_Leaf : BSP
+{
+    // list of instances 
+   Inst* head; 
+   Inst* tail;
+};
+
 struct Inst : BSP
 {
-    // in world
+    // in BSP_Leaf::inst / BSP_NodeShare::inst
 	Inst* next;
 	Inst* prev;    
 
@@ -202,49 +207,10 @@ struct World
         if (!m || m->world != this)
             return false;
 
-        bool kill_bsp = false;
-
         // kill sharing insts
         Inst* i = m->share_list;
-        while (i)
-        {
-            Inst* n = i->share_next;
-            if (i->prev)
-                i->prev->next = i->next;
-            else
-                head_inst = i->next;
-
-            if (i->next)
-                i->next->prev = i->prev;
-            else
-                tail_inst = i->prev;
-
-            if (i->name)
-                free(i->name);
-
-            if (editable == i)
-                editable = 0;
-
-            if (i->flags & INST_IN_TREE)
-            {
-                if (root == i)
-                    root = 0;
-                else
-                if (i->bsp_parent)
-                {
-                    if (i->bsp_parent->bsp_child[0]==i)
-                        i->bsp_parent->bsp_child[0]=0;
-                    else
-                        i->bsp_parent->bsp_child[1]=0;
-                }
-                kill_bsp = true;
-            }
-
-            free(i);
-            insts--;
-
-            i=n;
-        }
+        while (m->share_list)
+            DelInst(m->share_list);
 
         Face* f = m->head_face;
         while (f)
@@ -253,7 +219,6 @@ struct World
             free(f);
             f=n;
         }
-
 
         Line* l = m->head_line;
         while (l)
@@ -287,18 +252,14 @@ struct World
         free(m);
         meshes--;
 
-		if (kill_bsp && root)
-		{
-			DeleteBSP(root);
-			root = 0;
-		}
-
         return true;
     }
 
     // all insts
     int insts;
-    Inst* head_inst;
+
+    // only non-bsp
+    Inst* head_inst; 
     Inst* tail_inst;
 
     Inst* AddInst(Mesh* m, int flags, const double tm[16], const char* name)
@@ -366,7 +327,7 @@ struct World
         i->mesh = m;
 
         i->type = BSP::BSP_TYPE_INST;
-        i->flags = flags & ~INST_IN_TREE;
+        i->flags = flags;
         i->bsp_parent = 0;
 
         if (m)
@@ -385,8 +346,6 @@ struct World
             head_inst = i;
         tail_inst = i;    
         
-        // i->bbox[] = ;
-
         insts++;
         return i;
     }
@@ -404,15 +363,90 @@ struct World
             *s = (*s)->share_next;
         }
 
-        if (i->prev)
-            i->prev->next = i->next;
-        else
-            head_inst = i->next;
+        if (!i->bsp_parent)
+        {
+            if (i->prev)
+                i->prev->next = i->next;
+            else
+                head_inst = i->next;
 
-        if (i->next)
-            i->next->prev = i->prev;
+            if (i->next)
+                i->next->prev = i->prev;
+            else
+                tail_inst = i->prev;
+        }
         else
-            tail_inst = i->prev;
+        {
+            if (i->bsp_parent->type == BSP::BSP_TYPE_LEAF)
+            {
+                BSP_Leaf* leaf = (BSP_Leaf*)i->bsp_parent;
+
+                if (i->prev)
+                    i->prev->next = i->next;
+                else
+                    leaf->head = i->next;
+
+                if (i->next)
+                    i->next->prev = i->prev;
+                else
+                    leaf->tail = i->prev;
+
+                if (leaf->head == 0)
+                {
+                    // do ancestors cleanup
+                    // ...
+                }
+            }
+            else
+            if (i->bsp_parent->type == BSP::BSP_TYPE_NODE_SHARE)
+            {
+                BSP_NodeShare* share = (BSP_NodeShare*)i->bsp_parent;
+
+                if (share->bsp_child[0] == i)
+                    share->bsp_child[0] = 0;
+                else
+                if (share->bsp_child[1] == i)
+                    share->bsp_child[1] = 0;
+                else
+                {
+                    if (i->prev)
+                        i->prev->next = i->next;
+                    else
+                        share->head = i->next;
+
+                    if (i->next)
+                        i->next->prev = i->prev;
+                    else
+                        share->tail = i->prev;
+                }
+
+                if (share->head == 0 && share->bsp_child[0]==0 && share->bsp_child[1]==0)
+                {
+                    // do ancestors cleanup
+                    // ...
+                }
+            }
+            else
+            if (i->bsp_parent->type == BSP::BSP_TYPE_NODE)
+            {
+                BSP_Node* node = (BSP_Node*)i->bsp_parent;
+                if (node->bsp_child[0] == i)
+                    node->bsp_child[0] = 0;
+                else
+                if (node->bsp_child[1] == i)
+                    node->bsp_child[1] = 0;
+
+                if (node->bsp_child[0]==0 && node->bsp_child[1]==0)
+                {
+                    // do ancestors cleanup
+                    // ...
+                }
+            }
+            else
+            {
+                assert(0);
+            }
+        }
 
         if (i->name)
             free(i->name);
@@ -420,30 +454,11 @@ struct World
         if (editable == i)
             editable = 0;
 
-        bool kill_bsp = false;
-
-        if (i->flags & INST_IN_TREE)
-        {
-            if (root == i)
-                root = 0;
-            else
-            {
-                if (i->bsp_parent->bsp_child[0]==i)
-                    i->bsp_parent->bsp_child[0]=0;
-                else
-                    i->bsp_parent->bsp_child[1]=0;
-            }
-            kill_bsp = true;
-        }
-            
+        if (root == i)
+            root = 0;
+           
         insts--;
         free(i);
-
-		if (kill_bsp && root)
-		{
-			DeleteBSP(root);
-			root = 0;
-		}
 
         return true;
     }
@@ -455,7 +470,7 @@ struct World
     // now we want to form a tree of Insts
     BSP* root;
 
-    static void DeleteBSP(BSP* bsp)
+    void DeleteBSP(BSP* bsp)
     {
         if (bsp->type == BSP::BSP_TYPE_NODE)
         {
@@ -468,11 +483,332 @@ struct World
             free (bsp);
         }
         else
+        if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* share = (BSP_NodeShare*)bsp;
+
+            if (share->bsp_child[0])
+                DeleteBSP(share->bsp_child[0]);
+            if (share->bsp_child[1])
+                DeleteBSP(share->bsp_child[1]);
+
+            if (share->head)
+            {
+                Inst* i = share->head;
+                while (i)
+                {
+                    i->bsp_parent = 0;
+                    i=i->next;
+                }
+
+                if (tail_inst)
+                {
+                    share->head->prev = tail_inst;
+                    tail_inst->next = share->head;
+                    tail_inst = share->tail;
+                }
+                else
+                {
+                    head_inst = share->head; 
+                    tail_inst = share->tail;
+                }
+            }
+            free (bsp);
+        }        
+        else
+        if (bsp->type == BSP::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* leaf = (BSP_Leaf*)bsp;
+            if (leaf->head)
+            {
+                Inst* i = leaf->head;
+                while (i)
+                {
+                    i->bsp_parent = 0;
+                    i=i->next;
+                }
+
+                if (tail_inst)
+                {
+                    leaf->head->prev = tail_inst;
+                    tail_inst->next = leaf->head;
+                    tail_inst = leaf->tail;
+                }
+                else
+                {
+                    head_inst = leaf->head; 
+                    tail_inst = leaf->tail;
+                }
+            }
+            free (bsp);
+        }        
+        else
         if (bsp->type == BSP::BSP_TYPE_INST)
         {
             Inst* inst = (Inst*)bsp;
-            inst->flags &= ~INST_IN_TREE;
+
             bsp->bsp_parent = 0;
+            inst->next=0;
+            inst->prev = tail_inst;
+            if (tail_inst)
+                tail_inst->next = inst;
+            else
+                head_inst = inst;
+            tail_inst=inst;
+        }
+        else
+        {
+            assert(0);
+        }
+        
+    }
+
+    struct BSP_Item
+    {
+        Inst* inst;
+        float area;
+    };
+
+    BSP* SplitBSP(BSP_Item* arr, int num)
+    {
+        assert(num>0);
+        
+        if (num == 1)
+        {
+            Inst* inst = arr[0].inst;
+            inst->bsp_parent = 0;
+            inst->prev = 0;
+            inst->next = 0;
+            return inst;
+        }
+
+        struct CentroidSorter
+        {
+            static int sortX(const void* a, const void* b)
+            {
+                Inst* ia = ((BSP_Item*)a)->inst;
+                Inst* ib = ((BSP_Item*)b)->inst;
+
+                float diff = (ia->bbox[0]+ia->bbox[1])-(ib->bbox[0]+ib->bbox[1]);
+                if (diff<0)
+                    return -1;
+                if (diff>0)
+                    return +1;
+                return 0;
+            }
+            static int sortY(const void* a, const void* b)
+            {
+                Inst* ia = ((BSP_Item*)a)->inst;
+                Inst* ib = ((BSP_Item*)b)->inst;
+
+                float diff = (ia->bbox[2]+ia->bbox[3])-(ib->bbox[2]+ib->bbox[3]);
+                if (diff<0)
+                    return -1;
+                if (diff>0)
+                    return +1;
+                return 0;
+            }
+            static int sortZ(const void* a, const void* b)
+            {
+                Inst* ia = ((BSP_Item*)a)->inst;
+                Inst* ib = ((BSP_Item*)b)->inst;
+
+                float diff = (ia->bbox[4]+ia->bbox[5])-(ib->bbox[4]+ib->bbox[5]);
+                if (diff<0)
+                    return -1;
+                if (diff>0)
+                    return +1;
+                return 0;
+            }
+        };
+
+        static int (*sort[3])(const void* a, const void* b) = 
+        {
+            CentroidSorter::sortX,
+            CentroidSorter::sortY,
+            CentroidSorter::sortZ
+        };
+
+        float best_cost = -1;
+        int best_axis = -1;
+        int best_item = -1;
+
+        // actualy it could be better to splin only in x and y (axis<2)
+        for (int axis=0; axis<3; axis++)
+        {
+            qsort(arr, num, sizeof(BSP_Item), sort[axis]);
+
+            float lo_bbox[6] =
+            {
+                arr[0].inst->bbox[0],
+                arr[0].inst->bbox[1],
+                arr[0].inst->bbox[2],
+                arr[0].inst->bbox[3],
+                arr[0].inst->bbox[4],
+                arr[0].inst->bbox[5]
+            };
+
+            for (int i=0; i<num; i++)
+            {
+                lo_bbox[0] = fmin( lo_bbox[0], arr[i].inst->bbox[0]);
+                lo_bbox[1] = fmax( lo_bbox[1], arr[i].inst->bbox[1]);
+                lo_bbox[2] = fmin( lo_bbox[2], arr[i].inst->bbox[2]);
+                lo_bbox[3] = fmax( lo_bbox[3], arr[i].inst->bbox[3]);
+                lo_bbox[4] = fmin( lo_bbox[4], arr[i].inst->bbox[4]);
+                lo_bbox[5] = fmax( lo_bbox[5], arr[i].inst->bbox[5]);
+
+                arr[i].area = 
+                    (lo_bbox[1]-lo_bbox[0]) * (lo_bbox[3]-lo_bbox[2]) * HEIGHT_SCALE +
+                    (lo_bbox[3]-lo_bbox[2]) * (lo_bbox[5]-lo_bbox[4]) +
+                    (lo_bbox[5]-lo_bbox[4]) * (lo_bbox[1]-lo_bbox[0]);                
+            }
+
+            float hi_bbox[6] =
+            {
+                arr[num-1].inst->bbox[0],
+                arr[num-1].inst->bbox[1],
+                arr[num-1].inst->bbox[2],
+                arr[num-1].inst->bbox[3],
+                arr[num-1].inst->bbox[4],
+                arr[num-1].inst->bbox[5]
+            };
+
+            for (int i=num-1; i>0; i--)
+            {
+                hi_bbox[0] = fmin( hi_bbox[0], arr[i].inst->bbox[0]);
+                hi_bbox[1] = fmax( hi_bbox[1], arr[i].inst->bbox[1]);
+                hi_bbox[2] = fmin( hi_bbox[2], arr[i].inst->bbox[2]);
+                hi_bbox[3] = fmax( hi_bbox[3], arr[i].inst->bbox[3]);
+                hi_bbox[4] = fmin( hi_bbox[4], arr[i].inst->bbox[4]);
+                hi_bbox[5] = fmax( hi_bbox[5], arr[i].inst->bbox[5]);
+
+                float area = 
+                    (hi_bbox[1]-hi_bbox[0]) * (hi_bbox[3]-hi_bbox[2]) * HEIGHT_SCALE +
+                    (hi_bbox[3]-hi_bbox[2]) * (hi_bbox[5]-hi_bbox[4]) +
+                    (hi_bbox[5]-hi_bbox[4]) * (hi_bbox[1]-hi_bbox[0]);
+
+                // cost of {0..i-1}, {i..num-1}
+                float cost = arr[i-1].area * i + area * (num-i);
+                if (cost < best_cost || best_cost < 0)
+                {
+                    best_cost = cost;
+                    best_item = i;
+                    best_axis = axis;
+                }
+            }
+        }
+
+        if (best_axis != -1)
+        {
+            if (best_cost + arr[num-1].area * 2 > arr[num-1].area * num)
+                best_axis = -1;
+        }
+
+        if (best_axis == -1)
+        {
+            // fill final list of instances
+
+            BSP_Leaf* leaf = (BSP_Leaf*)malloc(sizeof(BSP_Leaf));
+            leaf->bsp_parent = 0;
+            leaf->type = BSP::BSP_TYPE_LEAF;
+
+            leaf->bbox[0] = arr[0].inst->bbox[0];
+            leaf->bbox[1] = arr[0].inst->bbox[1];
+            leaf->bbox[2] = arr[0].inst->bbox[2];
+            leaf->bbox[3] = arr[0].inst->bbox[3];
+            leaf->bbox[4] = arr[0].inst->bbox[4];
+            leaf->bbox[5] = arr[0].inst->bbox[5];
+            
+            leaf->head = arr[0].inst;
+            leaf->tail = arr[num-1].inst;
+            
+            arr[0].inst->prev = 0;
+            arr[num-1].inst->next = 0;
+
+            arr[0].inst->bsp_parent = leaf;
+            if (num>1)
+            {
+                arr[0].inst->next = arr[1].inst;
+                arr[num-1].inst->prev = arr[num-2].inst;
+                arr[num-1].inst->bsp_parent = leaf;
+
+                leaf->bbox[0] = fmin( leaf->bbox[0], arr[num-1].inst->bbox[0]);
+                leaf->bbox[1] = fmax( leaf->bbox[1], arr[num-1].inst->bbox[1]);
+                leaf->bbox[2] = fmin( leaf->bbox[2], arr[num-1].inst->bbox[2]);
+                leaf->bbox[3] = fmax( leaf->bbox[3], arr[num-1].inst->bbox[3]);
+                leaf->bbox[4] = fmin( leaf->bbox[4], arr[num-1].inst->bbox[4]);
+                leaf->bbox[5] = fmax( leaf->bbox[5], arr[num-1].inst->bbox[5]);                
+            }
+
+            for (int i=1; i<num-1; i++)
+            {
+                leaf->bbox[0] = fmin( leaf->bbox[0], arr[i].inst->bbox[0]);
+                leaf->bbox[1] = fmax( leaf->bbox[1], arr[i].inst->bbox[1]);
+                leaf->bbox[2] = fmin( leaf->bbox[2], arr[i].inst->bbox[2]);
+                leaf->bbox[3] = fmax( leaf->bbox[3], arr[i].inst->bbox[3]);
+                leaf->bbox[4] = fmin( leaf->bbox[4], arr[i].inst->bbox[4]);
+                leaf->bbox[5] = fmax( leaf->bbox[5], arr[i].inst->bbox[5]);  
+                                
+                arr[i].inst->bsp_parent = leaf;
+                arr[i].inst->prev = arr[i-1].inst;
+                arr[i].inst->next = arr[i+1].inst;
+            }
+
+            assert(leaf->head);
+            assert(leaf->tail);
+            assert(num==1 && leaf->head == leaf->tail || num!=1 && leaf->head != leaf->tail);
+            assert(leaf->head->prev == 0);
+            assert(leaf->tail->next == 0);
+
+            Inst* i = leaf->head;
+            int c = 0;
+            while (i)
+            {
+                c++;
+                i=i->next;
+                if (i)
+                    assert(i->prev->next == i);
+            }
+
+            assert(c==num);
+
+            i = leaf->tail;
+            c = 0;
+            while (i)
+            {
+                c++;
+                i=i->prev;
+                if (i)
+                    assert(i->next->prev == i);
+            }
+
+            assert(c==num);
+
+            return leaf;
+        }
+        else
+        {
+            int axis = best_axis;
+            qsort(arr, num, sizeof(BSP_Item), sort[axis]);
+
+            BSP_Node* node = (BSP_Node*)malloc(sizeof(BSP_Node));
+            node->bsp_parent = 0;
+            node->type = BSP::BSP_TYPE_NODE;
+
+            node->bsp_child[0] = SplitBSP(arr + 0, best_item);
+            node->bsp_child[0]->bsp_parent = node;
+
+            node->bsp_child[1] = SplitBSP(arr + best_item, num - best_item);
+            node->bsp_child[1]->bsp_parent = node;
+
+            node->bbox[0] = fmin( node->bsp_child[0]->bbox[0], node->bsp_child[1]->bbox[0]);
+            node->bbox[1] = fmax( node->bsp_child[0]->bbox[1], node->bsp_child[1]->bbox[1]);
+            node->bbox[2] = fmin( node->bsp_child[0]->bbox[2], node->bsp_child[1]->bbox[2]);
+            node->bbox[3] = fmax( node->bsp_child[0]->bbox[3], node->bsp_child[1]->bbox[3]);
+            node->bbox[4] = fmin( node->bsp_child[0]->bbox[4], node->bsp_child[1]->bbox[4]);
+            node->bbox[5] = fmax( node->bsp_child[0]->bbox[5], node->bsp_child[1]->bbox[5]);               
+
+            return node;
         }
     }
 
@@ -487,6 +823,8 @@ struct World
         if (!insts)
             return;
 
+        // MAY BE SLOW: 1/2 * num^3
+        /*
         int num = 0;
 
         BSP** arr = (BSP**)malloc(sizeof(BSP*) * insts);
@@ -497,7 +835,6 @@ struct World
                 arr[num++] = inst;
         }
 
-        // MAY BE SLOW: 1/2 * num^3
         while (num>1)
         {
             int a = 0;
@@ -561,12 +898,66 @@ struct World
 
             arr[a] = node;
         }
+        root = arr[0];
+        free(arr);
+        */
 
         // LET'S TRY:
         // https://graphics.stanford.edu/~boulos/papers/togbvh.pdf
+        // http://www.cs.uu.nl/docs/vakken/magr/2016-2017/slides/lecture%2003%20-%20the%20perfect%20BVH.pdf
 
-        root = arr[0];
-        free(arr);
+        // KEY IDEAS
+        // leaf nodes need ability of multiple objects encapsulation
+        // object can be referenced by both leaf siblings -> use NodeShare in place of Node !!! 
+        // ... need only to ensure that union of both leaf bboxes fully encapsulates that object
+
+        BSP_Item* arr = (BSP_Item*)malloc(sizeof(BSP_Item) * insts);
+
+        int count = 0;
+        for (Inst* inst = head_inst; inst; )
+        {
+            Inst* next = inst->next;
+            if (inst->flags & INST_USE_TREE)
+            {
+                arr[count++].inst = inst;
+
+                // extract!
+                if (inst->prev)
+                    inst->prev->next = inst->next;
+                else
+                    head_inst = inst->next;
+                if (inst->next)
+                    inst->next->prev = inst->prev;
+                else
+                    tail_inst = inst->prev;
+            }
+            inst = next;
+        }
+
+        if (count)
+        {
+            // split recursively!
+            root = SplitBSP(arr, count);
+
+            if (!root)
+            {
+                // if failed we need to put them back
+                for (int i=0; i<count; i++)
+                {
+                    Inst* inst = arr[i].inst;
+                    inst->bsp_parent = 0;
+                    inst->prev = tail_inst;
+                    inst->next = 0;
+                    if (tail_inst)
+                        tail_inst->next = inst;
+                    else
+                        head_inst = inst;
+                    tail_inst = inst;                        
+                }
+            }
+
+            free(arr);
+        }
     }
 
     // closest to 'eye' intersecting face
@@ -614,6 +1005,40 @@ struct World
             if (n->bsp_child[1])
                 QueryBSP(level+1, n->bsp_child[1], planes, plane, cb, cookie);
         }
+        else
+        if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)bsp;
+
+            if (s->bsp_child[0])
+                QueryBSP(level+1, s->bsp_child[0], planes, plane, cb, cookie);
+            if (s->bsp_child[1])
+                QueryBSP(level+1, s->bsp_child[1], planes, plane, cb, cookie);
+
+            Inst* i = s->head;
+            while (i)
+            {
+                QueryBSP(level+1, i, planes, plane, cb, cookie);
+                i=i->next;
+            }
+        }
+        else
+        if (bsp->type == BSP::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)bsp;
+
+            Inst* i = l->head;
+            while (i)
+            {
+                QueryBSP(level+1, i, planes, plane, cb, cookie);
+                i=i->next;
+            }
+        }
+        else
+        {
+            assert(bsp->type == BSP::BSP_TYPE_INST);
+        }
+        
     }
 
     // MESHES IN HULL
@@ -621,6 +1046,17 @@ struct World
     // recursive no clipping
     static void Query(BSP* bsp, void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
     {
+        if (bsp->type == BSP::BSP_TYPE_LEAF)
+        {
+            bsp_nodes++;
+            Inst* i = ((BSP_Leaf*)bsp)->head;
+            while (i)
+            {
+                Query(i,cb,cookie);
+                i=i->next;
+            }
+        }
+        else
         if (bsp->type == BSP::BSP_TYPE_INST)
         {
             bsp_insts++;
@@ -628,6 +1064,7 @@ struct World
             cb(i->mesh, i->tm, cookie);
         }
         else
+        if (bsp->type == BSP::BSP_TYPE_NODE)
         {
             bsp_nodes++;
             BSP_Node* n = (BSP_Node*)bsp;
@@ -636,6 +1073,27 @@ struct World
             if (n->bsp_child[1])
                 Query(n->bsp_child[1],cb,cookie);
         }
+        else
+        if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+        {
+            bsp_nodes++;
+            BSP_NodeShare* s = (BSP_NodeShare*)bsp;
+            if (s->bsp_child[0])
+                Query(s->bsp_child[0],cb,cookie);
+            if (s->bsp_child[1])
+                Query(s->bsp_child[1],cb,cookie);
+            Inst* i = s->head;
+            while (i)
+            {
+                Query(i,cb,cookie);
+                i=i->next;
+            }                
+        }
+        else
+        {
+            assert(0);
+        }
+        
     }
 
     // recursive
@@ -697,6 +1155,7 @@ struct World
             cb(i->mesh, i->tm, cookie);
         }
         else
+        if (bsp->type == BSP::BSP_TYPE_NODE)        
         {
             bsp_nodes++;
             BSP_Node* n = (BSP_Node*)bsp;
@@ -714,23 +1173,74 @@ struct World
                 if (n->bsp_child[1])
                     Query(n->bsp_child[1],cb,cookie);
             }
+        }
+        else
+        if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+        {
+            bsp_nodes++;
+            BSP_NodeShare* s = (BSP_NodeShare*)bsp;
+            if (planes)
+            {
+                if (s->bsp_child[0])
+                    Query(s->bsp_child[0],planes,plane,cb,cookie);
+                if (s->bsp_child[1])
+                    Query(s->bsp_child[1],planes,plane,cb,cookie);
+
+                Inst* i = s->head;
+                while (i)
+                {
+                    Query(i,planes,plane,cb,cookie);
+                    i=i->next;
+                }                
+            }
+            else
+            {
+                if (s->bsp_child[0])
+                    Query(s->bsp_child[0],cb,cookie);
+                if (s->bsp_child[1])
+                    Query(s->bsp_child[1],cb,cookie);
+
+                Inst* i = s->head;
+                while (i)
+                {
+                    Query(i,cb,cookie);
+                    i=i->next;
+                }                
+            }
         }        
+        else
+        if (bsp->type == BSP::BSP_TYPE_LEAF)
+        {
+            bsp_nodes++;
+            BSP_Leaf* l = (BSP_Leaf*)bsp;
+            if (planes)
+            {
+                Inst* i = l->head;
+                while (i)
+                {
+                    Query(i,planes,plane,cb,cookie);
+                    i=i->next;
+                }                
+            }
+            else
+            {
+                Inst* i = l->head;
+                while (i)
+                {
+                    Query(i,cb,cookie);
+                    i=i->next;
+                }                
+            }
+        }        
+        else
+        {
+            assert(0);
+        }
     }
 
     // main
     void Query(int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
     {
-        //temp!
-        /*
-        Inst* i = head_inst;
-        while (i)
-        {
-            if (i->flags & INST_VISIBLE)
-                cb(i->mesh, i->tm, cookie);
-            i=i->next;
-        }
-        */
-
         bsp_tests=0;
         bsp_insts=0;
         bsp_nodes=0;
@@ -1022,6 +1532,7 @@ void DeleteWorld(World* w)
     if (!w)
         return;
 
+    // killing bsp brings all instances to world list
 	if (w->root)
 	{
 		w->DeleteBSP(w->root);
@@ -1029,7 +1540,6 @@ void DeleteWorld(World* w)
 	}
 
     // killing all meshes should kill all insts as well
-
     while (w->meshes)
         w->DelMesh(w->head_mesh);
 

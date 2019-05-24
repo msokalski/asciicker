@@ -672,7 +672,7 @@ struct RenderContext
 
 				void main()
 				{
-					color = vec4(0,0,0,1);
+					color = vec4(0,0,0,0.33);
 				}
 			);
 
@@ -1459,6 +1459,11 @@ struct RenderContext
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_GEQUAL);
 		glCullFace(GL_BACK);
+		glDepthMask(0);
+
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		//glLineWidth(4.0f);
 
 		mesh_map=0;
 		mesh_faces=0;
@@ -1491,7 +1496,6 @@ struct RenderContext
 		{
 			// flush
 			glUnmapBuffer(GL_ARRAY_BUFFER);
-			glLineWidth(level);
 			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
 			rc->mesh_map=0;
 			rc->mesh_faces=0;
@@ -1516,6 +1520,9 @@ struct RenderContext
 
 		glDisable(GL_CULL_FACE);
 		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_BLEND);
+		glDepthMask(1);
+		//glLineWidth(1.0f);
 	}	
 
 	void BeginMeshes(const double* tm, const float* lt)
@@ -5000,8 +5007,8 @@ void my_init()
 	a3dListDir(mesh_dirname, MeshScan::Scan, mesh_dirname);
 
 	active_mesh = GetFirstMesh(world);
-
-	for (int i=0; i<100; i++)
+	/*
+	for (int i=0; i<1000; i++)
 	{
 		double tm[16]=
 		{
@@ -5014,9 +5021,11 @@ void my_init()
 			1
 		};
 		CreateInst(active_mesh,INST_USE_TREE|INST_VISIBLE,tm,0);
-		RebuildWorld(world);
 	}
-	
+	*/
+
+	RebuildWorld(world);
+
 	// todo:
 	// build local array of SORTED meshes (similary to palettes)
 	// don't rely on order of mesh list!
