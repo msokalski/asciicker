@@ -272,42 +272,31 @@ struct World
         if (tm)
         {
             memcpy(i->tm,tm,sizeof(double[16]));
+			
+			float w[4];
+			Vert* v = m->head_vert;
+			
+			if (v)
+			{
+				Product(tm, v->xyzw, w);
+				i->bbox[0] = w[0];
+				i->bbox[1] = w[0];
+				i->bbox[2] = w[1];
+				i->bbox[3] = w[1];
+				i->bbox[4] = w[2];
+				i->bbox[5] = w[2];
+			}
 
-            for (int q=0; q<8; q++)
-            {
-                int qx = q&1;
-                int qy = ((q>>1)&1) + 2;
-                int qz = ((q>>2)&1) + 4;
-
-                float v[4] = 
-                {
-                    m->bbox[qx],
-                    m->bbox[qy],
-                    m->bbox[qz],
-                    1.0f
-                };
-
-                float p[4];
-                Product(tm,v,p);
-
-                if (q==0)
-                {
-                    i->bbox[0] = p[0];
-                    i->bbox[1] = p[0];
-                    i->bbox[2] = p[1];
-                    i->bbox[3] = p[1];
-                    i->bbox[4] = p[2];
-                    i->bbox[5] = p[2];
-                }
-                else
-                {
-                    i->bbox[0] = fminf(i->bbox[0],p[0]);
-                    i->bbox[1] = fmaxf(i->bbox[1],p[0]);
-                    i->bbox[2] = fminf(i->bbox[2],p[1]);
-                    i->bbox[3] = fmaxf(i->bbox[3],p[1]);
-                    i->bbox[4] = fminf(i->bbox[4],p[2]);
-                    i->bbox[5] = fmaxf(i->bbox[5],p[2]);
-                }
+			while (v)
+			{
+				Product(tm, v->xyzw, w);
+				i->bbox[0] = fminf(i->bbox[0], w[0]);
+				i->bbox[1] = fmaxf(i->bbox[1], w[0]);
+				i->bbox[2] = fminf(i->bbox[2], w[1]);
+				i->bbox[3] = fmaxf(i->bbox[3], w[1]);
+				i->bbox[4] = fminf(i->bbox[4], w[2]);
+				i->bbox[5] = fmaxf(i->bbox[5], w[2]);
+				v = v->next;
             }
         }
         else
@@ -650,12 +639,12 @@ struct World
 
             for (int i=0; i<num; i++)
             {
-                lo_bbox[0] = fmin( lo_bbox[0], arr[i].inst->bbox[0]);
-                lo_bbox[1] = fmax( lo_bbox[1], arr[i].inst->bbox[1]);
-                lo_bbox[2] = fmin( lo_bbox[2], arr[i].inst->bbox[2]);
-                lo_bbox[3] = fmax( lo_bbox[3], arr[i].inst->bbox[3]);
-                lo_bbox[4] = fmin( lo_bbox[4], arr[i].inst->bbox[4]);
-                lo_bbox[5] = fmax( lo_bbox[5], arr[i].inst->bbox[5]);
+                lo_bbox[0] = fminf( lo_bbox[0], arr[i].inst->bbox[0]);
+                lo_bbox[1] = fmaxf( lo_bbox[1], arr[i].inst->bbox[1]);
+                lo_bbox[2] = fminf( lo_bbox[2], arr[i].inst->bbox[2]);
+                lo_bbox[3] = fmaxf( lo_bbox[3], arr[i].inst->bbox[3]);
+                lo_bbox[4] = fminf( lo_bbox[4], arr[i].inst->bbox[4]);
+                lo_bbox[5] = fmaxf( lo_bbox[5], arr[i].inst->bbox[5]);
 
                 arr[i].area = 
                     (lo_bbox[1]-lo_bbox[0]) * (lo_bbox[3]-lo_bbox[2]) * HEIGHT_SCALE +
@@ -675,12 +664,12 @@ struct World
 
             for (int i=num-1; i>0; i--)
             {
-                hi_bbox[0] = fmin( hi_bbox[0], arr[i].inst->bbox[0]);
-                hi_bbox[1] = fmax( hi_bbox[1], arr[i].inst->bbox[1]);
-                hi_bbox[2] = fmin( hi_bbox[2], arr[i].inst->bbox[2]);
-                hi_bbox[3] = fmax( hi_bbox[3], arr[i].inst->bbox[3]);
-                hi_bbox[4] = fmin( hi_bbox[4], arr[i].inst->bbox[4]);
-                hi_bbox[5] = fmax( hi_bbox[5], arr[i].inst->bbox[5]);
+                hi_bbox[0] = fminf( hi_bbox[0], arr[i].inst->bbox[0]);
+                hi_bbox[1] = fmaxf( hi_bbox[1], arr[i].inst->bbox[1]);
+                hi_bbox[2] = fminf( hi_bbox[2], arr[i].inst->bbox[2]);
+                hi_bbox[3] = fmaxf( hi_bbox[3], arr[i].inst->bbox[3]);
+                hi_bbox[4] = fminf( hi_bbox[4], arr[i].inst->bbox[4]);
+                hi_bbox[5] = fmaxf( hi_bbox[5], arr[i].inst->bbox[5]);
 
                 float area = 
                     (hi_bbox[1]-hi_bbox[0]) * (hi_bbox[3]-hi_bbox[2]) * HEIGHT_SCALE +
@@ -732,22 +721,22 @@ struct World
                 arr[num-1].inst->prev = arr[num-2].inst;
                 arr[num-1].inst->bsp_parent = leaf;
 
-                leaf->bbox[0] = fmin( leaf->bbox[0], arr[num-1].inst->bbox[0]);
-                leaf->bbox[1] = fmax( leaf->bbox[1], arr[num-1].inst->bbox[1]);
-                leaf->bbox[2] = fmin( leaf->bbox[2], arr[num-1].inst->bbox[2]);
-                leaf->bbox[3] = fmax( leaf->bbox[3], arr[num-1].inst->bbox[3]);
-                leaf->bbox[4] = fmin( leaf->bbox[4], arr[num-1].inst->bbox[4]);
-                leaf->bbox[5] = fmax( leaf->bbox[5], arr[num-1].inst->bbox[5]);                
+                leaf->bbox[0] = fminf( leaf->bbox[0], arr[num-1].inst->bbox[0]);
+                leaf->bbox[1] = fmaxf( leaf->bbox[1], arr[num-1].inst->bbox[1]);
+                leaf->bbox[2] = fminf( leaf->bbox[2], arr[num-1].inst->bbox[2]);
+                leaf->bbox[3] = fmaxf( leaf->bbox[3], arr[num-1].inst->bbox[3]);
+                leaf->bbox[4] = fminf( leaf->bbox[4], arr[num-1].inst->bbox[4]);
+                leaf->bbox[5] = fmaxf( leaf->bbox[5], arr[num-1].inst->bbox[5]);                
             }
 
             for (int i=1; i<num-1; i++)
             {
-                leaf->bbox[0] = fmin( leaf->bbox[0], arr[i].inst->bbox[0]);
-                leaf->bbox[1] = fmax( leaf->bbox[1], arr[i].inst->bbox[1]);
-                leaf->bbox[2] = fmin( leaf->bbox[2], arr[i].inst->bbox[2]);
-                leaf->bbox[3] = fmax( leaf->bbox[3], arr[i].inst->bbox[3]);
-                leaf->bbox[4] = fmin( leaf->bbox[4], arr[i].inst->bbox[4]);
-                leaf->bbox[5] = fmax( leaf->bbox[5], arr[i].inst->bbox[5]);  
+                leaf->bbox[0] = fminf( leaf->bbox[0], arr[i].inst->bbox[0]);
+                leaf->bbox[1] = fmaxf( leaf->bbox[1], arr[i].inst->bbox[1]);
+                leaf->bbox[2] = fminf( leaf->bbox[2], arr[i].inst->bbox[2]);
+                leaf->bbox[3] = fmaxf( leaf->bbox[3], arr[i].inst->bbox[3]);
+                leaf->bbox[4] = fminf( leaf->bbox[4], arr[i].inst->bbox[4]);
+                leaf->bbox[5] = fmaxf( leaf->bbox[5], arr[i].inst->bbox[5]);  
                                 
                 arr[i].inst->bsp_parent = leaf;
                 arr[i].inst->prev = arr[i-1].inst;
@@ -801,12 +790,12 @@ struct World
             node->bsp_child[1] = SplitBSP(arr + best_item, num - best_item);
             node->bsp_child[1]->bsp_parent = node;
 
-            node->bbox[0] = fmin( node->bsp_child[0]->bbox[0], node->bsp_child[1]->bbox[0]);
-            node->bbox[1] = fmax( node->bsp_child[0]->bbox[1], node->bsp_child[1]->bbox[1]);
-            node->bbox[2] = fmin( node->bsp_child[0]->bbox[2], node->bsp_child[1]->bbox[2]);
-            node->bbox[3] = fmax( node->bsp_child[0]->bbox[3], node->bsp_child[1]->bbox[3]);
-            node->bbox[4] = fmin( node->bsp_child[0]->bbox[4], node->bsp_child[1]->bbox[4]);
-            node->bbox[5] = fmax( node->bsp_child[0]->bbox[5], node->bsp_child[1]->bbox[5]);               
+            node->bbox[0] = fminf( node->bsp_child[0]->bbox[0], node->bsp_child[1]->bbox[0]);
+            node->bbox[1] = fmaxf( node->bsp_child[0]->bbox[1], node->bsp_child[1]->bbox[1]);
+            node->bbox[2] = fminf( node->bsp_child[0]->bbox[2], node->bsp_child[1]->bbox[2]);
+            node->bbox[3] = fmaxf( node->bsp_child[0]->bbox[3], node->bsp_child[1]->bbox[3]);
+            node->bbox[4] = fminf( node->bsp_child[0]->bbox[4], node->bsp_child[1]->bbox[4]);
+            node->bbox[5] = fmaxf( node->bsp_child[0]->bbox[5], node->bsp_child[1]->bbox[5]);               
 
             return node;
         }
@@ -960,23 +949,8 @@ struct World
         }
     }
 
-    // closest to 'eye' intersecting face
-    struct FaceHit
-    {
-        Inst* inst;
-        Face* face;
-        float abc_z[4]; // barycentric and world's z
-    };
-
-    // closest to ray isolated vert
-    struct IsolHit
-    {
-        Inst* inst;
-        Vert* vert;
-    };
-
-    // RAY HIT
-    bool Query(double p[3], double v[3], FaceHit* face_hit, IsolHit* isol_hit)
+    // RAY HIT using plucker
+    bool Query(double p[3], double v[3])
     {
         // hit->abc_z[3] MUST be preinitialized to FAREST z
 
@@ -1245,17 +1219,40 @@ struct World
         bsp_insts=0;
         bsp_nodes=0;
 
-        // assuming all insts are in tree
+        // static first
         if (root)
         {
-            double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
-
-            if (planes>0)
-                Query(root, planes, pp, cb, cookie);
-            else
-                Query(root, cb, cookie);
+			if (planes > 0)
+			{
+				double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+				Query(root, planes, pp, cb, cookie);
+			}
+			else
+			{
+				Query(root, cb, cookie);
+			}
         }
-    }
+
+		// dynamic after
+		Inst* i = head_inst;
+		if (planes > 0)
+		{
+			double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+			while (i)
+			{
+				Query(i, planes, pp, cb, cookie);
+				i = i->next;
+			}
+		}
+		else
+		{
+			while (i)
+			{
+				Query(i, cb, cookie);
+				i = i->next;
+			}
+		}
+	}
 };
 
 Mesh* World::LoadMesh(const char* path, const char* name)
