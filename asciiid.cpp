@@ -4856,7 +4856,6 @@ void my_render()
 	QueryWorldBSP(world, planes, clip_world, RenderContext::RenderBSP, rc);
 	rc->EndBSP();
 
-
 	// overlay patch creation
 	// slihouette of newly created patch 
 
@@ -5008,7 +5007,7 @@ void my_init()
 
 	active_mesh = GetFirstMesh(world);
 	/*
-	for (int i=0; i<1000; i++)
+	for (int i=0; i<100; i++)
 	{
 		double tm[16]=
 		{
@@ -5017,13 +5016,12 @@ void my_init()
 			0,0,0.1*HEIGHT_SCALE,0,
 			(double)(fast_rand()&0x7F),
 			(double)(fast_rand()&0x7F),
-			(double)(fast_rand()&0x1F)*HEIGHT_SCALE,
+			0*(double)(fast_rand()&0x1F)*HEIGHT_SCALE,
 			1
 		};
 		CreateInst(active_mesh,INST_USE_TREE|INST_VISIBLE,tm,0);
 	}
 	*/
-
 	RebuildWorld(world);
 
 	// todo:
