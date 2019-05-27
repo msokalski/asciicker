@@ -87,15 +87,15 @@ int PrintScreen(const TermScreen* screen, const uint8_t ipal[1<<24])
     const int max_cols = 512;
     const int max_line_bytes = max_cols * (22+3) + 11 + 1; 
     const int max_buffer_lines = 2;
-    const int header_size = 10;
+    const int header_size = 8;
     const int buffer_size = header_size + max_buffer_lines*max_line_bytes;
     const int buffer_flush_size = buffer_size - max_line_bytes;
     
     char buf[buffer_size];
     int siz=header_size;
     
-    // disable wrap, goto 1,1
-    memcpy(buf, "\x1B[7l\x1B[1;1H", header_size);
+    // disable wrap, goto home
+    memcpy(buf, "\x1B[?7l\x1B[H", header_size);
 
     uint8_t prev_fg = 0;
     uint8_t prev_bg = 0;

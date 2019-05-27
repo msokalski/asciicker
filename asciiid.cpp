@@ -4932,7 +4932,7 @@ void my_init()
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-	screen = CreateScreen(512,32);
+	screen = CreateScreen(512,128);
 
 	world = CreateWorld();
 
