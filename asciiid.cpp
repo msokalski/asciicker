@@ -2287,6 +2287,18 @@ void Stamp(double x, double y)
 
 void Palettize(const uint8_t p[768])
 {
+	if (!p && ipal)
+	{
+		int ret = system("reset");
+		free(ipal);
+		ipal = 0;
+	}
+	else
+	if (p && !ipal)
+	{
+		ipal = (uint8_t*)malloc(1<<24);
+	}
+
 	//glFinish();
 	uint64_t t0 = a3dGetTime();
 
@@ -2429,13 +2441,12 @@ void Palettize(const uint8_t p[768])
 	uint64_t t1 = a3dGetTime();
 	printf("palettized in %d us\n", (int)(t1 - t0));
 
-	if (!ipal)
-		ipal = (uint8_t*)malloc(1<<24);
-	glGetTextureImage(pal_tex, 0, GL_ALPHA, GL_UNSIGNED_BYTE, 1<<24, ipal);
-
-	uint64_t t2 = a3dGetTime();
-
-	printf("fetched ipal in %d us\n", (int)(t2 - t1));
+	if (ipal)
+	{
+		glGetTextureImage(pal_tex, 0, GL_ALPHA, GL_UNSIGNED_BYTE, 1<<24, ipal);
+		uint64_t t2 = a3dGetTime();
+		printf("fetched ipal in %d us\n", (int)(t2 - t1));
+	}
 }
 
 
@@ -5135,8 +5146,11 @@ void my_close()
 	}
 
 	if (ipal)
+	{
+		int ret = system("reset");
 		free(ipal);
-	ipal = 0;
+		ipal = 0;
+	}
 
 	DeleteScreen(screen);
 
@@ -5146,8 +5160,6 @@ void my_close()
 	ImGui::DestroyContext();
 
 	render_context.Delete();
-
-	int ret = system("reset");
 }
 
 int main(int argc, char *argv[]) 
