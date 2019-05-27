@@ -2289,7 +2289,6 @@ void Palettize(const uint8_t p[768])
 {
 	if (!p && ipal)
 	{
-		int ret = system("reset");
 		free(ipal);
 		ipal = 0;
 	}
@@ -5147,7 +5146,6 @@ void my_close()
 
 	if (ipal)
 	{
-		int ret = system("reset");
 		free(ipal);
 		ipal = 0;
 	}
