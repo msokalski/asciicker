@@ -36,3 +36,17 @@ enum INST_FLAGS
 
 void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie);
 void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie);
+
+void SaveWorld(World* w, FILE* f);
+World* LoadWorld(FILE* f);
+
+// during save:
+// save those meshes that have instances only (with file names)
+
+// during load:
+// load embedded meshes saved in file
+// later asciiid can add meshes from external files
+// ... then it can ask what to do with collisions (keep embedded, replace with externals)
+//     but it should compare them if they really differ (so need to load them regardless everything)
+
+
