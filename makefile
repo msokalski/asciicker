@@ -6,6 +6,8 @@ BIN := .run/asciiid
 
 # source files
 SRCS :=	asciiid.cpp \
+		asciiid_term.cpp \
+		asciiid_xterm.cpp \
 		asciiid_x11.cpp \
 		asciiid_urdo.cpp \
 		terrain.cpp \
@@ -64,10 +66,10 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-CPPFLAGS := -g -save-temps=obj -O3
+CPPFLAGS := -g -save-temps=obj #-O3
 
 # linker flags
-LDFLAGS := -g -save-temps=obj -O3
+LDFLAGS := -g -save-temps=obj #-O3
 
 # flags required for dependency generation; passed to compilers
 DEPFLAGS = -MT $@ -MD -MP -MF $(DEPDIR)/$*.Td

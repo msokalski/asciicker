@@ -22,6 +22,8 @@
 #include "imgui_impl_opengl3.h"
 
 #include "asciiid_platform.h"
+#include "asciiid_term.h"
+
 #include "texheap.h"
 #include "terrain.h"
 #include "mesh.h"
@@ -49,6 +51,7 @@ MouseQueue mouse_queue[mouse_queue_size];
 ImFont* pFont = 0;
 char ini_path[4096];
 
+TermScreen* screen = 0;
 Terrain* terrain = 0;
 World* world = 0;
 Mesh* active_mesh;
@@ -70,6 +73,7 @@ struct MeshPrefs
 int fonts_loaded = 0;
 int palettes_loaded = 0;
 GLuint pal_tex = 0;
+uint8_t* ipal = 0;
 
 void* GetMaterialArr();
 void* GetPaletteArr();
@@ -2353,7 +2357,7 @@ void Palettize(const uint8_t p[768])
 						}
 					}
 
-					lut = vec4(vec3(pal[idx]) / 255.0, 1.0);
+					lut = vec4(vec3(pal[idx]) / 255.0, float(idx) / 255.0);
 				}
 			}
 		);
@@ -2425,79 +2429,13 @@ void Palettize(const uint8_t p[768])
 	uint64_t t1 = a3dGetTime();
 	printf("palettized in %d us\n", (int)(t1 - t0));
 
-#if 0
-
-	uint8_t* p = pal[pal_id].rgb;
-
-	uint8_t* lut = (uint8_t*)malloc(256 * 256 * 256 * 3);
-
-	uint64_t t0 = a3dGetTime();
-
-	for (int i = 0; i < 256 * 256 * 256; i++)
-	{
-		int R8 = i & 0xFF;
-		int G8 = (i >> 8) & 0xFF;
-		int B8 = (i >> 16) & 0xFF;
-
-		int diff = 100000000; // greater than max possible diff
-		int idx = -1;
-
-		// find closest color in palette
-		for (int j = 0; j < 256; j++)
-		{
-			int k = 3 * j;
-			int dr = R8 - p[k++];
-			int dg = G8 - p[k++];
-			int db = B8 - p[k];
-
-#ifndef max
-#define max(a,b) ((a)>(b)?(a):(b))
-#endif
-
-			int d = max(max(R8, G8), B8) - max(max(p[3 * j], p[3 * j + 1]), p[3 * j + 2]);
-			d *= 16 * d; // mostly luminance
-			d += 2 * dr*dr + 4 * dg*dg + 3 * db*db; // bit of chrominance
-
-
-			if (d < diff)
-			{
-				idx = j;
-				diff = d;
-			}
-		}
-
-
-		/*
-		int j = 3*i;
-		int k = 3*idx;
-		lut[j++] = p[k++];
-		lut[j++] = p[k++];
-		lut[j] = p[k];
-		*/
-
-		lut[3 * i] = idx;
-	}
-
-	uint64_t t1 = a3dGetTime();
-
-	for (int i = 0; i < 256*256*256; i++)
-	{
-		int j = 3 * i;
-		int k = lut[j] * 3;
-		lut[j++] = p[k++];
-		lut[j++] = p[k++];
-		lut[j] = p[k];
-	}
+	if (!ipal)
+		ipal = (uint8_t*)malloc(1<<24);
+	glGetTextureImage(pal_tex, 0, GL_ALPHA, GL_UNSIGNED_BYTE, 1<<24, ipal);
 
 	uint64_t t2 = a3dGetTime();
 
-	glTextureSubImage3D(pal_tex, 0, 0, 0, 0, 256, 256, 256, GL_RGB, GL_UNSIGNED_BYTE, lut);
-	free(lut);
-
-	uint64_t t3 = a3dGetTime();
-
-	printf("%d / %d / %d\n", (int)(t1 - t0), (int)(t2 - t1), (int)(t3 - t2));
-#endif
+	printf("fetched ipal in %d us\n", (int)(t2 - t1));
 }
 
 
@@ -4852,9 +4790,11 @@ void my_render()
 		RenderContext::RenderMesh(inst_preview, inst_tm, rc);
 	rc->EndMeshes();
 
+/*
 	rc->BeginBSP(tm);
 	QueryWorldBSP(world, planes, clip_world, RenderContext::RenderBSP, rc);
 	rc->EndBSP();
+*/
 
 	// overlay patch creation
 	// slihouette of newly created patch 
@@ -4874,6 +4814,12 @@ void my_render()
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 	a3dSwapBuffers();
+
+	if (ipal)
+	{
+		ClearScreen(screen, 0,0, 256, 256*9/16, 0/*rand*/);
+		PrintScreen(screen,ipal);
+	}
 }
 
 void my_mouse(int x, int y, MouseInfo mi)
@@ -4976,6 +4922,7 @@ void my_init()
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
+	screen = CreateScreen(512,32);
 
 	world = CreateWorld();
 
@@ -5006,22 +4953,20 @@ void my_init()
 	a3dListDir(mesh_dirname, MeshScan::Scan, mesh_dirname);
 
 	active_mesh = GetFirstMesh(world);
-	/*
-	for (int i=0; i<100; i++)
+	for (int i=0; i<100000; i++)
 	{
 		double tm[16]=
 		{
 			0.1,0,0,0,
 			0,0.1,0,0,
 			0,0,0.1*HEIGHT_SCALE,0,
-			(double)(fast_rand()&0x7F),
-			(double)(fast_rand()&0x7F),
+			(double)(fast_rand()&0xFFF),
+			(double)(fast_rand()&0xFFF),
 			0*(double)(fast_rand()&0x1F)*HEIGHT_SCALE,
 			1
 		};
 		CreateInst(active_mesh,INST_USE_TREE|INST_VISIBLE,tm,0);
 	}
-	*/
 	RebuildWorld(world);
 
 	// todo:
@@ -5030,7 +4975,7 @@ void my_init()
 	// ...
 
 	glCreateTextures(GL_TEXTURE_3D, 1, &pal_tex);
-	glTextureStorage3D(pal_tex, 1, GL_RGB8, 256, 256, 256);
+	glTextureStorage3D(pal_tex, 1, GL_RGBA8, 256, 256, 256); // alpha holds pal-indexes!
 	glTextureParameteri(pal_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTextureParameteri(pal_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -5189,6 +5134,11 @@ void my_close()
 		free(gather);
 	}
 
+	if (ipal)
+		free(ipal);
+	ipal = 0;
+
+	DeleteScreen(screen);
 
 	a3dClose();
 
@@ -5196,6 +5146,8 @@ void my_close()
 	ImGui::DestroyContext();
 
 	render_context.Delete();
+
+	int ret = system("reset");
 }
 
 int main(int argc, char *argv[]) 
