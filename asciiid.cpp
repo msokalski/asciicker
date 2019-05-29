@@ -5165,8 +5165,15 @@ void my_close()
 	SetScreen(false);
 }
 
+#define TERMINAL
+
 int main(int argc, char *argv[]) 
 {
+	#ifdef TERMINAL
+		extern int Terminal(int argc, char *argv[]);
+		return Terminal(argc, argv);
+	#endif
+
 	PlatformInterface pi;
 	pi.close = my_close;
 	pi.render = my_render;
