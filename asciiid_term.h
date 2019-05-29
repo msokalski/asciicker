@@ -22,3 +22,5 @@ void ClearScreen(TermScreen* screen, int x, int y, int w, int h, const TermCell*
 
 // specialized in asciiid_xterm
 int PrintScreen(const TermScreen* screen, const uint8_t ipal[1<<24]);
+
+void SetScreen(bool alt);

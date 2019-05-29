@@ -212,3 +212,11 @@ int PrintScreen(const TermScreen* screen, const uint8_t ipal[1<<24])
 
     return ret;
 }
+
+void SetScreen(bool alt)
+{
+	if (alt)
+		printf("\x1B[?1049h\x1B[H"); // +home
+	else
+		printf("\x1B[?1049l");    
+}

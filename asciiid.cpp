@@ -4932,6 +4932,9 @@ void my_init()
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
+	SetScreen(true);
+
+
 	screen = CreateScreen(512,128);
 
 	world = CreateWorld();
@@ -5158,6 +5161,8 @@ void my_close()
 	ImGui::DestroyContext();
 
 	render_context.Delete();
+
+	SetScreen(false);
 }
 
 int main(int argc, char *argv[]) 
