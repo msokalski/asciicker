@@ -190,6 +190,7 @@ int PrintScreen(const TermScreen* screen, const uint8_t ipal[1<<24])
         if (y<y2-1)
         {
             // def bg and \n
+            // NOTE: linux replaces \n with \r\n automatically if output goes to terminal
             memcpy(buf+siz,"\x1B[49m\n",6);
             siz+=6;
             
