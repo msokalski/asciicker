@@ -3,6 +3,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <pty.h> // link  with -lutil
+
 #include <X11/X.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
@@ -49,6 +56,21 @@ static int mouse_y = 0;
 static bool track = false;
 static bool closing = false;
 static int force_key = A3D_NONE;
+
+
+int pty_num = 0;
+struct pollfd* pty_poll = 0;
+
+A3D_PTY* head_pty = 0;
+A3D_PTY* tail_pty = 0;
+
+struct A3D_PTY
+{
+	int fd;
+	pid_t pid;
+	A3D_PTY* next;
+	A3D_PTY* prev;
+};
 
 const char* caps[]=
 {
@@ -653,15 +675,56 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (platform_api.resize)
 		platform_api.resize(w,h);
 
+	int x11_fd = ConnectionNumber(dpy);
+
 	while (!closing)
 	{
+		if (pty_num)
+		{
+			if (!pty_poll)
+			{
+				pty_poll = (pollfd*)malloc(sizeof(pollfd)*(pty_num+1));
+
+				A3D_PTY* pty = head_pty;
+				for (int i=0; i<pty_num; i++)
+				{
+					pty_poll[i].fd = pty->fd;
+					pty_poll[i].events = POLLRDNORM | POLLHUP | POLLERR;
+					pty=pty->next;
+				}
+
+				pty_poll[pty_num].fd = x11_fd;
+				pty_poll[pty_num].events = POLLRDNORM | POLLHUP | POLLERR;
+			}
+
+			int timeout=0;
+			int num = poll(pty_poll, pty_num /*+1*/, timeout);
+
+			if (num > 0)
+			{
+				A3D_PTY* pty = head_pty;
+
+				for (int i=0; i<pty_num; i++)
+				{
+					if ( pty_poll[i].revents )
+					{
+						// invoke PTY callback
+						// requires some EXTRA safety as
+						// it can call a3dOpenPty / a3dClosePty
+						// ...
+						if (platform_api.ptydata)
+							platform_api.ptydata(pty);
+					}
+					pty = pty->next;
+				}
+			}
+		}
+
 		while (!closing && XPending(dpy))
 		{
 			XNextEvent(dpy, &xev);
 			if (XFilterEvent(&xev, win))
-			{
 				printf("%s","XFilter CONSUMED!\n");
-			}
 
 			if (xev.type == ClientMessage)
 			{
@@ -1550,5 +1613,115 @@ bool a3dGetCurDir(char* dir_path, int size)
 		}
 	}
 }
+
+
+A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[])
+{
+	// TODO: must be safe even when called some pty callback!
+
+    struct winsize ws;
+    ws.ws_col = w;
+    ws.ws_row = h;
+    ws.ws_xpixel=0;
+    ws.ws_ypixel=0;
+
+    char name[64]="";
+	int pty_fd = -1;
+    pid_t pid = forkpty(&pty_fd, name, 0, &ws);
+    if (pid == 0)
+    {
+        // child
+
+		char* no_args[] = {0};
+		if (!envp)
+			envp = environ;
+		if (!argv)
+			argv = no_args;
+
+        execvpe(path, argv, envp);
+        exit(1);
+    }
+
+    if (pid < 0 || pty_fd < 0)
+    {
+		//error
+        if (pty_fd>=0)
+            close(pty_fd);
+		return 0;
+	}
+
+	// parent
+
+	A3D_PTY* pty = (A3D_PTY*)malloc(sizeof(A3D_PTY));
+	pty->next = 0;
+	pty->prev = tail_pty;
+	if (tail_pty)
+		tail_pty->next = pty;
+	else
+		head_pty = pty;
+	tail_pty = pty;
+	
+	pty->fd = pty_fd;
+	pty->pid = pid;
+
+	if (pty_poll)
+		free(pty_poll);
+	pty_poll = 0;
+
+	pty_num++;
+
+	return pty;
+}
+
+int a3dReadPTY(A3D_PTY* pty, void* buf, size_t size)
+{
+	return read(pty->fd, buf, size);
+}
+
+int a3dWritePTY(A3D_PTY* pty, const void* buf, size_t size)
+{
+	return write(pty->fd, buf, size);
+}
+
+void a3dResizePTY(A3D_PTY* pty, int w, int h)
+{
+    // recalc new vt w,h
+    struct winsize ws;
+    ws.ws_col = w;
+    ws.ws_row = h;
+    ws.ws_xpixel=0;
+    ws.ws_ypixel=0;
+
+    ioctl(pty->fd, TIOCSWINSZ, &ws);
+}
+
+void a3dClosePTY(A3D_PTY* pty)
+{
+	// TODO: must be safe even if called from this or another pty callback!
+
+	close(pty->fd);
+
+	int stat;
+	waitpid(pty->pid, &stat, 0);
+
+	if (pty->prev)
+		pty->prev->next = pty->next;
+	else
+		head_pty = pty->next;
+
+	if (pty->next)
+		pty->next->prev = pty->prev;
+	else
+		tail_pty = pty->prev;
+
+	free(pty);
+
+	pty_num--;
+
+	if (pty_poll)
+		free(pty_poll);
+	pty_poll = 0;
+}
+
 
 #endif // __linux__

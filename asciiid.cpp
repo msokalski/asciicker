@@ -34,6 +34,13 @@
 
 #include "fast_rand.h"
 
+
+// just for write(fd)
+#include <unistd.h>
+
+
+A3D_PTY* term = 0;
+
 #define MOUSE_QUEUE
 
 #ifdef MOUSE_QUEUE
@@ -4927,6 +4934,9 @@ void my_resize(int w, int h)
 
 void my_init()
 {
+
+	term = a3dOpenPty(80,25, "/bin/bash", 0, 0);
+
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
@@ -5103,7 +5113,15 @@ void my_keyb_char(wchar_t chr)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddInputCharacter((unsigned short)chr);
+
+	if (term && chr < 0x7F)
+	{
+		char c = (char)chr;
+		a3dWritePTY(term, &c, 1);
+	}
 }
+
+bool DECCKM = false;
 
 void my_keyb_key(KeyInfo ki, bool down)
 {
@@ -5115,6 +5133,153 @@ void my_keyb_key(KeyInfo ki, bool down)
 	io.KeyAlt = a3dGetKeyb(A3D_LALT);// || a3dGetKeyb(A3D_RALT);
 	io.KeyCtrl = a3dGetKeyb(A3D_LCTRL) || a3dGetKeyb(A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(A3D_LSHIFT) || a3dGetKeyb(A3D_RSHIFT);
+
+	if (term && down)
+	{
+		const char* esc = 0;
+		switch (ki)
+		{
+			// small subset, note there are Ctrl / Shift ... variants too!
+			case A3D_F1: esc = "\x1BOP"; break;
+			case A3D_F2: esc = "\x1BOQ"; break;
+			case A3D_F3: esc = "\x1BOR"; break;
+			case A3D_F4: esc = "\x1BOS"; break;
+
+			case A3D_F5: esc = "\x1B[15~"; break;
+
+			case A3D_F6:  esc = "\x1B[17~"; break;
+			case A3D_F7:  esc = "\x1B[18~"; break;
+			case A3D_F8:  esc = "\x1B[19~"; break;
+			case A3D_F9:  esc = "\x1B[20~"; break;
+			case A3D_F10: esc = "\x1B[21~"; break;
+
+			case A3D_F11: esc = "\x1B[23~"; break;
+			case A3D_F12: esc = "\x1B[24~"; break;
+
+			case A3D_DOWN:  esc = DECCKM ? "\x1BOB" : "\x1B[B"; break; // "\x1B[1;2A"  w/shift ?
+			case A3D_UP:    esc = DECCKM ? "\x1BOA" : "\x1B[A"; break; // "\x1B[1;2B" 
+			case A3D_RIGHT: esc = DECCKM ? "\x1BOC" : "\x1B[C"; break; // "\x1B[1;2C"
+			case A3D_LEFT:  esc = DECCKM ? "\x1BOD" : "\x1B[D"; break; // "\x1B[1;2D"
+
+			case A3D_HOME: esc = DECCKM ? "\x1BOH" : "\x1B[H"; break;
+			case A3D_END:  esc = DECCKM ? "\x1BOF" : "\x1B[F"; break;	
+		}
+
+		// BEST DOC ABOUT XTERM:
+		// https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+
+		// ------------------------------------------------------------
+		// EVEN BETTER ARE REAL WORLD EXPERIMENTS:
+
+		// BASH MODE (DECCKM off)           MC MODE (DECCKM on)
+		/*
+			f1-f12
+			I: \x1BOP  						\x1BOP                      
+			I: \x1BOQ						\x1BOQ
+			I: \x1BOR						\x1BOR
+			I: \x1BOS						\x1BOS
+			I: \x1B[15~						\x1B[15~
+			I: \x1B[17~						\x1B[17~
+			I: \x1B[18~						\x1B[18~
+			I: \x1B[19~						\x1B[19~
+			I: \x1B[20~						\x1B[20~
+			I: \x1B[21~						\x1B[21~
+			I: \x1B[23~						\x1B[23~
+			I: \x1B[24~						\x1B[24~
+
+			ins hom pgup del end pgdn
+			I: \x1B[2~						\x1B[2~
+			I: \x1B[H 						\x1BOH
+			I: \x1B[5~						\x1B[5~
+			I: \x1B[3~						\x1B[3~
+			I: \x1B[F 						\x1BOF
+			I: \x1B[6~						\x1B[6~
+
+			up dn rt lt
+			I: \x1B[A						\x1BOA
+			I: \x1B[B						\x1BOB
+			I: \x1B[C						\x1BOC
+			I: \x1B[D						\x1BOD
+
+			numpad lock:ON (SAME IN BOTH MODES)
+			I: /							/
+			I: *							*
+			I: -							-
+			I: 7							7
+			I: 8							8
+			I: 9							9
+			I: +							+
+			I: 4							4
+			I: 5							5
+			I: 6							6
+			I: 1							1
+			I: 2							2
+			I: 3							3
+			I: \r							\r
+			I: 0							0
+			I: ,							,
+
+			numpad lock:OFF (SAME IN BOTH MODES)
+			I: /							/
+			I: *							*
+			I: -							-
+			I: \x1B[H						\x1BOH
+			I: \x1B[A						\x1BOA
+			I: \x1B[5~						\x1B[5~
+			I: +							+
+			I: \x1B[D						\x1BOD
+			I: \x1B[E						\x1BOE
+			I: \x1B[C						\x1BOC
+			I: \x1B[F						\x1BOF
+			I: \x1B[B						\x1BOB
+			I: \x1B[6~						\x1B[6~
+			I: \r							\r
+			I: \x1B[2~						\x1B[2~
+			I: \x1B[3~						\x1B[3~
+
+
+			I: \x1BOR       				\x1BOR				F3
+			I: \x1B[1;2R    				\x1B[1;2R			F3+shift
+			I: \x1B[1;3R    				\x1B[1;3R			F3+alt
+			I: \x1B[1;4R    				\x1B[1;4R			F3+alt+shift
+			I: \x1B[1;5R    				\x1B[1;5R			F3+ctrl
+			I: \x1B[1;6R    				\x1B[1;6R			F3+ctrl+shift
+			I: \x1B[1;7R    				\x1B[1;7R			F3+ctrl+alt
+			I: \x1B[1;8R    				\x1B[1;8R			F3+alt+ctrl+shift
+
+
+			I: \x1B[15~     				\x1B[15~			F5
+			I: \x1B[15;2~					\x1B[15;2~			F5+shift
+			I: \x1B[15;3~					\x1B[15;3~			F5+alt
+			I: \x1B[15;4~					\x1B[15;4~			F3+alt+shift
+			I: \x1B[15;5~					\x1B[15;5~			F3+ctrl
+			I: \x1B[15;6~					\x1B[15;6~			F3+ctrl+shift
+			I: \x1B[15;7~					\x1B[15;7~			F3+ctrl+alt
+			I: \x1B[15;8~					\x1B[15;8~			F3+alt+ctrl+shift		
+
+			I: h							I: h				H
+			I: H							I: H				H+shift
+			I: \x1Bh						I: \x1Bh			H+alt
+			I: \x1BH						I: \x1BH			H+alt+shift
+			I: \x08							I: \x08				H+ctrl     (so ctrl+letter is just index of it in alphabet?)
+			I: \x08							I: \x08				H+ctrl+shift      (SAME as ctrl !!!)
+			I: \x1B\x08						I: \x1B\x08			H+ctrl+alt
+			I: \x1B\x08						I: \x1B\x08			H+ctrl+alt+shift  (SAME as ctrl+alt !!!)
+
+			// normal						MC MODE (DECCKM on)
+			I: \x1B[H 						\x1BOH 				HOME
+			I: \x1B[1;2H    				\x1B[1;2H 			HOME+shift
+			I: \x1B[1;3H    				\x1B[1;3H 			HOME+alt
+			I: \x1B[1;4H    				\x1B[1;4H 			HOME+alt+shift
+			I: \x1B[1;5H    				\x1B[1;5H 			HOME+ctrl
+			I: \x1B[1;6H    				\x1B[1;6H 			HOME+ctrl+shift
+			I: \x1B[1;7H    				\x1B[1;7H 			HOME+ctrl+alt
+			I: \x1B[1;8H    				\x1B[1;8H 			HOME+ctrl+alt+shift
+		*/
+
+		if (esc)
+			a3dWritePTY(term,esc,strlen(esc));
+	}
 }
 
 void my_keyb_focus(bool set)
@@ -5155,6 +5320,8 @@ void my_close()
 
 	DeleteScreen(screen);
 
+	a3dClosePTY(term);
+
 	a3dClose();
 
 	ImGui_ImplOpenGL3_Shutdown();
@@ -5165,15 +5332,48 @@ void my_close()
 	SetScreen(false);
 }
 
-#define TERMINAL
+void my_ptydata(A3D_PTY* pty)
+{
+	char buf[4096];
+	int len = a3dReadPTY(pty, buf, 4095);
+	if (len<=0)
+	{
+		// cloing here is unsafe yet!
+		return;
+	}
+
+	buf[len]=0;
+
+	// intercept : \x1B[?1h 
+
+	for (int i=0; i<len; i++)
+	{
+		if (buf[i] == '\x1B') // esc
+		{
+			if (buf[i+1] == '[') // CSI
+			{
+				if (buf[i+2] == '?') // DEC Private Mode Set (DECSET)
+				{
+					if (buf[i+3] == '1') // DECCKM
+					{
+						if (buf[i+4] == 'h')
+							DECCKM = true;
+						else
+						if (buf[i+4] == 'l')
+							DECCKM = false;
+					}
+				}
+			}
+		}
+	}
+
+
+	if (len)
+		write(STDOUT_FILENO, buf, len);
+}
 
 int main(int argc, char *argv[]) 
 {
-	#ifdef TERMINAL
-		extern int Terminal(int argc, char *argv[]);
-		return Terminal(argc, argv);
-	#endif
-
 	PlatformInterface pi;
 	pi.close = my_close;
 	pi.render = my_render;
@@ -5183,6 +5383,8 @@ int main(int argc, char *argv[])
 	pi.keyb_key = my_keyb_key;
 	pi.keyb_focus = my_keyb_focus;
 	pi.mouse = my_mouse;
+
+	pi.ptydata = my_ptydata;
 
 	GraphicsDesc gd;
 	gd.color_bits = 32;

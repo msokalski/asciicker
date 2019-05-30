@@ -6,7 +6,6 @@ BIN := .run/asciiid
 
 # source files
 SRCS :=	asciiid.cpp \
-		asciiid_vt.cpp \
 		asciiid_term.cpp \
 		asciiid_xterm.cpp \
 		asciiid_x11.cpp \
