@@ -6,6 +6,7 @@ struct TermCell
 {
     uint8_t bg[3];
     uint8_t fg[3];
+    
     uint8_t h;
     uint8_t ch;
 };
