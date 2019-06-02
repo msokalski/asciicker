@@ -64,12 +64,16 @@ struct pollfd* pty_poll = 0;
 A3D_PTY* head_pty = 0;
 A3D_PTY* tail_pty = 0;
 
+// internal interface
+bool a3dProcessVT(A3D_VT* vt);
+
 struct A3D_PTY
 {
 	int fd;
 	pid_t pid;
 	A3D_PTY* next;
 	A3D_PTY* prev;
+	A3D_VT* vt;
 };
 
 const char* caps[]=
@@ -712,8 +716,16 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 						// requires some EXTRA safety as
 						// it can call a3dOpenPty / a3dClosePty
 						// ...
+
+						/*
 						if (platform_api.ptydata)
 							platform_api.ptydata(pty);
+						*/
+
+						if (pty->vt)
+						{
+							a3dProcessVT(pty->vt);
+						}
 					}
 					pty = pty->next;
 				}
@@ -1614,6 +1626,16 @@ bool a3dGetCurDir(char* dir_path, int size)
 	}
 }
 
+// private
+void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt)
+{
+	pty->vt = vt;
+}
+
+A3D_VT* a3dGetPtyVT(A3D_PTY* pty)
+{
+	return pty->vt;
+}
 
 A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[])
 {
@@ -1653,6 +1675,7 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 	// parent
 
 	A3D_PTY* pty = (A3D_PTY*)malloc(sizeof(A3D_PTY));
+	pty->vt = 0;
 	pty->next = 0;
 	pty->prev = tail_pty;
 	if (tail_pty)

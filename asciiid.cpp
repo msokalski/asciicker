@@ -39,7 +39,7 @@
 #include <unistd.h>
 
 
-A3D_PTY* term = 0;
+A3D_VT* term = 0;
 
 #define MOUSE_QUEUE
 
@@ -4935,7 +4935,7 @@ void my_resize(int w, int h)
 void my_init()
 {
 
-	term = a3dOpenPty(80,25, "/bin/bash", 0, 0);
+	term = a3dCreateVT(80,25, "/bin/bash", 0, 0);
 
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
@@ -5114,10 +5114,49 @@ void my_keyb_char(wchar_t chr)
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddInputCharacter((unsigned short)chr);
 
-	if (term && chr < 0x7F)
+	if (!term)
+		return;
+
+	if (chr<0x80)
 	{
-		char c = (char)chr;
-		a3dWritePTY(term, &c, 1);
+		char c[1] =
+		{
+			(char)chr
+		};
+		a3dWriteVT(term, c,1);
+	}
+	else
+	if (chr<0x800)
+	{
+		char cc[2] = 
+		{ 
+			(char)( ((chr>>6)&0x1F) | 0xC0 ), 
+			(char)( (chr&0x3f) | 0x80 ) 
+		};
+		a3dWriteVT(term, cc,2);
+	}
+	else
+	if (chr<0x10000)
+	{
+		char ccc[3] = 
+		{ 
+			(char)( ((chr>>12)&0x0F)|0xE0 ), 
+			(char)( ((chr>>6)&0x3f) | 0x80 ), 
+			(char)( (chr&0x3f) | 0x80 ) 
+		};
+		a3dWriteVT(term, ccc,3);
+	}
+	else
+	if (chr<0x101000)
+	{
+		char cccc[4] = 
+		{ 
+			(char)( ((chr>>18)&0x07)|0xF0 ), 
+			(char)( ((chr>>12)&0x3f) | 0x80 ), 
+			(char)( ((chr>>6)&0x3f) | 0x80 ), 
+			(char)( (chr&0x3f) | 0x80 )
+		};
+		a3dWriteVT(term, cccc,4);
 	}
 }
 
@@ -5278,7 +5317,7 @@ void my_keyb_key(KeyInfo ki, bool down)
 		*/
 
 		if (esc)
-			a3dWritePTY(term,esc,strlen(esc));
+			a3dWriteVT(term,esc,strlen(esc));
 	}
 }
 
@@ -5320,7 +5359,7 @@ void my_close()
 
 	DeleteScreen(screen);
 
-	a3dClosePTY(term);
+	a3dDestroyVT(term);
 
 	a3dClose();
 
@@ -5332,6 +5371,7 @@ void my_close()
 	SetScreen(false);
 }
 
+/*
 void my_ptydata(A3D_PTY* pty)
 {
 	char buf[4096];
@@ -5371,6 +5411,7 @@ void my_ptydata(A3D_PTY* pty)
 	if (len)
 		write(STDOUT_FILENO, buf, len);
 }
+*/
 
 int main(int argc, char *argv[]) 
 {
@@ -5384,7 +5425,7 @@ int main(int argc, char *argv[])
 	pi.keyb_focus = my_keyb_focus;
 	pi.mouse = my_mouse;
 
-	pi.ptydata = my_ptydata;
+	// pi.ptydata = my_ptydata;
 
 	GraphicsDesc gd;
 	gd.color_bits = 32;

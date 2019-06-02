@@ -1,22 +1,16 @@
 #include <malloc.h>
 #include <string.h>
+#include <stdio.h>
+
+// just for write(fd)
+#include <unistd.h>
 
 #include "asciiid_platform.h"
 #include "asciiid_term.h"
 
-struct VT_CHUNK
-{
-    VT_CHUNK* next;
-    char data[1];
-};
-
 struct A3D_VT
 {
     A3D_PTY* pty;
-
-    // still parsing
-    char inbuf[4096];
-    int inpos;
 
     int chr_val;
     int chr_ctx;
@@ -26,26 +20,39 @@ struct A3D_VT
 
     bool UTF8;
 
+    struct
+    {
+        int x, y;
+        int GL, GR;
+    } save_cursor;
+
+    int x,y;
+
     int G_table[4];
-    int G_current; // 0-3
+    int GL, GR; // 0-3
     int G_single_shift; // only 2 or 3 (0-inactive)
 
     bool DECCKM;
 
     // parsed not persisted yet
-    char buf[65536];
+    unsigned char buf[256];
 
     // full persisted history
     FILE* f; 
 };
 
-A3D_VT* CreateVT(int w, int h, const char* path, char* const argv[], char* const envp[])
+// private
+void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt);
+A3D_VT* a3dGetPtyVT(A3D_PTY* pty);
+
+A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* const envp[])
 {
     A3D_PTY* pty = a3dOpenPty(w, h, path, argv, envp);
     if (!pty)
         return 0;
 
     A3D_VT* vt = (A3D_VT*)malloc(sizeof(A3D_VT));
+    a3dSetPtyVT(pty,vt);
 
     vt->pty = pty;
 
@@ -73,9 +80,15 @@ A3D_VT* CreateVT(int w, int h, const char* path, char* const argv[], char* const
     return vt;
 }
 
-int utf8_parser[7][256]; // 0x001FFFFF char (partial) , 0x07000000 target state (if 0: ready), 0x80000000 error reset flag
+void a3dDestroyVT(A3D_VT* vt)
+{
+    a3dClosePTY(vt->pty);
+    free(vt);
+}
 
-void InitParser()
+int utf8_parser[8][256]; // 0x001FFFFF char (partial) , 0x07000000 target state (if 0: ready), 0x80000000 error reset flag
+
+int InitParser()
 {
     int err = 0x00200000;
 
@@ -190,16 +203,20 @@ void InitParser()
         utf8_parser[mode][i] = ((i&0x7)<<18) | (0x03<<24);
     for (int i=0xF8; i<0x100; i++)
         utf8_parser[mode][i] = 0x87000000; // muted error
+
+    return 1;
 }
+
+int parsed = InitParser();
 
 bool a3dProcessVT(A3D_VT* vt)
 {
-    int len = a3dReadPTY(vt->pty, vt->inbuf + vt->inpos, 4096-vt->inpos-1);
+    int len = a3dReadPTY(vt->pty, vt->buf, 256);
     if (len<=0)
         return false;
 
-    int siz = vt->inpos + len;
-    char* buf = vt->inbuf;
+    int siz = len;
+    unsigned char* buf = vt->buf;
 
     int chr_val = vt->chr_val;
     int chr_ctx = vt->chr_ctx;
@@ -237,7 +254,7 @@ bool a3dProcessVT(A3D_VT* vt)
 
         if (seq_ctx == 0)
         {
-            if (chr_val == 0x1B)
+            if (chr == 0x1B)
             {
                 seq_ctx = chr;
                 continue;
@@ -250,7 +267,10 @@ bool a3dProcessVT(A3D_VT* vt)
                 {
                     case 0x84: // (IND)
                         // Index
-                        // Move the active position one line down, to eliminate ambiguity about the meaning of LF. Deprecated in 1988 and withdrawn in 1992 from ISO/IEC 6429 (1986 and 1991 respectively for ECMA-48). 
+                        // Move the active position one line down, 
+                        // to eliminate ambiguity about the meaning of LF. 
+                        // Deprecated in 1988 and withdrawn in 1992 from 
+                        // ISO/IEC 6429 (1986 and 1991 respectively for ECMA-48). 
                         seq_ctx = 0;
                         continue;
                     case 0x85: // (NEL)
@@ -275,13 +295,16 @@ bool a3dProcessVT(A3D_VT* vt)
                         break;
                     case 0x8F: // (SS3)
                         // Single-Shift 3
-                        // Next character invokes a graphic character from the G3 graphic sets respectively. In systems that conform to ISO/IEC 4873 (ECMA-43), even if a C1 set other than the default is used, these two octets may only be used for this purpose.                         break;
+                        // Next character invokes a graphic character from the G3 graphic sets respectively. 
+                        // In systems that conform to ISO/IEC 4873 (ECMA-43), even if a C1 set other than 
+                        // the default is used, these two octets may only be used for this purpose.                         break;
                         seq_ctx = 0;
                         vt->G_single_shift = 3;
                         break;
                     case 0x90: // (DCS)
                         // Device Control String
-                        // Followed by a string of printable characters (0x20 through 0x7E) and format effectors (0x08 through 0x0D), terminated by ST (0x9C). 
+                        // Followed by a string of printable characters (0x20 through 0x7E) and 
+                        // format effectors (0x08 through 0x0D), terminated by ST (0x9C). 
                         seq_ctx = 'P';
                         break;
                     case 0x96: // (SPA)
@@ -294,7 +317,9 @@ bool a3dProcessVT(A3D_VT* vt)
                         break;
                     case 0x98: // (SOS)
                         // Start of String
-                        // Followed by a control string terminated by ST (0x9C) that may contain any character except SOS or ST. Not part of the first edition of ISO/IEC 6429.[9]
+                        // Followed by a control string terminated by ST (0x9C) 
+                        // that may contain any character except SOS or ST. 
+                        // Not part of the first edition of ISO/IEC 6429.[9]
                         seq_ctx = 'X';
                         break;
                     case 0x9A: // (SCI/DECID)
@@ -313,26 +338,33 @@ bool a3dProcessVT(A3D_VT* vt)
                         break;
                     case 0x9D: // (OSC)
                         // Operating System Command
-                        // Followed by a string of printable characters (0x20 through 0x7E) and format effectors (0x08 through 0x0D), terminated by ST (0x9C). These three control codes were intended for use to allow in-band signaling of protocol information, but are rarely used for that purpose. 
+                        // Followed by a string of printable characters (0x20 through 0x7E) 
+                        // and format effectors (0x08 through 0x0D), terminated by ST (0x9C). 
+                        // These three control codes were intended for use to allow in-band 
+                        // signaling of protocol information, but are rarely used for that purpose. 
                         seq_ctx = ']';
                         break;
                     case 0x9E: // (PM)
                         // Privacy Message 
-                        // Followed by a string of printable characters (0x20 through 0x7E) and format effectors (0x08 through 0x0D), terminated by ST (0x9C). These three control codes were intended for use to allow in-band signaling of protocol information, but are rarely used for that purpose. 
+                        // Followed by a string of printable characters (0x20 through 0x7E)
+                        // and format effectors (0x08 through 0x0D), terminated by ST (0x9C). 
+                        // These three control codes were intended for use to allow in-band 
+                        // signaling of protocol information, but are rarely used for that purpose. 
                         seq_ctx = '^';
                         break;
                     case 0x9F: // (APC)
                         // Application Program Command 
-                        // Followed by a string of printable characters (0x20 through 0x7E) and format effectors (0x08 through 0x0D), terminated by ST (0x9C). These three control codes were intended for use to allow in-band signaling of protocol information, but are rarely used for that purpose. 
+                        // Followed by a string of printable characters (0x20 through 0x7E) 
+                        // and format effectors (0x08 through 0x0D), terminated by ST (0x9C). 
+                        // These three control codes were intended for use to allow in-band 
+                        // signaling of protocol information, but are rarely used for that purpose. 
                         seq_ctx = '_';
                         break;
 
                     default:
                         // invalid C1
-                        seq_ctx = 0;                        
+                        continue;
                 }
-
-                continue;
             }
 
             // C0 Single-character functions
@@ -340,7 +372,6 @@ bool a3dProcessVT(A3D_VT* vt)
             {
                 case 0x05: // ENQ
                     // respond with empty string
-                    // ...
                     continue;
 
                 case 0x07: // BEL
@@ -350,19 +381,19 @@ bool a3dProcessVT(A3D_VT* vt)
 
                 case 0x08: // BS
                     // backspace (move left 1 cell, unwrap if needed and go up)
-                    // ...
+                    // echo -e "aaa\x08\x08b" -> aba
+                    // echo -e "aaa\x09\x08b" -> aaa    b (backspace by 1 cell even if there was a tab!)
                     continue;
 
                 case 0x09: // HT
                     // Horizontal tab
-                    // ...
+                    // echo -e "aaa\x09b" -> aaa     b 
                     continue;
 
                 case 0x0A: // LF
                 case 0x0B: // VT
                 case 0x0C: // FF
-                    // form feed
-                    // ...
+                    // move cursor down, add new line if needed
                     continue;
 
                 case 0x0E: // SO
@@ -379,6 +410,7 @@ bool a3dProcessVT(A3D_VT* vt)
                     if (chr<0x20)
                     {
                         // invalid C0
+                        continue;
                     }
             }
 
@@ -390,8 +422,49 @@ bool a3dProcessVT(A3D_VT* vt)
             // and charater code is greater than current G_set size
             // we should not print that char!
 
-            // TODO:
-            // ...
+            // TEMPORARILY TO CONSOLE WE'RE ATTACHED TO
+
+            if (chr<0x000080)
+            {
+                char c[1] =
+                {
+                    (char)chr
+                };
+                write(STDOUT_FILENO,c,1);
+            }
+            else
+            if (chr<0x000800)
+            {
+                char cc[2] = 
+                { 
+                    (char)( ((chr>>6)&0x1F) | 0xC0 ), 
+                    (char)( (chr&0x3f) | 0x80 ) 
+                };
+                write(STDOUT_FILENO,cc,2);
+            }
+            else
+            if (chr<0x010000)
+            {
+                char ccc[3] = 
+                { 
+                    (char)( ((chr>>12)&0x0F)|0xE0 ), 
+                    (char)( ((chr>>6)&0x3f) | 0x80 ), 
+                    (char)( (chr&0x3f) | 0x80 ) 
+                };
+                write(STDOUT_FILENO,ccc,3);
+            }
+            else
+            if (chr<0x101000)
+            {
+                char cccc[4] = 
+                { 
+                    (char)( ((chr>>18)&0x07)|0xF0 ), 
+                    (char)( ((chr>>12)&0x3f) | 0x80 ), 
+                    (char)( ((chr>>6)&0x3f) | 0x80 ), 
+                    (char)( (chr&0x3f) | 0x80 )
+                };
+                write(STDOUT_FILENO,cccc,4);
+            }
 
             continue;
         }
@@ -409,11 +482,14 @@ bool a3dProcessVT(A3D_VT* vt)
                         // Index
                         // Move the active position one line down, to eliminate ambiguity about the meaning of LF. Deprecated in 1988 and withdrawn in 1992 from ISO/IEC 6429 (1986 and 1991 respectively for ECMA-48). 
                         seq_ctx = 0;
+                        vt->y++;
                         break;
                     case 'E': // (NEL)
                         // Next Line
                         // Equivalent to CR+LF. Used to mark end-of-line on some IBM mainframes. 
                         seq_ctx = 0;
+                        vt->x=0;
+                        vt->y++;
                         break;
                     case 'H': // (HTS)
                         // Character Tabulation Set, Horizontal Tabulation Set
@@ -423,6 +499,7 @@ bool a3dProcessVT(A3D_VT* vt)
                     case 'M': // (RI)
                         // Reverse Line Feed, Reverse Index
                         seq_ctx = 0;
+                        vt->y--;
                         break;
                     case 'N': // (SS2)
                         // Single-Shift 2
@@ -500,6 +577,91 @@ bool a3dProcessVT(A3D_VT* vt)
                         break;
                     }
 
+                    case '6': // Back Index (DECBI), VT420 and up.
+                        seq_ctx = 0;
+                        break;
+
+                    case '7': // DECSC Save Cursor 
+                    /*
+                        Saves the following items in the terminal's memory:
+
+                            Cursor position
+                            Character attributes set by the SGR command
+                            Character sets (G0, G1, G2, or G3) currently in GL and GR
+                            Wrap flag (autowrap or no autowrap)
+                            State of origin mode (DECOM)
+                            Selective erase attribute
+                            Any single shift 2 (SS2) or single shift 3 (SS3) functions sent
+                    */
+                        vt->save_cursor.x = vt->x;
+                        vt->save_cursor.y = vt->y;
+                        vt->save_cursor.SGR = vt.SGR;
+                        vt->save_cursor.GL = vt->GL; 
+                        vt->save_cursor.GR = vt->GR;
+                        vt->save_cursor.auto_wrap = vt->auto_wrap;
+                        vt->save_cursor.single_shift = vt->single_shift;
+                        seq_ctx = 0;
+                        break;
+
+                    case '8': // DECRC Restore Cursor 
+                        vt->x = save_cursor.vt->x;
+                        vt->y = save_cursor.vt->y;
+                        vt->SGR = save_cursor.SGR;
+                        vt->GL = save_cursor.vt->GL; 
+                        vt->GR = save_cursor.vt->GR;
+                        vt->auto_wrap = save_cursor.vt->auto_wrap;
+                        vt->single_shift = save_cursor.vt->single_shift;
+                        seq_ctx = 0;
+                        break;
+
+                    case '=': // DECPAM Application Keypad ()
+                        vt->app_keypad = true;
+                        seq_ctx = 0;
+                        break; 
+
+                    case '<': // DECPNM Normal Keypad ()    
+                        vt->app_keypad = false;
+                        seq_ctx = 0;
+                        break;
+
+                    case 'F': // Cursor to lower left corner of screen (if enabled by the hpLowerleftBugCompat resource). 
+                        seq_ctx = 0;
+                        break;
+
+                    case 'c': // RIS 	Full Reset () 
+                        seq_ctx = 0;
+                        break;
+
+                    case 'l': // Memory Lock (per HP terminals). Locks memory above the cursor. 
+                        seq_ctx = 0;
+                        break;
+
+                    case 'm': // Memory Unlock (per HP terminals) 
+                        seq_ctx = 0;
+                        break;
+
+                    case 'n': // LS2 	Invoke the G2 Character Set () 
+                        seq_ctx = 0;
+                        vt->G_current = 2;
+                        break;
+
+                    case 'o': // LS3 	Invoke the G3 Character Set () 
+                        seq_ctx = 0;
+                        vt->G_current = 3;
+                        break;
+
+                    case '|': // LS3R 	Invoke the G3 Character Set as GR (). Has no visible effect in xterm. 
+                        seq_ctx = 0;
+                        break;
+
+                    case '}': // LS2R 	Invoke the G2 Character Set as GR (). Has no visible effect in xterm. 
+                        seq_ctx = 0;
+                        break;
+                        
+                    case '~': // LS1R 	Invoke the G1 Character Set as GR (). Has no visible effect in xterm.
+                        seq_ctx = 0;
+                        break;
+                        
                     default:
                         // error seq, dump it as regular chars!
                         // ...
@@ -548,26 +710,31 @@ bool a3dProcessVT(A3D_VT* vt)
                     case '3':
                         seq_ctx = 0;
                         // set double-height line, upper half
+                        // current line is permanently set to it
                         break;
 
                     case '4':
                         seq_ctx = 0;
                         // set double-height line, lower half
+                        // current whole line is permanently set to it
                         break;
 
                     case '5':
                         seq_ctx = 0;
                         // set single-width line
+                        // current whole line is permanently set to it
                         break;
 
                     case '6':
                         seq_ctx = 0;
                         // set double-width line
+                        // current whole line is permanently set to it
                         break;
 
                     case '8':
                         seq_ctx = 0;
                         // screen align test
+                        // fills screen with EEEE and sets different modes to lines 
                         break;
 
                     default: 
@@ -849,18 +1016,29 @@ bool a3dProcessVT(A3D_VT* vt)
 
             case '[': // (CSI)
             {
-                // our biggest enemy!
-                // ...
+                if (chr==';' || chr>='0' && chr<='9')
+                    str_len++;
+                else
+                {
+                    // consider anything else terminates
+                    // positively or negatively (default)
+                    switch (chr)
+                    {
+                        default:
+                            str_len = 0;
+                            seq_ctx = 0;
+                    }
+                }
                 break;
             }
 
             case 'P': // (DCS) -> Ps;Ps|PtST or $ qPtST or Ps$tPtST or +pPtST or +qPtST
             case 'X': // (SOS) not in xterm spec
-            case ']': // (OSC) -> Ps;PtBEL or Ps;PtST - hmm is that BEL preceded with ST?
+            case ']': // (OSC) -> Ps;PtBEL or Ps;PtST - hmm BEL!
             case '^': // (PM)  -> skipped by xterm
             case '_': // (APC) -> skipped by xterm
             {
-                if (chr == 0x9C)
+                if (chr == 0x9C || chr == 0x07 && seq_ctx == ']')
                 {
                     // do something with string from our secret place!
                     // ...
@@ -902,3 +1080,7 @@ bool a3dProcessVT(A3D_VT* vt)
     return true;
 }
 
+int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size)
+{
+    return a3dWritePTY(vt->pty, buf, size);
+}

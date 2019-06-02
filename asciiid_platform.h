@@ -199,8 +199,6 @@ enum KeyInfo
 	A3D_MAPEND
 };
 
-struct A3D_PTY;
-
 struct PlatformInterface
 {
 	void(*init)();
@@ -211,8 +209,6 @@ struct PlatformInterface
 	void(*keyb_char)(wchar_t ch);
 	void(*keyb_focus)(bool set);
 	void(*mouse)(int x, int y, MouseInfo mi);
-
-	void(*ptydata)(A3D_PTY* pty);
 
 	// asset loader
 	void(*image)(void* cookie, int width, int height, int channels, int depth, void* data);
@@ -292,7 +288,13 @@ int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* na
 bool a3dSetCurDir(const char* dir_path);
 bool a3dGetCurDir(char* dir_path, int size);
 
-// argv & envp arrays must be null-ptr terminated!
+struct A3D_VT;
+A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* const envp[]);
+void a3dDestroyVT(A3D_VT* vt);
+int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size);
+
+// HIDE IT ?
+struct A3D_PTY;
 A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[]);
 int a3dReadPTY(A3D_PTY* pty, void* buf, size_t size);
 int a3dWritePTY(A3D_PTY* pty, const void* buf, size_t size);
