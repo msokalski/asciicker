@@ -679,10 +679,11 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (platform_api.resize)
 		platform_api.resize(w,h);
 
-	int x11_fd = ConnectionNumber(dpy);
+	// int x11_fd = ConnectionNumber(dpy);
 
 	while (!closing)
 	{
+		/*
 		if (pty_num)
 		{
 			if (!pty_poll)
@@ -702,7 +703,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 			}
 
 			int timeout=0;
-			int num = poll(pty_poll, pty_num /*+1*/, timeout);
+			int num = poll(pty_poll, pty_num , timeout);
 
 			if (num > 0)
 			{
@@ -717,11 +718,6 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 						// it can call a3dOpenPty / a3dClosePty
 						// ...
 
-						/*
-						if (platform_api.ptydata)
-							platform_api.ptydata(pty);
-						*/
-
 						if (pty->vt)
 						{
 							a3dProcessVT(pty->vt);
@@ -731,6 +727,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 				}
 			}
 		}
+		*/
 
 		while (!closing && XPending(dpy))
 		{

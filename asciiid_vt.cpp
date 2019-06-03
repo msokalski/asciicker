@@ -8,6 +8,67 @@
 #include "asciiid_platform.h"
 #include "asciiid_term.h"
 
+struct SGR // 8 bytes
+{
+    uint8_t bk[3];
+    uint8_t fg[3];
+    uint16_t fl; 
+
+    enum SGR_FLAGS
+    {
+        // font decoration modes (4 bits)
+
+        SGR_NORMAL = 0, 
+        SGR_BOLD = 1, 
+        SGR_FAINT = 2,
+        SGR_NORMAL_UNDERLINED = 3,
+        SGR_BOLD_UNDERLINED = 4,
+        SGR_FAINT_UNDERLINED = 5,
+        SGR_NORMAL_DBL_UNDERLINED = 6,
+        SGR_BOLD_DBL_UNDERLINED = 7,
+        SGR_FAINT_DBL_UNDERLINED = 8,
+
+        // font decoration flags (4 bits)
+
+        SGR_ITALIC = 16,
+        SGR_BLINK = 32,
+        SGR_INVERSE = 64,
+        SGR_CROSSED_OUT = 128,
+
+        // font size and cell part modes (4 bits)
+
+        SGR_DBL_WIDTH_LEFT = 0x0100, //1<<8,
+        SGR_DBL_WIDTH_RIGHT = 0x0200,
+        SGR_DBL_HEIGHT_UPPER = 0x0300, // non-standard
+        SGR_DBL_HEIGHT_LOWER = 0x0400, // non-standard
+        SGR_DBL_SIZE_UPPER_LEFT = 0x0500,
+        SGR_DBL_SIZE_UPPER_RIGHT = 0x0600,
+        SGR_DBL_SIZE_LOWER_LEFT = 0x0700,
+        SGR_DBL_SIZE_LOWER_RIGHT = 0x0800,
+
+        // vt cell flags
+
+        SGR_PALETTIZED_FG = 0x1000,
+        SGR_PALETTIZED_BG = 0x2000,
+
+        SGR_LAST_BIT_LEFT = 0x4000, // FREEE
+
+        // 1 bit can be saved by
+        // merging 2 4bit modes into 1 9x9 (7bit)
+
+        // if still more bits are needed
+        // hi part of ch has 11 spare bits!
+
+        SGR_INVISIBLE = 0x8000, // make it not rendered at all
+    };
+};
+
+struct VT_CELL // 12 bytes
+{
+    uint32_t ch;
+    SGR sgr;
+};
+
 struct A3D_VT
 {
     A3D_PTY* pty;
@@ -23,27 +84,225 @@ struct A3D_VT
     struct
     {
         int x, y;
-        int GL, GR;
+        int gl, gr;
+        SGR sgr;
+        bool auto_wrap;
+        int single_shift;
     } save_cursor;
 
-    int x,y;
+    uint16_t x, y;
+    uint8_t gl, gr; // 0-3
+    uint8_t single_shift; // only 2 or 3 (0-inactive)
+    SGR sgr;
 
-    int G_table[4];
-    int GL, GR; // 0-3
-    int G_single_shift; // only 2 or 3 (0-inactive)
+    // shouldn't we merge it into bitfields?
+    bool auto_wrap;
+    bool app_keypad;
 
-    bool DECCKM;
+    uint8_t G_table[4];
 
     // parsed not persisted yet
-    unsigned char buf[256];
+    unsigned char buf[256]; // size will be adjusted to maximize thoughput
 
-    // full persisted history
-    FILE* f; 
+    static const int MAX_COLUMNS = 65536;
+    static const int MAX_ARCHIVE_LINES = 65536;
+    static const int MAX_TEMP_CELLS = 256;
+
+    // no reflows
+    // HARD wrap occurs at MAX_COLUMNS
+    // soft wrap at current w if auto_wrap is enabled
+
+    struct LINE
+    {
+        int cells;
+        VT_CELL cell[1];
+    };
+
+    int scroll; // scroll back amount (used by renderer, does not affect VT)
+    int lines;  // min = h max = MAX_ARCHIVE_LINES
+    int first_line; // starts incrementing after lines reaches MAX_ARCHIVE_LINES and wraps at MAX_ARCHIVE_LINES
+    LINE* line[MAX_ARCHIVE_LINES];
+
+    int w,h;
+
+    VT_CELL temp[MAX_TEMP_CELLS]; // prolongs current line
+    int temp_len; // after reaching 256 it must be baked into current line
+
+    int Write(int chr)
+    {
+        int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
+        LINE* l = line[lidx];
+
+        // adjust coords for auto_wrap
+        if (auto_wrap && x>=w)
+        {
+            x=0;
+            y++;
+            if (lines == MAX_ARCHIVE_LINES)
+            {
+
+            }
+        }
+
+        // then check if we need to generate new lines
+        if (y>=lines)
+        {
+            for (int i=lines; i<y; i++)
+            {
+                l = (LINE*)malloc(sizeof(LINE) - sizeof(VT_CELL));
+                if (!l)
+                    return -1;
+                l->cells = 0;
+                line[i] = l;
+            }
+
+            // last line should include x empty cells
+            l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(x-1));
+            if (!l)
+                return -1;
+            l->cells = x;
+            line[y] = l;
+            lines = y+1;
+
+            VT_CELL blank = { 0x20, sgr };
+            for (int i=0; i<x; i++)
+                l->cell[i] = blank;           
+        }        
+
+        if (x>=w && auto_wrap)
+        {
+            if (temp_len) // needed if changing y
+            {
+                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(temp_len-1);
+                if (!l) // mem-problem
+                    return -1;
+                memcpy(l->cell + l->cells, temp, sizeof(VT_CELL)*temp_len);
+                l->cells += temp_len;
+                line[lidx] = l;
+                temp_len = 0;
+            }
+            x=0; 
+            y++;
+
+            lidx = (first_line + y) % MAX_ARCHIVE_LINES;
+            l = line[lidx];
+
+            // check if we need to push/wrap archive or append line or nutting
+
+            if (y==h) // out of screen -> push
+            {
+                y--;
+                first_line++;
+            }
+        }
+        else
+        {
+            // check if we need to prolong current line with temp
+            if (x>l->cells)
+            {
+                // at first prolong line with empty cells
+                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
+                if (!l)
+                    return -1;
+                VT_CELL blank = { 0x20, sgr };
+                for (int i=l->cells; i<x; i++)
+                    l->cell[i] = blank;
+                l->cells = x;
+                line[first_line + y] = l;
+            }
+            temp_len = 0; // ready to append to begining of temp
+        }
+
+        VT_CELL cell = {chr, sgr};
+
+        if (x >= line[first_line + y]->cells)
+        {
+            // write to temp
+
+            if (x >= line[first_line + y]->cells + MAX_TEMP_CELLS)
+            {
+                // but temp is too short!
+                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
+                if (!l)
+                    return -1;
+                for (int i=0; i<temp_len; i++) 
+                    l->cell[i+l->cells] = temp[i]; // bake current temp into line
+                VT_CELL blank = { 0x20, sgr }; 
+                for (int i=l->cells+temp_len; i<x; i++)
+                    l->cell[i] = blank; // prolong line with empty cells
+                l->cells = x;
+                line[first_line + y] = l;
+                temp_len = 0; // ready to append to begining of temp
+            }
+
+            temp[temp_len++] = cell;
+            x++;
+        }
+        else
+        {
+            // write directly to line
+            l->cell[x++] = cell;
+        }
+
+        return x;        
+    }
 };
 
 // private
 void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt);
 A3D_VT* a3dGetPtyVT(A3D_PTY* pty);
+
+static void Scroll(A3D_VT* vt)
+{
+    if (vt->y >= vt->h)
+    {
+        // move upper part of screen to archive
+
+        int scroll = vt->y - vt->h + 1;
+        if (scroll < vt->h)
+            memmove(vt->screen, vt->screen + scroll* vt->w * sizeof(VT_CELL), (vt->h - scroll) * vt->w * sizeof(VT_CELL));
+        VT_CELL blank = { 0x20, vt->sgr };
+        VT_CELL* clear = vt->screen + (vt->h - scroll) * vt->w;
+        for (int i = 0; i < scroll * vt->w; i++)
+            clear[i] = blank;
+
+        vt->y = vt->h-1;
+    }
+
+    // DO IT ALWAYS after resize
+    // x can be as large as MAX_INT is then it will wrap to 0
+    if (vt->x<0)
+        vt->x += (1<<31);
+    if (vt->y<0)
+        vt->y=0;
+}
+
+static void Reset(A3D_VT* vt)
+{
+    vt->UTF8 = true;
+    vt->str_len = 0;
+
+    vt->G_table[0] = 0;
+    vt->G_table[1] = 0;
+    vt->G_table[2] = 0;
+    vt->G_table[3] = 0;
+
+    vt->gl = 0;
+    vt->gr = 0;
+    vt->single_shift = 0;
+    vt->auto_wrap = false;
+    vt->single_shift = 0;
+
+    vt->app_keypad = false;
+
+    vt->DECCKM = false;
+
+    vt->chr_val = 0;
+    vt->chr_ctx = 0;
+    vt->seq_ctx = 0;
+
+    memset(vt->screen,0,sizeof(VT_CELL)*vt->w*vt->h);
+}
 
 A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* const envp[])
 {
@@ -52,30 +311,14 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
         return 0;
 
     A3D_VT* vt = (A3D_VT*)malloc(sizeof(A3D_VT));
+    vt->screen = (VT_CELL*)malloc(sizeof(VT_CELL)*w*h);
+    vt->w = w;
+    vt->h = h;
+
+    Reset(vt);
+
     a3dSetPtyVT(pty,vt);
-
     vt->pty = pty;
-
-    vt->f = 0;
-
-    vt->UTF8 = true;
-
-    vt->str_len = 0;
-
-    vt->G_table[0] = 0;
-    vt->G_table[1] = 0;
-    vt->G_table[2] = 0;
-    vt->G_table[3] = 0;
-
-    vt->G_current = 0;
-    vt->G_single_shift = 0;
-
-
-    vt->DECCKM = false;
-
-    vt->chr_val = 0;
-    vt->chr_ctx = 0;
-    vt->seq_ctx = 0;
 
     return vt;
 }
@@ -83,6 +326,8 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
 void a3dDestroyVT(A3D_VT* vt)
 {
     a3dClosePTY(vt->pty);
+    if (vt->screen)
+        free(vt->screen);
     free(vt);
 }
 
@@ -261,6 +506,7 @@ bool a3dProcessVT(A3D_VT* vt)
             }
 
             // C1 (8-Bit) Control Characters
+            /*
             if (chr >= 0x80 && chr<0xA0)
             {
                 switch (chr)
@@ -291,7 +537,7 @@ bool a3dProcessVT(A3D_VT* vt)
                         // Single-Shift 2
                         // Next character invokes a graphic character from the G2 graphic sets respectively. 
                         seq_ctx = 0;
-                        vt->G_single_shift = 2;
+                        vt->single_shift = 2;
                         break;
                     case 0x8F: // (SS3)
                         // Single-Shift 3
@@ -299,7 +545,7 @@ bool a3dProcessVT(A3D_VT* vt)
                         // In systems that conform to ISO/IEC 4873 (ECMA-43), even if a C1 set other than 
                         // the default is used, these two octets may only be used for this purpose.                         break;
                         seq_ctx = 0;
-                        vt->G_single_shift = 3;
+                        vt->single_shift = 3;
                         break;
                     case 0x90: // (DCS)
                         // Device Control String
@@ -366,6 +612,7 @@ bool a3dProcessVT(A3D_VT* vt)
                         continue;
                 }
             }
+            */
 
             // C0 Single-character functions
             switch (chr)
@@ -380,30 +627,58 @@ bool a3dProcessVT(A3D_VT* vt)
                     continue;
 
                 case 0x08: // BS
+                {
                     // backspace (move left 1 cell, unwrap if needed and go up)
                     // echo -e "aaa\x08\x08b" -> aba
                     // echo -e "aaa\x09\x08b" -> aaa    b (backspace by 1 cell even if there was a tab!)
+                    if (vt->x>0)
+                        vt->x--;
+
                     continue;
+                }
 
                 case 0x09: // HT
+                {
                     // Horizontal tab
                     // echo -e "aaa\x09b" -> aaa     b 
+                    VT_CELL blank = { 0x20, vt->sgr };
+                    do
+                    {
+                        if (vt->auto_wrap && vt->x >= vt->w)
+                        {
+                            vt->x=0;
+                            vt->y++;
+                            Scroll(vt);
+                        }
+
+                        if (vt->x < vt->w)
+                            vt->screen[vt->x + vt->y * vt->w] = blank;
+
+                        vt->x++;
+                    } while (vt->x&0x7);
+                    
                     continue;
+                }
 
                 case 0x0A: // LF
                 case 0x0B: // VT
                 case 0x0C: // FF
+                {
                     // move cursor down, add new line if needed
+                    vt->y++;
+                    Scroll(vt);
+
                     continue;
+                }
 
                 case 0x0E: // SO
                     // switch to G1
-                    vt->G_current = 1;
+                    vt->gl = 1;
                     continue;
 
                 case 0x0F: // SI
                     // switch to G0
-                    vt->G_current = 0;
+                    vt->gl = 0;
                     continue;
 
                 default:
@@ -416,55 +691,20 @@ bool a3dProcessVT(A3D_VT* vt)
 
             out_chr:
 
-            // so we are left with chr to be printed!
+            if (vt->auto_wrap && vt->x >= vt->w)
+            {
+                vt->x=0;
+                vt->y++;
+                Scroll(vt);
+            }
 
-            // if we are in non-utf mode
-            // and charater code is greater than current G_set size
-            // we should not print that char!
+            if (vt->x < vt->w)
+            {
+                VT_CELL cell = { (uint32_t)chr, vt->sgr };
+                vt->screen[vt->x + vt->y * vt->w] = cell;
+            }
 
-            // TEMPORARILY TO CONSOLE WE'RE ATTACHED TO
-
-            if (chr<0x000080)
-            {
-                char c[1] =
-                {
-                    (char)chr
-                };
-                write(STDOUT_FILENO,c,1);
-            }
-            else
-            if (chr<0x000800)
-            {
-                char cc[2] = 
-                { 
-                    (char)( ((chr>>6)&0x1F) | 0xC0 ), 
-                    (char)( (chr&0x3f) | 0x80 ) 
-                };
-                write(STDOUT_FILENO,cc,2);
-            }
-            else
-            if (chr<0x010000)
-            {
-                char ccc[3] = 
-                { 
-                    (char)( ((chr>>12)&0x0F)|0xE0 ), 
-                    (char)( ((chr>>6)&0x3f) | 0x80 ), 
-                    (char)( (chr&0x3f) | 0x80 ) 
-                };
-                write(STDOUT_FILENO,ccc,3);
-            }
-            else
-            if (chr<0x101000)
-            {
-                char cccc[4] = 
-                { 
-                    (char)( ((chr>>18)&0x07)|0xF0 ), 
-                    (char)( ((chr>>12)&0x3f) | 0x80 ), 
-                    (char)( ((chr>>6)&0x3f) | 0x80 ), 
-                    (char)( (chr&0x3f) | 0x80 )
-                };
-                write(STDOUT_FILENO,cccc,4);
-            }
+            vt->x++;
 
             continue;
         }
@@ -479,55 +719,83 @@ bool a3dProcessVT(A3D_VT* vt)
                         goto out_chr;
 
                     case 'D': // (IND)
+                    {
                         // Index
                         // Move the active position one line down, to eliminate ambiguity about the meaning of LF. Deprecated in 1988 and withdrawn in 1992 from ISO/IEC 6429 (1986 and 1991 respectively for ECMA-48). 
                         seq_ctx = 0;
                         vt->y++;
+                        Scroll(vt);
+
                         break;
+                    }
+
                     case 'E': // (NEL)
+                    {
                         // Next Line
                         // Equivalent to CR+LF. Used to mark end-of-line on some IBM mainframes. 
                         seq_ctx = 0;
                         vt->x=0;
                         vt->y++;
+                        Scroll(vt);
+
                         break;
+                    }
+
                     case 'H': // (HTS)
+                    {
                         // Character Tabulation Set, Horizontal Tabulation Set
                         // Causes a character tabulation stop to be set at the active position. 
                         seq_ctx = 0;
                         break;
+                    }
+                    
                     case 'M': // (RI)
+                    {
                         // Reverse Line Feed, Reverse Index
                         seq_ctx = 0;
-                        vt->y--;
+                        if (vt->y > 0)
+                            vt->y--;
                         break;
+                    }
+
                     case 'N': // (SS2)
+                    {
                         // Single-Shift 2
                         // Next character invokes a graphic character from the G2 graphic sets respectively. 
                         seq_ctx = 0;
-                        vt->G_single_shift = 2;
+                        vt->single_shift = 2;
                         break;
+                    }
+
                     case 'O': // (SS3)
+                    {
                         // Single-Shift 3
                         // Next character invokes a graphic character from the G3 graphic sets respectively. In systems that conform to ISO/IEC 4873 (ECMA-43), even if a C1 set other than the default is used, these two octets may only be used for this purpose.                         break;
                         seq_ctx = 0;
-                        vt->G_single_shift = 3;
+                        vt->single_shift = 3;
                         break;
+                    }
+
                     case 'V': // (SPA)
+                    {
                         // Start of Protected Area
                         seq_ctx = 0;
                         break;
+                    }
+
                     case 'W': // (EPA)
+                    {
                         // End of Protected Area
                         seq_ctx = 0;
                         break;
-
+                    }
 
                     case '\\':// (ST)
+                    {
                         // String Terminator
                         seq_ctx = 0;
                         break;
-
+                    }
 
                     case 'P': // (DCS)
                         // Device Control String
@@ -595,22 +863,22 @@ bool a3dProcessVT(A3D_VT* vt)
                     */
                         vt->save_cursor.x = vt->x;
                         vt->save_cursor.y = vt->y;
-                        vt->save_cursor.SGR = vt.SGR;
-                        vt->save_cursor.GL = vt->GL; 
-                        vt->save_cursor.GR = vt->GR;
+                        vt->save_cursor.sgr = vt->sgr;
+                        vt->save_cursor.gl = vt->gl; 
+                        vt->save_cursor.gr = vt->gr;
                         vt->save_cursor.auto_wrap = vt->auto_wrap;
                         vt->save_cursor.single_shift = vt->single_shift;
                         seq_ctx = 0;
                         break;
 
                     case '8': // DECRC Restore Cursor 
-                        vt->x = save_cursor.vt->x;
-                        vt->y = save_cursor.vt->y;
-                        vt->SGR = save_cursor.SGR;
-                        vt->GL = save_cursor.vt->GL; 
-                        vt->GR = save_cursor.vt->GR;
-                        vt->auto_wrap = save_cursor.vt->auto_wrap;
-                        vt->single_shift = save_cursor.vt->single_shift;
+                        vt->x = vt->save_cursor.x;
+                        vt->y = vt->save_cursor.y;
+                        vt->sgr = vt->save_cursor.sgr;
+                        vt->gl = vt->save_cursor.gl; 
+                        vt->gr = vt->save_cursor.gr;
+                        vt->auto_wrap = vt->save_cursor.auto_wrap;
+                        vt->single_shift = vt->save_cursor.single_shift;
                         seq_ctx = 0;
                         break;
 
@@ -625,8 +893,12 @@ bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     case 'F': // Cursor to lower left corner of screen (if enabled by the hpLowerleftBugCompat resource). 
+                    {
+                        vt->x = 0;
+                        vt->y = vt->h-1;
                         seq_ctx = 0;
                         break;
+                    }
 
                     case 'c': // RIS 	Full Reset () 
                         seq_ctx = 0;
@@ -642,12 +914,12 @@ bool a3dProcessVT(A3D_VT* vt)
 
                     case 'n': // LS2 	Invoke the G2 Character Set () 
                         seq_ctx = 0;
-                        vt->G_current = 2;
+                        vt->gr = 2;
                         break;
 
                     case 'o': // LS3 	Invoke the G3 Character Set () 
                         seq_ctx = 0;
-                        vt->G_current = 3;
+                        vt->gr = 3;
                         break;
 
                     case '|': // LS3R 	Invoke the G3 Character Set as GR (). Has no visible effect in xterm. 

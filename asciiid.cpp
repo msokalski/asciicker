@@ -490,7 +490,7 @@ struct RenderContext
 		// meshes & bsp
 		glCreateBuffers(1, &mesh_vbo);
 		int mesh_face_size = 3*sizeof(float[3]) + sizeof(uint32_t); // 3*pos_xyz, visual
-		glNamedBufferStorage(mesh_vbo, 1024 * mesh_face_size, 0, GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
+		glNamedBufferStorage(mesh_vbo, 1024 * mesh_face_size, 0, GL_DYNAMIC_STORAGE_BIT);
 
 		glCreateVertexArrays(1, &mesh_vao);
 		glBindVertexArray(mesh_vao);
@@ -1476,7 +1476,6 @@ struct RenderContext
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		//glLineWidth(4.0f);
 
-		mesh_map=0;
 		mesh_faces=0;
 
 		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
@@ -1485,15 +1484,7 @@ struct RenderContext
 	static void RenderBSP(int level, const float bbox[6], void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
-
-		if (!rc->mesh_map)
-		{
-			//glBufferData(GL_ARRAY_BUFFER, sizeof(Face)*1024, 0, GL_STREAM_DRAW);
-			rc->mesh_map = (Face*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-		}
 		
-		assert(rc->mesh_map);
-
 		float* buf = rc->mesh_map[rc->mesh_faces].abc;
 		buf[0] = bbox[0];
 		buf[1] = bbox[1];
@@ -1506,9 +1497,8 @@ struct RenderContext
 		if (rc->mesh_faces/* == 1024*/)
 		{
 			// flush
-			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
 			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
-			rc->mesh_map=0;
 			rc->mesh_faces=0;
 		}
 	}
@@ -1518,9 +1508,8 @@ struct RenderContext
 		if (mesh_faces)
 		{
 			// flush
-			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, mesh_faces * sizeof(Face), mesh_map);
 			glDrawArrays(GL_POINTS, 0, mesh_faces);
-			mesh_map=0;
 			mesh_faces=0;
 		}
 
@@ -1561,7 +1550,7 @@ struct RenderContext
 		glDepthFunc(GL_GEQUAL);
 		glCullFace(GL_BACK);
 
-		mesh_map=0;
+		//mesh_map=0;
 		mesh_faces=0;
 
 		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
@@ -1570,15 +1559,7 @@ struct RenderContext
 	static void RenderFace(float coords[9], uint32_t visual, void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
-
-		if (!rc->mesh_map)
-		{
-			//glBufferData(GL_ARRAY_BUFFER, sizeof(Face)*1024, 0, GL_STREAM_DRAW);
-			rc->mesh_map = (Face*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-		}
 		
-		assert(rc->mesh_map);
-
 		memcpy(rc->mesh_map[rc->mesh_faces].abc, coords, sizeof(float[9]));
 		rc->mesh_map[rc->mesh_faces].visual = visual;
 		rc->mesh_faces++;
@@ -1586,9 +1567,8 @@ struct RenderContext
 		if (rc->mesh_faces == 1024)
 		{
 			// flush
-			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
 			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
-			rc->mesh_map=0;
 			rc->mesh_faces=0;
 		}
 	}
@@ -1600,9 +1580,8 @@ struct RenderContext
 		if (rc->mesh_faces)
 		{
 			// flush
-			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
 			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
-			rc->mesh_map=0;
 			rc->mesh_faces=0;
 		}
 
@@ -1618,9 +1597,8 @@ struct RenderContext
 		if (mesh_faces)
 		{
 			// flush
-			glUnmapBuffer(GL_ARRAY_BUFFER);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, mesh_faces * sizeof(Face), mesh_map);
 			glDrawArrays(GL_POINTS, 0, mesh_faces);
-			mesh_map=0;
 			mesh_faces=0;
 		}
 
@@ -1862,7 +1840,9 @@ struct RenderContext
 	{
 		float abc[9];
 		uint32_t visual;
-	}* mesh_map;
+	}; // * mesh_map;
+	
+	Face mesh_map[1024];
 
 	TexPage* page_tex;
 	TexPage* head;
@@ -2644,33 +2624,6 @@ void my_render()
 
 		struct MeshWidget
 		{
-			static void query_cb(float coords[9], uint32_t visual, void* cookie)
-			{
-				MeshWidget* mw = (MeshWidget*)cookie;
-				RenderContext* rc = &render_context;
-
-				if (!mw->map)
-				{
-					//glBufferData(GL_ARRAY_BUFFER, sizeof(Face)*1024, 0, GL_STREAM_DRAW);
-					mw->map = (Face*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-				}
-				
-				assert(mw->map);
-
-				memcpy(mw->map[mw->faces].abc, coords, sizeof(float[9]));
-				mw->map[mw->faces].visual = visual;
-				mw->faces++;
-
-				if (mw->faces == 1024)
-				{
-					// flush
-					glUnmapBuffer(GL_ARRAY_BUFFER);
-					glDrawArrays(GL_POINTS, 0, mw->faces);
-					mw->map=0;
-					mw->faces=0;
-				}
-			}
-
 			static void draw_cb(const ImDrawList* parent_list, const ImDrawCmd* cmd)
 			{
 				MeshWidget* mw = (MeshWidget*)cmd->UserCallbackData;
@@ -2881,20 +2834,17 @@ void my_render()
 				glDepthFunc(GL_LEQUAL);
 				glCullFace(GL_BACK);
 
-				mw->faces = 0;
-				mw->map = 0;
-
 				glBindBuffer(GL_ARRAY_BUFFER, rc->mesh_vbo);
 
-				QueryMesh(active_mesh, query_cb, mw);
+				rc->mesh_faces = 0;
+				QueryMesh(active_mesh, RenderContext::RenderFace, rc);
 
-				if (mw->faces)
+				if (rc->mesh_faces)
 				{
 					// flush!!!
-					glUnmapBuffer(GL_ARRAY_BUFFER);
-					glDrawArrays(GL_POINTS, 0, mw->faces);
-					mw->map=0;
-					mw->faces=0;
+					glBufferSubData(GL_ARRAY_BUFFER,0,sizeof(RenderContext::Face)*rc->mesh_faces,rc->mesh_map);
+					glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
+					rc->mesh_faces = 0;
 				}
 
 				// we should restore !!!!
@@ -2947,15 +2897,6 @@ void my_render()
 			}
 
 			ImRect rect;
-			int faces;
-			
-			struct Face
-			{
-				float abc[9];
-				uint32_t visual;
-			};
-
-			Face* map;
 		};
 
 		ImGui::Begin("MESH", 0, ImGuiWindowFlags_AlwaysAutoResize);
@@ -4028,6 +3969,7 @@ void my_render()
 	ImGui::Render();
 
 	glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
+
 	glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
 	glClearDepth(0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -4801,11 +4743,13 @@ void my_render()
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
 	rc->EndPatches();
 
+
 	rc->BeginMeshes(tm, lt);
 	QueryWorld(world, planes, clip_world, RenderContext::RenderMesh, rc);
 	if (inst_preview)
 		RenderContext::RenderMesh(inst_preview, inst_tm, rc);
 	rc->EndMeshes();
+
 
 /*
 	rc->BeginBSP(tm);
@@ -4983,8 +4927,8 @@ void my_init()
 			0.1,0,0,0,
 			0,0.1,0,0,
 			0,0,0.1*HEIGHT_SCALE,0,
-			(double)(fast_rand()&0xFFF),
-			(double)(fast_rand()&0xFFF),
+			(double)(fast_rand()&0x3FF),
+			(double)(fast_rand()&0x3FF),
 			0*(double)(fast_rand()&0x1F)*HEIGHT_SCALE,
 			1
 		};
@@ -5359,7 +5303,8 @@ void my_close()
 
 	DeleteScreen(screen);
 
-	a3dDestroyVT(term);
+	if (term)
+		a3dDestroyVT(term);
 
 	a3dClose();
 
