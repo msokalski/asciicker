@@ -133,52 +133,22 @@ struct A3D_VT
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
 
-        // adjust coords for auto_wrap
-        if (auto_wrap && x>=w)
-        {
-            x=0;
-            y++;
-            if (lines == MAX_ARCHIVE_LINES)
-            {
-
-            }
-        }
-
-        // then check if we need to generate new lines
-        if (y>=lines)
-        {
-            for (int i=lines; i<y; i++)
-            {
-                l = (LINE*)malloc(sizeof(LINE) - sizeof(VT_CELL));
-                if (!l)
-                    return -1;
-                l->cells = 0;
-                line[i] = l;
-            }
-
-            // last line should include x empty cells
-            l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(x-1));
-            if (!l)
-                return -1;
-            l->cells = x;
-            line[y] = l;
-            lines = y+1;
-
-            VT_CELL blank = { 0x20, sgr };
-            for (int i=0; i<x; i++)
-                l->cell[i] = blank;           
-        }        
+        VT_CELL cell = { (uint32_t)chr, sgr};  
+        
+        // if sgr has dbl-width font:
+        // if auto_wrap ensure x<w-1 ! 
+        // we need to place two halfs of glyph, advance x by 2!
 
         if (x>=w && auto_wrap)
         {
-            if (temp_len) // needed if changing y
+            if (temp_len) // needed if going to change y
             {
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(temp_len-1);
+                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(l->cells+temp_len-1));
                 if (!l) // mem-problem
                     return -1;
+                line[lidx] = l;
                 memcpy(l->cell + l->cells, temp, sizeof(VT_CELL)*temp_len);
                 l->cells += temp_len;
-                line[lidx] = l;
                 temp_len = 0;
             }
             x=0; 
@@ -187,61 +157,46 @@ struct A3D_VT
             lidx = (first_line + y) % MAX_ARCHIVE_LINES;
             l = line[lidx];
 
-            // check if we need to push/wrap archive or append line or nutting
-
-            if (y==h) // out of screen -> push
-            {
-                y--;
-                first_line++;
-            }
+            // TODO:
+            // HANDLE ADDING / REUSING LINES
+            // ...
         }
         else
         {
-            // check if we need to prolong current line with temp
-            if (x>l->cells)
+            // HANDLE ADDING LINES
+            if (y>=lines)
             {
-                // at first prolong line with empty cells
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
-                if (!l)
-                    return -1;
+                // ...
+            }
+
+            if (x < l->cells) // in line
+            {
+                l->cell[x++] = cell; // store char in line
+            }
+            else
+            if (x < l->cells + MAX_TEMP_CELLS) // in temp
+            {
                 VT_CELL blank = { 0x20, sgr };
-                for (int i=l->cells; i<x; i++)
-                    l->cell[i] = blank;
-                l->cells = x;
-                line[first_line + y] = l;
-            }
-            temp_len = 0; // ready to append to begining of temp
-        }
-
-        VT_CELL cell = {chr, sgr};
-
-        if (x >= line[first_line + y]->cells)
-        {
-            // write to temp
-
-            if (x >= line[first_line + y]->cells + MAX_TEMP_CELLS)
+                for (int i=l->cells+temp_len; i<x; i++)
+                    temp[temp_len++] = blank; // prolong temp with blanks
+                temp[x++ - l->cells] = cell; // store char in temp
+                temp_len = x - l->cells > temp_len ? x - l->cells : temp_len;   
+            }            
+            else
             {
-                // but temp is too short!
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
+                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*x); // note extra 1!
                 if (!l)
                     return -1;
-                for (int i=0; i<temp_len; i++) 
-                    l->cell[i+l->cells] = temp[i]; // bake current temp into line
-                VT_CELL blank = { 0x20, sgr }; 
+                line[lidx] = l;
+                for (int i=0; i<temp_len; i++)
+                    l->cell[i+l->cells] = temp[i]; // bake current temp
+                VT_CELL blank = { 0x20, sgr };
                 for (int i=l->cells+temp_len; i<x; i++)
-                    l->cell[i] = blank; // prolong line with empty cells
-                l->cells = x;
-                line[first_line + y] = l;
-                temp_len = 0; // ready to append to begining of temp
+                    l->cell[i] = blank; // expand with blanks
+                temp_len = 0;
+                l->cells = x+1; // store char in line
+                l->cell[x++] = cell;
             }
-
-            temp[temp_len++] = cell;
-            x++;
-        }
-        else
-        {
-            // write directly to line
-            l->cell[x++] = cell;
         }
 
         return x;        
@@ -294,8 +249,6 @@ static void Reset(A3D_VT* vt)
     vt->single_shift = 0;
 
     vt->app_keypad = false;
-
-    vt->DECCKM = false;
 
     vt->chr_val = 0;
     vt->chr_ctx = 0;
