@@ -4774,6 +4774,28 @@ void my_render()
 	
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+	if (term)
+	{
+		// bind active font tex
+		// bind pal texture
+		// use vt program
+
+		// setup uniforms:
+		// transform (ortho)
+		// font and pal units
+		// cell width and height in 2/vp_width, 2/vp_height units
+
+		// set num of glyphs = 0
+		
+		// for every cell in vt->screen containing char that is defined in font:
+		// store in some vbo 4 attribs (16bytes): uint(chr with flags); ushort[2](x,y); ubyte[4](fg); ubyte[4](bg); 
+		// increment num of glyphs
+
+		// if vbo buffer is full
+		// glBufferSubData and glDrawArrays(GL_POINTS) reset num of glyphs in buffer
+
+	}
+
 	a3dSwapBuffers();
 
 	if (ipal)

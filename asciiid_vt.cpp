@@ -128,79 +128,167 @@ struct A3D_VT
     VT_CELL temp[MAX_TEMP_CELLS]; // prolongs current line
     int temp_len; // after reaching 256 it must be baked into current line
 
-    int Write(int chr)
+    inline bool Resize(int cols, int rows)
+    {
+        if (cols<2)
+            cols=2;
+        if (rows<2)
+            rows=2;
+        if (rows>MAX_ARCHIVE_LINES)
+            rows = MAX_ARCHIVE_LINES;
+
+        int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
+        LINE* l = line[lidx];         
+
+        if (lines<=rows)
+        {
+            y += first_line; 
+            first_line = 0;
+        }
+        else
+        {
+            y += rows - h;
+            first_line = lines - rows;
+        }
+
+        w = cols;
+        h = rows;
+
+        if (y<0 || y>=h)
+        {
+            // apply temp changes!
+            if (temp_len)
+            {
+                int cells = l ? l->cells : 0;
+                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
+                if (!l) // mem-problem
+                    return false;
+                line[lidx] = l;
+                memcpy(l->cell + cells, temp, sizeof(VT_CELL)*temp_len);
+                l->cells = cells + temp_len;
+                temp_len = 0;
+            }
+
+            if (y<0)
+                y=0;
+            else
+                y=h-1;
+        }
+
+        return true;        
+    }
+
+    inline bool GotoXY(int col, int row)
+    {
+        if (row<0)
+            row = 0;
+        if (row>=h)
+            row = h-1;
+        if (col<0)
+            col=0;
+
+        if (row!=y && temp_len) // apply temp to line, needed if going to change y
+        {
+            int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
+            LINE* l = line[lidx];
+            int cells = l ? l->cells : 0;
+            l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
+            if (!l) // mem-problem
+                return false;
+            line[lidx] = l;
+            memcpy(l->cell + cells, temp, sizeof(VT_CELL)*temp_len);
+            l->cells = cells + temp_len;
+            temp_len = 0;
+        }
+
+        return true;
+    }
+
+    inline uint32_t Write(int chr)
     {
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
 
-        VT_CELL cell = { (uint32_t)chr, sgr};  
+        VT_CELL cell = {(uint32_t)chr, sgr};  
         
-        // if sgr has dbl-width font:
-        // if auto_wrap ensure x<w-1 ! 
-        // we need to place two halfs of glyph, advance x by 2!
-
         if (x>=w && auto_wrap)
         {
-            if (temp_len) // needed if going to change y
+            int cells = l ? l->cells : 0;
+                  
+            if (temp_len) // apply temp to line, needed if going to change y
             {
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(l->cells+temp_len-1));
+                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
                 if (!l) // mem-problem
-                    return -1;
+                    return false;
                 line[lidx] = l;
-                memcpy(l->cell + l->cells, temp, sizeof(VT_CELL)*temp_len);
-                l->cells += temp_len;
+                memcpy(l->cell + cells, temp, sizeof(VT_CELL)*temp_len);
+                l->cells = cells + temp_len;
                 temp_len = 0;
             }
             x=0; 
-            y++;
 
-            lidx = (first_line + y) % MAX_ARCHIVE_LINES;
-            l = line[lidx];
-
-            // TODO:
-            // HANDLE ADDING / REUSING LINES
-            // ...
+            if (y==h-1)
+            {
+                first_line++;
+                lidx = (first_line + y) % MAX_ARCHIVE_LINES;
+                l = line[lidx];
+                if (lines<MAX_ARCHIVE_LINES)
+                    lines++;
+                else
+                if (l)
+                {
+                    free(l);
+                    line[lidx]=0;
+                }
+            }
+            else
+            {
+                y++;
+                lidx = (first_line + y) % MAX_ARCHIVE_LINES;
+                if (y>=lines)
+                    lines = y+1;
+            }
         }
         else
-        {
-            // HANDLE ADDING LINES
-            if (y>=lines)
-            {
-                // ...
-            }
+        if (y>=lines)
+            lines = y+1;
 
-            if (x < l->cells) // in line
-            {
-                l->cell[x++] = cell; // store char in line
-            }
-            else
-            if (x < l->cells + MAX_TEMP_CELLS) // in temp
-            {
-                VT_CELL blank = { 0x20, sgr };
-                for (int i=l->cells+temp_len; i<x; i++)
-                    temp[temp_len++] = blank; // prolong temp with blanks
-                temp[x++ - l->cells] = cell; // store char in temp
-                temp_len = x - l->cells > temp_len ? x - l->cells : temp_len;   
-            }            
-            else
-            {
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*x); // note extra 1!
-                if (!l)
-                    return -1;
-                line[lidx] = l;
-                for (int i=0; i<temp_len; i++)
-                    l->cell[i+l->cells] = temp[i]; // bake current temp
-                VT_CELL blank = { 0x20, sgr };
-                for (int i=l->cells+temp_len; i<x; i++)
-                    l->cell[i] = blank; // expand with blanks
-                temp_len = 0;
-                l->cells = x+1; // store char in line
-                l->cell[x++] = cell;
-            }
+        int cells = l ? l->cells : 0;
+
+        if (x < cells) // in line
+        {
+            l->cell[x++] = cell; // store char in line
+        }
+        else
+        if (x < cells + MAX_TEMP_CELLS) // in temp
+        {
+            VT_CELL blank = { 0x20, sgr };
+            for (int i=cells+temp_len; i<x; i++)
+                temp[temp_len++] = blank; // prolong temp with blanks
+            temp[x++ - cells] = cell; // store char in temp
+            temp_len = x - cells > temp_len ? x - cells : temp_len;   
+        }            
+        else
+        {
+            l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*x); // note extra 1!
+            if (!l)
+                return false;
+            line[lidx] = l;
+            for (int i=0; i<temp_len; i++)
+                l->cell[i+cells] = temp[i]; // bake current temp
+            VT_CELL blank = { 0x20, sgr };
+            for (int i=cells+temp_len; i<x; i++)
+                l->cell[i] = blank; // expand with blanks
+            temp_len = 0;
+            l->cells = x+1; // store char in line
+            l->cell[x++] = cell;
         }
 
-        return x;        
+        return true;
     }
+
+    // insert n cols
+    // insert n rows
 };
 
 // private
