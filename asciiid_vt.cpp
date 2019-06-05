@@ -295,6 +295,7 @@ struct A3D_VT
 void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt);
 A3D_VT* a3dGetPtyVT(A3D_PTY* pty);
 
+/*
 static void Scroll(A3D_VT* vt)
 {
     if (vt->y >= vt->h)
@@ -319,6 +320,7 @@ static void Scroll(A3D_VT* vt)
     if (vt->y<0)
         vt->y=0;
 }
+*/
 
 static void Reset(A3D_VT* vt)
 {
@@ -342,7 +344,27 @@ static void Reset(A3D_VT* vt)
     vt->chr_ctx = 0;
     vt->seq_ctx = 0;
 
-    memset(vt->screen,0,sizeof(VT_CELL)*vt->w*vt->h);
+    for (int i=0; i<vt->lines; i++)
+    {
+        if (vt->line[i])
+        {
+            free(vt->line[i]);
+            vt->line[i]=0;
+        }
+    }
+
+    vt->temp_len = 0;
+    vt->lines = 0;
+    vt->x = 0;
+    vt->y = 0;
+    vt->scroll = 0;
+    vt->sgr.bk[0] = 0;
+    vt->sgr.bk[1] = 0;
+    vt->sgr.bk[2] = 0;
+    vt->sgr.fg[0] = 192;
+    vt->sgr.fg[1] = 192;
+    vt->sgr.fg[2] = 192;
+    vt->sgr.fl = 0;
 }
 
 A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* const envp[])
@@ -352,9 +374,10 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
         return 0;
 
     A3D_VT* vt = (A3D_VT*)malloc(sizeof(A3D_VT));
-    vt->screen = (VT_CELL*)malloc(sizeof(VT_CELL)*w*h);
+    memset(vt->line,0,sizeof(A3D_VT::LINE*)*A3D_VT::MAX_ARCHIVE_LINES);
     vt->w = w;
     vt->h = h;
+    vt->lines = 0;
 
     Reset(vt);
 
@@ -367,8 +390,9 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
 void a3dDestroyVT(A3D_VT* vt)
 {
     a3dClosePTY(vt->pty);
-    if (vt->screen)
-        free(vt->screen);
+    for (int i=0; i<vt->lines; i++)
+        if (vt->line[i])
+            free(vt->line[i]);
     free(vt);
 }
 
@@ -669,35 +693,14 @@ bool a3dProcessVT(A3D_VT* vt)
 
                 case 0x08: // BS
                 {
-                    // backspace (move left 1 cell, unwrap if needed and go up)
-                    // echo -e "aaa\x08\x08b" -> aba
-                    // echo -e "aaa\x09\x08b" -> aaa    b (backspace by 1 cell even if there was a tab!)
                     if (vt->x>0)
                         vt->x--;
-
                     continue;
                 }
 
                 case 0x09: // HT
                 {
-                    // Horizontal tab
-                    // echo -e "aaa\x09b" -> aaa     b 
-                    VT_CELL blank = { 0x20, vt->sgr };
-                    do
-                    {
-                        if (vt->auto_wrap && vt->x >= vt->w)
-                        {
-                            vt->x=0;
-                            vt->y++;
-                            Scroll(vt);
-                        }
-
-                        if (vt->x < vt->w)
-                            vt->screen[vt->x + vt->y * vt->w] = blank;
-
-                        vt->x++;
-                    } while (vt->x&0x7);
-                    
+                    vt->x += (8-(vt->x&0x7)); // (1..8)
                     continue;
                 }
 
@@ -705,10 +708,7 @@ bool a3dProcessVT(A3D_VT* vt)
                 case 0x0B: // VT
                 case 0x0C: // FF
                 {
-                    // move cursor down, add new line if needed
-                    vt->y++;
-                    Scroll(vt);
-
+                    vt->GotoXY(vt->x,vt->y+1);
                     continue;
                 }
 
@@ -732,6 +732,8 @@ bool a3dProcessVT(A3D_VT* vt)
 
             out_chr:
 
+            /*
+
             if (vt->auto_wrap && vt->x >= vt->w)
             {
                 vt->x=0;
@@ -746,6 +748,10 @@ bool a3dProcessVT(A3D_VT* vt)
             }
 
             vt->x++;
+
+            */
+
+            vt->Write(chr);
 
             continue;
         }
@@ -764,9 +770,7 @@ bool a3dProcessVT(A3D_VT* vt)
                         // Index
                         // Move the active position one line down, to eliminate ambiguity about the meaning of LF. Deprecated in 1988 and withdrawn in 1992 from ISO/IEC 6429 (1986 and 1991 respectively for ECMA-48). 
                         seq_ctx = 0;
-                        vt->y++;
-                        Scroll(vt);
-
+                        vt->GotoXY(vt->x,vt->y+1);
                         break;
                     }
 
@@ -775,10 +779,7 @@ bool a3dProcessVT(A3D_VT* vt)
                         // Next Line
                         // Equivalent to CR+LF. Used to mark end-of-line on some IBM mainframes. 
                         seq_ctx = 0;
-                        vt->x=0;
-                        vt->y++;
-                        Scroll(vt);
-
+                        vt->GotoXY(0,vt->y+1);
                         break;
                     }
 
@@ -794,8 +795,7 @@ bool a3dProcessVT(A3D_VT* vt)
                     {
                         // Reverse Line Feed, Reverse Index
                         seq_ctx = 0;
-                        if (vt->y > 0)
-                            vt->y--;
+                        vt->GotoXY(vt->x,vt->y-1);
                         break;
                     }
 
