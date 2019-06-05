@@ -84,7 +84,7 @@ struct A3D_VT
     int chr_ctx;
     int seq_ctx;    
 
-    int str_len;
+    int str_len; // incoming sequence length
 
     bool UTF8;
 
@@ -114,6 +114,10 @@ struct A3D_VT
     static const int MAX_COLUMNS = 65536;
     static const int MAX_ARCHIVE_LINES = 65536;
     static const int MAX_TEMP_CELLS = 256;
+    static const int MAX_STR_LEN = 256;
+
+    // incomming long sequence
+    char str[MAX_STR_LEN];
 
     // no reflows
     // HARD wrap occurs at MAX_COLUMNS
@@ -975,6 +979,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                     }
 
                     case 'c': // RIS 	Full Reset () 
+                        Reset(vt);
                         seq_ctx = 0;
                         break;
 
@@ -1009,8 +1014,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
                         
                     default:
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;
                 }
                 break;
@@ -1084,8 +1087,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     default: 
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;
                 }
                 break;
@@ -1105,8 +1106,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     default: 
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;                
                 }
                 
@@ -1209,8 +1208,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     default: 
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;                
                 }
                 break;
@@ -1251,8 +1248,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     default: 
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;                
                 }
 
@@ -1282,8 +1277,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     default:
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;                
                 }
 
@@ -1325,8 +1318,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     default:
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;                
                 }
 
@@ -1352,8 +1343,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                         break;
 
                     default:
-                        // error seq, dump it as regular chars!
-                        // ...
                         seq_ctx = 0;                
                 }
 
@@ -1362,20 +1351,25 @@ static bool a3dProcessVT(A3D_VT* vt)
 
             case '[': // (CSI)
             {
-                if (chr==';' || chr>='0' && chr<='9')
-                    str_len++;
+                if (chr < 0x20)
+                {
+                    // err
+                    str_len = 0;
+                    seq_ctx = 0;
+                }
+                else
+                if (chr <= 0x40)
+                {
+                    // values ( 0 .. 9 ), 
+                    // separators ( ; : ), 
+                    // prefixes: ( ? > = ! ) 
+                    // postfixes: ( SP " $ # ' * )
+                    if (str_len < A3D_VT::MAX_STR_LEN)
+                        vt->str[str_len++] = (char)chr;
+                }
                 else
                 {
-                    // args prefix flags:  ? > = !
-                    // args postfix flags: SP " $ # ' *
-                    // terminators:        from @ to ~
-
-                    // arguments: Prect is Ps;Ps;Ps;Ps
-                    
-                    // TERIIBLE exception: Pt is string (may include any printable chars but ;)
-
-                    // consider anything else terminates
-                    // positively or negatively (default)
+                    // terminators ( @ .. ~ )
                     switch (chr)
                     {
                         case '@': 
