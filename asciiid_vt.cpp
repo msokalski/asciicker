@@ -725,10 +725,9 @@ static bool a3dProcessVT(A3D_VT* vt)
                     continue;
                 }
 
-                case 0x0A: // LF (makes CR too)
+                case 0x0A: // LF (makes CR too?)
                 {
-                    vt->GotoXY(0,vt->y+1);
-                    a3dDumpVT(vt);
+                    vt->GotoXY(vt->x,vt->y+1);
                     continue;
                 }
 
@@ -738,6 +737,13 @@ static bool a3dProcessVT(A3D_VT* vt)
                     vt->GotoXY(vt->x,vt->y+1);
                     continue;
                 }
+
+                case 0x0D: // CR
+                {
+                    vt->GotoXY(0,vt->y);
+                    continue;
+                }
+
 
                 case 0x0E: // SO
                     // switch to G1
