@@ -8,6 +8,8 @@
 #include "asciiid_platform.h"
 #include "asciiid_term.h"
 
+static bool a3dProcessVT(A3D_VT* vt);
+
 struct SGR // 8 bytes
 {
     uint8_t bk[3];
@@ -73,6 +75,11 @@ struct A3D_VT
 {
     A3D_PTY* pty;
 
+    A3D_THREAD* pty_reader;
+    A3D_MUTEX* mutex; // prevents renderer and vt processing threads to clash
+
+    volatile int closing;
+
     int chr_val;
     int chr_ctx;
     int seq_ctx;    
@@ -128,6 +135,21 @@ struct A3D_VT
     VT_CELL temp[MAX_TEMP_CELLS]; // prolongs current line
     int temp_len; // after reaching 256 it must be baked into current line
 
+    static void* PtyRead(void* pvt)
+    {
+        A3D_VT* vt = (A3D_VT*)pvt;
+        while (!vt->closing)
+        {
+            if (!a3dProcessVT(vt))
+                break;
+
+            int a=0;
+        }
+
+        void* ret = 0;
+        return ret;
+    }
+
     inline bool Resize(int cols, int rows)
     {
         if (cols<2)
@@ -156,18 +178,7 @@ struct A3D_VT
 
         if (y<0 || y>=h)
         {
-            // apply temp changes!
-            if (temp_len)
-            {
-                int cells = l ? l->cells : 0;
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
-                if (!l) // mem-problem
-                    return false;
-                line[lidx] = l;
-                memcpy(l->cell + cells, temp, sizeof(VT_CELL)*temp_len);
-                l->cells = cells + temp_len;
-                temp_len = 0;
-            }
+            Flush();
 
             if (y<0)
                 y=0;
@@ -187,7 +198,18 @@ struct A3D_VT
         if (col<0)
             col=0;
 
-        if (row!=y && temp_len) // apply temp to line, needed if going to change y
+        if (row!=y)
+            Flush();
+
+        x = col;
+        y = row;
+
+        return true;
+    }
+
+    inline bool Flush()
+    {
+        if (temp_len) // apply temp to line, needed if going to change y
         {
             int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
             LINE* l = line[lidx];
@@ -200,11 +222,9 @@ struct A3D_VT
             l->cells = cells + temp_len;
             temp_len = 0;
         }
-
-        return true;
     }
 
-    inline uint32_t Write(int chr)
+    inline bool Write(int chr)
     {
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
@@ -215,16 +235,7 @@ struct A3D_VT
         {
             int cells = l ? l->cells : 0;
                   
-            if (temp_len) // apply temp to line, needed if going to change y
-            {
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
-                if (!l) // mem-problem
-                    return false;
-                line[lidx] = l;
-                memcpy(l->cell + cells, temp, sizeof(VT_CELL)*temp_len);
-                l->cells = cells + temp_len;
-                temp_len = 0;
-            }
+            Flush();
             x=0; 
 
             if (y==h-1)
@@ -335,7 +346,7 @@ static void Reset(A3D_VT* vt)
     vt->gl = 0;
     vt->gr = 0;
     vt->single_shift = 0;
-    vt->auto_wrap = false;
+    vt->auto_wrap = true;
     vt->single_shift = 0;
 
     vt->app_keypad = false;
@@ -384,12 +395,20 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
     a3dSetPtyVT(pty,vt);
     vt->pty = pty;
 
+    vt->mutex = a3dCreateMutex();
+    vt->pty_reader = a3dCreateThread(A3D_VT::PtyRead,vt);
+
     return vt;
 }
 
 void a3dDestroyVT(A3D_VT* vt)
 {
-    a3dClosePTY(vt->pty);
+    vt->closing = 1;
+    a3dClosePTY(vt->pty); // should force pty_reader to exit
+
+    a3dWaitForThread(vt->pty_reader);
+    a3dDeleteMutex(vt->mutex);
+
     for (int i=0; i<vt->lines; i++)
         if (vt->line[i])
             free(vt->line[i]);
@@ -519,11 +538,13 @@ int InitParser()
 
 int parsed = InitParser();
 
-bool a3dProcessVT(A3D_VT* vt)
+static bool a3dProcessVT(A3D_VT* vt)
 {
     int len = a3dReadPTY(vt->pty, vt->buf, 256);
     if (len<=0)
         return false;
+
+    a3dMutexLock(vt->mutex);
 
     int siz = len;
     unsigned char* buf = vt->buf;
@@ -704,7 +725,13 @@ bool a3dProcessVT(A3D_VT* vt)
                     continue;
                 }
 
-                case 0x0A: // LF
+                case 0x0A: // LF (makes CR too)
+                {
+                    vt->GotoXY(0,vt->y+1);
+                    a3dDumpVT(vt);
+                    continue;
+                }
+
                 case 0x0B: // VT
                 case 0x0C: // FF
                 {
@@ -1390,10 +1417,40 @@ bool a3dProcessVT(A3D_VT* vt)
     vt->seq_ctx = seq_ctx;
     vt->str_len = str_len;
 
+    a3dMutexUnlock(vt->mutex);
+
     return true;
 }
 
+// should be replaced with a3dWriteKey(ki) a3dWriteChar(ch) and a3dMouse(x,y,mi)
 int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size)
 {
     return a3dWritePTY(vt->pty, buf, size);
+}
+
+// TESTING!
+void a3dDumpVT(A3D_VT* vt)
+{
+    // flush! temp
+    vt->Flush();
+
+
+    write(STDOUT_FILENO,"--------------------\n",21);
+    for (int i=0; i<vt->lines; i++)
+    {
+        int lidx = (vt->first_line + i) % A3D_VT::MAX_ARCHIVE_LINES;
+        if (vt->line[lidx])
+        {
+            char buf[1024];
+            int w = vt->line[lidx]->cells < 1024 ? vt->line[lidx]->cells : 1023;
+            for (int x=0; x<w; x++)
+                buf[x] = vt->line[lidx]->cell[x].ch;
+            buf[w] = '\n';
+            write(STDOUT_FILENO, buf, w+1);
+        }
+        else
+        {
+            write(STDOUT_FILENO, "\n", 1);
+        }
+    }
 }

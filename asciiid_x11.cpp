@@ -8,6 +8,8 @@
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+
+#include <pthread.h> // compile with -pthread
 #include <pty.h> // link  with -lutil
 
 #include <X11/X.h>
@@ -57,19 +59,14 @@ static bool track = false;
 static bool closing = false;
 static int force_key = A3D_NONE;
 
-
-int pty_num = 0;
-struct pollfd* pty_poll = 0;
-
 A3D_PTY* head_pty = 0;
 A3D_PTY* tail_pty = 0;
-
-// internal interface
-bool a3dProcessVT(A3D_VT* vt);
 
 struct A3D_PTY
 {
 	int fd;
+	int pd[2];
+
 	pid_t pid;
 	A3D_PTY* next;
 	A3D_PTY* prev;
@@ -679,56 +676,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (platform_api.resize)
 		platform_api.resize(w,h);
 
-	// int x11_fd = ConnectionNumber(dpy);
-
 	while (!closing)
 	{
-		/*
-		if (pty_num)
-		{
-			if (!pty_poll)
-			{
-				pty_poll = (pollfd*)malloc(sizeof(pollfd)*(pty_num+1));
-
-				A3D_PTY* pty = head_pty;
-				for (int i=0; i<pty_num; i++)
-				{
-					pty_poll[i].fd = pty->fd;
-					pty_poll[i].events = POLLRDNORM | POLLHUP | POLLERR;
-					pty=pty->next;
-				}
-
-				pty_poll[pty_num].fd = x11_fd;
-				pty_poll[pty_num].events = POLLRDNORM | POLLHUP | POLLERR;
-			}
-
-			int timeout=0;
-			int num = poll(pty_poll, pty_num , timeout);
-
-			if (num > 0)
-			{
-				A3D_PTY* pty = head_pty;
-
-				for (int i=0; i<pty_num; i++)
-				{
-					if ( pty_poll[i].revents )
-					{
-						// invoke PTY callback
-						// requires some EXTRA safety as
-						// it can call a3dOpenPty / a3dClosePty
-						// ...
-
-						if (pty->vt)
-						{
-							a3dProcessVT(pty->vt);
-						}
-					}
-					pty = pty->next;
-				}
-			}
-		}
-		*/
-
 		while (!closing && XPending(dpy))
 		{
 			XNextEvent(dpy, &xev);
@@ -1623,7 +1572,59 @@ bool a3dGetCurDir(char* dir_path, int size)
 	}
 }
 
-// private
+struct A3D_THREAD
+{
+	pthread_t th;
+};
+
+A3D_THREAD* a3dCreateThread(void* (*entry)(void*), void* arg)
+{
+	pthread_t th;
+	pthread_create(&th, 0, entry, arg);
+	if (!th)
+		return 0;
+
+	A3D_THREAD* t = (A3D_THREAD*)malloc(sizeof(A3D_THREAD));
+	t->th = th;
+	return t;
+}
+
+void* a3dWaitForThread(A3D_THREAD* thread)
+{
+	void* ret = 0;
+	pthread_join(thread->th,&ret);
+	free(thread);
+	return ret;
+}
+
+struct A3D_MUTEX
+{
+	pthread_mutex_t mu;
+};
+
+A3D_MUTEX* a3dCreateMutex()
+{
+	A3D_MUTEX* m = (A3D_MUTEX*)malloc(sizeof(A3D_MUTEX));
+	pthread_mutex_init(&m->mu, 0);
+	return m;
+}
+
+void a3dDeleteMutex(A3D_MUTEX* mutex)
+{
+	pthread_mutex_destroy(&mutex->mu);
+	free(mutex);
+}
+
+void a3dMutexLock(A3D_MUTEX* mutex)
+{
+	pthread_mutex_lock(&mutex->mu);
+}
+
+void a3dMutexUnlock(A3D_MUTEX* mutex)
+{
+	pthread_mutex_unlock(&mutex->mu);
+}
+
 void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt)
 {
 	pty->vt = vt;
@@ -1636,8 +1637,6 @@ A3D_VT* a3dGetPtyVT(A3D_PTY* pty)
 
 A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[])
 {
-	// TODO: must be safe even when called some pty callback!
-
     struct winsize ws;
     ws.ws_col = w;
     ws.ws_row = h;
@@ -1684,17 +1683,23 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 	pty->fd = pty_fd;
 	pty->pid = pid;
 
-	if (pty_poll)
-		free(pty_poll);
-	pty_poll = 0;
-
-	pty_num++;
+	pipe(pty->pd);
 
 	return pty;
 }
 
 int a3dReadPTY(A3D_PTY* pty, void* buf, size_t size)
 {
+	fd_set set;
+	FD_ZERO (&set);
+	FD_SET(pty->fd, &set);
+	FD_SET(pty->pd[0], &set);
+
+	int max_fd = pty->fd > pty->pd[0] ? pty->fd : pty->pd[0];
+	int sel = select(max_fd+1, &set, 0,0,0);
+	if (FD_ISSET(pty->pd[0], &set))
+		return -1;
+
 	return read(pty->fd, buf, size);
 }
 
@@ -1717,12 +1722,15 @@ void a3dResizePTY(A3D_PTY* pty, int w, int h)
 
 void a3dClosePTY(A3D_PTY* pty)
 {
-	// TODO: must be safe even if called from this or another pty callback!
+	// force select to exit and set pd[0] (no more reads)
+	write(pty->pd[1], "\n", 1); 
 
-	close(pty->fd);
-
+	int ret = close(pty->fd);
 	int stat;
 	waitpid(pty->pid, &stat, 0);
+
+	close(pty->pd[0]);
+	close(pty->pd[1]);
 
 	if (pty->prev)
 		pty->prev->next = pty->next;
@@ -1735,13 +1743,6 @@ void a3dClosePTY(A3D_PTY* pty)
 		tail_pty = pty->prev;
 
 	free(pty);
-
-	pty_num--;
-
-	if (pty_poll)
-		free(pty_poll);
-	pty_poll = 0;
 }
-
 
 #endif // __linux__

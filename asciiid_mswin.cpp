@@ -15,6 +15,20 @@
 
 #include "asciiid_platform.h"
 
+A3D_PTY* head_pty = 0;
+A3D_PTY* tail_pty = 0;
+
+struct A3D_PTY
+{
+	/*
+	int fd;
+	pid_t pid;
+	A3D_PTY* next;
+	A3D_PTY* prev;
+	A3D_VT* vt;
+	*/
+};
+
 static PlatformInterface platform_api;
 static int mouse_b = 0;
 static int mouse_x = 0;
@@ -1361,5 +1375,194 @@ bool a3dGetCurDir(char* dir_path, int size)
 	}
 	return len > 0 && len + 1 < size;
 }
+
+struct A3D_THREAD
+{
+	HANDLE th;
+};
+
+A3D_THREAD* a3dCreateThread(void* (*entry)(void*), void* arg)
+{
+	HANDLE th;
+	th = CreateThread(0, 0, entry, arg);
+	if (!th)
+		return 0;
+
+	A3D_THREAD* t = (A3D_THREAD*)malloc(sizeof(A3D_THREAD));
+	t->th = th;
+	return t;
+}
+
+void* a3dWaitForThread(A3D_THREAD* thread)
+{
+	WaitForSingleObject(thread->th,INFINITE);
+	CloseHandle(thread->th);
+	free(thread);
+	return ret;
+}
+
+struct A3D_MUTEX
+{
+	CRITICAL_SECTION mu;
+};
+
+A3D_MUTEX* a3dCreateMutex()
+{
+	A3D_MUTEX* m = (A3D_MUTEX*)malloc(sizeof(A3D_MUTEX));
+	InitializeCriticalSection(&m->mu);
+	return m;
+}
+
+void a3dDeleteMutex(A3D_MUTEX* mutex)
+{
+	DeleteCriticalSection(&m->mu);
+	free(mutex);
+}
+
+void a3dMutexLock(A3D_MUTEX* mutex)
+{
+	EnterCriticalSection(&mutex->mu);
+}
+
+void a3dMutexUnlock(A3D_MUTEX* mutex)
+{
+	LeaveCriticalSection(&mutex->mu);
+}
+
+void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt)
+{
+	pty->vt = vt;
+}
+
+A3D_VT* a3dGetPtyVT(A3D_PTY* pty)
+{
+	return pty->vt;
+}
+
+A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[])
+{
+	// CreateProcess, pipe i/o
+	// instead of ioctl: 
+	// client app should create a hidden window having class name "<PID>_IOCTL" and any tittle 
+	// host app will send to it WM_COPYDATA message with {int signal; int data_size, uint8_t[data_size]}
+	// if client does not create that window - it will not be notified about win size changes :)
+	
+	return 0;
+
+	/*
+	// TODO: must be safe even when called some pty callback!
+
+    struct winsize ws;
+    ws.ws_col = w;
+    ws.ws_row = h;
+    ws.ws_xpixel=0;
+    ws.ws_ypixel=0;
+
+    char name[64]="";
+	int pty_fd = -1;
+    pid_t pid = forkpty(&pty_fd, name, 0, &ws);
+    if (pid == 0)
+    {
+        // child
+
+		char* no_args[] = {0};
+		if (!envp)
+			envp = environ;
+		if (!argv)
+			argv = no_args;
+
+        execvpe(path, argv, envp);
+        exit(1);
+    }
+
+    if (pid < 0 || pty_fd < 0)
+    {
+		//error
+        if (pty_fd>=0)
+            close(pty_fd);
+		return 0;
+	}
+
+	// parent
+
+	A3D_PTY* pty = (A3D_PTY*)malloc(sizeof(A3D_PTY));
+	pty->vt = 0;
+	pty->next = 0;
+	pty->prev = tail_pty;
+	if (tail_pty)
+		tail_pty->next = pty;
+	else
+		head_pty = pty;
+	tail_pty = pty;
+	
+	pty->fd = pty_fd;
+	pty->pid = pid;
+
+	if (pty_poll)
+		free(pty_poll);
+	pty_poll = 0;
+
+	pty_num++;
+
+	return pty;
+	*/
+}
+
+int a3dReadPTY(A3D_PTY* pty, void* buf, size_t size)
+{
+	return 0;
+	//return read(pty->fd, buf, size);
+}
+
+int a3dWritePTY(A3D_PTY* pty, const void* buf, size_t size)
+{
+	return 0;
+	//return write(pty->fd, buf, size);
+}
+
+void a3dResizePTY(A3D_PTY* pty, int w, int h)
+{
+	/*
+    // recalc new vt w,h
+    struct winsize ws;
+    ws.ws_col = w;
+    ws.ws_row = h;
+    ws.ws_xpixel=0;
+    ws.ws_ypixel=0;
+
+    ioctl(pty->fd, TIOCSWINSZ, &ws);
+	*/
+}
+
+void a3dClosePTY(A3D_PTY* pty)
+{
+	// TODO: must be safe even if called from this or another pty callback!
+	/*
+
+	close(pty->fd);
+
+	int stat;
+	waitpid(pty->pid, &stat, 0);
+
+	if (pty->prev)
+		pty->prev->next = pty->next;
+	else
+		head_pty = pty->next;
+
+	if (pty->next)
+		pty->next->prev = pty->prev;
+	else
+		tail_pty = pty->prev;
+
+	free(pty);
+
+	pty_num--;
+
+	if (pty_poll)
+		free(pty_poll);
+	pty_poll = 0;
+	*/
+}
+
 
 #endif // __WIN32__

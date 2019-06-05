@@ -2939,6 +2939,12 @@ void my_render()
 
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
+		if (ImGui::Button("DUMP_VT"))
+		{
+			if (term)
+				a3dDumpVT(term);
+		}
+
 		int xywh[4],wh[2];
 		a3dGetRect(xywh, wh);
 		ImGui::Text("%d,%d,%d,%d %d,%d %s", 

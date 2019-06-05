@@ -291,9 +291,24 @@ bool a3dGetCurDir(char* dir_path, int size);
 struct A3D_VT;
 A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* const envp[]);
 void a3dDestroyVT(A3D_VT* vt);
+
+// should be replaced with a3dWriteKey(ki) a3dWriteChar(ch) and a3dMouse(x,y,mi)
 int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size);
 
-// HIDE IT ?
+// TESTING!
+void a3dDumpVT(A3D_VT* vt);
+
+// simple thread api
+struct A3D_THREAD;
+A3D_THREAD* a3dCreateThread(void* (*entry)(void*), void*);
+void* a3dWaitForThread(A3D_THREAD* thread);
+
+struct A3D_MUTEX;
+A3D_MUTEX* a3dCreateMutex();
+void a3dDeleteMutex(A3D_MUTEX* mutex);
+void a3dMutexLock(A3D_MUTEX* mutex);
+void a3dMutexUnlock(A3D_MUTEX* mutex);
+
 struct A3D_PTY;
 A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[]);
 int a3dReadPTY(A3D_PTY* pty, void* buf, size_t size);
