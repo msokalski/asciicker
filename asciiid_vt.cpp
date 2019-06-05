@@ -1366,14 +1366,212 @@ static bool a3dProcessVT(A3D_VT* vt)
                     str_len++;
                 else
                 {
+                    // args prefix flags:  ? > = !
+                    // args postfix flags: SP " $ # ' *
+                    // terminators:        from @ to ~
+
+                    // arguments: Prect is Ps;Ps;Ps;Ps
+                    
+                    // TERIIBLE exception: Pt is string (may include any printable chars but ;)
+
                     // consider anything else terminates
                     // positively or negatively (default)
                     switch (chr)
                     {
+                        case '@': 
+                            // CSI Ps @ 
+                            // CSI Ps SP @
+                            break;
+                        case 'A': 
+                            // CSI Ps A 
+                            // CSI SP A
+                            break;
+                        case 'B':
+                            // CSI Ps B
+                            break;
+                        case 'C':
+                            // CSI Ps C
+                            break;                            
+                        case 'D':
+                            // CSI Ps D
+                            break;
+                        case 'E':
+                            // CSI Ps E
+                            break;
+                        case 'F':
+                            // CSI Ps F
+                            break;
+                        case 'G':
+                            // CSI Ps G
+                            break;
+                        case 'H':
+                            // CSI Ps;Ps H
+                            break;
+                        case 'I':
+                            // CSI Ps I
+                            break;
+                        case 'J': 
+                            // CSI Ps J 
+                            // CSI ? Ps J
+                            break;
+                        case 'K': 
+                            // CSI Ps K 
+                            // CSI ? Ps K
+                            break;
+                        case 'L':
+                            // CSI Ps L
+                            break;
+                        case 'M':
+                            // CSI Ps M
+                            break;
+                        case 'P':
+                            // CSI Ps P
+                            break;
+                        case 'S': 
+                            // CSI Ps S 
+                            // CSI ? Pi;Pa;Pv S
+                            break;
+                        case 'T': 
+                            // CSI Ps T 
+                            // CSI Ps;Ps;Ps;Ps;Ps T 
+                            // CSI > Ps;Ps T
+                            break;
+                        case 'X':
+                            // CSI Ps X
+                            break;
+                        case 'Z':
+                            // CSI Ps Z
+                            break;
+                        case '^':
+                            // CSI Ps ^
+                            break;
+                        case '`':
+                            // CSI Pm `
+                            break;
+                        case 'a':
+                            // CSI Pm a
+                            break;
+                        case 'b':
+                            // CSI Pm b
+                            break;
+                        case 'c': 
+                            // CSI Ps c 
+                            // CSI = Ps c 
+                            // CSI > Ps c
+                            break;
+                        case 'd':
+                            // CSI Pm d
+                            break;
+                        case 'e':
+                            // CSI Pm e
+                            break;
+                        case 'f':
+                            // CSI Ps;Ps f
+                            break;
+                        case 'g':
+                            // CSI Ps g
+                            break;
+                        case 'h': 
+                            // CSI Pm h 
+                            // CSI ? Pm h
+                            break;
+                        case 'i': 
+                            // CSI Pm i 
+                            // CSI ? Pm i
+                            break;
+                        case 'l': 
+                            // CSI Pm l 
+                            // CSI ? Pm l
+                            break;
+                        case 'm': 
+                            // CSI Pm m 
+                            // CSI > Ps;Ps m
+                            break;
+                        case 'n': 
+                            // CSI Ps n 
+                            // CSI > Ps n 
+                            // CSI ? Ps n
+                            break;
+                        case 'p': 
+                            // CSI > Ps p 
+                            // CSI ! p 
+                            // CSI Ps;Ps " p 
+                            // CSI Ps $ p 
+                            // CSI ? Ps $ p 
+                            // CSI # p 
+                            // CSI Ps;Ps # p
+                            break;
+                        case 'q': 
+                            // CSI Ps " q 
+                            // CSI Ps SP q 
+                            // CSI # q
+                            break;
+                        case 'r': 
+                            // CSI Ps;Ps r 
+                            // CSI ? Pm r 
+                            // CSI RECT;Ps $ r
+                            break;
+                        case 's': 
+                            // CSI s 
+                            // CSI Pl;Pr s 
+                            // CSI ? Pm s
+                            break;
+                        case 't': 
+                            // CSI Ps;Ps;Ps t 
+                            // CSI > Ps;Ps t 
+                            // CSI Ps SP t 
+                            // CSI RECT;Ps $ t
+                            break;
+                        case 'u': 
+                            // CSI u 
+                            // CSI Ps SP u
+                            break;
+                        case 'v': 
+                            // CSI RECT;Pp;Pt;Pl;Pp $ v
+                            break;
+                        case 'w': 
+                            // CSI Ps $ w 
+                            // CSI RECT ' w
+                            break;
+                        case 'x': 
+                            // CSI Ps x 
+                            // CSI Ps * x 
+                            // CSI Pc;RECT $ x
+                            break;
+                        case 'y': 
+                            // CSI Ps # y 
+                            // CSI Pi;Pg;RECT * y
+                            break;
+                        case 'z': 
+                            // CSI Ps;Pu ' z 
+                            // CSI RECT $ z
+                            break;
+                        case '{': 
+                            // CSI Pm ' { 
+                            // CSI # { 
+                            // CSI Ps;Ps # { 
+                            // CSI RECT $ { 
+                            break;
+                        case '|': 
+                            // CSI RECT # | 
+                            // CSI Ps $ | 
+                            // CSI Ps ' | 
+                            // CSI Ps * |
+                            break;
+                        case '}':  
+                            // CSI # }
+                            // CSI Pm ' }
+                            break;
+                        case '~': 
+                            // CSI Pm ' ~
+                            break;
                         default:
-                            str_len = 0;
-                            seq_ctx = 0;
+                            ; // ignore
                     }
+
+                    // end of seq
+                    str_len = 0;
+                    seq_ctx = 0;
                 }
                 break;
             }
