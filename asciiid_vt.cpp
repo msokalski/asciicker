@@ -2286,13 +2286,225 @@ static bool a3dProcessVT(A3D_VT* vt)
                             break;
                         case 'h': // CRITICAL
                         {
-                            if (str_len == 1 && vt->str[0] == '4')
+                            if (str_len >= 1)
                             {
-                                vt->Flush();
-                                vt->ins_mode = true;
-                                DONE();
+                                if (str_len == 1 && vt->str[0] == '4')
+                                {
+                                    vt->Flush();
+                                    vt->ins_mode = true;
+                                    DONE();
+                                    break;
+                                }
+
+                                if (vt->str[0] == '?')
+                                {
+                                    char* end = 0;
+                                    char* str = vt->str+1;
+                                    int Ps = strtol(str, &end, 10);
+                                    if (end != str)
+                                    {
+                                        switch (Ps)
+                                        {
+                                            case 1: // Application Cursor Keys (DECCKM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 2: // Designate USASCII for character sets G0-G3
+                                                TODO(); 
+                                                break;
+                                            case 3: // 132 Column Mode (DECCOLM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 4: // Smooth (Slow) Scroll (DECSCLM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 5: // Reverse Video (DECSCNM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 6: // Origin Mode (DECOM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 7: // Auto-wrap Mode (DECAWM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 8: // Auto-repeat Keys (DECARM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 9: // Send Mouse X & Y on button press.
+                                                TODO(); 
+                                                break;
+                                            case 10: // Show toolbar (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 12: // Start Blinking Cursor (AT&T 610).
+                                                TODO(); 
+                                                break;
+                                            case 13: // Start Blinking Cursor (set only via resource or menu).
+                                                TODO(); 
+                                                break;
+                                            case 14: // Enable XOR of Blinking Cursor control sequence and menu.
+                                                TODO(); 
+                                                break;
+                                            case 18: // Print form feed (DECPFF), VT220.
+                                                TODO(); 
+                                                break;
+                                            case 19: // Set print extent to full screen (DECPEX), VT220.
+                                                TODO(); 
+                                                break;
+                                            case 25: // Show Cursor (DECTCEM), VT220.
+                                                TODO(); 
+                                                break;
+                                            case 30: // Show scrollbar (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 35: // Enable font-shifting functions (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 38: // Enter Tektronix Mode (DECTEK), VT240, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 40: // Allow 80 -> 132 Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 41: // more(1) fix (see curses resource).
+                                                TODO(); 
+                                                break;
+                                            case 42: // Enable National Replacement Character sets (DECNRCM), VT220.
+                                                TODO(); 
+                                                break;
+                                            case 44: // Turn On Margin Bell, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 45: // Reverse-wraparound Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 46: // Start Logging, xterm.  This is normally disabled by a compile-time option.
+                                                TODO(); 
+                                                break;
+                                            case 47: // Use Alternate Screen Buffer, xterm.  This may be disabled by the titeInhibit resource.
+                                                TODO(); 
+                                                break;
+                                            case 66: // Application keypad (DECNKM), VT320.
+                                                TODO(); 
+                                                break;
+                                            case 67: // Backarrow key sends backspace (DECBKM), VT340, VT420.
+                                                TODO(); 
+                                                break;
+                                            case 69: // Enable left and right margin mode (DECLRMM), VT420 and up.
+                                                TODO(); 
+                                                break;
+                                            case 95: // Do not clear screen when DECCOLM is set/reset (DECNCSM), VT510 and up
+                                                TODO(); 
+                                                break;
+                                            case 1000: // Send Mouse X & Y on button press and release.
+                                                TODO(); 
+                                                break;
+                                            case 1001: // Use Hilite Mouse Tracking, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1002: // Use Cell Motion Mouse Tracking, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1003: // Use All Motion Mouse Tracking, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1004: // Send FocusIn/FocusOut events, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1005: // Enable UTF-8 Mouse Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1006: // Enable SGR Mouse Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1007: // Enable Alternate Scroll Mode, xterm
+                                                TODO(); 
+                                                break;
+                                            case 1010: // Scroll to bottom on tty output (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 1011: // Scroll to bottom on key press (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 1015: // Enable urxvt Mouse Mode.
+                                                TODO(); 
+                                                break;
+                                            case 1034: // Interpret "meta" key, xterm.  This sets eighth bit of keyboard input
+                                                TODO(); 
+                                                break;
+                                            case 1035: // Enable special modifiers for Alt and NumLock keys, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1036: // Send ESC when Meta modifies a key, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1037: // Send DEL from the editing-keypad Delete key, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1039: // Send ESC  when Alt modifies a key, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1040: // Keep selection even if not highlighted, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1041: // Use the CLIPBOARD selection, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1042: // Enable Urgency window manager hint when Control-G is received, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1043: // Enable raising of the window when Control-G is received, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1044: // Reuse the most recent data copied to CLIPBOARD, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1046: // Enable switching to/from Alternate Screen Buffer, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1047: // Use Alternate Screen Buffer, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1048: // Save cursor as in DECSC, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1049: // Save cursor as in DECSC, xterm.  After saving the cursor, switch to the Alternate Screen Buffer, clearing it first.
+                                                TODO(); 
+                                                break;
+                                            case 1050: // Set terminfo/termcap function-key mode, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1051: // Set Sun function-key mode, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1052: // Set HP function-key mode, xterm.
+                                                TODO(); 
+                                                break;                                                                                                   
+                                            case 1053: // Set SCO function-key mode, xterm.
+                                                TODO(); 
+                                                break; 
+                                            case 1060: // Set legacy keyboard emulation (i.e, X11R6), xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1061: // Set VT220 keyboard emulation, xterm.
+                                                TODO(); 
+                                                break;                                                                                                                                                                                                    
+                                            case 2004: // Set bracketed paste mode, xterm.
+                                                TODO(); 
+                                                break; 
+
+                                            default:
+                                                TODO(); 
+                                        }
+                                        break;
+                                    }
+
+                                    TODO();
+                                    break;
+                                }
+                                TODO();
                                 break;
                             }
+
                             // CSI Pm h 
                             // CSI ? Pm h
                             TODO();
@@ -2305,13 +2517,229 @@ static bool a3dProcessVT(A3D_VT* vt)
                             break;
                         case 'l': // CRITICAL
                         {
-                            if (str_len == 1 && vt->str[0] == '4')
+                            if (str_len >= 1)
                             {
-                                vt->Flush();
-                                vt->ins_mode = false;
-                                DONE();
+                                if (str_len == 1 && vt->str[0] == '4')
+                                {
+                                    vt->Flush();
+                                    vt->ins_mode = false;
+                                    DONE();
+                                    break;
+                                }
+
+                                if (vt->str[0] == '?')
+                                {
+                                    char* end = 0;
+                                    char* str = vt->str+1;
+                                    int Ps = strtol(str, &end, 10);
+                                    if (end != str)
+                                    {
+                                        switch (Ps)
+                                        {
+                                            case 1: // Normal Cursor Keys (DECCKM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 2: // Designate VT52 mode (DECANM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 3: // 80 Column Mode (DECCOLM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 4: // Jump (Fast) Scroll (DECSCLM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 5: // Normal Video (DECSCNM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 6: // Normal Cursor Mode (DECOM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 7: // No Auto-wrap Mode (DECAWM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 8: // No Auto-repeat Keys (DECARM), VT100.
+                                                TODO(); 
+                                                break;
+                                            case 9: // Don't send Mouse X & Y on button press, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 10: // Hide toolbar (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 12: // Stop Blinking Cursor (AT&T 610).
+                                                TODO(); 
+                                                break;
+                                            case 13: // Disable Blinking Cursor.
+                                                TODO(); 
+                                                break;
+                                            case 14: // Disable XOR of Blinking Cursor control sequence and menu.
+                                                TODO(); 
+                                                break;
+                                            case 18: // Don't print form feed (DECPFF).
+                                                TODO(); 
+                                                break;
+                                            case 19: // Limit print to scrolling region (DECPEX).
+                                                TODO(); 
+                                                break;
+                                            case 25: // Hide Cursor (DECTCEM), VT220.
+                                                TODO(); 
+                                                break;
+                                            case 30: // Don't show scrollbar (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 35: // Disable font-shifting functions (rxvt).
+                                                TODO(); 
+                                                break;
+                                            /*    
+                                            case 38: // Enter Tektronix Mode (DECTEK), VT240, xterm.
+                                                TODO(); 
+                                                break;
+                                            */
+                                            case 40: // Disallow 80 -> 132 Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 41: // No more(1) fix (see curses resource).
+                                                TODO(); 
+                                                break;
+                                            case 42: // Disable National Replacement Character sets
+                                                TODO(); 
+                                                break;
+                                            case 44: // Turn Off Margin Bell, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 45: // No Reverse-wraparound Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 46: // Stop Logging, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 47: // Use Normal Screen Buffer, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 66: // Numeric keypad (DECNKM), VT320.
+                                                TODO(); 
+                                                break;
+                                            case 67: // Backarrow key sends delete (DECBKM), VT340, VT420.
+                                                TODO(); 
+                                                break;
+                                            case 69: // Disable left and right margin mode (DECLRMM), VT420 and up.
+                                                TODO(); 
+                                                break;
+                                            case 95: // Clear screen when DECCOLM is set/reset (DECNCSM), VT510 and up.
+                                                TODO(); 
+                                                break;
+                                            case 1000: // Don't send Mouse X & Y on button press and release.
+                                                TODO(); 
+                                                break;
+                                            case 1001: // Don't use Hilite Mouse Tracking, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1002: // Don't use Cell Motion Mouse Tracking, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1003: // Don't use All Motion Mouse Tracking, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1004: // Don't send FocusIn/FocusOut events, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1005: // Disable UTF-8 Mouse Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1006: // Disable SGR Mouse Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1007: // Disable Alternate Scroll Mode, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1010: // Don't scroll to bottom on tty output (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 1011: // Don't scroll to bottom on key press (rxvt).
+                                                TODO(); 
+                                                break;
+                                            case 1015: // Disable urxvt Mouse Mode.
+                                                TODO(); 
+                                                break;
+                                            case 1034: // Don't interpret "meta" key, xterm.  
+                                                TODO(); 
+                                                break;
+                                            case 1035: // Disable special modifiers for Alt and NumLock keys, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1036: // Don't send ESC  when Meta modifies a key, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1037: // end VT220 Remove from the editing-keypad Delete key, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1039: // Don't send ESC when Alt modifies a key, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1040: // Do not keep selection when not highlighted, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1041: // Use the PRIMARY selection, xterm.  
+                                                TODO(); 
+                                                break;                                                
+                                            case 1042: // Disable Urgency window manager hint when Control-G is received, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1043: // Disable raising of the window when Control-G is received, xterm.
+                                                TODO(); 
+                                                break;  
+                                            /*                                              
+                                            case 1044: // Reuse the most recent data copied to CLIPBOARD, xterm.
+                                                TODO(); 
+                                                break;
+                                            */                                              
+                                            case 1046: // Disable switching to/from Alternate Screen Buffer, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1047: // Use Normal Screen Buffer, xterm.  
+                                                TODO(); 
+                                                break;                                                
+                                            case 1048: // Restore cursor as in DECRC, xterm.  
+                                                TODO(); 
+                                                break;                                                
+                                            case 1049: // Use Normal Screen Buffer and restore cursor as in DECRC, xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1050: // Reset terminfo/termcap function-key mode, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1051: // Reset Sun function-key mode, xterm.
+                                                TODO(); 
+                                                break;                                                
+                                            case 1052: // Reset HP function-key mode, xterm.
+                                                TODO(); 
+                                                break;                                                                                                   
+                                            case 1053: // Reset SCO function-key mode, xterm.
+                                                TODO(); 
+                                                break; 
+                                            case 1060: // Reset legacy keyboard emulation (i.e, X11R6), xterm.
+                                                TODO(); 
+                                                break;
+                                            case 1061: // Reset keyboard emulation to Sun/PC style, xterm.
+                                                TODO(); 
+                                                break;                                                                                                                                                                                                    
+                                            case 2004: // Reset bracketed paste mode, xterm.
+                                                TODO(); 
+                                                break; 
+
+                                            default:
+                                                TODO(); 
+                                        }
+                                        break;
+                                    }
+
+                                    TODO();
+                                    break;
+                                }
+                                TODO();
                                 break;
                             }
+
                             // CSI Pm l 
                             // CSI ? Pm l
                             TODO();
