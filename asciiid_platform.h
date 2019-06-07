@@ -296,7 +296,7 @@ void a3dDestroyVT(A3D_VT* vt);
 int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size);
 
 // TESTING!
-void a3dDumpVT(A3D_VT* vt);
+bool a3dDumpVT(A3D_VT* vt);
 
 // simple thread api
 struct A3D_THREAD;

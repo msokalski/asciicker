@@ -2939,11 +2939,13 @@ void my_render()
 
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
+		/*
 		if (ImGui::Button("DUMP_VT"))
 		{
 			if (term)
 				a3dDumpVT(term);
 		}
+		*/
 
 		int xywh[4],wh[2];
 		a3dGetRect(xywh, wh);
@@ -4802,6 +4804,18 @@ void my_render()
 
 	}
 
+	if (term)
+	{
+		if (a3dDumpVT(term))
+		{
+			glScissor(0,0,16,16);
+			glEnable(GL_SCISSOR_TEST);
+			glClearColor(1,1,1,1);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glDisable(GL_SCISSOR_TEST);
+		}
+	}
+
 	a3dSwapBuffers();
 
 	if (ipal)
@@ -4907,7 +4921,7 @@ void my_resize(int w, int h)
 void my_init()
 {
 
-	term = a3dCreateVT(80,24, "/bin/bash", 0, 0);
+	term = a3dCreateVT(90,30, "/bin/bash", 0, 0);
 
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));

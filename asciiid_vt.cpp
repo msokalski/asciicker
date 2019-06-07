@@ -6,6 +6,9 @@
 // just for write(fd)
 #include <unistd.h>
 
+// just to inform dump about term size
+#include <sys/ioctl.h>
+
 #include "asciiid_platform.h"
 #include "asciiid_term.h"
 
@@ -80,6 +83,8 @@ struct A3D_VT
     A3D_THREAD* pty_reader;
     A3D_MUTEX* mutex; // prevents renderer and vt processing threads to clash
 
+    bool dump_dirty; // received something after last dump
+
     volatile int closing;
 
     int chr_val;
@@ -104,9 +109,13 @@ struct A3D_VT
     uint8_t single_shift; // only 2 or 3 (0-inactive)
     SGR sgr;
 
+    int scroll_top;
+    int scroll_bottom;
+
     // shouldn't we merge it into bitfields?
     bool auto_wrap;
     bool app_keypad;
+    bool app_cursors;
     bool ins_mode; // CSI 4 h / CSI 4 l
 
     uint8_t G_table[4];
@@ -359,10 +368,11 @@ struct A3D_VT
     {
         bool ret;
         int at = y;
-        y = 0;
+        y = scroll_top;
         if (num>0)
             ret = DeleteLines(num);
         else
+        if (num<0)
             ret = InsertLines(-num);
 
         y = at;
@@ -371,12 +381,12 @@ struct A3D_VT
 
     inline bool DeleteLines(int num)
     {
-        if (y >= lines)
+        if (y >= lines || y>=scroll_bottom || y<scroll_top)
             return true;
 
         Flush();
 
-        int end = y+num < h ? y+num : h;
+        int end = y+num < scroll_bottom ? y+num : scroll_bottom;
 
         // free deleted lines
         for (int i=y; i<end; i++)
@@ -391,7 +401,7 @@ struct A3D_VT
         }
 
         // scroll up all survivors, null their origin
-        for (int i=end; i<h; i++)
+        for (int i=end; i<scroll_bottom; i++)
         {
             int from = (first_line + i) % MAX_ARCHIVE_LINES;
             int to = (first_line + i-num) % MAX_ARCHIVE_LINES;
@@ -403,16 +413,15 @@ struct A3D_VT
 
     inline bool InsertLines(int num)
     {
-        if (lines <= y)
+        if (y >= lines || y >= scroll_bottom || y<scroll_top)
             return true; // nutting to scroll
 
         Flush();
 
-        int first = y+num;
-        int last = lines+num < h ? lines+num : h;
+        int kill_from = scroll_bottom - num > y ? scroll_bottom - num : y;
 
-        // kill scrolled away lines
-        for (int i = last; i<h; i++)
+        // kill lines scrolled out of the bottom
+        for (int i=kill_from; i<scroll_bottom; i++)
         {
             int lidx = (first_line + i) % MAX_ARCHIVE_LINES;
             LINE* l = line[lidx];
@@ -423,29 +432,19 @@ struct A3D_VT
             }
         }
 
-        // scroll lines that fit 
-        for (int i = last-1; i>=first; i--)
+        // scroll survivors
+        for (int i=scroll_bottom-1; i>=y+num; i--)
         {
-            int from = (first_line + i) % MAX_ARCHIVE_LINES;
+            int from = (first_line + i - num) % MAX_ARCHIVE_LINES;
             int to = (first_line + i) % MAX_ARCHIVE_LINES;
             line[to] = line[from];
-            line[from] = 0;
+            line[from] = 0;           
         }
 
-        // clear empty lines
-        first = first < h ? first : h;
-        for (int i=y; y<first; y++)
-        {
-            int lidx = (first_line + i) % MAX_ARCHIVE_LINES;
-            LINE* l = line[lidx];
-            if (l)
-            {
-                free(l);
-                line[lidx] = 0;
-            }
-        }
+        // adjust num of lines if was between top and bottom of scroll range
+        if (lines >=scroll_top && lines < scroll_bottom)
+           lines = lines+num < scroll_bottom ? lines+num : scroll_bottom;
 
-        lines = last > lines ? last : lines;
         return true;
     }
 
@@ -646,33 +645,6 @@ void todo(int line)
 void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt);
 A3D_VT* a3dGetPtyVT(A3D_PTY* pty);
 
-/*
-static void Scroll(A3D_VT* vt)
-{
-    if (vt->y >= vt->h)
-    {
-        // move upper part of screen to archive
-
-        int scroll = vt->y - vt->h + 1;
-        if (scroll < vt->h)
-            memmove(vt->screen, vt->screen + scroll* vt->w * sizeof(VT_CELL), (vt->h - scroll) * vt->w * sizeof(VT_CELL));
-        VT_CELL blank = { 0x20, vt->sgr };
-        VT_CELL* clear = vt->screen + (vt->h - scroll) * vt->w;
-        for (int i = 0; i < scroll * vt->w; i++)
-            clear[i] = blank;
-
-        vt->y = vt->h-1;
-    }
-
-    // DO IT ALWAYS after resize
-    // x can be as large as MAX_INT is then it will wrap to 0
-    if (vt->x<0)
-        vt->x += (1<<31);
-    if (vt->y<0)
-        vt->y=0;
-}
-*/
-
 static void Reset(A3D_VT* vt)
 {
     vt->UTF8 = true;
@@ -688,9 +660,12 @@ static void Reset(A3D_VT* vt)
     vt->single_shift = 0;
     vt->auto_wrap = true;
     vt->ins_mode = false;
-    vt->single_shift = 0;
+
+    vt->scroll_top = 0;
+    vt->scroll_bottom = vt->h;
 
     vt->app_keypad = false;
+    vt->app_cursors = false;
 
     vt->chr_val = 0;
     vt->chr_ctx = 0;
@@ -738,6 +713,8 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
 
     vt->mutex = a3dCreateMutex();
     vt->pty_reader = a3dCreateThread(A3D_VT::PtyRead,vt);
+
+    vt->dump_dirty = true;
 
     return vt;
 }
@@ -1144,25 +1121,6 @@ static bool a3dProcessVT(A3D_VT* vt)
             }
 
             out_chr:
-
-            /*
-
-            if (vt->auto_wrap && vt->x >= vt->w)
-            {
-                vt->x=0;
-                vt->y++;
-                Scroll(vt);
-            }
-
-            if (vt->x < vt->w)
-            {
-                VT_CELL cell = { (uint32_t)chr, vt->sgr };
-                vt->screen[vt->x + vt->y * vt->w] = cell;
-            }
-
-            vt->x++;
-
-            */
 
             vt->Write(chr);
 
@@ -2145,9 +2103,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                             // CSI Ps S
                             // Scroll up Ps lines (default = 1) (SU), VT420, ECMA-48. 
 
-                            // that will force (even if Ps==0) num of lines to be at least h
-                            // then it will scroll last h lines up while shifting empty ones
-
                             if (Ps>0)
                                 vt->Scroll(Ps);
                             DONE();
@@ -2263,23 +2218,70 @@ static bool a3dProcessVT(A3D_VT* vt)
                             TODO();
                             break;
                         case 'c': 
+
                             // CSI Ps c 
+                            // Send Device Attributes (Primary DA).
+
                             // CSI = Ps c 
+                            // Send Device Attributes (Tertiary DA).
+
                             // CSI > Ps c
+                            // Send Device Attributes (Secondary DA).
+
                             TODO();
                             break;
                         case 'd':
+                        {
                             // CSI Pm d
-                            TODO();
+                            // Line Position Absolute  [row] (default = [1,column]) (VPA).
+                            char* end = 0;
+                            char* str = vt->str;
+                            int Ps = strtol(str, &end, 10);
+                            if (end == str)
+                                Ps=1;                            
+                            vt->GotoXY(vt->x, Ps-1);
+                            DONE();
                             break;
+                        }
                         case 'e':
+                        {
                             // CSI Pm e
-                            TODO();
+                            // Line Position Relative  [rows] (default = [row+1,column]) (VPR).
+                            char* end = 0;
+                            char* str = vt->str;
+                            int Ps = strtol(str, &end, 10);
+                            if (end == str)
+                                Ps=1;                            
+                            vt->GotoXY(vt->x, vt->y+Ps);
+                            DONE();
                             break;
+                        }
                         case 'f':
+                        {
                             // CSI Ps;Ps f
-                            TODO();
+                            // Horizontal and Vertical Position [row;column] (default = [1,1]) (HVP).
+                            // how is this different from (CUP)?
+                            char* end = 0;
+                            char* str = vt->str;
+                            int Psx, Psy = strtol(str, &end, 10);
+                            if (end == str)
+                            {
+                                Psy=1;
+                                Psx=1;
+                            }
+                            else
+                            if (*end == ';')
+                            {
+                                str = end+1;
+                                Psx = strtol(str, &end, 10);
+                                if (end == str)
+                                    Psx=1;
+                            }
+                            
+                            vt->GotoXY(Psx-1,Psy-1);
+                            DONE();
                             break;
+                        }
                         case 'g':
                             // CSI Ps g
                             TODO();
@@ -2306,7 +2308,8 @@ static bool a3dProcessVT(A3D_VT* vt)
                                         switch (Ps)
                                         {
                                             case 1: // Application Cursor Keys (DECCKM), VT100.
-                                                TODO(); 
+                                                vt->app_cursors = true;
+                                                DONE(); 
                                                 break;
                                             case 2: // Designate USASCII for character sets G0-G3
                                                 TODO(); 
@@ -2324,7 +2327,8 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 TODO(); 
                                                 break;
                                             case 7: // Auto-wrap Mode (DECAWM), VT100.
-                                                TODO(); 
+                                                vt->auto_wrap = true;
+                                                DONE(); 
                                                 break;
                                             case 8: // Auto-repeat Keys (DECARM), VT100.
                                                 TODO(); 
@@ -2511,8 +2515,13 @@ static bool a3dProcessVT(A3D_VT* vt)
                             break;
                         }
                         case 'i': 
+                        
                             // CSI Pm i 
+                            // Media Copy (MC).
+
                             // CSI ? Pm i
+                            // Media Copy (MC), DEC-specific.
+
                             TODO();
                             break;
                         case 'l': // CRITICAL
@@ -2537,7 +2546,8 @@ static bool a3dProcessVT(A3D_VT* vt)
                                         switch (Ps)
                                         {
                                             case 1: // Normal Cursor Keys (DECCKM), VT100.
-                                                TODO(); 
+                                                vt->app_cursors = false;
+                                                DONE(); 
                                                 break;
                                             case 2: // Designate VT52 mode (DECANM), VT100.
                                                 TODO(); 
@@ -2555,7 +2565,8 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 TODO(); 
                                                 break;
                                             case 7: // No Auto-wrap Mode (DECAWM), VT100.
-                                                TODO(); 
+                                                vt->auto_wrap = false;
+                                                DONE(); 
                                                 break;
                                             case 8: // No Auto-repeat Keys (DECARM), VT100.
                                                 TODO(); 
@@ -2746,9 +2757,14 @@ static bool a3dProcessVT(A3D_VT* vt)
                             break;
                         }
                         case 'm': 
-                            // CSI Pm m 
                             // CSI > Ps;Ps m
-                            TODO();
+                            if (str_len && vt->str[0]=='>')
+                            {
+                                TODO();
+                                break;
+                            }
+                            // CSI Pm m 
+                            //TODO(); // SGR!!!!!!!!!!!!!!!
                             break;
                         case 'n': 
                             // CSI Ps n 
@@ -2773,7 +2789,34 @@ static bool a3dProcessVT(A3D_VT* vt)
                             TODO();
                             break;
                         case 'r': 
-                            // CSI Ps;Ps r 
+                            // CSI Ps;Ps r (CRITICAL)
+                            // Set Scrolling Region [top;bottom] (default = full size of window) (DECSTBM), VT100.
+                            if (!str_len || vt->str[0] != '?' || vt->str[str_len-1] != '$')
+                            {
+                                char* end = 0;
+                                char* str = vt->str;
+                                int Pst = strtol(str, &end, 10), Psb;
+                                if (end == str)
+                                {
+                                    Pst=1;
+                                    Psb=vt->h;
+                                }
+                                else
+                                if (*end == ';')
+                                {
+                                    str = end+1;
+                                    Psb = strtol(str, &end, 10);
+                                    if (end == str)
+                                        Psb=vt->h;
+                                }
+
+                                vt->scroll_top = Pst-1;
+                                vt->scroll_bottom = Psb;
+                                
+                                DONE();
+                                break;
+                            }
+
                             // CSI ? Pm r 
                             // CSI RECT;Ps $ r
                             TODO();
@@ -2867,7 +2910,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                     // ...
                     str_len = 0;
                     seq_ctx = 0; // ok
-                    TODO();
+                    //TODO();
                 }
                 else
                 if (chr >= 0x20 && chr<=0x7E || chr>=0x08 && chr<= 0x0D || seq_ctx == 'X' && chr!=0x98)
@@ -2902,6 +2945,7 @@ static bool a3dProcessVT(A3D_VT* vt)
     vt->seq_ctx = seq_ctx;
     vt->str_len = str_len;
 
+    vt->dump_dirty = true;
     a3dMutexUnlock(vt->mutex);
 
     return true;
@@ -2914,21 +2958,117 @@ int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size)
 }
 
 // TESTING!
-void a3dDumpVT(A3D_VT* vt)
+bool a3dDumpVT(A3D_VT* vt)
 {
+    if (!vt->dump_dirty)
+        return false;
+
+    a3dMutexLock(vt->mutex);
+
+    struct winsize ws;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);    
+    int tw = ws.ws_col;
+    int th = ws.ws_row;
+
     // flush! temp
     vt->Flush();
 
+    write(STDOUT_FILENO,"\e[H",3); // goto home
 
-    write(STDOUT_FILENO,"\n--------------------\n",22);
-    for (int i=0; i<vt->h; i++)
+    int h = vt->lines < vt->h ? vt->lines : vt->h;
+    h = h<th ? h : th;
+
+    char buf[4+4*256] = "\e[2K"; // clear every line
+
+    for (int i=0; i<h; i++)
     {
+        int c = 4;
+        int lidx = (vt->first_line + i) % A3D_VT::MAX_ARCHIVE_LINES;
+        if (vt->line[lidx])
+        {
+            int w = vt->line[lidx]->cells < 256 ? vt->line[lidx]->cells : 255;
+            w = w < vt->w ? w : vt->w;
+            w = w < tw ? w : tw;
+            for (int x=0; x<w; x++)
+            {
+                int chr = vt->line[lidx]->cell[x].ch;
+
+                if (chr<0x80)
+                {
+                    buf[c++] = (char)chr;
+                }
+                else
+                if (chr<0x800)
+                {
+                    buf[c++] = (char)( ((chr>>6)&0x1F) | 0xC0 );
+                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
+                }
+                else
+                if (chr<0x10000)
+                {
+                    buf[c++] = (char)( ((chr>>12)&0x0F)|0xE0 );
+                    buf[c++] = (char)( ((chr>>6)&0x3f) | 0x80 );
+                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
+                }
+                else
+                if (chr<0x101000)
+                {
+                    buf[c++] = (char)( ((chr>>18)&0x07)|0xF0 );
+                    buf[c++] = (char)( ((chr>>12)&0x3f) | 0x80 );
+                    buf[c++] = (char)( ((chr>>6)&0x3f) | 0x80 );
+                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
+                }
+            }
+        }
+
+        if (i<h-1)
+            buf[c++] = '\n';
+        write(STDOUT_FILENO, buf, c);
+    }
+
+    char move[256];
+    int move_len = sprintf(move,"\e[%d;%dH",vt->y+1,vt->x+1);
+    write(STDOUT_FILENO,move,move_len);
+
+    vt->dump_dirty = false;
+
+    a3dMutexUnlock(vt->mutex);
+
+    return true;
+}
+
+/*
+bool a3dDumpVT(A3D_VT* vt)
+{
+    if (!vt->dump_dirty)
+        return false;
+
+    a3dMutexLock(vt->mutex);
+
+    struct winsize ws;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);    
+    int tw = ws.ws_col;
+    int th = ws.ws_row;
+
+    // flush! temp
+    vt->Flush();
+
+    write(STDOUT_FILENO,"\e[H",3);
+
+    int h = vt->lines < vt->h ? vt->lines : vt->h;
+    h = h<th ? h : th;
+
+    for (int i=0; i<h; i++)
+    {
+        write(STDOUT_FILENO, "\e[2K", 4);
         int lidx = (vt->first_line + i) % A3D_VT::MAX_ARCHIVE_LINES;
         if (vt->line[lidx])
         {
             char buf[4*256];
             int c = 0;
             int w = vt->line[lidx]->cells < 256 ? vt->line[lidx]->cells : 255;
+            w = w < vt->w ? w : vt->w;
+            w = w < tw ? w : tw;
             for (int x=0; x<w; x++)
             {
                 int chr = vt->line[lidx]->cell[x].ch;
@@ -2970,4 +3110,16 @@ void a3dDumpVT(A3D_VT* vt)
                 write(STDOUT_FILENO, "\n", 1);
         }
     }
+
+
+    char move[256];
+    int move_len = sprintf(move,"\e[%d;%dH",vt->y+1,vt->x+1);
+    write(STDOUT_FILENO,move,move_len);
+
+    vt->dump_dirty = false;
+
+    a3dMutexUnlock(vt->mutex);
+
+    return true;
 }
+*/
