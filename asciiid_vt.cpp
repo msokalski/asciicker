@@ -238,12 +238,12 @@ struct A3D_VT
 
     inline bool EraseChars(int num)
     {
+        Flush();
+        
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];        
         if (!l)
             return true;
-
-        Flush();
 
         int end = x+num < l->cells ? x+num : l->cells;
         VT_CELL blank = { 0x20, sgr };
@@ -254,12 +254,12 @@ struct A3D_VT
 
     inline bool EraseRow(int mode)
     {
+        Flush();
+
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];        
         if (!l)
             return true;
-
-        Flush();
 
         if (mode==0)
         {
@@ -339,12 +339,14 @@ struct A3D_VT
         
         if (y<scroll_top || y >= lines || y>=scroll_bottom)
             return true;
+
+        Flush();
+
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
         if (!l || l->cells + temp_len < x)
             return true;
 
-        Flush();
         int cells = l->cells;
 
         int end = x+num;
@@ -501,7 +503,9 @@ struct A3D_VT
     {
         if (!num)
             return true;
+
         Flush();
+        
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
         int cells = l ? l->cells : 0;
