@@ -83,7 +83,7 @@ struct A3D_VT
     A3D_THREAD* pty_reader;
     A3D_MUTEX* mutex; // prevents renderer and vt processing threads to clash
 
-    bool dump_dirty; // received something after last dump
+    int dump_dirty; // received something after last dump
 
     volatile int closing;
 
@@ -238,11 +238,12 @@ struct A3D_VT
 
     inline bool EraseChars(int num)
     {
-        Flush();
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];        
         if (!l)
             return true;
+
+        Flush();
 
         int end = x+num < l->cells ? x+num : l->cells;
         VT_CELL blank = { 0x20, sgr };
@@ -253,14 +254,16 @@ struct A3D_VT
 
     inline bool EraseRow(int mode)
     {
-        Flush();
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];        
         if (!l)
             return true;
 
+        Flush();
+
         if (mode==0)
         {
+            //return true;
             if (x>=l->cells)
                 return true;
             if (x==0)
@@ -279,6 +282,7 @@ struct A3D_VT
 
         if (mode==1)
         {
+            //return true;
             if (x==0)
                 return true;
             if (x>=l->cells)
@@ -291,6 +295,8 @@ struct A3D_VT
             VT_CELL blank = { 0x20, sgr };
             for (int i=0; i<x; i++)
                 l->cell[i] = blank;
+
+            return true;
         }
 
         if (mode==2)
@@ -329,15 +335,20 @@ struct A3D_VT
 
     inline bool DeleteChars(int num)
     {
-        if (y >= lines)
+        // does well
+        
+        if (y<scroll_top || y >= lines || y>=scroll_bottom)
             return true;
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
-        if (!l || l->cells < x)
+        if (!l || l->cells + temp_len < x)
             return true;
 
+        Flush();
+        int cells = l->cells;
+
         int end = x+num;
-        if (end >= l->cells) // trim right
+        if (end >= cells) // trim right
         {
             if (x==0)
             {
@@ -353,13 +364,17 @@ struct A3D_VT
             return true;
         }
 
-        for (int i=x; i<end; i++)
+        cells-=num;
+        if (cells<0)
+            cells=0;
+
+        for (int i=x; i<cells; i++)
             l->cell[i] = l->cell[i+num];
 
-        l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (l->cells-num-1));
+        l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (cells-1));
         if (!l)
             return false;
-        l->cells -= num;
+        l->cells = cells;
         line[lidx] = l;
         return true;
     }
@@ -649,6 +664,7 @@ static void Reset(A3D_VT* vt)
 {
     vt->UTF8 = true;
     vt->str_len = 0;
+    vt->dump_dirty |= 2;
 
     vt->G_table[0] = 0;
     vt->G_table[1] = 0;
@@ -681,6 +697,7 @@ static void Reset(A3D_VT* vt)
     }
 
     vt->temp_len = 0;
+    vt->temp_ins = 0;
     vt->lines = 0;
     vt->x = 0;
     vt->y = 0;
@@ -714,7 +731,7 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
     vt->mutex = a3dCreateMutex();
     vt->pty_reader = a3dCreateThread(A3D_VT::PtyRead,vt);
 
-    vt->dump_dirty = true;
+    vt->dump_dirty = 2; // resized or reset
 
     return vt;
 }
@@ -2773,8 +2790,16 @@ static bool a3dProcessVT(A3D_VT* vt)
                             TODO();
                             break;
                         case 'p': 
+                            if (str_len==1 && vt->str[0] == '!')
+                            {
+                                // CSI ! p 
+                                // Soft terminal reset (DECSTR), VT220 and up.
+                                Reset(vt);
+                                DONE();
+                                break;
+                            }
+
                             // CSI > Ps p 
-                            // CSI ! p 
                             // CSI Ps;Ps " p 
                             // CSI Ps $ p 
                             // CSI ? Ps $ p 
@@ -2945,7 +2970,7 @@ static bool a3dProcessVT(A3D_VT* vt)
     vt->seq_ctx = seq_ctx;
     vt->str_len = str_len;
 
-    vt->dump_dirty = true;
+    vt->dump_dirty |= 1; // processed input
     a3dMutexUnlock(vt->mutex);
 
     return true;
@@ -2975,7 +3000,14 @@ bool a3dDumpVT(A3D_VT* vt)
 
     write(STDOUT_FILENO,"\e[H",3); // goto home
 
-    int h = vt->lines < vt->h ? vt->lines : vt->h;
+    int h = vt->h;
+    if ((vt->dump_dirty & 2) == 0)
+    {
+        // if terminal is not reset or resized
+        // we can limit output to vt->lines
+        h = h < vt->lines ? h : vt->lines;
+    }
+
     h = h<th ? h : th;
 
     char buf[4+4*256] = "\e[2K"; // clear every line
@@ -3030,7 +3062,7 @@ bool a3dDumpVT(A3D_VT* vt)
     int move_len = sprintf(move,"\e[%d;%dH",vt->y+1,vt->x+1);
     write(STDOUT_FILENO,move,move_len);
 
-    vt->dump_dirty = false;
+    vt->dump_dirty = 0;
 
     a3dMutexUnlock(vt->mutex);
 
