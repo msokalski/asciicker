@@ -12,6 +12,25 @@
 #include "asciiid_platform.h"
 #include "asciiid_term.h"
 
+
+#define DONE() done(__LINE__)
+void done(int line)
+{
+    int bbb=0;
+}
+
+#define TODO() todo(__LINE__)
+void todo(int line)
+{
+    int aaa=0;
+}
+
+#define WARN() warn(__LINE__)
+void warn(int line)
+{
+    int aaa=0;
+}
+
 static bool a3dProcessVT(A3D_VT* vt);
 
 
@@ -335,8 +354,6 @@ struct A3D_VT
 
     inline bool DeleteChars(int num)
     {
-        // does well
-        
         if (y<scroll_top || y >= lines || y>=scroll_bottom)
             return true;
 
@@ -523,6 +540,9 @@ struct A3D_VT
 
         for (int i=0; i<num; i++)
             l->cell[i+x] = blank;
+            
+        if (GetCurLineLen() > w)
+            WARN();
     }
 
     inline bool Write(int chr)
@@ -612,6 +632,8 @@ struct A3D_VT
             if (temp_ins < cells && cells + temp_len > w)
                 l->cells = w - temp_len;
 
+            if (GetCurLineLen())
+                WARN();
             return true;
         }
 
@@ -644,21 +666,13 @@ struct A3D_VT
             l->cell[x++] = cell;
         }
 
+        if (GetCurLineLen() > w)
+            WARN();
+
         return true;
     }
 };
 
-#define DONE() done(__LINE__)
-void done(int line)
-{
-    int bbb=0;
-}
-
-#define TODO() todo(__LINE__)
-void todo(int line)
-{
-    int aaa=0;
-}
 
 // private
 void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt);
@@ -1118,7 +1132,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                     DONE();
                     continue;
                 }
-
 
                 case 0x0E: // SO
                     // switch to G1
@@ -2052,7 +2065,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                             char* str = vt->str;
                             int Ps = strtol(str, &end, 10);
                             if (end == str)
-                                Ps=0;                              
+                                Ps=0;
 
                             // CSI Ps K 
                             // Erase in Line (EL), VT100.
@@ -2986,6 +2999,48 @@ int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size)
     return a3dWritePTY(vt->pty, buf, size);
 }
 
+bool a3dGetVTCursorsMode(A3D_VT* vt)
+{
+    return vt->app_cursors;
+}
+
+static int DumpChr(char* buf, VT_CELL* cell)
+{
+    int chr = cell->ch;
+
+    if (chr<0x80)
+    {
+        *(buf++) = (char)chr;
+        return 1;
+    }
+    else
+    if (chr<0x800)
+    {
+        *(buf++) = (char)( ((chr>>6)&0x1F) | 0xC0 );
+        *(buf++) = (char)( (chr&0x3f) | 0x80 );
+        return 2;
+    }
+    else
+    if (chr<0x10000)
+    {
+        *(buf++) = (char)( ((chr>>12)&0x0F)|0xE0 );
+        *(buf++) = (char)( ((chr>>6)&0x3f) | 0x80 );
+        *(buf++) = (char)( (chr&0x3f) | 0x80 );
+        return 3;
+    }
+    else
+    if (chr<0x101000)
+    {
+        *(buf++) = (char)( ((chr>>18)&0x07)|0xF0 );
+        *(buf++) = (char)( ((chr>>12)&0x3f) | 0x80 );
+        *(buf++) = (char)( ((chr>>6)&0x3f) | 0x80 );
+        *(buf++) = (char)( (chr&0x3f) | 0x80 );
+        return 4;
+    }
+
+    return 0;
+}
+
 // TESTING!
 bool a3dDumpVT(A3D_VT* vt)
 {
@@ -3000,7 +3055,7 @@ bool a3dDumpVT(A3D_VT* vt)
     int th = ws.ws_row;
 
     // flush! temp
-    vt->Flush();
+    // vt->Flush();
 
     write(STDOUT_FILENO,"\e[H",3); // goto home
 
@@ -3020,41 +3075,42 @@ bool a3dDumpVT(A3D_VT* vt)
     {
         int c = 4;
         int lidx = (vt->first_line + i) % A3D_VT::MAX_ARCHIVE_LINES;
+        if (vt->temp_len && i==vt->y)
+        {
+            A3D_VT::LINE* l = vt->line[lidx]; 
+            int lc = l ? l->cells : 0;
+            int cells = lc + vt->temp_len;
+            int w = cells < 256 ? cells : 255;
+            w = w < vt->w ? w : vt->w;
+            w = w < tw ? w : tw;
+
+            if (vt->ins_mode)
+            {
+                int x=0;
+                for (; x<vt->temp_ins && x<w; x++)
+                    c += DumpChr(buf+c, vt->line[lidx]->cell + x);
+                for (int t=0; t<vt->temp_len && x+t<w; t++)
+                    c += DumpChr(buf+c, vt->temp + t);
+                for (x=vt->temp_ins + vt->temp_len; x<w; x++)
+                    c += DumpChr(buf+c, vt->line[lidx]->cell + x - vt->temp_len);
+            }
+            else
+            {
+                int x=0;
+                for (; x<lc && x<w; x++)
+                    c += DumpChr(buf+c, vt->line[lidx]->cell + x);
+                for (; x<w; x++)
+                    c += DumpChr(buf+c, vt->temp + x - lc);
+            }
+        }
+        else
         if (vt->line[lidx])
         {
             int w = vt->line[lidx]->cells < 256 ? vt->line[lidx]->cells : 255;
             w = w < vt->w ? w : vt->w;
             w = w < tw ? w : tw;
             for (int x=0; x<w; x++)
-            {
-                int chr = vt->line[lidx]->cell[x].ch;
-
-                if (chr<0x80)
-                {
-                    buf[c++] = (char)chr;
-                }
-                else
-                if (chr<0x800)
-                {
-                    buf[c++] = (char)( ((chr>>6)&0x1F) | 0xC0 );
-                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
-                }
-                else
-                if (chr<0x10000)
-                {
-                    buf[c++] = (char)( ((chr>>12)&0x0F)|0xE0 );
-                    buf[c++] = (char)( ((chr>>6)&0x3f) | 0x80 );
-                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
-                }
-                else
-                if (chr<0x101000)
-                {
-                    buf[c++] = (char)( ((chr>>18)&0x07)|0xF0 );
-                    buf[c++] = (char)( ((chr>>12)&0x3f) | 0x80 );
-                    buf[c++] = (char)( ((chr>>6)&0x3f) | 0x80 );
-                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
-                }
-            }
+                c += DumpChr(buf+c, vt->line[lidx]->cell + x);
         }
 
         if (i<h-1)

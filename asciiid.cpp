@@ -5103,6 +5103,12 @@ void my_keyb_char(wchar_t chr)
 	if (!term)
 		return;
 
+	if (chr==0x7F) // DEL
+	{
+		a3dWriteVT(term,"\x1B[3~",4);
+		return;
+	}
+
 	if (chr<0x80)
 	{
 		char c[1] =
@@ -5146,8 +5152,6 @@ void my_keyb_char(wchar_t chr)
 	}
 }
 
-bool DECCKM = false;
-
 void my_keyb_key(KeyInfo ki, bool down)
 {
 	ImGuiIO& io = ImGui::GetIO();
@@ -5158,6 +5162,8 @@ void my_keyb_key(KeyInfo ki, bool down)
 	io.KeyAlt = a3dGetKeyb(A3D_LALT);// || a3dGetKeyb(A3D_RALT);
 	io.KeyCtrl = a3dGetKeyb(A3D_LCTRL) || a3dGetKeyb(A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(A3D_LSHIFT) || a3dGetKeyb(A3D_RSHIFT);
+
+	bool DECCKM = a3dGetVTCursorsMode(term);
 
 	if (term && down)
 	{

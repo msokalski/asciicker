@@ -295,6 +295,8 @@ void a3dDestroyVT(A3D_VT* vt);
 // should be replaced with a3dWriteKey(ki) a3dWriteChar(ch) and a3dMouse(x,y,mi)
 int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size);
 
+bool a3dGetVTCursorsMode(A3D_VT* vt);
+
 // TESTING!
 bool a3dDumpVT(A3D_VT* vt);
 
