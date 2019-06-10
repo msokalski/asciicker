@@ -913,6 +913,11 @@ static bool a3dProcessVT(A3D_VT* vt)
     int i = 0;
     while (i<siz)
     {
+        a3dMutexUnlock(vt->mutex);
+        a3dDumpVT(vt);
+        usleep(1000);
+        a3dMutexLock(vt->mutex);
+
         if (UTF8)
         {
             int code = utf8_parser[chr_ctx][buf[i++]];
@@ -931,6 +936,11 @@ static bool a3dProcessVT(A3D_VT* vt)
 
         if (chr_ctx)
             continue;
+
+        if (vt->y>=1 && vt->y<=5)
+        {
+            int kot=0;
+        }
 
         // we have a char in chr_val!
         int chr = chr_val;
@@ -1155,6 +1165,11 @@ static bool a3dProcessVT(A3D_VT* vt)
             }
 
             out_chr:
+
+            if (chr<0x20 || chr>=127)
+            {
+                int aaa=0;
+            }
 
             vt->Write(chr);
 
@@ -2791,15 +2806,46 @@ static bool a3dProcessVT(A3D_VT* vt)
                             break;
                         }
                         case 'm': 
+                        {
                             // CSI > Ps;Ps m
                             if (str_len && vt->str[0]=='>')
                             {
                                 TODO();
                                 break;
                             }
+
+                            if (str_len)
+                            {
+                                char* str = vt->str;
+                                while(true)
+                                {
+                                    if (*str == ';')
+                                    {
+                                        // default
+                                        int Ps = 0;
+                                        str++;
+                                        continue;
+                                    }
+                                    char* end = 0;
+                                    int Ps = strtol(str, &end, 10), Psb;
+                                    if (end != str)
+                                    {
+                                        if (Ps == 8)
+                                        {
+                                            // invisible
+                                            int aaa = 0;
+                                        }
+                                        if (*end==';')
+                                            str = end+1;
+                                        else
+                                            break;
+                                    }
+                                }
+                            }
                             // CSI Pm m 
                             //TODO(); // SGR!!!!!!!!!!!!!!!
                             break;
+                        }
                         case 'n': 
                             // CSI Ps n 
                             // CSI > Ps n 
@@ -2990,6 +3036,7 @@ static bool a3dProcessVT(A3D_VT* vt)
     vt->dump_dirty |= 1; // processed input
     a3dMutexUnlock(vt->mutex);
 
+    a3dDumpVT(vt);
     return true;
 }
 
