@@ -2597,6 +2597,8 @@ void my_render()
 	const float clear_in[4]={0.45f, 0.55f, 0.60f, 1.00f};
 	const float clear_out[4]={0.40f, 0.50f, 0.55f, 0.95f};
 
+	static int last_heap_ops = 0;
+
 	//const float* clear_color = mouse_in ? clear_in : clear_out;
 	const float* clear_color = clear_in;
 
@@ -2939,13 +2941,7 @@ void my_render()
 
 		ImGui::Begin("VIEW", 0, ImGuiWindowFlags_AlwaysAutoResize);
 
-		/*
-		if (ImGui::Button("DUMP_VT"))
-		{
-			if (term)
-				a3dDumpVT(term);
-		}
-		*/
+		ImGui::Text("VT HEAP Ops: %d", last_heap_ops);
 
 		int xywh[4],wh[2];
 		a3dGetRect(xywh, wh);
@@ -4806,7 +4802,8 @@ void my_render()
 
 	if (term)
 	{
-		if (a3dDumpVT(term))
+		bool dump = a3dDumpVT(term);
+		if (dump > 0)
 		{
 			glScissor(0,0,16,16);
 			glEnable(GL_SCISSOR_TEST);
@@ -4921,7 +4918,7 @@ void my_resize(int w, int h)
 void my_init()
 {
 
-	term = a3dCreateVT(90,30, "/bin/bash", 0, 0);
+	term = a3dCreateVT(190,54, "/bin/bash", 0, 0);
 
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));

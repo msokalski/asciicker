@@ -1637,6 +1637,17 @@ A3D_VT* a3dGetPtyVT(A3D_PTY* pty)
 
 A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[])
 {
+	A3D_PTY* pty = (A3D_PTY*)malloc(sizeof(A3D_PTY));
+	if (!pty)
+		return 0;
+
+	int pfd[2];
+	if (pipe(pfd) != 0)	
+	{
+		free(pty);
+		return 0;
+	}
+
     struct winsize ws;
     ws.ws_col = w;
     ws.ws_row = h;
@@ -1662,6 +1673,10 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 
     if (pid < 0 || pty_fd < 0)
     {
+		free(pty);
+		close(pfd[0]);
+		close(pfd[1]);
+
 		//error
         if (pty_fd>=0)
             close(pty_fd);
@@ -1670,7 +1685,6 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 
 	// parent
 
-	A3D_PTY* pty = (A3D_PTY*)malloc(sizeof(A3D_PTY));
 	pty->vt = 0;
 	pty->next = 0;
 	pty->prev = tail_pty;
@@ -1681,9 +1695,9 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 	tail_pty = pty;
 	
 	pty->fd = pty_fd;
+	pty->pd[0] = pfd[0];
+	pty->pd[1] = pfd[1];
 	pty->pid = pid;
-
-	pipe(pty->pd);
 
 	return pty;
 }
@@ -1723,7 +1737,10 @@ void a3dResizePTY(A3D_PTY* pty, int w, int h)
 void a3dClosePTY(A3D_PTY* pty)
 {
 	// force select to exit and set pd[0] (no more reads)
-	write(pty->pd[1], "\n", 1); 
+	if ( write(pty->pd[1], "\n", 1) <= 0)
+	{
+		// weird, it is our own pipe.
+	}
 
 	int ret = close(pty->fd);
 	int stat;

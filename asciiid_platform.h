@@ -298,7 +298,7 @@ int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size);
 bool a3dGetVTCursorsMode(A3D_VT* vt);
 
 // TESTING!
-bool a3dDumpVT(A3D_VT* vt);
+int a3dDumpVT(A3D_VT* vt);
 
 // simple thread api
 struct A3D_THREAD;
