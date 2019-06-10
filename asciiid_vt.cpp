@@ -140,7 +140,7 @@ struct A3D_VT
     uint8_t G_table[4];
 
     // parsed not persisted yet
-    unsigned char buf[256]; // size will be adjusted to maximize thoughput
+    unsigned char buf[65536]; // size will be adjusted to maximize thoughput
 
     static const int MAX_COLUMNS = 65536;
     static const int MAX_ARCHIVE_LINES = 65536;
@@ -265,7 +265,7 @@ struct A3D_VT
             return true;
 
         int end = x+num < l->cells ? x+num : l->cells;
-        VT_CELL blank = { 0x20, sgr };
+        VT_CELL blank = { 0x00, sgr };
         for (int i=x; i<end; i++)
             l->cell[i] = blank;
         return true;
@@ -311,7 +311,7 @@ struct A3D_VT
                 return true;
             }
 
-            VT_CELL blank = { 0x20, sgr };
+            VT_CELL blank = { 0x00, sgr };
             for (int i=0; i<x; i++)
                 l->cell[i] = blank;
 
@@ -354,8 +354,8 @@ struct A3D_VT
 
     inline bool DeleteChars(int num)
     {
-        if (y<scroll_top || y >= lines || y>=scroll_bottom)
-            return true;
+    //    if (y<scroll_top || y >= lines || y>=scroll_bottom)
+    //        return true;
 
         Flush();
 
@@ -536,7 +536,7 @@ struct A3D_VT
         for (int i=cells-1; i>=x; i--)
             l->cell[i+num] = l->cell[i];
         
-        VT_CELL blank = { 0x20, sgr };
+        VT_CELL blank = { 0x00, sgr };
 
         for (int i=0; i<num; i++)
             l->cell[i+x] = blank;
@@ -547,6 +547,10 @@ struct A3D_VT
 
     inline bool Write(int chr)
     {
+        if (x>=w)
+        {
+            int a=0;
+        }
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
 
@@ -601,7 +605,7 @@ struct A3D_VT
                         l->cells = x;
                         line[lidx] = l;
 
-                        VT_CELL blank = { 0x20, sgr };
+                        VT_CELL blank = { 0x00, sgr };
                         for (int i=cells; i<x; i++)
                             l->cell[i] = blank;
                     }
@@ -618,7 +622,7 @@ struct A3D_VT
                     l->cells = x;
                     line[lidx] = l;
 
-                    VT_CELL blank = { 0x20, sgr };
+                    VT_CELL blank = { 0x00, sgr };
                     for (int i=cells; i<x; i++)
                         l->cell[i] = blank;
                 }
@@ -644,7 +648,7 @@ struct A3D_VT
         else
         if (x < cells + MAX_TEMP_CELLS) // in temp
         {
-            VT_CELL blank = { 0x20, sgr };
+            VT_CELL blank = { 0x00, sgr };
             for (int i=cells+temp_len; i<x; i++)
                 temp[temp_len++] = blank; // prolong temp with blanks
             temp[x++ - cells] = cell; // store char in temp
@@ -658,7 +662,7 @@ struct A3D_VT
             line[lidx] = l;
             for (int i=0; i<temp_len; i++)
                 l->cell[i+cells] = temp[i]; // bake current temp
-            VT_CELL blank = { 0x20, sgr };
+            VT_CELL blank = { 0x00, sgr };
             for (int i=cells+temp_len; i<x; i++)
                 l->cell[i] = blank; // expand with blanks
             temp_len = 0;
@@ -893,7 +897,7 @@ int parsed = InitParser();
 
 static bool a3dProcessVT(A3D_VT* vt)
 {
-    int len = a3dReadPTY(vt->pty, vt->buf, 256);
+    int len = a3dReadPTY(vt->pty, vt->buf, 65536);
     if (len<=0)
         return false;
 
@@ -913,11 +917,6 @@ static bool a3dProcessVT(A3D_VT* vt)
     int i = 0;
     while (i<siz)
     {
-        a3dMutexUnlock(vt->mutex);
-        a3dDumpVT(vt);
-        usleep(1000);
-        a3dMutexLock(vt->mutex);
-
         if (UTF8)
         {
             int code = utf8_parser[chr_ctx][buf[i++]];
@@ -946,9 +945,9 @@ static bool a3dProcessVT(A3D_VT* vt)
         int chr = chr_val;
         chr_val = 0;
 
-        if (chr==0x2510)
+        if (chr==127)
         {
-            int aaa=0;
+            int qqq=0;
         }
 
         if (seq_ctx == 0)
@@ -1082,15 +1081,14 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                 case 0x08: // BS
                 {
-                    if (vt->x>0)
-                        vt->x--;
+                    vt->GotoXY(vt->x-1,vt->y);
                     DONE();
                     continue;
                 }
 
                 case 0x09: // HT
                 {
-                    vt->x += (8-(vt->x&0x7)); // (1..8)
+                    vt->GotoXY(vt->x + (8-(vt->x&0x7)),vt->y);
                     DONE();
                     continue;
                 }
@@ -1101,7 +1099,13 @@ static bool a3dProcessVT(A3D_VT* vt)
                 {
                     // add line if y == h-1
                     // - recycle if lines == MAX_ARCHIVE_LINES
-                    vt->Flush();
+
+                    if (vt->y<vt->scroll_bottom-1)
+                        vt->GotoXY(vt->x,vt->y+1);
+                    else
+                        vt->Scroll(1);
+
+                    /*
                     if (vt->y == vt->h-1)
                     {
                         if (vt->lines == A3D_VT::MAX_ARCHIVE_LINES)
@@ -1130,7 +1134,10 @@ static bool a3dProcessVT(A3D_VT* vt)
                         }
                     }
                     else
+                    {
                         vt->y++;
+                    }
+                    */
                     
                     DONE();
                     continue;
@@ -1190,7 +1197,11 @@ static bool a3dProcessVT(A3D_VT* vt)
                         // Index
                         // Move the active position one line down, to eliminate ambiguity about the meaning of LF. Deprecated in 1988 and withdrawn in 1992 from ISO/IEC 6429 (1986 and 1991 respectively for ECMA-48). 
                         seq_ctx = 0;
-                        vt->GotoXY(vt->x,vt->y+1);
+                        if (vt->y<vt->scroll_bottom-1)
+                            vt->GotoXY(vt->x,vt->y+1);
+                        else
+                            vt->Scroll(1);
+                        
                         DONE();
                         break;
                     }
@@ -1200,7 +1211,12 @@ static bool a3dProcessVT(A3D_VT* vt)
                         // Next Line
                         // Equivalent to CR+LF. Used to mark end-of-line on some IBM mainframes. 
                         seq_ctx = 0;
-                        vt->GotoXY(0,vt->y+1);
+
+                        if (vt->y<vt->scroll_bottom-1)
+                            vt->GotoXY(0,vt->y+1);
+                        else
+                            vt->Scroll(1);
+
                         DONE();
                         break;
                     }
@@ -1218,7 +1234,11 @@ static bool a3dProcessVT(A3D_VT* vt)
                     {
                         // Reverse Line Feed, Reverse Index
                         seq_ctx = 0;
-                        vt->GotoXY(vt->x,vt->y-1);
+                        if (vt->y > 0)
+                            vt->GotoXY(vt->x,vt->y-1);
+                        else
+                            vt->Scroll(-1);
+                        
                         DONE();
                         break;
                     }
@@ -1374,8 +1394,7 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                     case 'F': // Cursor to lower left corner of screen (if enabled by the hpLowerleftBugCompat resource). 
                     {
-                        vt->x = 0;
-                        vt->y = vt->h-1;
+                        vt->GotoXY(0, vt->h-1);
                         seq_ctx = 0;
                         DONE();
                         break;
@@ -1884,6 +1903,22 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                             // CSI Ps A 
                             // Cursor Up Ps Times (default = 1) (CUU).
+
+                            if (Ps>0)
+                            {
+                                if (vt->y < vt->scroll_bottom)
+                                {
+                                    vt->GotoXY(vt->x,vt->y-Ps);
+                                }
+                                else
+                                {
+                                    if (vt->y-Ps < vt->scroll_top)
+                                        vt->GotoXY(vt->x,vt->scroll_top);
+                                    else
+                                        vt->GotoXY(vt->x,vt->y-Ps);
+                                }
+                            }
+
                             if (Ps)
                                 vt->GotoXY(vt->x,vt->y-Ps);
                             DONE();
@@ -1899,8 +1934,23 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                             // CSI Ps B
                             // Cursor Down Ps Times (default = 1) (CUD).
-                            if (Ps)
-                                vt->GotoXY(vt->x,vt->y+Ps);
+
+                            if (Ps>0)
+                            {
+                                if (vt->y >= vt->scroll_bottom)
+                                {
+                                    vt->GotoXY(vt->x,vt->y+Ps);
+                                }
+                                else
+                                {
+                                    if (vt->y+Ps >= vt->scroll_bottom)
+                                        vt->GotoXY(vt->x,vt->scroll_bottom-1);
+                                    else
+                                        vt->GotoXY(vt->x,vt->y+Ps);
+                                }
+                            }
+                            
+
                             DONE();
                             break;
                         }
@@ -1944,8 +1994,28 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                             // CSI Ps E
                             // Cursor Next Line Ps Times (default = 1) (CNL).
-                            if (Ps)
+
+                            if (Ps && vt->y<vt->h-1)
+                            {
                                 vt->GotoXY(0,vt->y+Ps);
+
+                                // to the first character of nth following line
+                                // should we skip blanks?
+                                int lidx = (vt->first_line + vt->y) % A3D_VT::MAX_ARCHIVE_LINES;
+                                A3D_VT::LINE* l = vt->line[lidx];
+                                if (l)
+                                {
+                                    for (int x=0; x<l->cells; x++)
+                                        if (l->cell[x].ch != 0x00)
+                                        {
+                                            vt->x=x;
+                                            break;
+                                        }
+
+                                    // currently if all are blanks we are at 0
+                                }
+                            }
+
                             DONE();
                             break;
                         }
@@ -1959,8 +2029,28 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                             // CSI Ps F
                             // Cursor Preceding Line Ps Times (default = 1) (CPL).
-                            if (Ps)
+
+                            if (Ps && vt->y>0)
+                            {
                                 vt->GotoXY(0,vt->y-Ps);
+
+                                // to the first character of nth preceding line
+                                // should we skip blanks?
+                                int lidx = (vt->first_line + vt->y) % A3D_VT::MAX_ARCHIVE_LINES;
+                                A3D_VT::LINE* l = vt->line[lidx];
+                                if (l)
+                                {
+                                    for (int x=0; x<l->cells; x++)
+                                        if (l->cell[x].ch != 0x00)
+                                        {
+                                            vt->x=x;
+                                            break;
+                                        }
+
+                                    // currently if all are blanks we are at 0
+                                }
+                            }
+
                             DONE();
                             break;
                         }
@@ -3036,7 +3126,6 @@ static bool a3dProcessVT(A3D_VT* vt)
     vt->dump_dirty |= 1; // processed input
     a3dMutexUnlock(vt->mutex);
 
-    a3dDumpVT(vt);
     return true;
 }
 
@@ -3054,6 +3143,9 @@ bool a3dGetVTCursorsMode(A3D_VT* vt)
 static int DumpChr(char* buf, VT_CELL* cell)
 {
     int chr = cell->ch;
+
+    if (chr==0)
+        chr=0x20;
 
     if (chr<0x80)
     {
@@ -3094,6 +3186,7 @@ bool a3dDumpVT(A3D_VT* vt)
     if (!vt->dump_dirty)
         return false;
 
+    
     a3dMutexLock(vt->mutex);
 
     struct winsize ws;

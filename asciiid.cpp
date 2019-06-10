@@ -4806,7 +4806,6 @@ void my_render()
 
 	if (term)
 	{
-		/*
 		if (a3dDumpVT(term))
 		{
 			glScissor(0,0,16,16);
@@ -4815,7 +4814,6 @@ void my_render()
 			glClear(GL_COLOR_BUFFER_BIT);
 			glDisable(GL_SCISSOR_TEST);
 		}
-		*/
 	}
 
 	a3dSwapBuffers();
