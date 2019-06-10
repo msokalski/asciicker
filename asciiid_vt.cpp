@@ -1855,7 +1855,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                     TODO();
                 }
                 else
-                if (chr <= 0x40)
+                if (chr <= 0x40 && chr != '@')
                 {
                     // values ( 0 .. 9 ), 
                     // separators ( ; : ), 
