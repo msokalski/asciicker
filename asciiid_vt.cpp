@@ -115,6 +115,9 @@ struct A3D_VT
 
     bool UTF8;
 
+    uint8_t def_fg;
+    uint8_t def_bg;
+
     struct
     {
         int x, y;
@@ -758,13 +761,9 @@ static void Reset(A3D_VT* vt)
     vt->x = 0;
     vt->y = 0;
     vt->scroll = 0;
-    vt->sgr.bk[0] = 0;
-    vt->sgr.bk[1] = 0;
-    vt->sgr.bk[2] = 0;
-    vt->sgr.fg[0] = 192;
-    vt->sgr.fg[1] = 192;
-    vt->sgr.fg[2] = 192;
-    vt->sgr.fl = 0;
+    vt->sgr.bk[0] = vt->def_bg;
+    vt->sgr.fg[0] = vt->def_fg;
+    vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
 }
 
 A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* const envp[])
@@ -778,6 +777,9 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
     vt->w = w;
     vt->h = h;
     vt->lines = 0;
+
+    vt->def_bg = 0;
+    vt->def_fg = 7;
 
     Reset(vt);
 
@@ -971,19 +973,9 @@ static bool a3dProcessVT(A3D_VT* vt)
         if (chr_ctx)
             continue;
 
-        if (vt->y>=1 && vt->y<=5)
-        {
-            int kot=0;
-        }
-
         // we have a char in chr_val!
         int chr = chr_val;
         chr_val = 0;
-
-        if (chr==127)
-        {
-            int qqq=0;
-        }
 
         if (seq_ctx == 0)
         {
@@ -1188,11 +1180,6 @@ static bool a3dProcessVT(A3D_VT* vt)
             }
 
             out_chr:
-
-            if (chr<0x20 || chr>=127)
-            {
-                int aaa=0;
-            }
 
             vt->Write(chr);
 
@@ -2936,11 +2923,318 @@ static bool a3dProcessVT(A3D_VT* vt)
                                     int Ps = strtol(str, &end, 10), Psb;
                                     if (end != str)
                                     {
-                                        if (Ps == 8)
+                                        switch (Ps)
                                         {
-                                            // invisible
-                                            int aaa = 0;
+                                            case 0: // DEFAULT SGR
+                                                vt->sgr.bk[0] = vt->def_bg;
+                                                vt->sgr.fg[0] = vt->def_fg;
+                                                vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
+                                                break;
+
+                                            case 1: // BOLD
+                                            {
+                                                switch (vt->sgr.fl & 0xF)
+                                                {
+                                                    case SGR::SGR_FAINT:
+                                                    case SGR::SGR_NORMAL: 
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_BOLD;
+                                                        break;
+                                                    case SGR::SGR_NORMAL_UNDERLINED:
+                                                    case SGR::SGR_FAINT_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_BOLD_UNDERLINED;
+                                                        break;
+                                                    case SGR::SGR_NORMAL_DBL_UNDERLINED:
+                                                    case SGR::SGR_FAINT_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_BOLD_DBL_UNDERLINED;
+                                                        break;
+                                                    case SGR::SGR_BOLD:
+                                                    case SGR::SGR_BOLD_UNDERLINED:
+                                                    case SGR::SGR_BOLD_DBL_UNDERLINED:
+                                                        break;
+                                                }
+                                                break;
+                                            }
+                                            case 2: // FAINT
+                                            {
+                                                switch (vt->sgr.fl & 0xF)
+                                                {
+                                                    case SGR::SGR_BOLD:
+                                                    case SGR::SGR_NORMAL: 
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_FAINT;
+                                                        break;
+                                                    case SGR::SGR_NORMAL_UNDERLINED:
+                                                    case SGR::SGR_BOLD_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_FAINT_UNDERLINED;
+                                                        break;
+                                                    case SGR::SGR_NORMAL_DBL_UNDERLINED:
+                                                    case SGR::SGR_BOLD_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_FAINT_DBL_UNDERLINED;
+                                                        break;
+                                                    case SGR::SGR_FAINT:
+                                                    case SGR::SGR_FAINT_UNDERLINED:
+                                                    case SGR::SGR_FAINT_DBL_UNDERLINED:
+                                                        break;
+                                                }
+                                                break;
+                                            }
+                                            case 3: // ITALIC
+                                            {
+                                                vt->sgr.fl |= SGR::SGR_ITALIC;
+                                                break;
+                                            }
+                                            case 4: // UNDERLINE
+                                            {
+                                                switch (vt->sgr.fl & 0xF)
+                                                {
+                                                    case SGR::SGR_BOLD:
+                                                    case SGR::SGR_BOLD_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_BOLD_UNDERLINED;
+                                                        break;
+
+                                                    case SGR::SGR_NORMAL: 
+                                                    case SGR::SGR_NORMAL_DBL_UNDERLINED: 
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_NORMAL_UNDERLINED;
+                                                        break;
+
+                                                    case SGR::SGR_FAINT:
+                                                    case SGR::SGR_FAINT_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_FAINT_UNDERLINED;
+                                                        break;
+
+                                                    case SGR::SGR_NORMAL_UNDERLINED:
+                                                    case SGR::SGR_BOLD_UNDERLINED:
+                                                    case SGR::SGR_FAINT_UNDERLINED:
+                                                        break;
+                                                }
+                                                break;
+                                            }
+                                            case 5: // BLINK
+                                            {
+                                                // some terminals display it as BOLD
+                                                vt->sgr.fl |= SGR::SGR_ITALIC;
+                                                break;
+                                            }
+                                            case 6: break; // undocumented
+                                            case 7: // INVERSE
+                                            {
+                                                // some terminals display it as BOLD
+                                                vt->sgr.fl |= SGR::SGR_INVERSE;
+                                                break;
+                                            }
+                                            case 8: // INVISIBLE
+                                            {
+                                                vt->sgr.fl |= SGR::SGR_INVISIBLE;
+                                                break;
+                                            }
+                                            case 9: // CROSSED-OUT
+                                            {
+                                                vt->sgr.fl |= SGR::SGR_CROSSED_OUT;
+                                                break;
+                                            }
+                                            case 21: // DBL-UNDERLINE
+                                            {
+                                                switch (vt->sgr.fl & 0xF)
+                                                {
+                                                    case SGR::SGR_BOLD:
+                                                    case SGR::SGR_BOLD_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_BOLD_DBL_UNDERLINED;
+                                                        break;
+
+                                                    case SGR::SGR_NORMAL: 
+                                                    case SGR::SGR_NORMAL_UNDERLINED: 
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_NORMAL_DBL_UNDERLINED;
+                                                        break;
+
+                                                    case SGR::SGR_FAINT:
+                                                    case SGR::SGR_FAINT_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_FAINT_DBL_UNDERLINED;
+                                                        break;
+
+                                                    case SGR::SGR_NORMAL_DBL_UNDERLINED:
+                                                    case SGR::SGR_BOLD_DBL_UNDERLINED:
+                                                    case SGR::SGR_FAINT_DBL_UNDERLINED:
+                                                        break;
+                                                }
+                                                break;
+                                            }
+                                            case 22: // REGULAR (no FAINT no BOLD)
+                                            {
+                                                switch (vt->sgr.fl & 0xF)
+                                                {
+                                                    case SGR::SGR_BOLD:
+                                                    case SGR::SGR_FAINT: 
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_NORMAL;
+                                                        break;
+                                                    case SGR::SGR_FAINT_UNDERLINED:
+                                                    case SGR::SGR_BOLD_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_NORMAL_UNDERLINED;
+                                                        break;
+                                                    case SGR::SGR_FAINT_DBL_UNDERLINED:
+                                                    case SGR::SGR_BOLD_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_NORMAL_DBL_UNDERLINED;
+                                                        break;
+                                                    case SGR::SGR_NORMAL:
+                                                    case SGR::SGR_NORMAL_UNDERLINED:
+                                                    case SGR::SGR_NORMAL_DBL_UNDERLINED:
+                                                        break;
+                                                }
+                                                break;                                                
+                                            }
+                                            case 23: // NOT ITALIC
+                                                vt->sgr.fl &= ~SGR::SGR_ITALIC;
+                                                break;
+                                            case 24: // NOT UNDERLINED
+                                            {
+                                                switch (vt->sgr.fl & 0xF)
+                                                {
+                                                    case SGR::SGR_NORMAL_UNDERLINED:
+                                                    case SGR::SGR_NORMAL_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_NORMAL;
+                                                        break;
+                                                    case SGR::SGR_BOLD_UNDERLINED:
+                                                    case SGR::SGR_BOLD_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_BOLD;
+                                                        break;
+                                                    case SGR::SGR_FAINT_UNDERLINED:
+                                                    case SGR::SGR_FAINT_DBL_UNDERLINED:
+                                                        vt->sgr.fl = (vt->sgr.fl & ~0xF) | SGR::SGR_FAINT;
+                                                        break;
+
+                                                    case SGR::SGR_NORMAL: 
+                                                    case SGR::SGR_FAINT:
+                                                    case SGR::SGR_BOLD:
+                                                        break;
+                                                }
+                                                break;                                                
+                                            }
+                                            case 25: // STEADY
+                                                vt->sgr.fl &= ~SGR::SGR_BLINK;
+                                                break;
+                                            case 26: break; // undocumented
+                                            case 27: // POSITIVE
+                                                vt->sgr.fl &= ~SGR::SGR_INVERSE;
+                                                break;
+                                            case 28: // VISIBLE
+                                                vt->sgr.fl &= ~SGR::SGR_INVISIBLE;
+                                                break;
+                                            case 29: // NOT CROSSED-OUT
+                                                vt->sgr.fl &= ~SGR::SGR_CROSSED_OUT;
+                                                break;
+
+                                            case 38: // set FG 256/RGB
+                                            {
+                                                if (*end==';')
+                                                    str = end+1;
+                                                Ps = strtol(str, &end, 10);
+                                                if (end != str)
+                                                {
+                                                    if (Ps==2) // RGB
+                                                    {
+                                                        // Pi;Pr;Pg;Pb - Pi is colorspace to lookup in palette
+                                                        int irgb[4] = {0,0,0,0};
+                                                        for (int i=0; i<4; i++)
+                                                        {
+                                                            if (*end==';')
+                                                                str = end+1;
+                                                            Ps = strtol(str, &end, 10);
+                                                            if (end != str)
+                                                                irgb[i] = Ps;
+                                                        }
+                                                        vt->sgr.fg[0] = irgb[0];
+                                                        vt->sgr.fg[1] = irgb[1];
+                                                        vt->sgr.fg[2] = irgb[2];
+                                                        vt->sgr.fl &= ~SGR::SGR_PALETTIZED_FG;
+                                                    }
+                                                    else
+                                                    if (Ps==5) // exact palette entry
+                                                    {
+                                                        // Ps
+                                                        if (*end==';')
+                                                            str = end+1;
+                                                        Ps = strtol(str, &end, 10);
+                                                        vt->sgr.fg[0] = Ps;                                                              
+                                                        vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
+                                                    }
+                                                }
+                                                break;
+                                            }
+                                            case 39: // default FG
+                                                vt->sgr.fg[0] = vt->def_fg;
+                                                vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
+                                                break;
+
+                                            case 48: // set BK 256/RGB
+                                            {
+                                                if (*end==';')
+                                                    str = end+1;
+                                                Ps = strtol(str, &end, 10);
+                                                if (end != str)
+                                                {
+                                                    if (Ps==2) // RGB
+                                                    {
+                                                        // Pi;Pr;Pg;Pb - Pi is colorspace to lookup in palette
+                                                        int irgb[4] = {0,0,0,0};
+                                                        for (int i=0; i<4; i++)
+                                                        {
+                                                            if (*end==';')
+                                                                str = end+1;
+                                                            Ps = strtol(str, &end, 10);
+                                                            if (end != str)
+                                                                irgb[i] = Ps;
+                                                        }
+                                                        vt->sgr.bk[0] = irgb[0];
+                                                        vt->sgr.bk[1] = irgb[1];
+                                                        vt->sgr.bk[2] = irgb[2];
+                                                        vt->sgr.fl &= ~SGR::SGR_PALETTIZED_BG;
+                                                    }
+                                                    else
+                                                    if (Ps==5) // exact palette entry
+                                                    {
+                                                        // Ps
+                                                        if (*end==';')
+                                                            str = end+1;
+                                                        Ps = strtol(str, &end, 10);
+                                                        vt->sgr.bk[0] = Ps;                                                              
+                                                        vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                    }
+                                                }
+                                                break;
+                                            }
+                                            case 49: // default BG
+                                                vt->sgr.bk[0] = vt->def_bg;
+                                                vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                break;
+
+                                            default:
+                                                if (Ps>=30 && Ps<38)
+                                                {
+                                                    // FG 8colors pal 
+                                                    vt->sgr.fg[0] = Ps-30;
+                                                    vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
+                                                }
+                                                else
+                                                if (Ps>=40 && Ps<48)
+                                                {
+                                                    // BG 8colors pal 
+                                                    vt->sgr.bk[0] = Ps-40;
+                                                    vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                }
+                                                else
+                                                if (Ps>=90 && Ps<98)
+                                                {
+                                                    // FG upper 8 of 16colors pal 
+                                                    vt->sgr.fg[0] = Ps+8-90;
+                                                    vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
+                                                }
+                                                else
+                                                if (Ps>=100 && Ps<108)
+                                                {
+                                                    // BK upper 8 of 16colors pal 
+                                                    vt->sgr.bk[0] = Ps+8-100;
+                                                    vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                }
                                         }
+
                                         if (*end==';')
                                             str = end+1;
                                         else
@@ -2949,7 +3243,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                 }
                             }
                             // CSI Pm m 
-                            //TODO(); // SGR!!!!!!!!!!!!!!!
+                            DONE();
                             break;
                         }
                         case 'n': 
