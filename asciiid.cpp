@@ -4918,7 +4918,7 @@ void my_resize(int w, int h)
 void my_init()
 {
 
-	term = a3dCreateVT(204,49, "/bin/bash", 0, 0);
+	term = a3dCreateVT(100,40, "/bin/bash", 0, 0);
 
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));

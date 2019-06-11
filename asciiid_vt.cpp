@@ -3454,20 +3454,147 @@ static int DumpChr(char* buf, VT_CELL* cell)
 {
     int chr = cell->ch;
 
+    int sgr=0;
+
+    //if (!sgr || cell->sgr.bk[0] != sgr->bk[0])
+    if (cell->sgr.fl & SGR::SGR_PALETTIZED_BG)
+    {
+        if (cell->sgr.bk[0] < 8)
+        {
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='4'; 
+            *(buf++)='0'+cell->sgr.bk[0]; 
+            *(buf++)='m';
+            sgr+= 5; 
+        }
+        else
+        if (cell->sgr.bk[0] < 16)
+        {
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='1'; 
+            *(buf++)='0'; 
+            *(buf++)='0'+cell->sgr.bk[0]-8; 
+            *(buf++)='m'; 
+            sgr+= 6; 
+        }
+        else
+        {
+            // 256C PAL
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='4'; 
+            *(buf++)='8'; 
+            *(buf++)=';';
+            *(buf++)='5'; 
+            *(buf++)=';';
+            sgr+=7;             
+
+            int v = cell->sgr.bk[0];
+            if (v>=200)
+            {
+                v-=200;
+                *(buf++)='2';
+                sgr++;             
+            }
+            else
+            if (v>=100)
+            {
+                v-=100;
+                *(buf++)='1';
+                sgr++;             
+            }
+
+            *(buf++)='0' + v/10;
+            *(buf++)='0' + v%10;
+            
+            *(buf++)='m'; 
+            sgr+= 3;             
+        }
+    }
+    else
+    {
+        // RGB
+    }
+    
+
+    //if (!sgr || cell->sgr.fg[0] != sgr->fg[0])
+    if (cell->sgr.fl & SGR::SGR_PALETTIZED_FG)
+    {
+        if (cell->sgr.fg[0] < 8)
+        {
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='3'; 
+            *(buf++)='0'+cell->sgr.fg[0]; 
+            *(buf++)='m'; 
+            sgr+= 5; 
+        }
+        else
+        if (cell->sgr.fg[0] < 16)
+        {
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='9'; 
+            *(buf++)='0'+cell->sgr.fg[0]-8; 
+            *(buf++)='m'; 
+            sgr+= 5; 
+        }
+        else
+        {
+            // 256C PAL
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='3'; 
+            *(buf++)='8'; 
+            *(buf++)=';';
+            *(buf++)='5'; 
+            *(buf++)=';';
+            sgr+=7;             
+
+            int v = cell->sgr.fg[0];
+            if (v>=200)
+            {
+                v-=200;
+                *(buf++)='2';
+                sgr++;             
+            }
+            else
+            if (v>=100)
+            {
+                v-=100;
+                *(buf++)='1';
+                sgr++;             
+            }
+
+            *(buf++)='0' + v/10;
+            *(buf++)='0' + v%10;
+            
+            *(buf++)='m'; 
+            sgr+= 3;             
+        }
+    }
+    else
+    {
+        // RGB
+    }
+    
+
     if (chr==0)
         chr=0x20;
 
     if (chr<0x80)
     {
         *(buf++) = (char)chr;
-        return 1;
+        return 1 + sgr;
     }
     else
     if (chr<0x800)
     {
         *(buf++) = (char)( ((chr>>6)&0x1F) | 0xC0 );
         *(buf++) = (char)( (chr&0x3f) | 0x80 );
-        return 2;
+        return 2 + sgr;
     }
     else
     if (chr<0x10000)
@@ -3475,7 +3602,7 @@ static int DumpChr(char* buf, VT_CELL* cell)
         *(buf++) = (char)( ((chr>>12)&0x0F)|0xE0 );
         *(buf++) = (char)( ((chr>>6)&0x3f) | 0x80 );
         *(buf++) = (char)( (chr&0x3f) | 0x80 );
-        return 3;
+        return 3 + sgr;
     }
     else
     if (chr<0x101000)
@@ -3484,10 +3611,10 @@ static int DumpChr(char* buf, VT_CELL* cell)
         *(buf++) = (char)( ((chr>>12)&0x3f) | 0x80 );
         *(buf++) = (char)( ((chr>>6)&0x3f) | 0x80 );
         *(buf++) = (char)( (chr&0x3f) | 0x80 );
-        return 4;
+        return 4 + sgr;
     }
 
-    return 0;
+    return 0 + sgr;
 }
 
 // TESTING!
@@ -3521,7 +3648,7 @@ int a3dDumpVT(A3D_VT* vt)
 
     h = h<th ? h : th;
 
-    char buf[4+4*256] = "\e[2K"; // clear every line
+    char buf[4+4*256+11*256] = "\e[2K"; // clear every line
 
     for (int i=0; i<h; i++)
     {
