@@ -77,7 +77,7 @@ struct SGR // 8 bytes
         SGR_PALETTIZED_FG = 0x1000,
         SGR_PALETTIZED_BG = 0x2000,
 
-        SGR_LAST_BIT_LEFT = 0x4000, // FREEE
+        SGR_DEFAULT_BK = 0x4000,
 
         // 1 bit can be saved by
         // merging 2 4bit modes into 1 9x9 (7bit)
@@ -259,7 +259,61 @@ struct A3D_VT
         Flush();
         
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
-        LINE* l = line[lidx];        
+        LINE* l = line[lidx];   
+
+        if ( 0 == (sgr.fl & (SGR::SGR_DEFAULT_BK | SGR::SGR_INVERSE) ) )
+        {
+            VT_CELL blank = { 0x00, sgr };
+            VT_CELL erase = { 0x20, sgr };
+
+            int cells = l ? l->cells : 0;
+
+            if (x>=w)
+            {
+                if (x>=cells)
+                    return true;
+
+                int end = x+num < cells ? x+num : cells;
+
+                for (int i=x; i<end; i++)
+                    l->cell[i] = erase;
+
+                return true;
+            }
+
+            if (x>=cells)
+            {
+                int end = x+num < w ? x+num : w;
+
+                l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (end-1));
+                l->cells = end;
+                line[lidx] = l;
+                heap_ops++;
+
+                for (int i=cells; i<x; i++)
+                    l->cell[i] = blank;
+                for (int i=x; i<end; i++)
+                    l->cell[i] = erase;
+
+                return true;
+            }
+
+            int end = x+num < w ? x+num : w;
+            if (cells<end)
+            {
+                l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (end-1));
+                l->cells = end;
+                line[lidx] = l;
+                heap_ops++;
+            }
+
+            for (int i=x; i<end; i++)
+                l->cell[i] = erase;
+
+            return true;
+        }
+
+
         if (!l)
             return true;
 
@@ -275,29 +329,84 @@ struct A3D_VT
         Flush();
 
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
-        LINE* l = line[lidx];
+        LINE* l = line[lidx];        
+        int cells = l ? l->cells : 0;
 
-        if (!l)
+        if ( 0 == (sgr.fl & (SGR::SGR_DEFAULT_BK | SGR::SGR_INVERSE) ) )
         {
-            if (mode == 0)
+            VT_CELL blank = { 0x00, sgr };
+            VT_CELL erase = { 0x20, sgr };
+
+            if (mode==0)
             {
-                for (int i=0; i<x; i++)
+                if (x>=w)
+                {
+                    for (int i=x; i<cells; i++)
+                        l->cell[i] = erase;                
+                    return true;
+                }
+
+                if (cells<w)
+                {
+                    l=(LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(w-1));
+                    l->cells = w;
+                    line[lidx] = l;
+                    heap_ops++;
+                }
+                else
+                {
+                    for (int i=x; i<cells; i++)
+                        l->cell[i] = erase;                
+                    return true;
+                }
+                
+
+                for (int i=cells; i<x; i++)
                     l->cell[i] = blank;
                 for (int i=x; i<w; i++)
                     l->cell[i] = erase;
+
                 return true;
             }
 
-            if (mode == 1)
+            if (mode==1)
             {
+                if (cells<x)
+                {
+                    l=(LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
+                    l->cells = x;
+                    line[lidx] = l;
+                    heap_ops++;
+                }
+
                 for (int i=0; i<x; i++)
                     l->cell[i] = erase;
+
+                return true;
             }
-            
+
+            if (cells<w)
+            {
+                l=(LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(w-1));
+                l->cells = w;
+                line[lidx] = l;
+                heap_ops++;
+                cells = w;
+            }
+
+            for (int i=0; i<cells; i++)
+                l->cell[i] = erase;
+
+            return true;
+        }
+
+        if (!l)
+            return true;
 
         if (mode==0)
         {
-            /if (x>=l->cells)
+            //return true;
+            if (x>=cells)
                 return true;
             if (x==0)
             {
@@ -307,7 +416,6 @@ struct A3D_VT
                 line[lidx] = 0;
                 return true;
             }
-
             l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (x-1));
             heap_ops++;
 
@@ -361,6 +469,34 @@ struct A3D_VT
         if (y>=from && y<to)
             Flush();
 
+        if ( 0 == (sgr.fl & (SGR::SGR_DEFAULT_BK | SGR::SGR_INVERSE) ) )
+        {
+            VT_CELL erase = { 0x20, sgr };
+
+            for (int i=from; i<to; i++)
+            {
+                int lidx = (first_line + i) % MAX_ARCHIVE_LINES;
+                LINE* l = line[lidx];
+                if (!l || l->cells != w)
+                {
+                    if (l)
+                    {
+                        free(l);
+                        heap_ops++;
+                    }
+                    l=(LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(w-1));
+                    l->cells = w;
+                    line[lidx] = l;
+                    heap_ops++;
+                }
+
+                for (int i=0; i<w; i++)
+                    l->cell[i] = erase;
+            }
+
+            return true;
+        }
+
         for (int i=from; i<to; i++)
         {
             int lidx = (first_line + i) % MAX_ARCHIVE_LINES;
@@ -379,17 +515,100 @@ struct A3D_VT
 
     inline bool DeleteChars(int num)
     {
-    //    if (y<scroll_top || y >= lines || y>=scroll_bottom)
-    //        return true;
-
         Flush();
 
+        // delete num chars first, then we should fill all space between resulting end of line and w with blanks!
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
+        int cells = l ? l->cells : 0;
+
+        if ( 0 == (sgr.fl & SGR::SGR_DEFAULT_BK) )
+        {
+            VT_CELL blank = { 0x00, sgr };
+            VT_CELL erase = { 0x20, sgr };
+
+            if (x>w)
+            {
+                if (cells<x)
+                    return true; 
+                
+                // trim only
+                if (cells-num < x)
+                {
+                    // trim upto x
+                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(x-1));
+                    l->cells = x;
+                    line[lidx] = l;
+                    heap_ops++;
+                }
+                else
+                {
+                    // trim num chars and shift tail
+                    for (int i=x; i<cells-num; i++)
+                        l->cell[i] = l->cell[i+num];
+                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(cells-num-1));
+                    l->cells = cells-num;
+                    line[lidx] = l;
+                    heap_ops++;
+                }
+                
+                return true;
+            }
+
+            if (x>=cells)
+            {
+                if (cells != w)
+                {
+                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(w-1));
+                    l->cells = w;
+                    line[lidx] = l;
+                    heap_ops++;
+                }
+
+                int end = w-num < x ? x : w-num;
+                for (int i=cells; i<end; i++)
+                    l->cell[i] = blank;
+                for (int i=end; i<w; i++)
+                    l->cell[i] = erase;
+
+                return true;                
+            }
+
+            int len = cells-num;
+            if (len >= x)
+            {
+                for (int i=x; i<len; i++)
+                    l->cell[i] = l->cell[i+num];
+            }
+            else
+                len = x;
+
+            if (len<w)
+            {
+                if (l->cells != w)
+                {
+                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(w-1));
+                    l->cells = w;
+                    line[lidx] = l;
+                    heap_ops++;
+                }
+
+                for (int i=len; i<w; i++)
+                    l->cell[i] = erase;
+            }
+            else
+            {
+                l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(len-1));
+                l->cells = len;
+                line[lidx] = l;
+                heap_ops++;
+            }
+
+            return true;
+        }
+
         if (!l || l->cells + temp_len < x)
             return true;
-
-        int cells = l->cells;
 
         int end = x+num;
         if (end >= cells) // trim right
@@ -466,16 +685,40 @@ struct A3D_VT
                 line[lidx] = 0;
             }            
         }
+        
+        if ( 0 == (sgr.fl & (SGR::SGR_DEFAULT_BK | SGR::SGR_INVERSE) ) )
+        {        
+            // scroll up all survivors, ERASE THEIR origins
+            VT_CELL erase = { 0x20, sgr };
+            for (int i=end; i<scroll_bottom; i++)
+            {
+                int from = (first_line + i) % MAX_ARCHIVE_LINES;
+                int to = (first_line + i-num) % MAX_ARCHIVE_LINES;
 
-        // scroll up all survivors, null their origin
-        for (int i=end; i<scroll_bottom; i++)
-        {
-            int from = (first_line + i) % MAX_ARCHIVE_LINES;
-            int to = (first_line + i-num) % MAX_ARCHIVE_LINES;
+                line[to] = line[from];
 
-            line[to] = line[from];
-            line[from] = 0;
+                LINE* l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL) * (w-1));
+                l->cells = w;
+                line[from] = l;
+                heap_ops++;
+
+                for (int i=0; i<w; i++)
+                    l->cell[i] = erase;
+            }
         }
+        else
+        {
+            // scroll up all survivors, null their origin
+            for (int i=end; i<scroll_bottom; i++)
+            {
+                int from = (first_line + i) % MAX_ARCHIVE_LINES;
+                int to = (first_line + i-num) % MAX_ARCHIVE_LINES;
+
+                line[to] = line[from];
+                line[from] = 0;
+            }
+        }
+        
     }
 
     inline bool InsertLines(int num)
@@ -501,18 +744,40 @@ struct A3D_VT
             }
         }
 
-        // scroll survivors
-        for (int i=scroll_bottom-1; i>=y+num; i--)
+        if ( 0 == (sgr.fl & (SGR::SGR_DEFAULT_BK | SGR::SGR_INVERSE) ) )
         {
-            int from = (first_line + i - num) % MAX_ARCHIVE_LINES;
-            int to = (first_line + i) % MAX_ARCHIVE_LINES;
-            line[to] = line[from];
-            line[from] = 0;           
-        }
+            // scroll survivors, ERASE THEIR origins
+            VT_CELL erase = { 0x20, sgr };
+            for (int i=scroll_bottom-1; i>=y+num; i--)
+            {
+                int from = (first_line + i - num) % MAX_ARCHIVE_LINES;
+                int to = (first_line + i) % MAX_ARCHIVE_LINES;
+                line[to] = line[from];
 
-        // adjust num of lines if was between top and bottom of scroll range
-        if (lines >=scroll_top && lines < scroll_bottom)
-           lines = lines+num < scroll_bottom ? lines+num : scroll_bottom;
+                LINE* l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL) * (w-1));
+                l->cells = w;
+                line[from] = l;
+                heap_ops++;
+
+                for (int i=0; i<w; i++)
+                    l->cell[i] = erase;
+            }            
+        }
+        else
+        {
+            // scroll survivors, null their origin
+            for (int i=scroll_bottom-1; i>=y+num; i--)
+            {
+                int from = (first_line + i - num) % MAX_ARCHIVE_LINES;
+                int to = (first_line + i) % MAX_ARCHIVE_LINES;
+                line[to] = line[from];
+                line[from] = 0;           
+            }
+
+            // adjust num of lines if was between top and bottom of scroll range
+            if (lines >=scroll_top && lines < scroll_bottom)
+            lines = lines+num < scroll_bottom ? lines+num : scroll_bottom;
+        }
 
         return true;
     }
@@ -590,10 +855,6 @@ struct A3D_VT
 
     inline bool Write(int chr)
     {
-        if (x>=w)
-        {
-            int a=0;
-        }
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
 
@@ -779,7 +1040,7 @@ static void Reset(A3D_VT* vt)
     vt->scroll = 0;
     vt->sgr.bk[0] = vt->def_bg;
     vt->sgr.fg[0] = vt->def_fg;
-    vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
+    vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
 }
 
 A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* const envp[])
@@ -1158,6 +1419,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                             if (l)
                             {
                                 free(l);
+                                vt->heap_ops++;
                                 vt->line[lidx] = 0;
                             }
                         }
@@ -2935,7 +3197,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                         // default
                                         vt->sgr.bk[0] = vt->def_bg;
                                         vt->sgr.fg[0] = vt->def_fg;
-                                        vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
+                                        vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                                         str++;
                                         continue;
                                     }
@@ -2948,7 +3210,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                             case 0: // DEFAULT SGR
                                                 vt->sgr.bk[0] = vt->def_bg;
                                                 vt->sgr.fg[0] = vt->def_fg;
-                                                vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
+                                                vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                                                 break;
 
                                             case 1: // BOLD
@@ -3205,7 +3467,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                         vt->sgr.bk[0] = irgb[0];
                                                         vt->sgr.bk[1] = irgb[1];
                                                         vt->sgr.bk[2] = irgb[2];
-                                                        vt->sgr.fl &= ~SGR::SGR_PALETTIZED_BG;
+                                                        vt->sgr.fl &= ~(SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK);
                                                     }
                                                     else
                                                     if (Ps==5) // exact palette entry
@@ -3216,13 +3478,14 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                         Ps = strtol(str, &end, 10);
                                                         vt->sgr.bk[0] = Ps;                                                              
                                                         vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                        vt->sgr.fl &= ~SGR::SGR_DEFAULT_BK;
                                                     }
                                                 }
                                                 break;
                                             }
                                             case 49: // default BG
                                                 vt->sgr.bk[0] = vt->def_bg;
-                                                vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                vt->sgr.fl |= SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                                                 break;
 
                                             default:
@@ -3238,6 +3501,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                     // BG 8colors pal 
                                                     vt->sgr.bk[0] = Ps-40;
                                                     vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                    vt->sgr.fl &= ~SGR::SGR_DEFAULT_BK;
                                                 }
                                                 else
                                                 if (Ps>=90 && Ps<98)
@@ -3252,6 +3516,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                     // BK upper 8 of 16colors pal 
                                                     vt->sgr.bk[0] = Ps+8-100;
                                                     vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
+                                                    vt->sgr.fl &= ~SGR::SGR_DEFAULT_BK;
                                                 }
                                         }
 
@@ -3266,7 +3531,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                             {
                                 vt->sgr.bk[0] = vt->def_bg;
                                 vt->sgr.fg[0] = vt->def_fg;
-                                vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
+                                vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                             }
                             
                             // CSI Pm m 
@@ -3486,6 +3751,16 @@ static int DumpChr(char* buf, VT_CELL* cell)
     //if (!sgr || cell->sgr.bk[0] != sgr->bk[0])
     if (cell->sgr.fl & SGR::SGR_PALETTIZED_BG)
     {
+        if (cell->sgr.fl & SGR::SGR_DEFAULT_BK)
+        {
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='4'; 
+            *(buf++)='9'; 
+            *(buf++)='m';
+            sgr+= 5; 
+        }
+        else
         if (cell->sgr.bk[0] < 8)
         {
             *(buf++)='\e'; 

@@ -4802,7 +4802,10 @@ void my_render()
 
 	if (term)
 	{
-		bool dump = a3dDumpVT(term);
+		int dump = a3dDumpVT(term);
+		if (dump>0)
+			last_heap_ops = dump-1;
+
 		if (dump > 0)
 		{
 			glScissor(0,0,16,16);
