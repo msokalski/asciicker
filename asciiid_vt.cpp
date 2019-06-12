@@ -1462,7 +1462,7 @@ static bool a3dProcessVT(A3D_VT* vt)
             out_chr:
 
             vt->Write(chr);
-
+            
             continue;
         }
 
@@ -3716,6 +3716,8 @@ static bool a3dProcessVT(A3D_VT* vt)
                 seq_ctx = 0;
                 TODO();
         }
+
+
     }
 
     // persist state till we have more data to process
@@ -3748,159 +3750,167 @@ static int DumpChr(char* buf, VT_CELL* cell)
 
     int sgr=0;
 
-    //if (!sgr || cell->sgr.bk[0] != sgr->bk[0])
-    if (cell->sgr.fl & SGR::SGR_PALETTIZED_BG)
-    {
-        if (cell->sgr.fl & SGR::SGR_DEFAULT_BK)
-        {
-            *(buf++)='\e'; 
-            *(buf++)='['; 
-            *(buf++)='4'; 
-            *(buf++)='9'; 
-            *(buf++)='m';
-            sgr+= 5; 
-        }
-        else
-        if (cell->sgr.bk[0] < 8)
-        {
-            *(buf++)='\e'; 
-            *(buf++)='['; 
-            *(buf++)='4'; 
-            *(buf++)='0'+cell->sgr.bk[0]; 
-            *(buf++)='m';
-            sgr+= 5; 
-        }
-        else
-        if (cell->sgr.bk[0] < 16)
-        {
-            *(buf++)='\e'; 
-            *(buf++)='['; 
-            *(buf++)='1'; 
-            *(buf++)='0'; 
-            *(buf++)='0'+cell->sgr.bk[0]-8; 
-            *(buf++)='m'; 
-            sgr+= 6; 
-        }
-        else
-        {
-            // 256C PAL
-            *(buf++)='\e'; 
-            *(buf++)='['; 
-            *(buf++)='4'; 
-            *(buf++)='8'; 
-            *(buf++)=';';
-            *(buf++)='5'; 
-            *(buf++)=';';
-            sgr+=7;             
-
-            int v = cell->sgr.bk[0];
-            if (v>=200)
-            {
-                v-=200;
-                *(buf++)='2';
-                sgr++;             
-            }
-            else
-            if (v>=100)
-            {
-                v-=100;
-                *(buf++)='1';
-                sgr++;             
-            }
-
-            *(buf++)='0' + v/10;
-            *(buf++)='0' + v%10;
-            
-            *(buf++)='m'; 
-            sgr+= 3;             
-        }
-    }
-    else
-    {
-        // RGB
-    }
-    
-
-    //if (!sgr || cell->sgr.fg[0] != sgr->fg[0])
-    if (cell->sgr.fl & SGR::SGR_PALETTIZED_FG)
-    {
-        if (cell->sgr.fg[0] < 8)
-        {
-            switch (cell->sgr.fl & 0xF)
-            {
-                case SGR::SGR_BOLD:
-                case SGR::SGR_BOLD_UNDERLINED:
-                case SGR::SGR_BOLD_DBL_UNDERLINED:
-                    *(buf++)='\e'; 
-                    *(buf++)='['; 
-                    *(buf++)='9'; 
-                    *(buf++)='0'+cell->sgr.fg[0]; 
-                    *(buf++)='m'; 
-                    sgr+= 5; 
-                    break;
-
-                default:
-                    *(buf++)='\e'; 
-                    *(buf++)='['; 
-                    *(buf++)='3'; 
-                    *(buf++)='0'+cell->sgr.fg[0]; 
-                    *(buf++)='m'; 
-                    sgr+= 5; 
-            }
-        }
-        else
-        if (cell->sgr.fg[0] < 16)
-        {
-            *(buf++)='\e'; 
-            *(buf++)='['; 
-            *(buf++)='9'; 
-            *(buf++)='0'+cell->sgr.fg[0]-8; 
-            *(buf++)='m'; 
-            sgr+= 5; 
-        }
-        else
-        {
-            // 256C PAL
-            *(buf++)='\e'; 
-            *(buf++)='['; 
-            *(buf++)='3'; 
-            *(buf++)='8'; 
-            *(buf++)=';';
-            *(buf++)='5'; 
-            *(buf++)=';';
-            sgr+=7;             
-
-            int v = cell->sgr.fg[0];
-            if (v>=200)
-            {
-                v-=200;
-                *(buf++)='2';
-                sgr++;             
-            }
-            else
-            if (v>=100)
-            {
-                v-=100;
-                *(buf++)='1';
-                sgr++;             
-            }
-
-            *(buf++)='0' + v/10;
-            *(buf++)='0' + v%10;
-            
-            *(buf++)='m'; 
-            sgr+= 3;             
-        }
-    }
-    else
-    {
-        // RGB
-    }
-    
-
     if (chr==0)
+    {
         chr=0x20;
+        *(buf++)='\e'; 
+        *(buf++)='['; 
+        *(buf++)='m'; 
+        sgr += 3;
+    }
+    else
+    {
 
+        //if (!sgr || cell->sgr.bk[0] != sgr->bk[0])
+        if (cell->sgr.fl & SGR::SGR_PALETTIZED_BG)
+        {
+            if (cell->sgr.fl & SGR::SGR_DEFAULT_BK)
+            {
+                *(buf++)='\e'; 
+                *(buf++)='['; 
+                *(buf++)='4'; 
+                *(buf++)='9'; 
+                *(buf++)='m';
+                sgr+= 5; 
+            }
+            else
+            if (cell->sgr.bk[0] < 8)
+            {
+                *(buf++)='\e'; 
+                *(buf++)='['; 
+                *(buf++)='4'; 
+                *(buf++)='0'+cell->sgr.bk[0]; 
+                *(buf++)='m';
+                sgr+= 5; 
+            }
+            else
+            if (cell->sgr.bk[0] < 16)
+            {
+                *(buf++)='\e'; 
+                *(buf++)='['; 
+                *(buf++)='1'; 
+                *(buf++)='0'; 
+                *(buf++)='0'+cell->sgr.bk[0]-8; 
+                *(buf++)='m'; 
+                sgr+= 6; 
+            }
+            else
+            {
+                // 256C PAL
+                *(buf++)='\e'; 
+                *(buf++)='['; 
+                *(buf++)='4'; 
+                *(buf++)='8'; 
+                *(buf++)=';';
+                *(buf++)='5'; 
+                *(buf++)=';';
+                sgr+=7;             
+
+                int v = cell->sgr.bk[0];
+                if (v>=200)
+                {
+                    v-=200;
+                    *(buf++)='2';
+                    sgr++;             
+                }
+                else
+                if (v>=100)
+                {
+                    v-=100;
+                    *(buf++)='1';
+                    sgr++;             
+                }
+
+                *(buf++)='0' + v/10;
+                *(buf++)='0' + v%10;
+                
+                *(buf++)='m'; 
+                sgr+= 3;             
+            }
+        }
+        else
+        {
+            // RGB
+        }
+        
+
+        //if (!sgr || cell->sgr.fg[0] != sgr->fg[0])
+        if (cell->sgr.fl & SGR::SGR_PALETTIZED_FG)
+        {
+            if (cell->sgr.fg[0] < 8)
+            {
+                switch (cell->sgr.fl & 0xF)
+                {
+                    case SGR::SGR_BOLD:
+                    case SGR::SGR_BOLD_UNDERLINED:
+                    case SGR::SGR_BOLD_DBL_UNDERLINED:
+                        *(buf++)='\e'; 
+                        *(buf++)='['; 
+                        *(buf++)='9'; 
+                        *(buf++)='0'+cell->sgr.fg[0]; 
+                        *(buf++)='m'; 
+                        sgr+= 5; 
+                        break;
+
+                    default:
+                        *(buf++)='\e'; 
+                        *(buf++)='['; 
+                        *(buf++)='3'; 
+                        *(buf++)='0'+cell->sgr.fg[0]; 
+                        *(buf++)='m'; 
+                        sgr+= 5; 
+                }
+            }
+            else
+            if (cell->sgr.fg[0] < 16)
+            {
+                *(buf++)='\e'; 
+                *(buf++)='['; 
+                *(buf++)='9'; 
+                *(buf++)='0'+cell->sgr.fg[0]-8; 
+                *(buf++)='m'; 
+                sgr+= 5; 
+            }
+            else
+            {
+                // 256C PAL
+                *(buf++)='\e'; 
+                *(buf++)='['; 
+                *(buf++)='3'; 
+                *(buf++)='8'; 
+                *(buf++)=';';
+                *(buf++)='5'; 
+                *(buf++)=';';
+                sgr+=7;             
+
+                int v = cell->sgr.fg[0];
+                if (v>=200)
+                {
+                    v-=200;
+                    *(buf++)='2';
+                    sgr++;             
+                }
+                else
+                if (v>=100)
+                {
+                    v-=100;
+                    *(buf++)='1';
+                    sgr++;             
+                }
+
+                *(buf++)='0' + v/10;
+                *(buf++)='0' + v%10;
+                
+                *(buf++)='m'; 
+                sgr+= 3;             
+            }
+        }
+        else
+        {
+            // RGB
+        }
+    }
+    
     if (chr<0x80)
     {
         *(buf++) = (char)chr;
