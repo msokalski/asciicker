@@ -277,32 +277,22 @@ struct A3D_VT
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];
 
-        VT_CELL blank = { 0x00, sgr };
-        VT_CELL erase = { 0x20, sgr };
-
-        int cells = l ? l->cells : 0;
-
-        if (mode == 0)
+        if (!l)
         {
-            if (x>cells)
+            if (mode == 0)
             {
-                l = (LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(x-1));
-                l->cells = x;
-                line[lidx] = l;
+                for (int i=0; i<x; i++)
+                    l->cell[i] = blank;
+                for (int i=x; i<w; i++)
+                    l->cell[i] = erase;
+                return true;
             }
 
-            for (int i=cells; i<x; i++)
-                l->cell[i] = blank;
-            for (int i=x; i<w; i++)
-                l->cell[i] = erase;
-            return true;
-        }
-
-        if (mode == 1)
-        {
-            for (int i=0; i<x; i++)
-                l->cell[i] = erase;
-        }
+            if (mode == 1)
+            {
+                for (int i=0; i<x; i++)
+                    l->cell[i] = erase;
+            }
             
 
         if (mode==0)
