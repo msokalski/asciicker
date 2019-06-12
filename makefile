@@ -67,10 +67,10 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-CPPFLAGS := -g -save-temps=obj -pthread -O3
+CPPFLAGS := -g -save-temps=obj -pthread #-O3
 
 # linker flags
-LDFLAGS := -g -save-temps=obj -pthread -O3
+LDFLAGS := -g -save-temps=obj -pthread #-O3
 
 # flags required for dependency generation; passed to compilers
 DEPFLAGS = -MT $@ -MD -MP -MF $(DEPDIR)/$*.Td

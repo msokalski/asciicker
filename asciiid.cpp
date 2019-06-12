@@ -5191,6 +5191,10 @@ void my_keyb_key(KeyInfo ki, bool down)
 
 			case A3D_HOME: esc = DECCKM ? "\x1BOH" : "\x1B[H"; break;
 			case A3D_END:  esc = DECCKM ? "\x1BOF" : "\x1B[F"; break;	
+
+			case A3D_INSERT:  esc = "\x1B[2~"; break;	
+			case A3D_PAGEUP: esc = "\x1B[5~"; break;	
+			case A3D_PAGEDOWN:  esc = "\x1B[6~"; break;	
 		}
 
 		// BEST DOC ABOUT XTERM:

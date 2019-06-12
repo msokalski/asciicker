@@ -275,14 +275,39 @@ struct A3D_VT
         Flush();
 
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
-        LINE* l = line[lidx];        
-        if (!l)
+        LINE* l = line[lidx];
+
+        VT_CELL blank = { 0x00, sgr };
+        VT_CELL erase = { 0x20, sgr };
+
+        int cells = l ? l->cells : 0;
+
+        if (mode == 0)
+        {
+            if (x>cells)
+            {
+                l = (LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(x-1));
+                l->cells = x;
+                line[lidx] = l;
+            }
+
+            for (int i=cells; i<x; i++)
+                l->cell[i] = blank;
+            for (int i=x; i<w; i++)
+                l->cell[i] = erase;
             return true;
+        }
+
+        if (mode == 1)
+        {
+            for (int i=0; i<x; i++)
+                l->cell[i] = erase;
+        }
+            
 
         if (mode==0)
         {
-            //return true;
-            if (x>=l->cells)
+            /if (x>=l->cells)
                 return true;
             if (x==0)
             {
@@ -292,6 +317,7 @@ struct A3D_VT
                 line[lidx] = 0;
                 return true;
             }
+
             l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (x-1));
             heap_ops++;
 
@@ -1102,9 +1128,11 @@ static bool a3dProcessVT(A3D_VT* vt)
                     continue;
 
                 case 0x07: // BEL
+                {
                     // beep
                     // ...
                     continue;
+                }
 
                 case 0x08: // BS
                 {
@@ -1237,7 +1265,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                     {
                         // Reverse Line Feed, Reverse Index
                         seq_ctx = 0;
-                        if (vt->y > 0)
+                        if (vt->y > vt->scroll_top)
                             vt->GotoXY(vt->x,vt->y-1);
                         else
                             vt->Scroll(-1);
@@ -2915,7 +2943,9 @@ static bool a3dProcessVT(A3D_VT* vt)
                                     if (*str == ';')
                                     {
                                         // default
-                                        int Ps = 0;
+                                        vt->sgr.bk[0] = vt->def_bg;
+                                        vt->sgr.fg[0] = vt->def_fg;
+                                        vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
                                         str++;
                                         continue;
                                     }
@@ -3242,6 +3272,13 @@ static bool a3dProcessVT(A3D_VT* vt)
                                     }
                                 }
                             }
+                            else
+                            {
+                                vt->sgr.bk[0] = vt->def_bg;
+                                vt->sgr.fg[0] = vt->def_fg;
+                                vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG;
+                            }
+                            
                             // CSI Pm m 
                             DONE();
                             break;
@@ -3524,12 +3561,27 @@ static int DumpChr(char* buf, VT_CELL* cell)
     {
         if (cell->sgr.fg[0] < 8)
         {
-            *(buf++)='\e'; 
-            *(buf++)='['; 
-            *(buf++)='3'; 
-            *(buf++)='0'+cell->sgr.fg[0]; 
-            *(buf++)='m'; 
-            sgr+= 5; 
+            switch (cell->sgr.fl & 0xF)
+            {
+                case SGR::SGR_BOLD:
+                case SGR::SGR_BOLD_UNDERLINED:
+                case SGR::SGR_BOLD_DBL_UNDERLINED:
+                    *(buf++)='\e'; 
+                    *(buf++)='['; 
+                    *(buf++)='9'; 
+                    *(buf++)='0'+cell->sgr.fg[0]; 
+                    *(buf++)='m'; 
+                    sgr+= 5; 
+                    break;
+
+                default:
+                    *(buf++)='\e'; 
+                    *(buf++)='['; 
+                    *(buf++)='3'; 
+                    *(buf++)='0'+cell->sgr.fg[0]; 
+                    *(buf++)='m'; 
+                    sgr+= 5; 
+            }
         }
         else
         if (cell->sgr.fg[0] < 16)
@@ -3648,20 +3700,21 @@ int a3dDumpVT(A3D_VT* vt)
 
     h = h<th ? h : th;
 
-    char buf[4+4*256+11*256] = "\e[2K"; // clear every line
+    char buf[65536] = "\e[0m\e[2K"; // clear every line with default sgr
+
+    int sw = vt->w < 256 ? vt->w : 256;
+    sw = sw < tw ? sw : tw;
 
     for (int i=0; i<h; i++)
     {
-        int c = 4;
+        int c = 8;
         int lidx = (vt->first_line + i) % A3D_VT::MAX_ARCHIVE_LINES;
         if (vt->temp_len && i==vt->y)
         {
             A3D_VT::LINE* l = vt->line[lidx]; 
             int lc = l ? l->cells : 0;
             int cells = lc + vt->temp_len;
-            int w = cells < 256 ? cells : 255;
-            w = w < vt->w ? w : vt->w;
-            w = w < tw ? w : tw;
+            int w = cells < sw ? cells : sw;
 
             if (vt->ins_mode)
             {
