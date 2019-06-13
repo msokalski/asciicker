@@ -4084,9 +4084,10 @@ int a3dDumpVT(A3D_VT* vt)
 
     h = h<th ? h : th;
 
-    char buf[65536] = "\e[0m\e[2K"; // clear every line with default sgr
+    const int max_line = 512;
 
-    int max_line = 382+1;
+    // clear every line with default sgr
+    char buf[8+ max_line*(3/*def*/+4/*inv*/+19/*fg*/+19/*bk*/) +1] = "\e[0m\e[2K"; 
 
     int sw = vt->w < max_line ? vt->w : max_line;
     sw = sw < tw ? sw : tw;
@@ -4124,7 +4125,7 @@ int a3dDumpVT(A3D_VT* vt)
         else
         if (vt->line[lidx])
         {
-            int w = vt->line[lidx]->cells < max_line ? vt->line[lidx]->cells : max_line-1;
+            int w = vt->line[lidx]->cells < max_line ? vt->line[lidx]->cells : max_line;
             w = w < vt->w ? w : vt->w;
             w = w < tw ? w : tw;
             for (int x=0; x<w; x++)
