@@ -155,6 +155,7 @@ struct A3D_VT
 
     struct LINE
     {
+        // TODO: int flags; // 1-dbl_width, 2_dbl-height (VT can do 0,1,3 only)
         int cells;
         VT_CELL cell[1];
     };
@@ -761,7 +762,9 @@ struct A3D_VT
 
                 for (int i=0; i<w; i++)
                     l->cell[i] = erase;
-            }            
+            }
+
+            // num of lines remains same as we shift in full row blanks            
         }
         else
         {
@@ -1039,7 +1042,9 @@ static void Reset(A3D_VT* vt)
     vt->y = 0;
     vt->scroll = 0;
     vt->sgr.bk[0] = vt->def_bg;
+    vt->sgr.bk[1] = 0; // pal mask
     vt->sgr.fg[0] = vt->def_fg;
+    vt->sgr.fg[1] = 0; // pal mask
     vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
 }
 
@@ -1056,7 +1061,7 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
     vt->lines = 0;
 
     vt->def_bg = 0;
-    vt->def_fg = 7;
+    vt->def_fg = 15;
 
     Reset(vt);
 
@@ -1454,7 +1459,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                     if (chr<0x20)
                     {
                         // invalid C0
-                        TODO();
                         continue;
                     }
             }
@@ -2189,21 +2193,24 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                             if (Ps>0)
                             {
-                                if (vt->y < vt->scroll_bottom)
+                                // if y is below top, move curor up but don't pass top
+                                if (vt->y >= vt->scroll_top)
                                 {
-                                    vt->GotoXY(vt->x,vt->y-Ps);
+                                    if (vt->y-Ps <= vt->scroll_top)
+                                        vt->GotoXY(vt->x,vt->scroll_top);
+                                    else
+                                        vt->GotoXY(vt->x,vt->y-Ps);
                                 }
                                 else
+                                // otherwise go up but stop at 0
                                 {
-                                    if (vt->y-Ps < vt->scroll_top)
-                                        vt->GotoXY(vt->x,vt->scroll_top);
+                                    if (vt->y-Ps < 0)
+                                        vt->GotoXY(vt->x,0);
                                     else
                                         vt->GotoXY(vt->x,vt->y-Ps);
                                 }
                             }
 
-                            if (Ps)
-                                vt->GotoXY(vt->x,vt->y-Ps);
                             DONE();
                             break;
                         }
@@ -2220,14 +2227,19 @@ static bool a3dProcessVT(A3D_VT* vt)
 
                             if (Ps>0)
                             {
-                                if (vt->y >= vt->scroll_bottom)
-                                {
-                                    vt->GotoXY(vt->x,vt->y+Ps);
-                                }
-                                else
+                                // if y is above bottom, move curor down but stop before bottom
+                                if (vt->y < vt->scroll_bottom)
                                 {
                                     if (vt->y+Ps >= vt->scroll_bottom)
                                         vt->GotoXY(vt->x,vt->scroll_bottom-1);
+                                    else
+                                        vt->GotoXY(vt->x,vt->y+Ps);
+                                }
+                                else
+                                // otherwise go down but stop before height
+                                {
+                                    if (vt->y+Ps >= vt->h)
+                                        vt->GotoXY(vt->x, vt->h-1);
                                     else
                                         vt->GotoXY(vt->x,vt->y+Ps);
                                 }
@@ -3196,7 +3208,9 @@ static bool a3dProcessVT(A3D_VT* vt)
                                     {
                                         // default
                                         vt->sgr.bk[0] = vt->def_bg;
+                                        vt->sgr.bk[1] = 0; // pal mask
                                         vt->sgr.fg[0] = vt->def_fg;
+                                        vt->sgr.fg[1] = 0; // pal mask
                                         vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                                         str++;
                                         continue;
@@ -3209,7 +3223,9 @@ static bool a3dProcessVT(A3D_VT* vt)
                                         {
                                             case 0: // DEFAULT SGR
                                                 vt->sgr.bk[0] = vt->def_bg;
+                                                vt->sgr.bk[1] = 0; // pal mask
                                                 vt->sgr.fg[0] = vt->def_fg;
+                                                vt->sgr.fg[1] = 0; // pal mask
                                                 vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                                                 break;
 
@@ -3413,18 +3429,18 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                     if (Ps==2) // RGB
                                                     {
                                                         // Pi;Pr;Pg;Pb - Pi is colorspace to lookup in palette
-                                                        int irgb[4] = {0,0,0,0};
-                                                        for (int i=0; i<4; i++)
+                                                        int rgb[3] = {0,0,0};
+                                                        for (int i=0; i<3; i++)
                                                         {
                                                             if (*end==';')
                                                                 str = end+1;
                                                             Ps = strtol(str, &end, 10);
                                                             if (end != str)
-                                                                irgb[i] = Ps;
+                                                                rgb[i] = Ps;
                                                         }
-                                                        vt->sgr.fg[0] = irgb[0];
-                                                        vt->sgr.fg[1] = irgb[1];
-                                                        vt->sgr.fg[2] = irgb[2];
+                                                        vt->sgr.fg[0] = rgb[0];
+                                                        vt->sgr.fg[1] = rgb[1];
+                                                        vt->sgr.fg[2] = rgb[2];
                                                         vt->sgr.fl &= ~SGR::SGR_PALETTIZED_FG;
                                                     }
                                                     else
@@ -3434,7 +3450,8 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                         if (*end==';')
                                                             str = end+1;
                                                         Ps = strtol(str, &end, 10);
-                                                        vt->sgr.fg[0] = Ps;                                                              
+                                                        vt->sgr.fg[0] = Ps;
+                                                        vt->sgr.fg[1] = 0xFF; // pal mask
                                                         vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
                                                     }
                                                 }
@@ -3442,6 +3459,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                             }
                                             case 39: // default FG
                                                 vt->sgr.fg[0] = vt->def_fg;
+                                                vt->sgr.fg[1] = 0; // pal mask
                                                 vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
                                                 break;
 
@@ -3455,18 +3473,18 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                     if (Ps==2) // RGB
                                                     {
                                                         // Pi;Pr;Pg;Pb - Pi is colorspace to lookup in palette
-                                                        int irgb[4] = {0,0,0,0};
-                                                        for (int i=0; i<4; i++)
+                                                        int rgb[3] = {0,0,0};
+                                                        for (int i=0; i<3; i++)
                                                         {
                                                             if (*end==';')
                                                                 str = end+1;
                                                             Ps = strtol(str, &end, 10);
                                                             if (end != str)
-                                                                irgb[i] = Ps;
+                                                                rgb[i] = Ps;
                                                         }
-                                                        vt->sgr.bk[0] = irgb[0];
-                                                        vt->sgr.bk[1] = irgb[1];
-                                                        vt->sgr.bk[2] = irgb[2];
+                                                        vt->sgr.bk[0] = rgb[0];
+                                                        vt->sgr.bk[1] = rgb[1];
+                                                        vt->sgr.bk[2] = rgb[2];
                                                         vt->sgr.fl &= ~(SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK);
                                                     }
                                                     else
@@ -3477,6 +3495,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                             str = end+1;
                                                         Ps = strtol(str, &end, 10);
                                                         vt->sgr.bk[0] = Ps;                                                              
+                                                        vt->sgr.bk[1] = 0xFF; // pal mask
                                                         vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
                                                         vt->sgr.fl &= ~SGR::SGR_DEFAULT_BK;
                                                     }
@@ -3485,6 +3504,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                             }
                                             case 49: // default BG
                                                 vt->sgr.bk[0] = vt->def_bg;
+                                                vt->sgr.bk[1] = 0; // pal mask
                                                 vt->sgr.fl |= SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                                                 break;
 
@@ -3493,6 +3513,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 {
                                                     // FG 8colors pal 
                                                     vt->sgr.fg[0] = Ps-30;
+                                                    vt->sgr.fg[1] = 0x7; // pal mask
                                                     vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
                                                 }
                                                 else
@@ -3500,6 +3521,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 {
                                                     // BG 8colors pal 
                                                     vt->sgr.bk[0] = Ps-40;
+                                                    vt->sgr.bk[1] = 0x7; // pal mask
                                                     vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
                                                     vt->sgr.fl &= ~SGR::SGR_DEFAULT_BK;
                                                 }
@@ -3508,6 +3530,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 {
                                                     // FG upper 8 of 16colors pal 
                                                     vt->sgr.fg[0] = Ps+8-90;
+                                                    vt->sgr.fg[1] = 0xF; // pal mask
                                                     vt->sgr.fl |= SGR::SGR_PALETTIZED_FG;
                                                 }
                                                 else
@@ -3515,6 +3538,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 {
                                                     // BK upper 8 of 16colors pal 
                                                     vt->sgr.bk[0] = Ps+8-100;
+                                                    vt->sgr.bk[1] = 0xF; // pal mask
                                                     vt->sgr.fl |= SGR::SGR_PALETTIZED_BG;
                                                     vt->sgr.fl &= ~SGR::SGR_DEFAULT_BK;
                                                 }
@@ -3530,7 +3554,9 @@ static bool a3dProcessVT(A3D_VT* vt)
                             else
                             {
                                 vt->sgr.bk[0] = vt->def_bg;
+                                vt->sgr.bk[1] = 0; // pal mask
                                 vt->sgr.fg[0] = vt->def_fg;
+                                vt->sgr.fg[1] = 0; // pal mask
                                 vt->sgr.fl = SGR::SGR_PALETTIZED_FG | SGR::SGR_PALETTIZED_BG | SGR::SGR_DEFAULT_BK;
                             }
                             
@@ -3744,24 +3770,65 @@ bool a3dGetVTCursorsMode(A3D_VT* vt)
     return vt->app_cursors;
 }
 
+static int DumpDecimalByte(char* buf, uint8_t v)
+{
+    int len = 0;
+    if (v>=200)
+    {
+        v-=200;
+        *(buf++)='2';
+        len++;
+    }
+    else
+    if (v>=100)
+    {
+        v-=100;
+        *(buf++)='1';
+        len++;
+    }
+
+    if (v>=10 || len)
+    {
+        *(buf++)='0' + v/10;
+        len++;
+    }
+
+    *(buf++)='0' + v%10;
+    len++;             
+
+    return len;
+}
+
 static int DumpChr(char* buf, VT_CELL* cell)
 {
     int chr = cell->ch;
 
     int sgr=0;
 
+    *(buf++)='\e'; 
+    *(buf++)='['; 
+    *(buf++)='m'; 
+    sgr += 3;
+
     if (chr==0)
     {
         chr=0x20;
-        *(buf++)='\e'; 
-        *(buf++)='['; 
-        *(buf++)='m'; 
-        sgr += 3;
     }
     else
     {
+        // keep attribs but hide glyph
+        if (cell->sgr.fl & SGR::SGR_INVISIBLE)
+            chr = 0x20;
 
-        //if (!sgr || cell->sgr.bk[0] != sgr->bk[0])
+        if (cell->sgr.fl & SGR::SGR_INVERSE)
+        {
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='7'; 
+            *(buf++)='m';
+            sgr += 4;
+        }
+
         if (cell->sgr.fl & SGR::SGR_PALETTIZED_BG)
         {
             if (cell->sgr.fl & SGR::SGR_DEFAULT_BK)
@@ -3804,37 +3871,52 @@ static int DumpChr(char* buf, VT_CELL* cell)
                 *(buf++)=';';
                 *(buf++)='5'; 
                 *(buf++)=';';
-                sgr+=7;             
+                sgr+=7;
 
-                int v = cell->sgr.bk[0];
-                if (v>=200)
-                {
-                    v-=200;
-                    *(buf++)='2';
-                    sgr++;             
-                }
-                else
-                if (v>=100)
-                {
-                    v-=100;
-                    *(buf++)='1';
-                    sgr++;             
-                }
-
-                *(buf++)='0' + v/10;
-                *(buf++)='0' + v%10;
+                int l = DumpDecimalByte(buf,cell->sgr.bk[0]);
+                buf+=l;
+                sgr+=l;
                 
                 *(buf++)='m'; 
-                sgr+= 3;             
+                sgr++;             
             }
         }
         else
         {
             // RGB
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='4'; 
+            *(buf++)='8'; 
+            *(buf++)=';'; 
+            *(buf++)='2'; 
+            *(buf++)=';'; 
+            sgr+=7;
+
+            int l;
+            l = DumpDecimalByte(buf,cell->sgr.bk[0]);
+            buf+=l;
+            sgr+=l;
+
+            *(buf++)=';'; 
+            sgr++;
+
+            l = DumpDecimalByte(buf,cell->sgr.bk[1]);
+            buf+=l;
+            sgr+=l;
+
+            *(buf++)=';'; 
+            sgr++;
+
+            l = DumpDecimalByte(buf,cell->sgr.bk[2]);
+            buf+=l;
+            sgr+=l;
+
+            *(buf++)='m'; 
+            sgr++;             
         }
         
 
-        //if (!sgr || cell->sgr.fg[0] != sgr->fg[0])
         if (cell->sgr.fl & SGR::SGR_PALETTIZED_FG)
         {
             if (cell->sgr.fg[0] < 8)
@@ -3844,13 +3926,18 @@ static int DumpChr(char* buf, VT_CELL* cell)
                     case SGR::SGR_BOLD:
                     case SGR::SGR_BOLD_UNDERLINED:
                     case SGR::SGR_BOLD_DBL_UNDERLINED:
-                        *(buf++)='\e'; 
-                        *(buf++)='['; 
-                        *(buf++)='9'; 
-                        *(buf++)='0'+cell->sgr.fg[0]; 
-                        *(buf++)='m'; 
-                        sgr+= 5; 
-                        break;
+                        if (cell->sgr.fg[1] <= 0x7) // pal mask
+                        {
+                            *(buf++)='\e'; 
+                            *(buf++)='['; 
+                            *(buf++)='9'; 
+                            *(buf++)='0'+cell->sgr.fg[0]; 
+                            *(buf++)='m'; 
+                            sgr+= 5; 
+                            break;
+                        }
+
+                        // otherwise go with default
 
                     default:
                         *(buf++)='\e'; 
@@ -3883,31 +3970,47 @@ static int DumpChr(char* buf, VT_CELL* cell)
                 *(buf++)=';';
                 sgr+=7;             
 
-                int v = cell->sgr.fg[0];
-                if (v>=200)
-                {
-                    v-=200;
-                    *(buf++)='2';
-                    sgr++;             
-                }
-                else
-                if (v>=100)
-                {
-                    v-=100;
-                    *(buf++)='1';
-                    sgr++;             
-                }
-
-                *(buf++)='0' + v/10;
-                *(buf++)='0' + v%10;
+                int l = DumpDecimalByte(buf,cell->sgr.fg[0]);
+                buf+=l;
+                sgr+=l;
                 
                 *(buf++)='m'; 
-                sgr+= 3;             
+                sgr++;             
             }
         }
         else
         {
             // RGB
+            *(buf++)='\e'; 
+            *(buf++)='['; 
+            *(buf++)='3'; 
+            *(buf++)='8'; 
+            *(buf++)=';'; 
+            *(buf++)='2'; 
+            *(buf++)=';'; 
+            sgr+=7;
+
+            int l;
+            l = DumpDecimalByte(buf,cell->sgr.fg[0]);
+            buf+=l;
+            sgr+=l;
+
+            *(buf++)=';'; 
+            sgr++;
+
+            l = DumpDecimalByte(buf,cell->sgr.fg[1]);
+            buf+=l;
+            sgr+=l;
+
+            *(buf++)=';'; 
+            sgr++;
+
+            l = DumpDecimalByte(buf,cell->sgr.fg[2]);
+            buf+=l;
+            sgr+=l;
+
+            *(buf++)='m'; 
+            sgr++; 
         }
     }
     
