@@ -1660,6 +1660,7 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
     if (pid == 0)
     {
         // child
+	    ioctl(STDIN_FILENO, TIOCSWINSZ, &ws);
 
 		char* no_args[] = {0};
 		if (!envp)

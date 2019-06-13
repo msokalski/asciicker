@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 // just for write(fd)
 #include <unistd.h>
@@ -136,6 +137,7 @@ struct A3D_VT
     int scroll_bottom;
 
     // shouldn't we merge it into bitfields?
+    bool show_cursor;
     bool auto_wrap;
     bool app_keypad;
     bool app_cursors;
@@ -865,9 +867,8 @@ struct A3D_VT
         
         if (x>=w && auto_wrap)
         {
-            int cells = l ? l->cells : 0;
-                  
             Flush();
+
             x=0; 
 
             if (y==h-1)
@@ -882,14 +883,15 @@ struct A3D_VT
                 {
                     free(l);
                     heap_ops++;
-
                     line[lidx]=0;
+                    l = 0;
                 }
             }
             else
             {
                 y++;
                 lidx = (first_line + y) % MAX_ARCHIVE_LINES;
+                l = line[lidx];
                 if (y>=lines)
                     lines = y+1;
             }
@@ -899,6 +901,7 @@ struct A3D_VT
             lines = y+1;
 
         int cells = l ? l->cells : 0;
+        assert(cells>=0);
 
         if (ins_mode)
         {
@@ -1013,6 +1016,7 @@ static void Reset(A3D_VT* vt)
     vt->single_shift = 0;
     vt->auto_wrap = true;
     vt->ins_mode = false;
+    vt->show_cursor = true;
 
     vt->scroll_top = 0;
     vt->scroll_bottom = vt->h;
@@ -1058,12 +1062,12 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
     memset(vt->line,0,sizeof(A3D_VT::LINE*)*A3D_VT::MAX_ARCHIVE_LINES);
     vt->w = w;
     vt->h = h;
-    vt->lines = 0;
 
     vt->def_bg = 0;
     vt->def_fg = 15;
 
     Reset(vt);
+    vt->lines = 0;
 
     a3dSetPtyVT(pty,vt);
     vt->pty = pty;
@@ -2789,6 +2793,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 TODO(); 
                                                 break;
                                             case 25: // Show Cursor (DECTCEM), VT220.
+                                                vt->show_cursor = true;
                                                 TODO(); 
                                                 break;
                                             case 30: // Show scrollbar (rxvt).
@@ -3027,6 +3032,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                                                 TODO(); 
                                                 break;
                                             case 25: // Hide Cursor (DECTCEM), VT220.
+                                                vt->show_cursor = false;
                                                 TODO(); 
                                                 break;
                                             case 30: // Don't show scrollbar (rxvt).
@@ -4133,6 +4139,12 @@ int a3dDumpVT(A3D_VT* vt)
 
     }
 
+    if ( write(STDOUT_FILENO,vt->show_cursor ? "\e[?25h" : "\e[?25l",6) <= 0 )
+    {
+        a3dMutexUnlock(vt->mutex);
+        return -1;
+    }
+
     char move[256];
     int move_len = sprintf(move,"\e[%d;%dH",vt->y+1,vt->x+1);
     if ( write(STDOUT_FILENO,move,move_len) <= 0)
@@ -4140,7 +4152,6 @@ int a3dDumpVT(A3D_VT* vt)
         a3dMutexUnlock(vt->mutex);
         return -1;
     }
-
 
     vt->dump_dirty = 0;
 
@@ -4151,90 +4162,3 @@ int a3dDumpVT(A3D_VT* vt)
 
     return heap_ops + 1;
 }
-
-/*
-bool a3dDumpVT(A3D_VT* vt)
-{
-    if (!vt->dump_dirty)
-        return false;
-
-    a3dMutexLock(vt->mutex);
-
-    struct winsize ws;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);    
-    int tw = ws.ws_col;
-    int th = ws.ws_row;
-
-    // flush! temp
-    vt->Flush();
-
-    write(STDOUT_FILENO,"\e[H",3);
-
-    int h = vt->lines < vt->h ? vt->lines : vt->h;
-    h = h<th ? h : th;
-
-    for (int i=0; i<h; i++)
-    {
-        write(STDOUT_FILENO, "\e[2K", 4);
-        int lidx = (vt->first_line + i) % A3D_VT::MAX_ARCHIVE_LINES;
-        if (vt->line[lidx])
-        {
-            char buf[4*256];
-            int c = 0;
-            int w = vt->line[lidx]->cells < 256 ? vt->line[lidx]->cells : 255;
-            w = w < vt->w ? w : vt->w;
-            w = w < tw ? w : tw;
-            for (int x=0; x<w; x++)
-            {
-                int chr = vt->line[lidx]->cell[x].ch;
-
-                if (chr<0x80)
-                {
-                    buf[c++] = (char)chr;
-                }
-                else
-                if (chr<0x800)
-                {
-                    buf[c++] = (char)( ((chr>>6)&0x1F) | 0xC0 );
-                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
-                }
-                else
-                if (chr<0x10000)
-                {
-                    buf[c++] = (char)( ((chr>>12)&0x0F)|0xE0 );
-                    buf[c++] = (char)( ((chr>>6)&0x3f) | 0x80 );
-                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
-                }
-                else
-                if (chr<0x101000)
-                {
-                    buf[c++] = (char)( ((chr>>18)&0x07)|0xF0 );
-                    buf[c++] = (char)( ((chr>>12)&0x3f) | 0x80 );
-                    buf[c++] = (char)( ((chr>>6)&0x3f) | 0x80 );
-                    buf[c++] = (char)( (chr&0x3f) | 0x80 );
-                }
-            }
-
-            if (i<vt->h-1)
-                buf[c++] = '\n';
-            write(STDOUT_FILENO, buf, c);
-        }
-        else
-        {
-            if (i<vt->h-1)
-                write(STDOUT_FILENO, "\n", 1);
-        }
-    }
-
-
-    char move[256];
-    int move_len = sprintf(move,"\e[%d;%dH",vt->y+1,vt->x+1);
-    write(STDOUT_FILENO,move,move_len);
-
-    vt->dump_dirty = false;
-
-    a3dMutexUnlock(vt->mutex);
-
-    return true;
-}
-*/

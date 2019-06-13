@@ -4920,8 +4920,62 @@ void my_resize(int w, int h)
 
 void my_init()
 {
+	int term_w = 190;
+	int term_h = 54;
+	// char* args[]= { "/bin/bash", 0 };
+	// char* args[]= { "/snap/bin/ascii-patrol", 0 };
+	// char* args[]= { "/usr/bin/mc", 0 };
+	// char* args[]= { "/usr/bin/htop", "-d", "1", 0 };
 
-	term = a3dCreateVT(80,30, "/bin/bash", 0, 0);
+	char* const args[]= { "/home/user/asciiquarium_1.1/asciiquarium", 0 };
+	// char* args[]= { "/bin/bash", "-c", "~/asciiquarium_1.1/asciiquarium", 0 };
+
+
+	// TODO: move environment stuff to PTY creator
+	char e_cols[32], e_rows[32], e_term[32], e_colr[32];
+	sprintf(e_cols,"COLUMNS=%d",term_w);
+	sprintf(e_rows,"LINES=%d",term_h);
+	sprintf(e_term,"TERM=%s","xterm-256color");
+	sprintf(e_colr,"COLORTERM=%s","truecolor");
+
+	int num=0;
+	int i=0;
+	while (environ[i])
+	{
+		if (strncmp(environ[i],"COLUMNS=",8) &&
+			strncmp(environ[i],"LINES=",6) &&
+			strncmp(environ[i],"TERM=",5) &&
+			strncmp(environ[i],"COLORTERM=",10))
+			num++;
+		i++;
+	}
+
+	char** envp = (char**)malloc(sizeof(char*)*(num+5));
+
+	i=0;
+	num=0;
+	while (environ[i])
+	{
+		if (strncmp(environ[i],"COLUMNS=",8) &&
+			strncmp(environ[i],"LINES=",6) &&
+			strncmp(environ[i],"TERM=",5) &&
+			strncmp(environ[i],"COLORTERM=",10))
+		{
+			envp[num] = environ[i];
+			num++;
+		}
+		i++;
+	}
+
+	envp[num+0] = e_cols;
+	envp[num+1] = e_rows;
+	envp[num+2] = e_term;
+	envp[num+3] = e_colr;
+	envp[num+4] = 0;
+
+	term = a3dCreateVT(term_w,term_h, args[0], args, envp);
+
+	free(envp);
 
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
@@ -4929,7 +4983,6 @@ void my_init()
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
 	SetScreen(true);
-
 
 	screen = CreateScreen(512,128);
 
