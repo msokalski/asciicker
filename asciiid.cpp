@@ -4920,8 +4920,8 @@ void my_resize(int w, int h)
 
 void my_init()
 {
-	int term_w = 190;
-	int term_h = 54;
+	int term_w = 382;
+	int term_h = 110;
 	// char* args[]= { "/bin/bash", 0 };
 	// char* args[]= { "/snap/bin/ascii-patrol", 0 };
 	// char* args[]= { "/usr/bin/mc", 0 };
@@ -4935,8 +4935,12 @@ void my_init()
 	char e_cols[32], e_rows[32], e_term[32], e_colr[32];
 	sprintf(e_cols,"COLUMNS=%d",term_w);
 	sprintf(e_rows,"LINES=%d",term_h);
-	sprintf(e_term,"TERM=%s","xterm-256color");
 	sprintf(e_colr,"COLORTERM=%s","truecolor");
+	sprintf(e_colr,"COLORTERM=%s","truecolor");
+
+	// standard terminals don't need TERMINFO
+	sprintf(e_term,"TERM=%s", /*"vt120"*/ /*"linux"*/ /*"xterm"*/ "xterm-256color");
+	
 
 	int num=0;
 	int i=0;
