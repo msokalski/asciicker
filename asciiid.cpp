@@ -4802,7 +4802,10 @@ void my_render()
 
 	if (term)
 	{
-		int dump = a3dDumpVT(term);
+		int tw = (GLsizei)io.DisplaySize.x/16;
+		int th = (GLsizei)io.DisplaySize.y/16;
+
+		int dump = a3dDumpVT(term, tw, th);
 		if (dump>0)
 			last_heap_ops = dump-1;
 
@@ -4923,12 +4926,12 @@ void my_init()
 	int term_w = 90;
 	int term_h = 35;
 
-	// const char* args[]= { "/bin/bash", 0 };
+	const char* args[]= { "/bin/bash", 0 };
 	// const char* args[]= { "/snap/bin/ascii-patrol", 0 };
 	// const char* args[]= { "/usr/bin/mc", 0 };
 	// const char* args[]= { "/usr/bin/htop", "-d", "1", 0 };
 
-	const char * args[]= { "/home/user/asciiquarium/asciiquarium", 0 };
+	// const char * args[]= { "/home/user/asciiquarium/asciiquarium", 0 };
 	// const char* args[]= { "/bin/bash", "-c", "~/asciiquarium_1.1/asciiquarium", 0 };
 
 
@@ -4978,9 +4981,9 @@ void my_init()
 	envp[num+3] = e_colr;
 	envp[num+4] = 0;
 
-	term = a3dCreateVT(term_w,term_h, args[0], (char**)args, envp);
+	term = a3dCreateVT(term_w,term_h, args[0], (char**)args, 0/*envp*/);
 
-	free(envp);
+	// free(envp);
 
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));

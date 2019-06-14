@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include <pthread.h> // compile with -pthread
 #include <pty.h> // link  with -lutil
@@ -1635,6 +1636,76 @@ A3D_VT* a3dGetPtyVT(A3D_PTY* pty)
 	return pty->vt;
 }
 
+/*
+A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[])
+{
+	A3D_PTY* pty = (A3D_PTY*)malloc(sizeof(A3D_PTY));
+	if (!pty)
+		return 0;
+
+	int pfd[2];
+	if (pipe(pfd) != 0)	
+	{
+		free(pty);
+		return 0;
+	}		
+
+    struct winsize ws;
+    ws.ws_col = w;
+    ws.ws_row = h;
+    ws.ws_xpixel=0;
+    ws.ws_ypixel=0;		
+
+	int master,slave;
+	char name[1024];
+	openpty(&master, &slave, name, 0, &ws);
+
+	pid_t pid = fork();
+	if (pid == 0)
+	{
+		setsid();
+
+		int tfd = open(name, O_RDWR);
+		ioctl(tfd, TIOCSCTTY, 0);
+		close(tfd);
+
+		// Redirect stdin/stdout/stderr to the pty
+		if (dup2(slave, 1) == -1) 
+			exit(-1);
+		if (dup2(slave, 2) == -1) 
+			exit(-1);
+		if (dup2(slave, 0) == -1) 
+			exit(-1);
+
+		close(slave);
+
+		signal(SIGPIPE, SIG_DFL);
+
+		if (!envp)
+			envp = environ;
+
+		execvpe(path, argv, envp);
+		exit(-1);
+	}
+
+	pty->vt = 0;
+	pty->next = 0;
+	pty->prev = tail_pty;
+	if (tail_pty)
+		tail_pty->next = pty;
+	else
+		head_pty = pty;
+	tail_pty = pty;
+	
+	pty->fd = master;
+	pty->pd[0] = pfd[0];
+	pty->pd[1] = pfd[1];
+	pty->pid = pid;
+
+	return pty;
+}
+*/
+
 A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* const envp[])
 {
 	A3D_PTY* pty = (A3D_PTY*)malloc(sizeof(A3D_PTY));
@@ -1656,6 +1727,7 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 
     char name[64]="";
 	int pty_fd = -1;
+
     pid_t pid = forkpty(&pty_fd, name, 0, &ws);
     if (pid == 0)
     {
@@ -1703,6 +1775,7 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 	return pty;
 }
 
+
 int a3dReadPTY(A3D_PTY* pty, void* buf, size_t size)
 {
 	fd_set set;
@@ -1732,19 +1805,32 @@ void a3dResizePTY(A3D_PTY* pty, int w, int h)
     ws.ws_xpixel=0;
     ws.ws_ypixel=0;
 
-    ioctl(pty->fd, TIOCSWINSZ, &ws);
+	while ( ioctl(pty->fd, TIOCSWINSZ, &ws) == -1 )
+	{
+		if (errno != EINTR)
+			break;
+	}
+
+	// kill(pty->pid,SIGWINCH);
 }
 
-void a3dClosePTY(A3D_PTY* pty)
+void a3dUnblockPTY(A3D_PTY* pty)
 {
 	// force select to exit and set pd[0] (no more reads)
 	if ( write(pty->pd[1], "\n", 1) <= 0)
 	{
 		// weird, it is our own pipe.
 	}
+}
 
-	int ret = close(pty->fd);
+void a3dClosePTY(A3D_PTY* pty)
+{
+	a3dUnblockPTY(pty);
+
 	int stat;
+//	kill(pty->pid, SIGKILL);
+//	write(pty->fd,"\n",1);
+	int ret = close(pty->fd);
 	waitpid(pty->pid, &stat, 0);
 
 	close(pty->pd[0]);

@@ -179,7 +179,7 @@ void SignalHandler(int s)
             Escape(log_fd, "S: ", 3, buf, len);
         }
 
-        ioctl(pty_fd, TIOCSWINSZ, &ws);
+        //ioctl(pty_fd, TIOCSWINSZ, &ws);
 
     }
 

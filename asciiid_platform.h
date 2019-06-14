@@ -298,7 +298,7 @@ int a3dWriteVT(A3D_VT* vt, const void* buf, size_t size);
 bool a3dGetVTCursorsMode(A3D_VT* vt);
 
 // TESTING!
-int a3dDumpVT(A3D_VT* vt);
+int a3dDumpVT(A3D_VT* vt, int tw, int th);
 
 // simple thread api
 struct A3D_THREAD;
@@ -316,5 +316,6 @@ A3D_PTY* a3dOpenPty(int w, int h, const char* path, char* const argv[], char* co
 int a3dReadPTY(A3D_PTY* pty, void* buf, size_t size);
 int a3dWritePTY(A3D_PTY* pty, const void* buf, size_t size);
 void a3dResizePTY(A3D_PTY* pty, int w, int h);
+void a3dUnblockPTY(A3D_PTY* pty);
 void a3dClosePTY(A3D_PTY* pty);
 

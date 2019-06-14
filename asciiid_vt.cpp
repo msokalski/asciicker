@@ -13,6 +13,164 @@
 #include "asciiid_platform.h"
 #include "asciiid_term.h"
 
+struct ALLOC
+{
+    ALLOC* next;
+    ALLOC* prev;
+    size_t size;
+};
+
+ALLOC* head=0;
+ALLOC* tail=0;
+
+A3D_MUTEX* alloc_mutex = a3dCreateMutex();
+
+void CHECK(ALLOC* a)
+{
+    size_t s = a->size;
+    assert(s<256*1024);
+    uint8_t* l = (uint8_t*)a;
+
+    for (int i=sizeof(ALLOC); i<256; i++)
+        assert(l[i] == (i&0xFF));
+    for (int i=0; i<256; i++)
+        assert(l[i+256+s] == (i&0xFF));
+}
+
+void CHECK_ALL()
+{
+    ALLOC* a = head;
+    while (a)
+    {
+        CHECK(a);
+        a=a->next;
+    }
+}
+
+void FREE(void* p, bool lock=true)
+{
+    if (lock)
+        a3dMutexLock(alloc_mutex);
+
+    CHECK_ALL();
+
+    ALLOC* a = (ALLOC*)((char*)p - 256);
+    size_t s = a->size;
+    uint8_t* l = (uint8_t*)a;
+
+    free(a);
+
+    if (a->prev)
+        a->prev->next = a->next;
+    else
+        head = a->next;
+    
+    if (a->next)
+        a->next->prev = a->prev;
+    else
+        tail = a->prev;
+
+    CHECK_ALL();
+
+    if (lock)
+        a3dMutexUnlock(alloc_mutex);
+}
+
+void* MALLOC(size_t s, bool lock = true)
+{
+    if (lock)
+        a3dMutexLock(alloc_mutex);
+
+    CHECK_ALL();
+
+    assert(s);
+
+    ALLOC* a = (ALLOC*)malloc(s+512);
+    if (!a)
+    {
+        if (lock)
+            a3dMutexUnlock(alloc_mutex);
+        return 0;
+    }
+
+    a->size = s;
+    a->prev = tail;
+    a->next = 0;
+    if (tail)
+        tail->next = a;
+    else
+        head = a;
+    tail = a;
+
+    uint8_t* l = (uint8_t*)a;
+
+    for (int i=sizeof(ALLOC); i<256; i++)
+        l[i] = (i&0xFF);
+    for (int i=0; i<256; i++)
+        l[i+256+s] = (i&0xFF);
+
+    CHECK_ALL();
+
+    if (lock)
+        a3dMutexUnlock(alloc_mutex);
+
+    return l+256;
+}
+
+void* REALLOC(void* p, size_t s)
+{
+    a3dMutexLock(alloc_mutex);
+
+    CHECK_ALL();
+
+    if (!p)
+    {
+        void* v =  MALLOC(s,false);
+
+        CHECK_ALL();
+
+        a3dMutexUnlock(alloc_mutex);
+        return v;
+    }
+
+    if (!s)
+    {
+        FREE(p,false);
+
+        CHECK_ALL();
+
+        a3dMutexUnlock(alloc_mutex);
+        return 0;
+    }
+
+    ALLOC* a = (ALLOC*)((char*)p-256);
+    size_t z = a->size;
+
+    void* v = MALLOC(s,false);
+
+    if (!v)
+    {
+
+        CHECK_ALL();
+
+        a3dMutexUnlock(alloc_mutex);
+        return 0;
+    }
+    
+    memcpy(v,p,z<s ? z : s);
+
+    FREE(p,false);
+
+    CHECK_ALL();
+
+    a3dMutexUnlock(alloc_mutex);
+    return v;
+}
+
+#define free(p) FREE(p)
+#define malloc(s) MALLOC(s)
+#define realloc(p,s) REALLOC(p,s)
+
 
 #define DONE() done(__LINE__)
 void done(int line)
@@ -197,6 +355,8 @@ struct A3D_VT
         if (rows>MAX_ARCHIVE_LINES)
             rows = MAX_ARCHIVE_LINES;
 
+        /*
+
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];         
 
@@ -223,6 +383,10 @@ struct A3D_VT
             else
                 y=h-1;
         }
+        */
+
+        w = cols;
+        h = rows;       
 
         return true;        
     }
@@ -813,7 +977,10 @@ struct A3D_VT
             }
             else
             {
-                l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
+                if (!l)
+                    l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));    
+                else
+                    l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
                 heap_ops++;
 
                 if (!l) // mem-problem
@@ -1060,6 +1227,8 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
 
     A3D_VT* vt = (A3D_VT*)malloc(sizeof(A3D_VT));
     memset(vt->line,0,sizeof(A3D_VT::LINE*)*A3D_VT::MAX_ARCHIVE_LINES);
+
+    vt->closing = 0;
     vt->w = w;
     vt->h = h;
 
@@ -1068,15 +1237,17 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
 
     Reset(vt);
     vt->lines = 0;
+    vt->first_line = 0;
 
     a3dSetPtyVT(pty,vt);
     vt->pty = pty;
 
     vt->mutex = a3dCreateMutex();
-    vt->pty_reader = a3dCreateThread(A3D_VT::PtyRead,vt);
 
     vt->dump_dirty = 2; // resized or reset
     vt->heap_ops = 0;
+
+    vt->pty_reader = a3dCreateThread(A3D_VT::PtyRead,vt);
 
     return vt;
 }
@@ -1084,9 +1255,10 @@ A3D_VT* a3dCreateVT(int w, int h, const char* path, char* const argv[], char* co
 void a3dDestroyVT(A3D_VT* vt)
 {
     vt->closing = 1;
+    a3dUnblockPTY(vt->pty);
+    a3dWaitForThread(vt->pty_reader);
     a3dClosePTY(vt->pty); // should force pty_reader to exit
 
-    a3dWaitForThread(vt->pty_reader);
     a3dDeleteMutex(vt->mutex);
 
     for (int i=0; i<vt->lines; i++)
@@ -3748,8 +3920,6 @@ static bool a3dProcessVT(A3D_VT* vt)
                 seq_ctx = 0;
                 TODO();
         }
-
-
     }
 
     // persist state till we have more data to process
@@ -4054,21 +4224,25 @@ static int DumpChr(char* buf, VT_CELL* cell)
 }
 
 // TESTING!
-int a3dDumpVT(A3D_VT* vt)
+int a3dDumpVT(A3D_VT* vt, int tw, int th)
 {
-    if (!vt->dump_dirty)
-        return 0;
-    
     a3dMutexLock(vt->mutex);
 
-    struct winsize ws;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);    
-    int tw = ws.ws_col;
-    int th = ws.ws_row;
+    if (!vt->dump_dirty)
+    {
+        if (tw!=vt->w || th!=vt->h)
+        {
+            vt->Resize(tw,th);
+            a3dResizePTY(vt->pty,vt->w,vt->h);    
+        }
+
+        a3dMutexUnlock(vt->mutex);
+        return 0;
+    }
 
     int wr = 0;
 
-    if ( write(STDOUT_FILENO,"\e[H",3) <=0 ) // goto home
+    if ( write(STDOUT_FILENO,"\e[H\e[?7l",8) <=0 ) // goto home, disable wrap
     {
         a3dMutexUnlock(vt->mutex);
         return -1;
@@ -4160,6 +4334,12 @@ int a3dDumpVT(A3D_VT* vt)
 
     int heap_ops = vt->heap_ops;
     vt->heap_ops = 0;
+
+    if (tw!=vt->w || th!=vt->h)
+    {
+        vt->Resize(tw,th);
+        a3dResizePTY(vt->pty,vt->w,vt->h);    
+    }
 
     a3dMutexUnlock(vt->mutex);
 
