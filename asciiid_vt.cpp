@@ -22,8 +22,11 @@ struct ALLOC
 
 ALLOC* head=0;
 ALLOC* tail=0;
+int allocs = 0;
 
-A3D_MUTEX* alloc_mutex = a3dCreateMutex();
+//A3D_MUTEX* alloc_mutex = a3dCreateMutex();
+
+#define MARGIN (sizeof(ALLOC))
 
 void CHECK(ALLOC* a)
 {
@@ -31,10 +34,10 @@ void CHECK(ALLOC* a)
     assert(s<256*1024);
     uint8_t* l = (uint8_t*)a;
 
-    for (int i=sizeof(ALLOC); i<256; i++)
+    for (int i=sizeof(ALLOC); i<MARGIN; i++)
         assert(l[i] == (i&0xFF));
-    for (int i=0; i<256; i++)
-        assert(l[i+256+s] == (i&0xFF));
+    for (int i=0; i<MARGIN; i++)
+        assert(l[i+MARGIN+s] == (i&0xFF));
 }
 
 void CHECK_ALL()
@@ -47,18 +50,31 @@ void CHECK_ALL()
     }
 }
 
+void FIND(ALLOC* f)
+{
+    ALLOC* a = head;
+    while (a != f)
+    {
+        assert(a);
+        a=a->next;
+    }
+}
+
 void FREE(void* p, bool lock=true)
 {
-    if (lock)
-        a3dMutexLock(alloc_mutex);
+//    if (lock)
+//        a3dMutexLock(alloc_mutex);
 
     CHECK_ALL();
 
-    ALLOC* a = (ALLOC*)((char*)p - 256);
+    ALLOC* a = (ALLOC*)((char*)p - MARGIN);
+    
+    FIND(a);
+
     size_t s = a->size;
     uint8_t* l = (uint8_t*)a;
 
-    free(a);
+    allocs--;
 
     if (a->prev)
         a->prev->next = a->next;
@@ -70,28 +86,33 @@ void FREE(void* p, bool lock=true)
     else
         tail = a->prev;
 
+
+    free(a);
+
     CHECK_ALL();
 
-    if (lock)
-        a3dMutexUnlock(alloc_mutex);
+//    if (lock)
+//        a3dMutexUnlock(alloc_mutex);
 }
 
 void* MALLOC(size_t s, bool lock = true)
 {
-    if (lock)
-        a3dMutexLock(alloc_mutex);
+//    if (lock)
+//        a3dMutexLock(alloc_mutex);
 
     CHECK_ALL();
 
     assert(s);
 
-    ALLOC* a = (ALLOC*)malloc(s+512);
+    ALLOC* a = (ALLOC*)malloc(s+2*MARGIN);
     if (!a)
     {
-        if (lock)
-            a3dMutexUnlock(alloc_mutex);
+//        if (lock)
+//            a3dMutexUnlock(alloc_mutex);
         return 0;
     }
+
+    allocs++;
 
     a->size = s;
     a->prev = tail;
@@ -104,32 +125,33 @@ void* MALLOC(size_t s, bool lock = true)
 
     uint8_t* l = (uint8_t*)a;
 
-    for (int i=sizeof(ALLOC); i<256; i++)
+    for (int i=sizeof(ALLOC); i<MARGIN; i++)
         l[i] = (i&0xFF);
-    for (int i=0; i<256; i++)
-        l[i+256+s] = (i&0xFF);
+    for (int i=0; i<MARGIN; i++)
+        l[i+MARGIN+s] = (i&0xFF);
 
     CHECK_ALL();
 
-    if (lock)
-        a3dMutexUnlock(alloc_mutex);
+//    if (lock)
+//        a3dMutexUnlock(alloc_mutex);
 
-    return l+256;
+    return l+MARGIN;
 }
 
 void* REALLOC(void* p, size_t s)
 {
-    a3dMutexLock(alloc_mutex);
+//    a3dMutexLock(alloc_mutex);
 
     CHECK_ALL();
 
     if (!p)
     {
+        assert(s);
         void* v =  MALLOC(s,false);
 
         CHECK_ALL();
 
-        a3dMutexUnlock(alloc_mutex);
+//        a3dMutexUnlock(alloc_mutex);
         return v;
     }
 
@@ -139,11 +161,13 @@ void* REALLOC(void* p, size_t s)
 
         CHECK_ALL();
 
-        a3dMutexUnlock(alloc_mutex);
+//        a3dMutexUnlock(alloc_mutex);
         return 0;
     }
 
-    ALLOC* a = (ALLOC*)((char*)p-256);
+    ALLOC* a = (ALLOC*)((char*)p-MARGIN);
+    FIND(a);
+
     size_t z = a->size;
 
     void* v = MALLOC(s,false);
@@ -153,7 +177,7 @@ void* REALLOC(void* p, size_t s)
 
         CHECK_ALL();
 
-        a3dMutexUnlock(alloc_mutex);
+//        a3dMutexUnlock(alloc_mutex);
         return 0;
     }
     
@@ -163,7 +187,7 @@ void* REALLOC(void* p, size_t s)
 
     CHECK_ALL();
 
-    a3dMutexUnlock(alloc_mutex);
+//    a3dMutexUnlock(alloc_mutex);
     return v;
 }
 
@@ -1265,6 +1289,8 @@ void a3dDestroyVT(A3D_VT* vt)
         if (vt->line[i])
             free(vt->line[i]);
     free(vt);
+
+    assert(allocs==0);
 }
 
 int utf8_parser[8][256]; // 0x001FFFFF char (partial) , 0x07000000 target state (if 0: ready), 0x80000000 error reset flag
