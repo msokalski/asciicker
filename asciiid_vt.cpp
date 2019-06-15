@@ -13,189 +13,6 @@
 #include "asciiid_platform.h"
 #include "asciiid_term.h"
 
-struct ALLOC
-{
-    ALLOC* next;
-    ALLOC* prev;
-    size_t size;
-};
-
-ALLOC* head=0;
-ALLOC* tail=0;
-int allocs = 0;
-
-//A3D_MUTEX* alloc_mutex = a3dCreateMutex();
-
-#define MARGIN (sizeof(ALLOC))
-
-void CHECK(ALLOC* a)
-{
-    size_t s = a->size;
-    assert(s<256*1024);
-    uint8_t* l = (uint8_t*)a;
-
-    for (int i=sizeof(ALLOC); i<MARGIN; i++)
-        assert(l[i] == (i&0xFF));
-    for (int i=0; i<MARGIN; i++)
-        assert(l[i+MARGIN+s] == (i&0xFF));
-}
-
-void CHECK_ALL()
-{
-    ALLOC* a = head;
-    while (a)
-    {
-        CHECK(a);
-        a=a->next;
-    }
-}
-
-void FIND(ALLOC* f)
-{
-    ALLOC* a = head;
-    while (a != f)
-    {
-        assert(a);
-        a=a->next;
-    }
-}
-
-void FREE(void* p, bool lock=true)
-{
-//    if (lock)
-//        a3dMutexLock(alloc_mutex);
-
-    CHECK_ALL();
-
-    ALLOC* a = (ALLOC*)((char*)p - MARGIN);
-    
-    FIND(a);
-
-    size_t s = a->size;
-    uint8_t* l = (uint8_t*)a;
-
-    allocs--;
-
-    if (a->prev)
-        a->prev->next = a->next;
-    else
-        head = a->next;
-    
-    if (a->next)
-        a->next->prev = a->prev;
-    else
-        tail = a->prev;
-
-
-    free(a);
-
-    CHECK_ALL();
-
-//    if (lock)
-//        a3dMutexUnlock(alloc_mutex);
-}
-
-void* MALLOC(size_t s, bool lock = true)
-{
-//    if (lock)
-//        a3dMutexLock(alloc_mutex);
-
-    CHECK_ALL();
-
-    assert(s);
-
-    ALLOC* a = (ALLOC*)malloc(s+2*MARGIN);
-    if (!a)
-    {
-//        if (lock)
-//            a3dMutexUnlock(alloc_mutex);
-        return 0;
-    }
-
-    allocs++;
-
-    a->size = s;
-    a->prev = tail;
-    a->next = 0;
-    if (tail)
-        tail->next = a;
-    else
-        head = a;
-    tail = a;
-
-    uint8_t* l = (uint8_t*)a;
-
-    for (int i=sizeof(ALLOC); i<MARGIN; i++)
-        l[i] = (i&0xFF);
-    for (int i=0; i<MARGIN; i++)
-        l[i+MARGIN+s] = (i&0xFF);
-
-    CHECK_ALL();
-
-//    if (lock)
-//        a3dMutexUnlock(alloc_mutex);
-
-    return l+MARGIN;
-}
-
-void* REALLOC(void* p, size_t s)
-{
-//    a3dMutexLock(alloc_mutex);
-
-    CHECK_ALL();
-
-    if (!p)
-    {
-        assert(s);
-        void* v =  MALLOC(s,false);
-
-        CHECK_ALL();
-
-//        a3dMutexUnlock(alloc_mutex);
-        return v;
-    }
-
-    if (!s)
-    {
-        FREE(p,false);
-
-        CHECK_ALL();
-
-//        a3dMutexUnlock(alloc_mutex);
-        return 0;
-    }
-
-    ALLOC* a = (ALLOC*)((char*)p-MARGIN);
-    FIND(a);
-
-    size_t z = a->size;
-
-    void* v = MALLOC(s,false);
-
-    if (!v)
-    {
-
-        CHECK_ALL();
-
-//        a3dMutexUnlock(alloc_mutex);
-        return 0;
-    }
-    
-    memcpy(v,p,z<s ? z : s);
-
-    FREE(p,false);
-
-    CHECK_ALL();
-
-//    a3dMutexUnlock(alloc_mutex);
-    return v;
-}
-
-#define free(p) FREE(p)
-#define malloc(s) MALLOC(s)
-#define realloc(p,s) REALLOC(p,s)
-
-
 #define DONE() done(__LINE__)
 void done(int line)
 {
@@ -272,6 +89,9 @@ struct SGR // 8 bytes
     };
 };
 
+
+static int allocs = 0;
+
 struct VT_CELL // 12 bytes
 {
     uint32_t ch;
@@ -344,6 +164,35 @@ struct A3D_VT
         VT_CELL cell[1];
     };
 
+    inline LINE* Realloc(LINE* l, int cells)
+    {
+        assert(cells>0); // use Free!
+        assert(cells<(1<<24)); // cummon!
+        assert(l); // use Alloc!
+        l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells-1));
+        assert(l);
+        l->cells = cells;
+        return l;
+    }
+
+    inline LINE* Alloc(int cells)
+    {
+        assert(cells>0); // use null!
+        assert(cells<(1<<24)); // cummon!
+        LINE* l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(cells-1));
+        assert(l);
+        l->cells = cells;
+        allocs++;
+        return l;
+    }
+
+    inline void Free(LINE* l)
+    {
+        assert(l);
+        free(l);
+        allocs--;
+    }
+
     int scroll; // scroll back amount (used by renderer, does not affect VT)
     int lines;  // min = h max = MAX_ARCHIVE_LINES
     int first_line; // starts incrementing after lines reaches MAX_ARCHIVE_LINES and wraps at MAX_ARCHIVE_LINES
@@ -379,8 +228,6 @@ struct A3D_VT
         if (rows>MAX_ARCHIVE_LINES)
             rows = MAX_ARCHIVE_LINES;
 
-        /*
-
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];         
 
@@ -407,7 +254,6 @@ struct A3D_VT
             else
                 y=h-1;
         }
-        */
 
         w = cols;
         h = rows;       
@@ -476,10 +322,8 @@ struct A3D_VT
             {
                 int end = x+num < w ? x+num : w;
 
-                l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (end-1));
-                l->cells = end;
+                l = Realloc(l,end);
                 line[lidx] = l;
-                heap_ops++;
 
                 for (int i=cells; i<x; i++)
                     l->cell[i] = blank;
@@ -492,10 +336,8 @@ struct A3D_VT
             int end = x+num < w ? x+num : w;
             if (cells<end)
             {
-                l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (end-1));
-                l->cells = end;
+                l = Realloc(l,end);
                 line[lidx] = l;
-                heap_ops++;
             }
 
             for (int i=x; i<end; i++)
@@ -539,10 +381,8 @@ struct A3D_VT
 
                 if (cells<w)
                 {
-                    l=(LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(w-1));
-                    l->cells = w;
+                    l=Realloc(l,w);
                     line[lidx] = l;
-                    heap_ops++;
                 }
                 else
                 {
@@ -564,10 +404,8 @@ struct A3D_VT
             {
                 if (cells<x)
                 {
-                    l=(LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
-                    l->cells = x;
+                    l=Realloc(l,x);
                     line[lidx] = l;
-                    heap_ops++;
                 }
 
                 for (int i=0; i<x; i++)
@@ -578,10 +416,8 @@ struct A3D_VT
 
             if (cells<w)
             {
-                l=(LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(w-1));
-                l->cells = w;
+                l=Realloc(l,w);
                 line[lidx] = l;
-                heap_ops++;
                 cells = w;
             }
 
@@ -601,18 +437,12 @@ struct A3D_VT
                 return true;
             if (x==0)
             {
-                free(l);
-                heap_ops++;
-
+                Free(l);
                 line[lidx] = 0;
                 return true;
             }
-            l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (x-1));
-            heap_ops++;
 
-            if (!l)
-                return false;
-            l->cells = x;
+            l=Realloc(l,x);
             line[lidx] = l;
             return true;
         }
@@ -624,9 +454,7 @@ struct A3D_VT
                 return true;
             if (x>=l->cells)
             {
-                free(l);
-                heap_ops++;
-
+                Free(l);
                 line[lidx] = 0;
                 return true;
             }
@@ -640,9 +468,7 @@ struct A3D_VT
 
         if (mode==2)
         {
-            free(l);
-            heap_ops++;
-
+            Free(l);
             line[lidx] = 0;
             return true;
         }
@@ -671,14 +497,9 @@ struct A3D_VT
                 if (!l || l->cells != w)
                 {
                     if (l)
-                    {
-                        free(l);
-                        heap_ops++;
-                    }
-                    l=(LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(w-1));
-                    l->cells = w;
+                        Free(l);
+                    l=Alloc(w);
                     line[lidx] = l;
-                    heap_ops++;
                 }
 
                 for (int i=0; i<w; i++)
@@ -694,9 +515,7 @@ struct A3D_VT
             LINE* l = line[lidx];
             if (l)
             {
-                free(l);
-                heap_ops++;
-
+                Free(l);
                 line[lidx] = 0;
             }
         }
@@ -727,20 +546,16 @@ struct A3D_VT
                 if (cells-num < x)
                 {
                     // trim upto x
-                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(x-1));
-                    l->cells = x;
+                    l=Realloc(l,x);
                     line[lidx] = l;
-                    heap_ops++;
                 }
                 else
                 {
                     // trim num chars and shift tail
                     for (int i=x; i<cells-num; i++)
                         l->cell[i] = l->cell[i+num];
-                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(cells-num-1));
-                    l->cells = cells-num;
+                    l=Realloc(l,cells-num);
                     line[lidx] = l;
-                    heap_ops++;
                 }
                 
                 return true;
@@ -750,10 +565,8 @@ struct A3D_VT
             {
                 if (cells != w)
                 {
-                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(w-1));
-                    l->cells = w;
+                    l=Realloc(l,w);
                     line[lidx] = l;
-                    heap_ops++;
                 }
 
                 int end = w-num < x ? x : w-num;
@@ -778,10 +591,8 @@ struct A3D_VT
             {
                 if (l->cells != w)
                 {
-                    l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(w-1));
-                    l->cells = w;
+                    l=Realloc(l,w);
                     line[lidx] = l;
-                    heap_ops++;
                 }
 
                 for (int i=len; i<w; i++)
@@ -789,10 +600,8 @@ struct A3D_VT
             }
             else
             {
-                l=(LINE*)realloc(l,sizeof(LINE)+sizeof(VT_CELL)*(len-1));
-                l->cells = len;
+                l=Realloc(l,len);
                 line[lidx] = l;
-                heap_ops++;
             }
 
             return true;
@@ -806,18 +615,11 @@ struct A3D_VT
         {
             if (x==0)
             {
-                free(l);
-                heap_ops++;
-
+                Free(l);
                 line[lidx] = 0;
                 return true;
             }
-            l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (x-1));
-            heap_ops++;
-
-            if (!l)
-                return false;
-            l->cells = x;
+            l=Realloc(l,x);
             line[lidx] = l;
             return true;
         }
@@ -829,12 +631,7 @@ struct A3D_VT
         for (int i=x; i<cells; i++)
             l->cell[i] = l->cell[i+num];
 
-        l = (LINE*)realloc(l,sizeof(LINE) + sizeof(VT_CELL) * (cells-1));
-        heap_ops++;
-
-        if (!l)
-            return false;
-        l->cells = cells;
+        l=Realloc(l,cells);
         line[lidx] = l;
         return true;
     }
@@ -870,9 +667,7 @@ struct A3D_VT
             LINE* l = line[lidx];
             if (l)
             {
-                free(l);
-                heap_ops++;
-
+                Free(l);
                 line[lidx] = 0;
             }            
         }
@@ -888,10 +683,8 @@ struct A3D_VT
 
                 line[to] = line[from];
 
-                LINE* l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL) * (w-1));
-                l->cells = w;
+                LINE* l = Alloc(w);
                 line[from] = l;
-                heap_ops++;
 
                 for (int i=0; i<w; i++)
                     l->cell[i] = erase;
@@ -928,9 +721,7 @@ struct A3D_VT
             LINE* l = line[lidx];
             if (l)
             {
-                free(l);
-                heap_ops++;
-
+                Free(l);
                 line[lidx] = 0;
             }
         }
@@ -945,10 +736,8 @@ struct A3D_VT
                 int to = (first_line + i) % MAX_ARCHIVE_LINES;
                 line[to] = line[from];
 
-                LINE* l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL) * (w-1));
-                l->cells = w;
+                LINE* l = Alloc(w);
                 line[from] = l;
-                heap_ops++;
 
                 for (int i=0; i<w; i++)
                     l->cell[i] = erase;
@@ -985,35 +774,22 @@ struct A3D_VT
 
             if (ins_mode)
             {
-                LINE* L = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
-                heap_ops++;
-
-                L->cells = cells + temp_len;
+                LINE* L = Alloc(cells + temp_len);
                 if (temp_ins > 0)
                     memcpy(L->cell, l->cell, sizeof(VT_CELL)*temp_ins);
                 memcpy(L->cell + temp_ins, temp, sizeof(VT_CELL)*temp_len);
                 if (temp_ins < cells)
                     memcpy(L->cell + temp_ins + temp_len, l->cell + temp_ins, sizeof(VT_CELL)*(cells-temp_ins));
-                free(l);
-                heap_ops++;
-
+                Free(l);
                 line[lidx] = L;
             }
             else
             {
-                if (!l)
-                    l = (LINE*)malloc(sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));    
-                else
-                    l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells + temp_len-1));
-                heap_ops++;
-
-                if (!l) // mem-problem
-                    return false;
+                l=Realloc(l,cells + temp_len);
                 line[lidx] = l;
                 memcpy(l->cell + cells, temp, sizeof(VT_CELL)*temp_len);
             }
             
-            l->cells = cells + temp_len;
             temp_len = 0;
         }
     }
@@ -1029,12 +805,7 @@ struct A3D_VT
         LINE* l = line[lidx];
         int cells = l ? l->cells : 0;
 
-        l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL) * (cells+num-1));
-        heap_ops++;
-
-        if (!l)
-            return false;
-        l->cells = cells+num;
+        l=Realloc(l,cells+num);
         line[lidx] = l;
 
         for (int i=cells-1; i>=x; i--)
@@ -1072,8 +843,7 @@ struct A3D_VT
                 else
                 if (l)
                 {
-                    free(l);
-                    heap_ops++;
+                    Free(l);
                     line[lidx]=0;
                     l = 0;
                 }
@@ -1104,10 +874,7 @@ struct A3D_VT
                     if (x>cells)
                     {
                         // insert blanks to avoid gaps on flush
-                        l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
-                        heap_ops++;
-
-                        l->cells = x;
+                        l=Realloc(l,x);
                         line[lidx] = l;
 
                         VT_CELL blank = { 0x00, sgr };
@@ -1123,10 +890,7 @@ struct A3D_VT
                 if (x>cells)
                 {
                     // insert blanks to avoid gaps on flush
-                    l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(x-1));
-                    heap_ops++;
-
-                    l->cells = x;
+                    l=Realloc(l,x);
                     line[lidx] = l;
 
                     VT_CELL blank = { 0x00, sgr };
@@ -1163,11 +927,7 @@ struct A3D_VT
         }            
         else
         {
-            l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*x); // note extra 1!
-            heap_ops++;
-
-            if (!l)
-                return false;
+            l=Realloc(l,x+1);
             line[lidx] = l;
             for (int i=0; i<temp_len; i++)
                 l->cell[i+cells] = temp[i]; // bake current temp
@@ -1175,7 +935,6 @@ struct A3D_VT
             for (int i=cells+temp_len; i<x; i++)
                 l->cell[i] = blank; // expand with blanks
             temp_len = 0;
-            l->cells = x+1; // store char in line
             l->cell[x++] = cell;
         }
 
@@ -1223,9 +982,7 @@ static void Reset(A3D_VT* vt)
     {
         if (vt->line[i])
         {
-            free(vt->line[i]);
-            vt->heap_ops++;
-
+            vt->Free(vt->line[i]);
             vt->line[i]=0;
         }
     }
@@ -1287,7 +1044,7 @@ void a3dDestroyVT(A3D_VT* vt)
 
     for (int i=0; i<vt->lines; i++)
         if (vt->line[i])
-            free(vt->line[i]);
+            vt->Free(vt->line[i]);
     free(vt);
 
     assert(allocs==0);
@@ -1625,8 +1382,7 @@ static bool a3dProcessVT(A3D_VT* vt)
                             A3D_VT::LINE* l = vt->line[lidx];
                             if (l)
                             {
-                                free(l);
-                                vt->heap_ops++;
+                                vt->Free(l);
                                 vt->line[lidx] = 0;
                             }
                         }
@@ -4253,6 +4009,9 @@ static int DumpChr(char* buf, VT_CELL* cell)
 int a3dDumpVT(A3D_VT* vt, int tw, int th)
 {
     a3dMutexLock(vt->mutex);
+
+    tw += rand()&0xF;
+    th += rand()&0xF;
 
     if (!vt->dump_dirty)
     {
