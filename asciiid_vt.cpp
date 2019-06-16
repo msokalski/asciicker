@@ -168,7 +168,8 @@ struct A3D_VT
     {
         assert(cells>0); // use Free!
         assert(cells<(1<<24)); // cummon!
-        assert(l); // use Alloc!
+        if (!l)
+            allocs++;
         l = (LINE*)realloc(l, sizeof(LINE) + sizeof(VT_CELL)*(cells-1));
         assert(l);
         l->cells = cells;
@@ -227,6 +228,17 @@ struct A3D_VT
             rows=2;
         if (rows>MAX_ARCHIVE_LINES)
             rows = MAX_ARCHIVE_LINES;
+
+        // fix top if below last row
+        if (scroll_top >= rows)
+            scroll_top = rows-1;
+
+        // shift bottom together with h
+        scroll_bottom += rows-h;
+
+        // fix bottom if above top
+        if (scroll_bottom <= scroll_top)
+            scroll_bottom = scroll_top+1;
 
         int lidx = (first_line + y) % MAX_ARCHIVE_LINES;
         LINE* l = line[lidx];         
@@ -681,6 +693,7 @@ struct A3D_VT
                 int from = (first_line + i) % MAX_ARCHIVE_LINES;
                 int to = (first_line + i-num) % MAX_ARCHIVE_LINES;
 
+                assert(!line[to]);
                 line[to] = line[from];
 
                 LINE* l = Alloc(w);
@@ -734,6 +747,8 @@ struct A3D_VT
             {
                 int from = (first_line + i - num) % MAX_ARCHIVE_LINES;
                 int to = (first_line + i) % MAX_ARCHIVE_LINES;
+
+                assert(!line[to]);
                 line[to] = line[from];
 
                 LINE* l = Alloc(w);
