@@ -58,7 +58,6 @@ MouseQueue mouse_queue[mouse_queue_size];
 ImFont* pFont = 0;
 char ini_path[4096];
 
-TermScreen* screen = 0;
 Terrain* terrain = 0;
 World* world = 0;
 Mesh* active_mesh;
@@ -4820,12 +4819,6 @@ void my_render()
 	}
 
 	a3dSwapBuffers();
-
-	if (ipal)
-	{
-		ClearScreen(screen, 0,0, 256, 256*9/16, 0/*rand*/);
-		PrintScreen(screen,ipal);
-	}
 }
 
 void my_mouse(int x, int y, MouseInfo mi)
@@ -4991,8 +4984,6 @@ void my_init()
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
 	SetScreen(true);
-
-	screen = CreateScreen(512,128);
 
 	world = CreateWorld();
 
@@ -5413,8 +5404,6 @@ void my_close()
 		free(ipal);
 		ipal = 0;
 	}
-
-	DeleteScreen(screen);
 
 	if (term)
 		a3dDestroyVT(term);

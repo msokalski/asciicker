@@ -65,7 +65,7 @@ static int (* const CP437[256])(char*) =
 
 static const int CP437_UCS2[256] =
 {
-    0x0000, 0x263A, 0x263B, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022, 
+    0x0020, 0x263A, 0x263B, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022, 
     0x25D8, 0x25CB, 0x25D9, 0x2642, 0x2640, 0x266A, 0x266B, 0x263C,
     0x25BA, 0x25C4, 0x2195, 0x203C, 0x00B6, 0x00A7, 0x25AC, 0x21A8, 
     0x2191, 0x2193, 0x2192, 0x2190, 0x221F, 0x2194, 0x25B2, 0x25BC,
@@ -96,215 +96,216 @@ static const int CP437_UCS2[256] =
     0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x00B5, 0x03C4, 
     0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229, 
     0x2261, 0x00B1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248, 
-    0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x25A1
+    0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x0020
 };
 
-int BuildPerfectHash(const int* charset, int size)
+#include <math.h>
+
+int int_descent(const void* a, const void* b)
 {
-    // if charset is not invertible simply use first glyph that is mapped to that char
-    int gm_size; // must be pow2 >= size
+    return ((const int*)b)[1] - ((const int*)a)[1];
+}
 
-    int max_char = 0;
-    for (int i=0; i<size; i++)
-        max_char = max_char > charset[i] ? max_char : charset[i];
+struct PHF
+{
+    int range; // hash values range
+    int minkey;
+    int shift;
+    int height;
+    int row[1];
 
-    int max_p2 = 0;
+    int Hash(int key) const
     {
-        int m = max_char;
-        while (m)
-        {
-            max_p2++;
-            m>>=1;
-        }
+        int c = key - minkey;
+        int y = c >> shift;
+        assert(y>=0 && y<height);
+        int x = c & ((1<<shift)-1);
+        c = x + row[y];
+        assert(c>=0 && c<range);
+        return c;
     }
 
-    max_p2 = 16;
-
-    int* collisions = (int*)malloc(sizeof(int)*(1<<max_p2));
-    for (int p2=0; p2<max_p2; p2++)
+    void Destroy()
     {
-        int gm_size = 1<<p2;
-        int gm_mask = gm_size-1;
-        memset(collisions, 0, gm_size * sizeof(int));
+        free(this);
+    }
+
+    static PHF* Create(const int* charset, int size)
+    {
+        // if charset is not invertible simply use first glyph that is mapped to that char
+        int gm_size; // must be pow2 >= size
+
+        int max_char = 0;
+        int min_char = 0;
+        for (int i=0; i<size; i++)
+        {
+            min_char = min_char < charset[i] ? min_char : charset[i];
+            max_char = max_char > charset[i] ? max_char : charset[i];
+        }
+
+        int domain = max_char - min_char + 1;
+
+        // for (int aspect = -8; aspect<=8; aspect++)
+        int aspect = 0;
+
+        int hash_size = (int)floor( pow(2.0,aspect)*sqrt(domain) );
+
+        int shift = 0;
+        while (hash_size)
+        {
+            hash_size>>=1;
+            shift++;
+        }
+
+        int width = 1<<shift;
+        int height = (domain + width-1) / width;
+
+        PHF* phf = (PHF*)malloc(sizeof(PHF) + sizeof(int)*(height-1));
+        memset(phf->row,0,sizeof(int) * height);
+
+        phf->minkey = min_char;
+        phf->shift = shift;
+        phf->height = height;
+
+        int mask = width - 1;
+
+        // bin array so we can quickly check for collisions
+        int pitch = (width+7)/8;
+        int bytes = pitch * height;
+        uint8_t* arr = (uint8_t*)malloc(bytes);
+        memset(arr,0,bytes);
+        for (int i=0; i<size; i++)
+        {
+            int c = charset[i] - min_char;
+            int y = c >> shift;
+            int x = c & mask; // unshifted!
+            arr[(x>>3) + pitch*y] |= 1<<(x&7);
+        }
+
+        // this will let us start from highest occupancy rows
+        int* fil = (int*)malloc(sizeof(int) * height*2); // {row & fil}
+        memset(fil,0,sizeof(int) * height*2);
+        for (int i=0; i<height; i++)
+            fil[2*i] = i;
+        for (int i=0; i<size; i++)
+        {
+            int c = charset[i] - min_char;
+            int y = c >> shift;
+            fil[2*y+1]++;
+        }
+
+        qsort(fil, height, sizeof(int)*2, int_descent);
+
+        int min_shift = 0;
+        int max_shift = 0;
+        int max_idx = -1;
+
+        for (int f = 0; f < height; f++)
+        {
+            int fy = fil[2*f];
+
+            int s = 0;
+            // initial s could be negative
+            // so first existing on this row char appears on x=0
+            for (int fx=0; fx<width; fx++)
+            {
+                if ( arr[(fx>>3) + pitch*fy] & (1<<(fx&7)) )
+                    break;
+                s--;
+            }
+
+            int t = width-1;
+            for (int fx=t; fx>=0; fx--)
+            {
+                if ( arr[(fx>>3) + pitch*fy] & (1<<(fx&7)) )
+                    break;
+                t--;
+            }            
+
+            do // s loop until all collisions are resolved
+            {
+                // run all chars on this row
+                int fx=0;
+                for (; fx<width; fx++)
+                {
+                    if ( arr[(fx>>3) + pitch*fy] & (1<<(fx&7)) )
+                    {
+                        // check if fx+s is already occupied by already processed rows
+                        for (int g = 0; g < f; g++)
+                        {
+                            int gy = fil[2*g];
+                            int gx = fx+s-phf->row[gy];
+
+                            // check if there is a char on 
+
+                            if (gx>=0 && gx<width)
+                            {
+
+                                if ( arr[(gx>>3) + pitch*gy] & (1<<(gx&7)) )
+                                {
+                                    s++;
+                                    g = f;   // exit g loop
+                                    fx = -1; // restart chars
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (fx >= 0)
+                {
+                    if (t+s>max_idx)
+                        max_idx = t+s;
+                    if (s>max_shift)
+                        max_shift = s;
+                    if (s<min_shift)
+                        min_shift = s;
+                    phf->row[fy] = s;
+                    break;
+                }
+
+            } while (1);
+
+            // printf("%d / %d\n", f, height);
+        }
+
+        phf->range = max_idx+1;
+
+        free(fil);
+        free(arr);
+
+        int* test = (int*)malloc( phf->range * sizeof(int) );
+        memset(test,-1,phf->range * sizeof(int));
 
         for (int i=0; i<size; i++)
         {
-
-            int h = (charset[i] >= 0x1000 ? (charset[i]+0x0100) : charset[i]) &gm_mask; // i&gm_mask;
-            collisions[h]++;
+            int index = phf->Hash(charset[i]);
+            assert( index >= 0 );
+            assert( index < phf->range );
+            assert( test[index] == -1 || test[index] == charset[i]);
+            test[index] = charset[i];
         }
 
-        int max_col=0;
-        int num_col=0;
-        for (int h=0; h<gm_size; h++)
+        free(test);
+
+        int shift_range = max_shift - min_shift;
+        int shift_bits = 0;
+        while (shift_range)
         {
-            if (collisions[h]>1)
-                num_col++;
-            max_col = max_col > collisions[h] ? max_col : collisions[h];
+            shift_range >>= 1;
+            shift_bits++;
         }
 
-        printf("charset_size:%d map_size:%d (0x%X) max_col:%d num_col:%d\n", size,gm_size,gm_mask,max_col,num_col);
+        printf("width = %d, height = %d\n", width, height);
+        printf("index efficiency   = %5.2f %%\n", (double)size*100/phf->range);
+        printf("storage efficiency = %5.2f bits/key\n", (double)shift_bits*height / size);
 
-        if (max_col==1)
-            break;
+        //exit(1);
+        return phf;
     }
-    //exit(1);
-    return 0;
-}
+};
 
-// int perfect_hash = BuildPerfectHash(CP437_UCS2,256);
-
-int PrintScreen(const TermScreen* screen, const uint8_t ipal[1<<24])
-{
-    int ret = 0;
-
-    // read w,h
-
-    struct winsize ws;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);    
-
-    int x=0, y=0;
-    int w = ws.ws_col;
-    int h = ws.ws_row;
-
-    int x2 = x+w;
-    x2 = x2<screen->width ? x2 : screen->width;
-
-    int y2 = y+h;
-    y2 = y2<screen->height ? y2 : screen->height;
-
-    int x1 = x>=0 ? x : 0;
-    int y1 = y>=0 ? y : 0;
-
-    const int max_cols = 512;
-    const int max_line_bytes = max_cols * (22+3) + 11 + 1; 
-    const int max_buffer_lines = 2;
-    const int header_size = 8;
-    const int buffer_size = header_size + max_buffer_lines*max_line_bytes;
-    const int buffer_flush_size = buffer_size - max_line_bytes;
-    
-    char buf[buffer_size];
-    int siz=header_size;
-    
-    // disable wrap, goto home
-    memcpy(buf, "\x1B[?7l\x1B[H", header_size);
-
-    uint8_t prev_fg = 0;
-    uint8_t prev_bg = 0;
-
-    for (int y=y1; y<y2; y++)
-    {
-        const TermCell* ptr = screen->cell + x1 + y*screen->width;
-        for (int x=0; x<x2; ptr++,x++)
-        {
-            uint8_t fg = ipal[ptr->fg[0] + 256*ptr->fg[1] + 65536*ptr->fg[2]];
-            uint8_t bg = ipal[ptr->bg[0] + 256*ptr->bg[1] + 65536*ptr->bg[2]];
-
-            if (fg!=prev_fg || x==0)
-            {
-                prev_fg = fg;
-                // ESC[ 38;5;<n> m Select foreground color
-                memcpy(buf+siz,"\x1B[38;5;",7);
-                if (fg<10)
-                {
-                    buf[siz+7] = fg+'0';
-                    buf[siz+8] = 'm';
-                    siz+=9;
-                }
-                else
-                if (fg<100)
-                {
-                    buf[siz+7] = '0'+fg/10;
-                    buf[siz+8] = '0'+fg%10;
-                    buf[siz+9] = 'm';
-                    siz+=10;
-                }
-                else
-                {
-                    if (fg >= 200)
-                    {
-                        buf[siz+7] = '2'; 
-                        fg -= 200;
-                    }
-                    else
-                    {
-                        buf[siz+7] = '1'; 
-                        fg -= 100;
-                    }
-                    buf[siz+8] = '0'+fg/10;
-                    buf[siz+9] = '0'+fg%10;
-                    buf[siz+10] = 'm';
-                    siz+=11;
-                }
-            }
-
-            if (bg!=prev_bg || x==0)
-            {
-                prev_bg = bg;
-                //ESC[ 48;5;<n> m Select background color
-                memcpy(buf+siz,"\x1B[48;5;",7);
-                if (bg<10)
-                {
-                    buf[siz+7] = bg+'0';
-                    buf[siz+8] = 'm';
-                    siz+=9;
-                }
-                else
-                if (bg<100)
-                {
-                    buf[siz+7] = '0'+bg/10;
-                    buf[siz+8] = '0'+bg%10;
-                    buf[siz+9] = 'm';
-                    siz+=10;
-                }
-                else
-                {
-                    if (bg >= 200)
-                    {
-                        buf[siz+7] = '2'; 
-                        bg -= 200;
-                    }
-                    else
-                    {
-                        buf[siz+7] = '1'; 
-                        bg -= 100;
-                    }
-                    buf[siz+8] = '0'+bg/10;
-                    buf[siz+9] = '0'+bg%10;
-                    buf[siz+10] = 'm';
-                    siz+=11;
-                }
-            }
-
-            siz += CP437[ptr->ch](buf+siz);
-        }
-
-        if (y<y2-1)
-        {
-            // def bg and \n
-            // NOTE: linux replaces \n with \r\n automatically if output goes to terminal
-            memcpy(buf+siz,"\x1B[49m\n",6);
-            siz+=6;
-            
-            if (siz >= buffer_flush_size)
-            {
-                ret += write(STDOUT_FILENO,buf,siz);
-                siz=0;
-            }
-        }
-    }
-
-    if (siz)
-    {
-        // def fg and bg
-        memcpy(buf+siz,"\x1B[39m\x1B[49m",10);
-        siz+=10;
-        ret += write(STDOUT_FILENO,buf,siz);
-        siz=0;
-    }
-
-    return ret;
-}
+PHF* perfect_hash = PHF::Create(CP437_UCS2,256);
 
 void SetScreen(bool alt)
 {
