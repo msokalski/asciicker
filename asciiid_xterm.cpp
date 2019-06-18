@@ -113,7 +113,8 @@ struct PHF
     int minkey;
     int shift;
     int height;
-    int row[1];
+    PHF* recurse;
+    int* row; // if recurse is NOT null it is [recurse->range] otherwise [height] 
 
     int Hash(int key) const
     {
@@ -121,17 +122,26 @@ struct PHF
         int y = c >> shift;
         assert(y>=0 && y<height);
         int x = c & ((1<<shift)-1);
-        c = x + row[y];
+        if (recurse)
+            c = x + row[recurse->Hash(y)];
+        else
+            c = x + row[y];
         assert(c>=0 && c<range);
         return c;
     }
 
-    void Destroy()
+    void Free()
     {
-        free(this);
+        if (row)
+            free(row);
+        if (recurse)
+        {
+            recurse->Free();
+            free(recurse);
+        }
     }
 
-    static PHF* Create(const int* charset, int size, bool rec = true)
+    int Init(const int* charset, int size, bool rec = true)
     {
         uint64_t t0 = a3dGetTime();
         // if charset is not invertible simply use first glyph that is mapped to that char
@@ -152,7 +162,7 @@ struct PHF
 
         int hash_size = (int)floor( pow(2.0,aspect)*sqrt(domain) );
 
-        int shift = 0;
+        shift = 0;
         while (hash_size)
         {
             hash_size>>=1;
@@ -160,14 +170,12 @@ struct PHF
         }
 
         int width = 1<<shift;
-        int height = (domain + width-1) / width;
+        height = (domain + width-1) / width;
 
-        PHF* phf = (PHF*)malloc(sizeof(PHF) + sizeof(int)*(height-1));
-        memset(phf->row,0,sizeof(int) * height);
+        row = (int*)malloc(sizeof(int) * height);
+        memset(row,0,sizeof(int) * height);
 
-        phf->minkey = min_char;
-        phf->shift = shift;
-        phf->height = height;
+        minkey = min_char;
 
         int mask = width - 1;
 
@@ -219,7 +227,7 @@ struct PHF
             if (s==-width)
             {
                 // empty row
-                phf->row[fy] = 0;
+                row[fy] = 0;
                 continue;
             }
 
@@ -243,7 +251,7 @@ struct PHF
                         for (int g = 0; g < f; g++)
                         {
                             int gy = fil[2*g];
-                            int gx = fx+s-phf->row[gy];
+                            int gx = fx+s-row[gy];
 
                             // check if there is a char on 
 
@@ -269,7 +277,7 @@ struct PHF
                         max_shift = s;
                     if (s<min_shift)
                         min_shift = s;
-                    phf->row[fy] = s;
+                    row[fy] = s;
                     break;
                 }
 
@@ -278,24 +286,29 @@ struct PHF
             // printf("%d / %d\n", f, height);
         }
 
-        phf->range = max_idx+1;
+        range = max_idx+1;
+        recurse = 0;
 
         free(fil);
         free(arr);
 
         uint64_t t1 = a3dGetTime();
 
-        int* test = (int*)malloc( phf->range * sizeof(int) );
-        memset(test,-1,phf->range * sizeof(int));
+        int* test = (int*)malloc( range * sizeof(int) );
+        memset(test,-1,range * sizeof(int));
 
+        printf("test: ");
         for (int i=0; i<size; i++)
         {
-            int index = phf->Hash(charset[i]);
+            int index = Hash(charset[i]);
+            if (i<20)
+                printf("%d ",index);
             assert( index >= 0 );
-            assert( index < phf->range );
+            assert( index < range );
             assert( test[index] == -1 || test[index] == charset[i]);
             test[index] = charset[i];
         }
+        printf("... \n");
 
         free(test);
 
@@ -308,30 +321,75 @@ struct PHF
         }
 
         printf("elapsed %jd us\n", t1-t0);
-        printf("width = %d, height = %d\n", width, height);
-        printf("index efficiency   = %5.2f %%\n", (double)size*100/phf->range);
+        printf("range = %d, width = %d, height = %d\n", range, width, height);
+        printf("index efficiency   = %5.2f %%\n", (double)size*100/range);
         printf("storage efficiency = %5.2f bits/key\n", (double)shift_bits*height / size);
 
         for (int y=0; y<height-1; y++)
-            printf( (y&7)==7 ? "%d,\n":"%d,", phf->row[y] );
-
-        printf( "%d\n", phf->row[height-1] );
-
+            printf( (y&7)==7 ? "%d,\n":"%d,", row[y] );
+        printf( "%d\n", row[height-1] );
 
         // let's check recurency
         if (rec)
         {
             printf("------------------\n");
-            PHF* rphf = Create(phf->row,height,false);
-            rphf->Destroy();
+            PHF* rphf = (PHF*)malloc(sizeof(PHF));
+            rphf->Init(row,height,false);
+            printf("------------------\n");
+
+            // if performed well
+            {
+                int* rrow = (int*)malloc(sizeof(int) * rphf->range);
+                memset(rrow,0,sizeof(int) * rphf->range);
+                for (int y=0; y<height; y++)
+                {
+                    int i = rphf->Hash( row[y] );
+                    rrow[i] = row[y];
+                }
+                free(row);
+                row = rrow;
+                recurse = rphf;
+
+                // print compressed row data
+                for (int r=0; r<rphf->range-1; r++)
+                    printf( (r&7)==7 ? "%d,\n":"%d,", row[r] );
+                printf( "%d\n", row[rphf->range-1] );                
+
+                // test once again with recursion
+                int* test = (int*)malloc( range * sizeof(int) );
+                memset(test,-1,range * sizeof(int));
+
+                printf("test: ");
+                for (int i=0; i<size; i++)
+                {
+                    int index = Hash(charset[i]);
+                    if (i<20)
+                    {
+                        printf("%d ",index);
+                        fflush(stdout);
+                    }
+                    assert( index >= 0 );
+                    assert( index < range );
+                    assert( test[index] == -1 || test[index] == charset[i]);
+                    test[index] = charset[i];
+                }
+
+                printf("... \n");
+
+
+                free(test);
+
+
+            }
+            // else
+            //  rphf->Destroy();
         }
 
-        //exit(1);
-        return phf;
     }
 };
 
-PHF* perfect_hash = PHF::Create(CP437_UCS2,256);
+PHF perfect_hash;
+int perfect_hash_ok = perfect_hash.Init(CP437_UCS2,256);
 
 void SetScreen(bool alt)
 {
