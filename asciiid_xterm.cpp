@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include "asciiid_term.h"
+#include "asciiid_platform.h"
 
 template <uint16_t C> static int UTF8(char* buf)
 {
@@ -130,8 +131,9 @@ struct PHF
         free(this);
     }
 
-    static PHF* Create(const int* charset, int size)
+    static PHF* Create(const int* charset, int size, bool rec = true)
     {
+        uint64_t t0 = a3dGetTime();
         // if charset is not invertible simply use first glyph that is mapped to that char
         int gm_size; // must be pow2 >= size
 
@@ -214,6 +216,13 @@ struct PHF
                 s--;
             }
 
+            if (s==-width)
+            {
+                // empty row
+                phf->row[fy] = 0;
+                continue;
+            }
+
             int t = width-1;
             for (int fx=t; fx>=0; fx--)
             {
@@ -274,6 +283,8 @@ struct PHF
         free(fil);
         free(arr);
 
+        uint64_t t1 = a3dGetTime();
+
         int* test = (int*)malloc( phf->range * sizeof(int) );
         memset(test,-1,phf->range * sizeof(int));
 
@@ -296,9 +307,24 @@ struct PHF
             shift_bits++;
         }
 
+        printf("elapsed %jd us\n", t1-t0);
         printf("width = %d, height = %d\n", width, height);
         printf("index efficiency   = %5.2f %%\n", (double)size*100/phf->range);
         printf("storage efficiency = %5.2f bits/key\n", (double)shift_bits*height / size);
+
+        for (int y=0; y<height-1; y++)
+            printf( (y&7)==7 ? "%d,\n":"%d,", phf->row[y] );
+
+        printf( "%d\n", phf->row[height-1] );
+
+
+        // let's check recurency
+        if (rec)
+        {
+            printf("------------------\n");
+            PHF* rphf = Create(phf->row,height,false);
+            rphf->Destroy();
+        }
 
         //exit(1);
         return phf;
