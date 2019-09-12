@@ -57,6 +57,7 @@ MouseQueue mouse_queue[mouse_queue_size];
 
 ImFont* pFont = 0;
 char ini_path[4096];
+char root_path[4096];
 
 Terrain* terrain = 0;
 World* world = 0;
@@ -2516,6 +2517,177 @@ int AllocDir(DirItem*** dir, DirItem** list = 0)
 	return head.num;
 }
 
+static bool MeshScan(A3D_DirItem item, const char* name, void* cookie)
+{
+	if (!(item&A3D_FILE))
+		return true;
+
+	char buf[4096];
+	snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
+	buf[4095] = 0;
+
+	Mesh* m = GetFirstMesh(world);
+	while (m)
+	{
+		char mesh_name[256];
+		GetMeshName(m,mesh_name,256);
+
+		if (strcmp(name,mesh_name)==0)
+			break;
+
+		m=GetNextMesh(m);
+	}
+
+	if (!m)
+	{
+		m = LoadMesh(world, buf, name);
+		if (m)
+		{
+			MeshPrefs* mp = (MeshPrefs*)malloc(sizeof(MeshPrefs));
+			memset(mp,0,sizeof(MeshPrefs));
+			SetMeshCookie(m,mp);
+		}
+	}
+	
+	return true;
+}
+
+void New()
+{
+	// free mesh prefs !!!
+	Mesh* m = GetFirstMesh(world);
+	while (m)
+	{
+		MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(m);
+		free(mp);
+		m = GetNextMesh(m);
+	}
+
+	URDO_Purge();
+	DeleteTerrain(terrain);
+	DeleteWorld(world);
+	world = 0;
+	terrain = 0;
+
+	terrain = CreateTerrain();
+	world = CreateWorld();
+
+	// add meshes from library that aren't present in scene file
+	char mesh_dirname[4096];
+	sprintf(mesh_dirname,"%s/meshes",root_path);
+	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
+
+	RebuildWorld(world);
+
+	active_mesh = GetFirstMesh(world);	
+
+	// init some planar terrain
+
+	const int num1 = 16;
+	const int num2 = num1*num1;
+
+	uint32_t* rnd = (uint32_t*)malloc(sizeof(uint32_t)*num2);
+	int n = num2;
+	for (int i = 0; i < num2; i++)
+		rnd[i] = i;
+
+	for (int i = 0; i < num2; i++)
+	{
+		int r = (fast_rand() + fast_rand()*(FAST_RAND_MAX+1)) % n;
+
+		uint32_t uv = rnd[r];
+		rnd[r] = rnd[--n];
+		uint32_t u = uv % num1;
+		uint32_t v = uv / num1;
+		AddTerrainPatch(terrain, u, v, 0/*fast_rand()&0x7F*/);
+	}
+
+	free(rnd);
+
+	pos_x = num1 * VISUAL_CELLS / 2;
+	pos_y = num1 * VISUAL_CELLS / 2;
+	pos_z = 0x0;
+}
+
+void Load(const char* path)
+{
+	// load
+
+	// free mesh prefs !!!
+	Mesh* m = GetFirstMesh(world);
+	while (m)
+	{
+		MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(m);
+		free(mp);
+		m = GetNextMesh(m);
+	}
+
+	URDO_Purge();
+	DeleteTerrain(terrain);
+	DeleteWorld(world);
+	world = 0;
+	terrain = 0;
+
+	FILE* f = fopen(path,"rb");
+	if (f)
+	{
+		terrain = LoadTerrain(f);
+
+		if (terrain)
+		{
+			for (int i=0; i<256; i++)
+			{
+				if ( fread(mat[i].shade,1,sizeof(Cell)*4*16,f) != sizeof(Cell)*4*16 )
+					break;
+				mat[i].Update();
+			}
+
+			world = LoadWorld(f);
+			if (world)
+			{
+				// reload meshes too
+				Mesh* m = GetFirstMesh(world);
+
+				while (m)
+				{
+					char mesh_name[256];
+					GetMeshName(m,mesh_name,256);
+					char obj_path[4096];
+					sprintf(obj_path,"%s/meshes/%s",root_path,mesh_name);
+					if (!UpdateMesh(m,obj_path))
+					{
+						// what now?
+						// missing mesh file!
+					}
+
+					MeshPrefs* mp = (MeshPrefs*)malloc(sizeof(MeshPrefs));
+					memset(mp,0,sizeof(MeshPrefs));
+					SetMeshCookie(m,mp);
+
+					m = GetNextMesh(m);
+				}
+			}
+		}
+
+		fclose(f);
+	}
+
+	if (!terrain)
+		terrain = CreateTerrain();
+
+	if (!world)
+		world = CreateWorld();
+
+	// add meshes from library that aren't present in scene file
+	char mesh_dirname[4096];
+	sprintf(mesh_dirname,"%s/meshes",root_path);
+	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
+
+	RebuildWorld(world);
+
+	active_mesh = GetFirstMesh(world);	
+}
+
 void my_render()
 {
 	ImGuiIO& io = ImGui::GetIO();
@@ -2629,6 +2801,9 @@ void my_render()
 			{
 				MeshWidget* mw = (MeshWidget*)cmd->UserCallbackData;
 				if (!mw)
+					return;
+
+				if (!active_mesh)
 					return;
 
 				int vp[4];
@@ -2871,6 +3046,7 @@ void my_render()
 					glDisable(GL_DEPTH_TEST);
 
 				glDepthFunc(depth_func);
+
 			}
 
 			bool Widget(const char* label, const ImVec2& size)
@@ -2980,6 +3156,13 @@ void my_render()
 				a3dGetCurDir(save_path,4096);
 				AllocDir(&dir_arr);
 			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("NEW"))
+			{
+				New();
+			}
 		}
 		else
 		{
@@ -3079,6 +3262,8 @@ void my_render()
 							for (int i=0; i<256; i++)
 								fwrite(mat[i].shade,1,sizeof(Cell)*4*16,f);
 
+							SaveWorld(world,f);
+
 							// close save dialog
 							save = 0;
 							if (dir_arr)
@@ -3092,35 +3277,7 @@ void my_render()
 				else
 				if (save == 2)
 				{
-					// load
-
-					URDO_Purge();
-					DeleteTerrain(terrain);
-					terrain = 0;
-
-					FILE* f = fopen(save_path,"rb");
-					if (f)
-					{
-						terrain = LoadTerrain(f);
-
-						if (terrain)
-						{
-							for (int i=0; i<256; i++)
-							{
-								if ( fread(mat[i].shade,1,sizeof(Cell)*4*16,f) != sizeof(Cell)*4*16 )
-									break;
-
-								mat[i].Update();
-							}
-						}
-
-						fclose(f);
-					}
-
-					if (!terrain)
-					{
-						terrain = CreateTerrain();
-					}
+					Load(save_path);
 
 					// close save dialog
 					save = 0;
@@ -3180,6 +3337,8 @@ void my_render()
 							for (int i=0; i<256; i++)
 								fwrite(mat[i].shade,1,sizeof(Cell)*4*16,f);
 
+							SaveWorld(world,f);
+
 							// close save dialog
 							save = 0;
 							if (dir_arr)
@@ -3194,33 +3353,7 @@ void my_render()
 				if (save == 2)
 				{
 					// load
-
-					URDO_Purge();
-					DeleteTerrain(terrain);
-					terrain = 0;
-
-					FILE* f = fopen(save_path,"rb");
-					if (f)
-					{
-						terrain = LoadTerrain(f);
-
-						if (terrain)
-						{
-							for (int i=0; i<256; i++)
-							{
-								if ( fread(mat[i].shade,1,sizeof(Cell)*4*16,f) != sizeof(Cell)*4*16 )
-									break;	
-								mat[i].Update();
-							}
-						}
-
-						fclose(f);
-					}
-
-					if (!terrain)
-					{
-						terrain = CreateTerrain();
-					}
+					Load(save_path);
 
 					// close save dialog
 					save = 0;
@@ -4987,33 +5120,12 @@ void my_init()
 
 	world = CreateWorld();
 
-	// scan meshes dir
-	struct MeshScan
-	{
-		static bool Scan(A3D_DirItem item, const char* name, void* cookie)
-		{
-			if (!(item&A3D_FILE))
-				return true;
-
-			char buf[4096];
-			snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
-			buf[4095] = 0;
-
-			Mesh* m = LoadMesh(world, buf, name);
-			if (m)
-			{
-				MeshPrefs* mp = (MeshPrefs*)malloc(sizeof(MeshPrefs));
-				memset(mp,0,sizeof(MeshPrefs));
-				SetMeshCookie(m,mp);
-			}
-			return true;
-		}
-	};
-
 	char mesh_dirname[] = "./meshes";
-	a3dListDir(mesh_dirname, MeshScan::Scan, mesh_dirname);
+	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 
 	active_mesh = GetFirstMesh(world);
+
+	/*
 	for (int i=0; i<100000; i++)
 	{
 		double tm[16]=
@@ -5028,6 +5140,8 @@ void my_init()
 		};
 		CreateInst(active_mesh,INST_USE_TREE|INST_VISIBLE,tm,0);
 	}
+	*/
+
 	RebuildWorld(world);
 
 	// todo:
@@ -5066,9 +5180,8 @@ void my_init()
 
 	// keep it startup dir
 	{
-		char dir[4096];
-		a3dGetCurDir(dir,4096);
-		snprintf(ini_path,4096,"%s/imgui.ini",dir);
+		a3dGetCurDir(root_path,4096);
+		snprintf(ini_path,4096,"%s/imgui.ini",root_path);
 		ini_path[4095]=0;
 		io.IniFilename = ini_path;
 	}
@@ -5145,6 +5258,9 @@ void my_init()
 	a3dSetTitle(utf8/*"ASCIIID"*/);
 	a3dSetIcon("./icons/app.png");
 	a3dSetVisible(true);
+
+	int rect[] = {1920*2,0, 1920,1080};
+	a3dSetRect(rect, A3D_WND_NORMAL);
 }
 
 void my_keyb_char(wchar_t chr)
@@ -5375,6 +5491,7 @@ void my_keyb_focus(bool set)
 
 void my_close()
 {
+	// free mesh prefs !!!
 	Mesh* m = GetFirstMesh(world);
 	while (m)
 	{

@@ -101,6 +101,8 @@ struct Mesh
     float bbox[6];
 
     Inst* share_list;
+
+    bool Update(const char* path);
 };
 
 struct BSP
@@ -1255,13 +1257,15 @@ struct World
 	}
 };
 
-Mesh* World::LoadMesh(const char* path, const char* name)
+
+bool Mesh::Update(const char* path)
 {
     FILE* f = fopen(path,"rt");
     if (!f)
-        return 0;
+        return false;
 
-    Mesh* m = AddMesh(name ? name : path);
+    Mesh* m = this;
+
     int plannar = 0x7;
 
     char buf[1024];
@@ -1505,6 +1509,19 @@ Mesh* World::LoadMesh(const char* path, const char* name)
     }
 
     fclose(f);
+    return true;
+}
+
+Mesh* World::LoadMesh(const char* path, const char* name)
+{
+    Mesh* m = AddMesh(name ? name : path);
+
+    if (!m->Update(path))
+    {
+        DeleteMesh(m);
+        return 0;
+    }
+
     return m;
 }
 
@@ -1548,6 +1565,11 @@ Mesh* LoadMesh(World* w, const char* path, const char* name)
     if (!w)
         return 0;
     return w->LoadMesh(path, name);
+}
+
+bool UpdateMesh(Mesh* m, const char* path)
+{
+    m->Update(path);
 }
 
 void DeleteMesh(Mesh* m)
@@ -1689,4 +1711,180 @@ void RebuildWorld(World* w)
 {
     if (w)
         w->Rebuild();
+}
+
+static void SaveInst(Inst* i, FILE* f)
+{
+    int mesh_id_len = i->mesh && i->mesh->name ? strlen(i->mesh->name) : 0;
+
+    fwrite(&mesh_id_len, 1,4, f);
+    if (mesh_id_len)
+        fwrite(i->mesh->name, 1,mesh_id_len, f);
+
+    int inst_name_len = i->name ? strlen(i->name) : 0;
+
+    fwrite(&inst_name_len, 1,4, f);
+    if (inst_name_len)
+        fwrite(i->name, 1,inst_name_len, f);
+
+    fwrite(i->tm, 1,16*8, f);
+    fwrite(&i->flags, 1,4, f);
+}
+
+static void SaveQueryBSP(BSP* bsp, FILE* f) 
+{
+    if (bsp->type == BSP::BSP_TYPE_LEAF)
+    {
+        Inst* i = ((BSP_Leaf*)bsp)->head;
+        while (i)
+        {
+            SaveInst(i,f);
+            i=i->next;
+        }
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_INST)
+    {
+        Inst* i = (Inst*)bsp;
+        SaveInst(i,f);
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE)
+    {
+        bsp_nodes++;
+        BSP_Node* n = (BSP_Node*)bsp;
+        if (n->bsp_child[0])
+            SaveQueryBSP(n->bsp_child[0],f);
+        if (n->bsp_child[1])
+            SaveQueryBSP(n->bsp_child[1],f);
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+    {
+        bsp_nodes++;
+        BSP_NodeShare* s = (BSP_NodeShare*)bsp;
+        if (s->bsp_child[0])
+            SaveQueryBSP(s->bsp_child[0],f);
+        if (s->bsp_child[1])
+            SaveQueryBSP(s->bsp_child[1],f);
+        Inst* i = s->head;
+        while (i)
+        {
+            SaveInst(i,f);
+            i=i->next;
+        }                
+    }
+    else
+    {
+        assert(0);
+    }
+}
+
+void SaveWorld(World* w, FILE* f)
+{
+    /*
+    int num_of_instances;
+    {
+        int mesh_id_len;
+        char mesh_id[mesh_id_len];
+        int inst_name_len;
+        char inst_name[inst_name_len];
+        double tm[16];
+        int flags;
+    } [num_of_instances];
+    */
+
+    int num_of_instances = w->insts;
+    fwrite(&num_of_instances,1,4,f);
+
+    // non bsp first
+    Inst* i = w->head_inst;
+    while (i)
+    {
+        SaveInst(i,f);
+        i=i->next;
+    }
+
+    // then bsp ones
+    SaveQueryBSP(w->root,f);
+}
+
+World* LoadWorld(FILE* f)
+{
+    // load instances, 
+    // create empty meshes if mesh-id is used for the first time
+    // all subsequent instances should point to that mesh (share!)
+
+    // after loading, asciiid will reload mesh files from ./obj dir
+    // then it is responsible to match (by id) & use our empty meshes!
+
+    World* w = CreateWorld();
+
+    int num_of_instances = 0;
+    if (1!=fread(&num_of_instances,4,1,f))
+    {
+        DeleteWorld(w);
+        return 0;
+    }
+    
+    for (int i=0; i<num_of_instances; i++)
+    {
+        int mesh_id_len = 0;
+        if (1!=fread(&mesh_id_len, 4,1, f))
+        {
+            DeleteWorld(w);
+            return 0;
+        }
+
+        char mesh_id[256]="";
+        if (mesh_id_len)
+            if (1!=fread(mesh_id, mesh_id_len,1, f))
+            {
+                DeleteWorld(w);
+                return 0;
+            }
+        mesh_id[mesh_id_len] = 0;
+
+        int inst_name_len = 0;
+        if (1!=fread(&inst_name_len, 4,1, f))
+        {
+            DeleteWorld(w);
+            return 0;
+        }
+
+        char inst_name[256]="";
+        if (inst_name_len)
+            if (1!=fread(inst_name, inst_name_len,1, f))
+            {
+                DeleteWorld(w);
+                return 0;
+            }
+        inst_name[inst_name_len] = 0;
+
+        double tm[16] = {0};
+        if (1!=fread(tm, 16*8,1, f))
+        {
+            DeleteWorld(w);
+            return 0;
+        }
+
+        int flags = 0;
+        if (1!=fread(&flags, 4,1, f))
+        {
+            DeleteWorld(w);
+            return 0;
+        }
+
+        // mesh id lookup
+        Mesh* m = w->head_mesh;
+        while (m && strcmp(m->name,mesh_id))
+            m = m->next;
+
+        if (!m)
+            m = w->AddMesh(mesh_id);
+
+        Inst* inst = CreateInst(m,flags,tm,inst_name);
+    }
+
+    return w;
 }

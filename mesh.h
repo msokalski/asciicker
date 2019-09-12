@@ -12,6 +12,8 @@ void RebuildWorld(World* w);
 Mesh* LoadMesh(World* w, const char* path, const char* name = 0);
 void DeleteMesh(Mesh* m);
 
+bool UpdateMesh(Mesh* m, const char* path);
+
 Mesh* GetFirstMesh(World* w);
 Mesh* GetLastMesh(World* w);
 Mesh* GetPrevMesh(Mesh* m);
