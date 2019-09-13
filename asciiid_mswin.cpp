@@ -1379,16 +1379,32 @@ bool a3dGetCurDir(char* dir_path, int size)
 struct A3D_THREAD
 {
 	HANDLE th;
+
+	void* (*entry)(void*);
+	void* arg;
+
+	static DWORD WINAPI wrap(LPVOID p)
+	{
+		A3D_THREAD* t = (A3D_THREAD*)p;
+		t->arg = t->entry(t->arg);
+		return 0;
+	}
 };
 
 A3D_THREAD* a3dCreateThread(void* (*entry)(void*), void* arg)
 {
 	HANDLE th;
-	th = CreateThread(0, 0, entry, arg);
-	if (!th)
-		return 0;
+	DWORD id;
 
 	A3D_THREAD* t = (A3D_THREAD*)malloc(sizeof(A3D_THREAD));
+	t->arg = arg;
+	t->entry = entry;
+	th = CreateThread(0, 0, A3D_THREAD::wrap, arg, 0, &id);
+	if (!th)
+	{
+		free(t);
+		return 0;
+	}
 	t->th = th;
 	return t;
 }
@@ -1397,6 +1413,7 @@ void* a3dWaitForThread(A3D_THREAD* thread)
 {
 	WaitForSingleObject(thread->th,INFINITE);
 	CloseHandle(thread->th);
+	void* ret = thread->arg;
 	free(thread);
 	return ret;
 }
@@ -1415,7 +1432,7 @@ A3D_MUTEX* a3dCreateMutex()
 
 void a3dDeleteMutex(A3D_MUTEX* mutex)
 {
-	DeleteCriticalSection(&m->mu);
+	DeleteCriticalSection(&mutex->mu);
 	free(mutex);
 }
 
@@ -1429,6 +1446,7 @@ void a3dMutexUnlock(A3D_MUTEX* mutex)
 	LeaveCriticalSection(&mutex->mu);
 }
 
+#if 0 
 void a3dSetPtyVT(A3D_PTY* pty, A3D_VT* vt)
 {
 	pty->vt = vt;
@@ -1563,6 +1581,8 @@ void a3dClosePTY(A3D_PTY* pty)
 	pty_poll = 0;
 	*/
 }
+
+#endif
 
 
 #endif // __WIN32__

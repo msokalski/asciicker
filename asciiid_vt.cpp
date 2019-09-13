@@ -1,3 +1,6 @@
+
+#ifndef _WIN32
+
 #include <malloc.h>
 #include <string.h>
 #include <stdio.h>
@@ -4145,3 +4148,5 @@ int a3dDumpVT(A3D_VT* vt, int tw, int th)
 
     return heap_ops + 1;
 }
+
+#endif

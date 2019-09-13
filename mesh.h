@@ -7,7 +7,7 @@ struct Inst;
 
 World* CreateWorld();
 void DeleteWorld(World* w);
-void RebuildWorld(World* w);
+void RebuildWorld(World* w, bool boxes = false);
 
 Mesh* LoadMesh(World* w, const char* path, const char* name = 0);
 void DeleteMesh(Mesh* m);

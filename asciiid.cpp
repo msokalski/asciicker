@@ -22,7 +22,8 @@
 #include "imgui_impl_opengl3.h"
 
 #include "asciiid_platform.h"
-#include "asciiid_term.h"
+
+// #include "asciiid_term.h"
 
 #include "texheap.h"
 #include "terrain.h"
@@ -36,10 +37,13 @@
 
 
 // just for write(fd)
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
-
+#if 0
 A3D_VT* term = 0;
+#endif
 
 #define MOUSE_QUEUE
 
@@ -2574,7 +2578,7 @@ void New()
 
 	// add meshes from library that aren't present in scene file
 	char mesh_dirname[4096];
-	sprintf(mesh_dirname,"%s/meshes",root_path);
+	sprintf(mesh_dirname,"%smeshes",root_path);
 	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 
 	RebuildWorld(world);
@@ -2653,7 +2657,7 @@ void Load(const char* path)
 					char mesh_name[256];
 					GetMeshName(m,mesh_name,256);
 					char obj_path[4096];
-					sprintf(obj_path,"%s/meshes/%s",root_path,mesh_name);
+					sprintf(obj_path,"%smeshes/%s",root_path,mesh_name);
 					if (!UpdateMesh(m,obj_path))
 					{
 						// what now?
@@ -2680,10 +2684,14 @@ void Load(const char* path)
 
 	// add meshes from library that aren't present in scene file
 	char mesh_dirname[4096];
-	sprintf(mesh_dirname,"%s/meshes",root_path);
+	sprintf(mesh_dirname,"%smeshes",root_path);
 	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 
-	RebuildWorld(world);
+	// this is the only case when instances has no valid bboxes yet
+	// as meshes weren't present during their creation
+	// now meshes are loaded ...
+	// so we need to update instance boxes with (,true)
+	RebuildWorld(world, true);
 
 	active_mesh = GetFirstMesh(world);	
 }
@@ -3615,7 +3623,19 @@ void my_render()
 					// 5. post translate by constant xyz + random xyz
 
 					extern int bsp_insts, bsp_nodes, bsp_tests;
-					ImGui::Text("INSTS:%d, NODES:%d, TESTS:%d", bsp_insts, bsp_nodes, bsp_tests);
+					ImGui::Text("INSTS:%d, NODES:%d, TESTS:%d \n ", bsp_insts, bsp_nodes, bsp_tests);
+
+					const char* mode = "";
+
+					if (io.KeyAlt)
+						mode = "ADD/REMOVE TILES";
+					else
+					if (io.KeyCtrl)
+						mode = "DELETE MESH";
+					else
+						mode = "INSERT MESH";
+
+					ImGui::Text("MODE (ctrl): %s", mode);
 
 
 					MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
@@ -4648,103 +4668,144 @@ void my_render()
 				{
 					if (!inst_added || !io.MouseDown[0])
 					{
-						// pretranslate and scale
-						MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
-
-						double ptm[16] = {0};
-						ptm[0] = pow(2.0,mp->scale_val[0] + 2*mp->scale_rnd[0]*((double)fast_rand() / 0x7fff - 0.5) );
-						ptm[5] = pow(2.0,mp->scale_val[1] + 2*mp->scale_rnd[1]*((double)fast_rand() / 0x7fff - 0.5) );
-						ptm[10] = pow(2.0,mp->scale_val[2] + 2*mp->scale_rnd[2]*((double)fast_rand() / 0x7fff - 0.5) );
-						ptm[15] = 1;
-						ptm[12] = 0; //mp->pre_trans[0] * ptm[0];
-						ptm[13] = 0; //mp->pre_trans[1] * ptm[5];
-						ptm[14] = 0; //mp->pre_trans[2] * ptm[10];
-
-						// rot loc Z
-						double ztm[16];
-						double loc_z[3] = {0,0,1};
-						double ang_z = mp->rotate_locZ_val + 360*mp->rotate_locZ_rnd*((double)fast_rand() / 0x7fff - 0.5);
-						Rotation(loc_z, ang_z * M_PI / 180, ztm);
-
-						// rot xy
-						double rot[16]; //rtm[16];
-						double rot_xy[3] =
+						Inst* inst = 0;
+						if (io.KeyCtrl || io.KeyShift)
 						{
-							mp->rotate_XY_val[0]/180.0 + 2*mp->rotate_XY_rnd[0]*((double)fast_rand() / 0x7fff - 0.5),
-							mp->rotate_XY_val[1]/180.0 + 2*mp->rotate_XY_rnd[1]*((double)fast_rand() / 0x7fff - 0.5),
-							0
-						};
+							// HITTEST!
+							// inst = ;
 
-						double ang_xy = sqrt(rot_xy[0]*rot_xy[0] + rot_xy[1]*rot_xy[1]);
-						if (ang_xy != 0)
-						{
-							rot_xy[0] /= ang_xy;
-							rot_xy[1] /= ang_xy;
+							// and set this inst for hover hilight
+							// ...
 						}
 
-						if (ang_xy>1)
-							ang_xy = 1; 
-
-						Rotation(rot_xy, ang_xy * M_PI, rot/*rtm*/);
-
-						// last thing, align with terrain normal!
-						double up[4]={0,0,1,0};
-						double dir[4];
-						Product(rot,/*rtm,*/up,dir);
-
-						// alignment rot axis
-						double align_axis[3];
-						CrossProduct(dir,hit_nrm,align_axis);
-
-						// alignment angle
-						double align_len = sqrt( align_axis[0]*align_axis[0] + align_axis[1]*align_axis[1] + align_axis[2]*align_axis[2]);
-						double align_ang = asin( align_len );
-
-						if (align_len > 0)
+						if (io.KeyShift)
 						{
-							align_axis[0] /= align_len; 
-							align_axis[1] /= align_len;
-							align_axis[2] /= align_len;
-						}
+							// pick, works also with CTRL (delete)
+							inst_preview = 0;
 
-						double atm[16];
-						Rotation(align_axis,align_ang * mp->rotate_align,atm);
+							if (inst && !inst_added && io.MouseDown[0])
+							{
+								// set it as current mesh
+								// ...
 
-						double rtm[16];
-						MatProduct(atm,rot,rtm);
-
-						double itm[16] = {0};
-
-						// post-scale and translate
-						itm[0] = 1;
-						itm[5] = 1;
-						itm[10] = HEIGHT_SCALE;
-						itm[15] = 1;
-
-						itm[12] = hit[0];
-						itm[13] = hit[1];
-						itm[14] = hit[2];
-
-						double tm1[16];
-						double tm2[16];
-
-						// inst_tm = itm * rtm * ztm * ptm
-						MatProduct(itm,rtm,tm1);
-						MatProduct(ztm,ptm,tm2);
-						MatProduct(tm1,tm2,inst_tm);
-
-						if (!inst_added && io.MouseDown[0])
-						{
-							int flags = INST_USE_TREE | INST_VISIBLE;
-							Inst* inst = CreateInst(active_mesh, flags, inst_tm, 0);
-
-							inst_added = true;
-							RebuildWorld(world);
+								inst_added = true;
+							}
 						}
 						else
+						if (!io.KeyCtrl)
 						{
-							// we'll need to paint active_mesh with inst_tm
-							inst_preview = active_mesh;
+							// pretranslate and scale
+							MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
+
+							double ptm[16] = { 0 };
+							ptm[0] = pow(2.0, mp->scale_val[0] + 2 * mp->scale_rnd[0] * ((double)fast_rand() / 0x7fff - 0.5));
+							ptm[5] = pow(2.0, mp->scale_val[1] + 2 * mp->scale_rnd[1] * ((double)fast_rand() / 0x7fff - 0.5));
+							ptm[10] = pow(2.0, mp->scale_val[2] + 2 * mp->scale_rnd[2] * ((double)fast_rand() / 0x7fff - 0.5));
+							ptm[15] = 1;
+							ptm[12] = 0; //mp->pre_trans[0] * ptm[0];
+							ptm[13] = 0; //mp->pre_trans[1] * ptm[5];
+							ptm[14] = 0; //mp->pre_trans[2] * ptm[10];
+
+							// rot loc Z
+							double ztm[16];
+							double loc_z[3] = { 0,0,1 };
+							double ang_z = mp->rotate_locZ_val + 360 * mp->rotate_locZ_rnd*((double)fast_rand() / 0x7fff - 0.5);
+							Rotation(loc_z, ang_z * M_PI / 180, ztm);
+
+							// rot xy
+							double rot[16]; //rtm[16];
+							double rot_xy[3] =
+							{
+								mp->rotate_XY_val[0] / 180.0 + 2 * mp->rotate_XY_rnd[0] * ((double)fast_rand() / 0x7fff - 0.5),
+								mp->rotate_XY_val[1] / 180.0 + 2 * mp->rotate_XY_rnd[1] * ((double)fast_rand() / 0x7fff - 0.5),
+								0
+							};
+
+							double ang_xy = sqrt(rot_xy[0] * rot_xy[0] + rot_xy[1] * rot_xy[1]);
+							if (ang_xy != 0)
+							{
+								rot_xy[0] /= ang_xy;
+								rot_xy[1] /= ang_xy;
+							}
+
+							if (ang_xy > 1)
+								ang_xy = 1;
+
+							Rotation(rot_xy, ang_xy * M_PI, rot/*rtm*/);
+
+							// last thing, align with terrain normal!
+							double up[4] = { 0,0,1,0 };
+							double dir[4];
+							Product(rot,/*rtm,*/up, dir);
+
+							// alignment rot axis
+							double align_axis[3];
+							CrossProduct(dir, hit_nrm, align_axis);
+
+							// alignment angle
+							double align_len = sqrt(align_axis[0] * align_axis[0] + align_axis[1] * align_axis[1] + align_axis[2] * align_axis[2]);
+							double align_ang = asin(align_len);
+
+							if (align_len > 0)
+							{
+								align_axis[0] /= align_len;
+								align_axis[1] /= align_len;
+								align_axis[2] /= align_len;
+							}
+
+							double atm[16];
+							Rotation(align_axis, align_ang * mp->rotate_align, atm);
+
+							double rtm[16];
+							MatProduct(atm, rot, rtm);
+
+							double itm[16] = { 0 };
+
+							// post-scale and translate
+							itm[0] = 1;
+							itm[5] = 1;
+							itm[10] = HEIGHT_SCALE;
+							itm[15] = 1;
+
+							itm[12] = hit[0];
+							itm[13] = hit[1];
+							itm[14] = hit[2];
+
+							double tm1[16];
+							double tm2[16];
+
+							// inst_tm = itm * rtm * ztm * ptm
+							MatProduct(itm, rtm, tm1);
+							MatProduct(ztm, ptm, tm2);
+							MatProduct(tm1, tm2, inst_tm);
+
+							if (!inst_added && io.MouseDown[0])
+							{
+								int flags = INST_USE_TREE | INST_VISIBLE;
+								inst = CreateInst(active_mesh, flags, inst_tm, 0);
+
+								inst_added = true;
+								RebuildWorld(world);
+							}
+							else
+							{
+								// we'll need to paint active_mesh with inst_tm
+								inst_preview = active_mesh;
+							}
+						}
+						
+						if (io.KeyCtrl)
+						{
+							inst_preview = 0;
+
+							if (inst)
+							{
+								if (inst_added && io.MouseDown[0])
+								{
+									// delete this inst (clear hilight too)
+									inst_added = true;
+								}
+							}
 						}
 					}
 				}
@@ -4887,11 +4948,12 @@ void my_render()
 	rc->EndMeshes();
 
 
-/*
+	// bsp hierarchy boxes
+	/*
 	rc->BeginBSP(tm);
 	QueryWorldBSP(world, planes, clip_world, RenderContext::RenderBSP, rc);
 	rc->EndBSP();
-*/
+	*/
 
 	// overlay patch creation
 	// slihouette of newly created patch 
@@ -4910,6 +4972,7 @@ void my_render()
 	
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+	#if 0
 	if (term)
 	{
 		// bind active font tex
@@ -4950,6 +5013,7 @@ void my_render()
 			glDisable(GL_SCISSOR_TEST);
 		}
 	}
+	#endif
 
 	a3dSwapBuffers();
 }
@@ -5049,6 +5113,7 @@ void my_resize(int w, int h)
 
 void my_init()
 {
+	#if 0
 	int term_w = 90;
 	int term_h = 35;
 
@@ -5110,13 +5175,16 @@ void my_init()
 	term = a3dCreateVT(term_w,term_h, args[0], (char**)args, 0/*envp*/);
 
 	// free(envp);
+	#endif
 
 	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
 	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
 	printf("VERSION:  %s\n",glGetString(GL_VERSION));
 	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
+	#if 0
 	SetScreen(true);
+	#endif
 
 	world = CreateWorld();
 
@@ -5259,7 +5327,8 @@ void my_init()
 	a3dSetIcon("./icons/app.png");
 	a3dSetVisible(true);
 
-	int rect[] = {1920*2,0, 1920,1080};
+	//int rect[] = { 1920 * 2, 0, 1920,1080 };
+	int rect[] = { 1920, 0, 1920,1080 };
 	a3dSetRect(rect, A3D_WND_NORMAL);
 }
 
@@ -5268,6 +5337,7 @@ void my_keyb_char(wchar_t chr)
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddInputCharacter((unsigned short)chr);
 
+	#if 0
 	if (!term)
 		return;
 
@@ -5318,6 +5388,7 @@ void my_keyb_char(wchar_t chr)
 		};
 		a3dWriteVT(term, cccc,4);
 	}
+	#endif
 }
 
 void my_keyb_key(KeyInfo ki, bool down)
@@ -5331,6 +5402,7 @@ void my_keyb_key(KeyInfo ki, bool down)
 	io.KeyCtrl = a3dGetKeyb(A3D_LCTRL) || a3dGetKeyb(A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(A3D_LSHIFT) || a3dGetKeyb(A3D_RSHIFT);
 
+	#if 0
 	bool DECCKM = a3dGetVTCursorsMode(term);
 
 	if (term && down)
@@ -5483,6 +5555,8 @@ void my_keyb_key(KeyInfo ki, bool down)
 		if (esc)
 			a3dWriteVT(term,esc,strlen(esc));
 	}
+
+	#endif
 }
 
 void my_keyb_focus(bool set)
@@ -5522,8 +5596,10 @@ void my_close()
 		ipal = 0;
 	}
 
+	#if 0
 	if (term)
 		a3dDestroyVT(term);
+	#endif
 
 	a3dClose();
 
@@ -5532,7 +5608,9 @@ void my_close()
 
 	render_context.Delete();
 
+	#if 0
 	SetScreen(false);
+	#endif
 }
 
 /*

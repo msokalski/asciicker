@@ -28,6 +28,7 @@ struct Vert
     // regardless of mesh type (2d/3d)
     // we keep z (makes it easier to switch mesh types back and forth)
 	float xyzw[4];
+	float rgb[3];
 
     bool sel;
 };
@@ -152,6 +153,36 @@ struct Inst : BSP
 
     int /*FLAGS*/ flags; 
     char* name;
+
+	void UpdateBox()
+	{
+		float w[4];
+		Vert* v = mesh->head_vert;
+
+		if (v)
+		{
+			Product(tm, v->xyzw, w);
+			bbox[0] = w[0];
+			bbox[1] = w[0];
+			bbox[2] = w[1];
+			bbox[3] = w[1];
+			bbox[4] = w[2];
+			bbox[5] = w[2];
+			v = v->next;
+		}
+
+		while (v)
+		{
+			Product(tm, v->xyzw, w);
+			bbox[0] = fminf(bbox[0], w[0]);
+			bbox[1] = fmaxf(bbox[1], w[0]);
+			bbox[2] = fminf(bbox[2], w[1]);
+			bbox[3] = fmaxf(bbox[3], w[1]);
+			bbox[4] = fminf(bbox[4], w[2]);
+			bbox[5] = fmaxf(bbox[5], w[2]);
+			v = v->next;
+		}
+	}
 };
 
 int bsp_tests=0;
@@ -271,51 +302,27 @@ struct World
 
         Inst* i = (Inst*)malloc(sizeof(Inst));
 
-        if (tm)
-        {
-            memcpy(i->tm,tm,sizeof(double[16]));
-			
-			float w[4];
-			Vert* v = m->head_vert;
-			
-			if (v)
-			{
-				Product(tm, v->xyzw, w);
-				i->bbox[0] = w[0];
-				i->bbox[1] = w[0];
-				i->bbox[2] = w[1];
-				i->bbox[3] = w[1];
-				i->bbox[4] = w[2];
-				i->bbox[5] = w[2];
-			}
+		if (tm)
+		{
+			memcpy(i->tm, tm, sizeof(double[16]));
+		}
+		else
+		{
+			memset(i->tm, 0, sizeof(double[16]));
+			i->tm[0] = i->tm[5] = i->tm[10] = i->tm[15] = 1.0;
+			i->bbox[0] = m->bbox[0];
+			i->bbox[1] = m->bbox[1];
+			i->bbox[2] = m->bbox[2];
+			i->bbox[3] = m->bbox[3];
+			i->bbox[4] = m->bbox[4];
+			i->bbox[5] = m->bbox[5];
+		}
 
-			while (v)
-			{
-				Product(tm, v->xyzw, w);
-				i->bbox[0] = fminf(i->bbox[0], w[0]);
-				i->bbox[1] = fmaxf(i->bbox[1], w[0]);
-				i->bbox[2] = fminf(i->bbox[2], w[1]);
-				i->bbox[3] = fmaxf(i->bbox[3], w[1]);
-				i->bbox[4] = fminf(i->bbox[4], w[2]);
-				i->bbox[5] = fmaxf(i->bbox[5], w[2]);
-				v = v->next;
-            }
-        }
-        else
-        {
-            memset(i->tm,0,sizeof(double[16]));
-            i->tm[0] = i->tm[5] = i->tm[10] = i->tm[15] = 1.0;
-            i->bbox[0] = m->bbox[0];
-            i->bbox[1] = m->bbox[1];
-            i->bbox[2] = m->bbox[2];
-            i->bbox[3] = m->bbox[3];
-            i->bbox[4] = m->bbox[4];
-            i->bbox[5] = m->bbox[5];
-        }
-        
         i->name = name ? strdup(name) : 0;
 
         i->mesh = m;
+
+		i->UpdateBox();
 
         i->type = BSP::BSP_TYPE_INST;
         i->flags = flags;
@@ -803,7 +810,7 @@ struct World
         }
     }
 
-	void Rebuild()
+	void Rebuild(bool boxes)
 	{
 		if (root)
 		{
@@ -907,6 +914,12 @@ struct World
         int count = 0;
         for (Inst* inst = head_inst; inst; )
         {
+			// update inst bbox
+			if (boxes)
+			{
+				inst->UpdateBox();
+			}
+
             Inst* next = inst->next;
             if (inst->flags & INST_USE_TREE)
             {
@@ -951,20 +964,276 @@ struct World
         }
     }
 
+	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3])
+	{
+		/*
+		int qlo = q->lo;
+		int qhi = q->hi;
+
+		if (ray[1] - qlo * ray[3] + ray[5] * (x + range) > 0 ||
+			ray[5] * (y + range) - ray[0] - qlo * ray[4] > 0 ||
+			ray[2] - ray[4] * x + ray[3] * (y + range) > 0 ||
+			qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
+			ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
+			ray[4] * (x + range) - ray[3] * y - ray[2] > 0)
+			return 0;
+
+		if (range == VISUAL_CELLS)
+		{
+			Patch* p = (Patch*)q;
+			if (HitPatch(p, x, y, ray, ret, nrm))
+				return p;
+			else
+				return 0;
+		}
+
+		// recurse
+		range >>= 1;
+		Node* n = (Node*)q;
+		Patch* p = 0;
+		if (n->quad[0])
+		{
+			Patch* h = HitTerrain0(n->quad[0], x, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[1])
+		{
+			Patch* h = HitTerrain0(n->quad[1], x + range, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[2])
+		{
+			Patch* h = HitTerrain0(n->quad[2], x, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[3])
+		{
+			Patch* h = HitTerrain0(n->quad[3], x + range, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+
+		return p;
+		*/
+
+		return 0;
+	}
+
+	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3])
+	{
+		/*
+		int qlo = q->lo;
+		int qhi = q->hi;
+
+		if (ray[5] * (y + range) - ray[0] - qlo * ray[4] > 0 ||
+			qlo * ray[3] - ray[5] * x - ray[1] > 0 ||
+			ray[2] - ray[4] * x + ray[3] * y > 0 ||
+			ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
+			ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
+			ray[4] * (x + range) - ray[3] * (y + range) - ray[2] > 0)
+			return 0;
+
+		if (range == VISUAL_CELLS)
+		{
+			Patch* p = (Patch*)q;
+			if (HitPatch(p, x, y, ray, ret, nrm))
+				return p;
+			else
+				return 0;
+		}
+
+		// recurse
+		range >>= 1;
+		Node* n = (Node*)q;
+		Patch* p = 0;
+		if (n->quad[0])
+		{
+			Patch* h = HitTerrain1(n->quad[0], x, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[1])
+		{
+			Patch* h = HitTerrain1(n->quad[1], x + range, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[2])
+		{
+			Patch* h = HitTerrain1(n->quad[2], x, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[3])
+		{
+			Patch* h = HitTerrain1(n->quad[3], x + range, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+
+		return p;
+		*/
+
+		return 0;
+	}
+
+	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3])
+	{
+		/*
+		int qlo = q->lo;
+		int qhi = q->hi;
+
+		if (ray[0] + qlo * ray[4] - ray[5] * y > 0 ||
+			ray[1] - qlo * ray[3] + ray[5] * (x + range) > 0 ||
+			ray[2] + ray[3] * (y + range) - ray[4] * (x + range) > 0 ||
+			ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
+			qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
+			ray[4] * x - ray[3] * y - ray[2] > 0)
+			return 0;
+
+		if (range == VISUAL_CELLS)
+		{
+			Patch* p = (Patch*)q;
+			if (HitPatch(p, x, y, ray, ret, nrm))
+				return p;
+			else
+				return 0;
+		}
+
+		// recurse
+		range >>= 1;
+		Node* n = (Node*)q;
+		Patch* p = 0;
+		if (n->quad[0])
+		{
+			Patch* h = HitTerrain2(n->quad[0], x, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[1])
+		{
+			Patch* h = HitTerrain2(n->quad[1], x + range, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[2])
+		{
+			Patch* h = HitTerrain2(n->quad[2], x, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[3])
+		{
+			Patch* h = HitTerrain2(n->quad[3], x + range, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+
+		return p;
+		*/
+
+		return 0;
+	}
+
+	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3])
+	{
+		/*
+		int qlo = q->lo;
+		int qhi = q->hi;
+
+		if (qlo * ray[3] - ray[5] * x - ray[1] > 0 ||
+			ray[0] + qlo * ray[4] - ray[5] * y > 0 ||
+			ray[2] - ray[4] * (x + range) + ray[3] * y > 0 ||
+			ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
+			ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
+			ray[4] * x - ray[3] * (y + range) - ray[2] > 0)
+			return 0;
+
+		if (range == VISUAL_CELLS)
+		{
+			Patch* p = (Patch*)q;
+			if (HitPatch(p, x, y, ray, ret, nrm))
+				return p;
+			else
+				return 0;
+		}
+
+		// recurse
+		range >>= 1;
+		Node* n = (Node*)q;
+		Patch* p = 0;
+		if (n->quad[0])
+		{
+			Patch* h = HitTerrain3(n->quad[0], x, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[1])
+		{
+			Patch* h = HitTerrain3(n->quad[1], x + range, y, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[2])
+		{
+			Patch* h = HitTerrain3(n->quad[2], x, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+		if (n->quad[3])
+		{
+			Patch* h = HitTerrain3(n->quad[3], x + range, y + range, range, ray, ret, nrm);
+			if (h)
+				p = h;
+		}
+
+		return p;
+		*/
+
+		return 0;
+	}
+
     // RAY HIT using plucker
-    bool Query(double p[3], double v[3])
+    Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3])
     {
-        // hit->abc_z[3] MUST be preinitialized to FAREST z
+		// p should be projected to the BOTTOM plane!
+		double ray[] =
+		{
+			p[1] * v[2] - p[2] * v[1],
+			p[2] * v[0] - p[0] * v[2],
+			p[0] * v[1] - p[1] * v[0],
+			v[0], v[1], v[2],
+			p[0], p[1], p[2] // used by triangle-ray intersection
+		};
 
-        // 1. find closest to eye intersecting face
-        // 2. closest vertex -> max(a,b,c)
-        // 3. closest edge -> min(a,b,c)
+		int sign_case = 0;
 
-        // what about isolated verts?
-        // they should form their own list
-        // and we can find one closest to ray in 3d
+		if (v[0] >= 0)
+			sign_case |= 1;
+		if (v[1] >= 0)
+			sign_case |= 2;
+		if (v[2] >= 0)
+			sign_case |= 4;
 
-        return false;
+		assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
+
+		static Inst* (*const func_vect[])(BSP* q, double ray[6], double ret[3], double nrm[3]) =
+		{
+			HitWorld0,
+			HitWorld1,
+			HitWorld2,
+			HitWorld3
+		};
+
+		ret[0] = p[0];
+		ret[1] = p[1];
+		ret[2] = p[2];
+
+		Inst* inst = func_vect[sign_case](root, ray, ret, nrm);
+		return inst;
     }
 
     static void QueryBSP(int level, BSP* bsp, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie)
@@ -1266,7 +1535,7 @@ bool Mesh::Update(const char* path)
 
     Mesh* m = this;
 
-    int plannar = 0x7;
+    int plannar = 0x7 | 0x8;
 
     char buf[1024];
 
@@ -1287,40 +1556,76 @@ bool Mesh::Update(const char* path)
             continue;
 
         p += 2;
-        // expect 2-4 floats, ignore 4th if present
-        float xyzw[4];
-        int coords = sscanf(p,"%f %f %f %f", xyzw+0, xyzw+1, xyzw+2, xyzw+3);
-        if (coords<2)
-            continue;
 
-        if (coords<3)
-            xyzw[2] = 0.0f;
-        if (coords<4)
-            xyzw[3] = 1.0f;
+		float xyzw[4];
+		float rgb[4];
+
+		// expect 6-7 floats 
+		// xyz rgb
+		// xyzw rgb
+		int coords = sscanf(p, "%f %f %f %f %f %f %f", xyzw + 0, xyzw + 1, xyzw + 2, xyzw + 3, rgb+0, rgb+1, rgb+2);
+		if (coords < 2)
+			continue;
+
+		if (coords < 3)
+		{
+			xyzw[2] = 0.0f;
+			xyzw[3] = 1.0f;
+			rgb[0] = rgb[1] = rgb[2] = 1.0f;
+		}
+		else
+		if (coords < 4)
+		{
+			xyzw[3] = 1.0f;
+			rgb[0] = rgb[1] = rgb[2] = 1.0f;
+		}
+		else
+		if (coords < 6)
+			rgb[0] = rgb[1] = rgb[2] = 1.0f;
+		else
+		if (coords < 7)
+		{
+			rgb[2] = rgb[1];
+			rgb[1] = rgb[0];
+			rgb[0] = xyzw[3];
+			xyzw[3] = 1.0f;
+		}
 
         Vert* v = (Vert*)malloc(sizeof(Vert));
         v->xyzw[0] = xyzw[0];
         v->xyzw[1] = xyzw[1];
         v->xyzw[2] = xyzw[2];
         v->xyzw[3] = xyzw[3];
+		v->rgb[0] = rgb[0];
+		v->rgb[1] = rgb[1];
+		v->rgb[2] = rgb[2];
 
         if (m->verts && plannar)
         {
             if (plannar&1)
             {
                 if (v->xyzw[0] != m->head_vert->xyzw[0])
-                    plannar&=~1;
+                    plannar &= ~1;
             }
             if (plannar&2)
             {
                 if (v->xyzw[1] != m->head_vert->xyzw[1])
-                    plannar&=~2;
+                    plannar &= ~2;
             }
             if (plannar&4)
             {
                 if (v->xyzw[2] != m->head_vert->xyzw[2])
-                    plannar&=~4;
+                    plannar &= ~4;
             }
+			if (plannar & 8)
+			{
+				if (v->rgb[0] != m->head_vert->rgb[0] ||
+					v->rgb[1] != m->head_vert->rgb[1] ||
+					v->rgb[2] != m->head_vert->rgb[2])
+				{
+					plannar &= ~8;
+				}
+			}
         }
 
         v->mesh = m;
@@ -1569,7 +1874,7 @@ Mesh* LoadMesh(World* w, const char* path, const char* name)
 
 bool UpdateMesh(Mesh* m, const char* path)
 {
-    m->Update(path);
+    return m->Update(path);
 }
 
 void DeleteMesh(Mesh* m)
@@ -1707,21 +2012,21 @@ void  SetMeshCookie(Mesh* m, void* cookie)
         m->cookie = cookie;
 }
 
-void RebuildWorld(World* w)
+void RebuildWorld(World* w, bool boxes)
 {
     if (w)
-        w->Rebuild();
+        w->Rebuild(boxes);
 }
 
 static void SaveInst(Inst* i, FILE* f)
 {
-    int mesh_id_len = i->mesh && i->mesh->name ? strlen(i->mesh->name) : 0;
+    int mesh_id_len = i->mesh && i->mesh->name ? (int)strlen(i->mesh->name) : 0;
 
     fwrite(&mesh_id_len, 1,4, f);
     if (mesh_id_len)
         fwrite(i->mesh->name, 1,mesh_id_len, f);
 
-    int inst_name_len = i->name ? strlen(i->name) : 0;
+    int inst_name_len = i->name ? (int)strlen(i->name) : 0;
 
     fwrite(&inst_name_len, 1,4, f);
     if (inst_name_len)
