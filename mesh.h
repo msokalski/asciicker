@@ -39,6 +39,8 @@ enum INST_FLAGS
 void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie);
 void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie);
 
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3]);
+
 void SaveWorld(World* w, FILE* f);
 World* LoadWorld(FILE* f);
 

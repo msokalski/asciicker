@@ -183,6 +183,37 @@ struct Inst : BSP
 			v = v->next;
 		}
 	}
+
+    bool HitFace(double ray[6], double ret[3], double nrm[3])
+    {
+        if (!mesh)
+            return false;
+
+        bool flag = false;
+
+        Face* f = mesh->head_face; 
+        while (f)
+        {
+            double v0[4], v1[4], v2[4];
+            Product(tm,f->abc[0]->xyzw,v0);
+            Product(tm,f->abc[1]->xyzw,v1);
+            Product(tm,f->abc[2]->xyzw,v2);
+
+            double hit[3];
+            if (RayIntersectsTriangle(ray,v0,v1,v2,hit))
+            {
+                if (hit[2] > ret[2])
+                {
+                    // calc normal -> nrm
+                    flag = true;
+                }
+            }
+
+            f=f->next;
+        }
+
+        return flag;
+    }
 };
 
 int bsp_tests=0;
@@ -966,232 +997,272 @@ struct World
 
 	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-		/*
-		int qlo = q->lo;
-		int qhi = q->hi;
+        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
+        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
+        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
 
-		if (ray[1] - qlo * ray[3] + ray[5] * (x + range) > 0 ||
-			ray[5] * (y + range) - ray[0] - qlo * ray[4] > 0 ||
-			ray[2] - ray[4] * x + ray[3] * (y + range) > 0 ||
-			qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
-			ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
-			ray[4] * (x + range) - ray[3] * y - ray[2] > 0)
+		if (ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
+			ray[5] * y[1] - ray[0] - z[0] * ray[4] > 0 ||
+			ray[2] - ray[4] * x[0] + ray[3] * y[1] > 0 ||
+			z[1] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
+			ray[0] + z[1] * ray[4] - ray[5] * y[0] > 0 ||
+			ray[4] * x[1] - ray[3] * y[0] - ray[2] > 0)
 			return 0;
 
-		if (range == VISUAL_CELLS)
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
-			Patch* p = (Patch*)q;
-			if (HitPatch(p, x, y, ray, ret, nrm))
-				return p;
+			Inst* inst = (Inst*)q;
+			if (inst->HitFace(ray, ret, nrm))
+				return inst;
 			else
 				return 0;
 		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-		// recurse
-		range >>= 1;
-		Node* n = (Node*)q;
-		Patch* p = 0;
-		if (n->quad[0])
-		{
-			Patch* h = HitTerrain0(n->quad[0], x, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[1])
-		{
-			Patch* h = HitTerrain0(n->quad[1], x + range, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[2])
-		{
-			Patch* h = HitTerrain0(n->quad[2], x, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[3])
-		{
-			Patch* h = HitTerrain0(n->quad[3], x + range, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
+            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
 
-		return p;
-		*/
+            j = s->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
 
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
+        
 		return 0;
 	}
 
 	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-		/*
-		int qlo = q->lo;
-		int qhi = q->hi;
+        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
+        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
+        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
 
-		if (ray[5] * (y + range) - ray[0] - qlo * ray[4] > 0 ||
-			qlo * ray[3] - ray[5] * x - ray[1] > 0 ||
-			ray[2] - ray[4] * x + ray[3] * y > 0 ||
-			ray[0] + qhi * ray[4] - ray[5] * y > 0 ||
-			ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
-			ray[4] * (x + range) - ray[3] * (y + range) - ray[2] > 0)
+		if (ray[5] * y[1] - ray[0] - z[0] * ray[4] > 0 ||
+			z[0] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
+			ray[2] - ray[4] * x[0] + ray[3] * y[0] > 0 ||
+			ray[0] + z[1] * ray[4] - ray[5] * y[0] > 0 ||
+			ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
+			ray[4] * x[1] - ray[3] * y[1] - ray[2] > 0)
 			return 0;
 
-		if (range == VISUAL_CELLS)
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
-			Patch* p = (Patch*)q;
-			if (HitPatch(p, x, y, ray, ret, nrm))
-				return p;
+			Inst* inst = (Inst*)q;
+			if (inst->HitFace(ray, ret, nrm))
+				return inst;
 			else
 				return 0;
 		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-		// recurse
-		range >>= 1;
-		Node* n = (Node*)q;
-		Patch* p = 0;
-		if (n->quad[0])
-		{
-			Patch* h = HitTerrain1(n->quad[0], x, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[1])
-		{
-			Patch* h = HitTerrain1(n->quad[1], x + range, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[2])
-		{
-			Patch* h = HitTerrain1(n->quad[2], x, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[3])
-		{
-			Patch* h = HitTerrain1(n->quad[3], x + range, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
+            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
 
-		return p;
-		*/
+            j = s->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
+
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
 
 		return 0;
 	}
 
 	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-		/*
-		int qlo = q->lo;
-		int qhi = q->hi;
+        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
+        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
+        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
 
-		if (ray[0] + qlo * ray[4] - ray[5] * y > 0 ||
-			ray[1] - qlo * ray[3] + ray[5] * (x + range) > 0 ||
-			ray[2] + ray[3] * (y + range) - ray[4] * (x + range) > 0 ||
-			ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
-			qhi * ray[3] - ray[5] * x - ray[1] > 0 ||
-			ray[4] * x - ray[3] * y - ray[2] > 0)
+		if (ray[0] + z[0] * ray[4] - ray[5] * y[0] > 0 ||
+			ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
+			ray[2] + ray[3] * y[1] - ray[4] * x[1] > 0 ||
+			ray[5] * y[1] - ray[0] - z[1] * ray[4] > 0 ||
+			z[1] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
+			ray[4] * x[0] - ray[3] * y[0] - ray[2] > 0)
 			return 0;
 
-		if (range == VISUAL_CELLS)
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
-			Patch* p = (Patch*)q;
-			if (HitPatch(p, x, y, ray, ret, nrm))
-				return p;
+			Inst* inst = (Inst*)q;
+			if (inst->HitFace(ray, ret, nrm))
+				return inst;
 			else
 				return 0;
 		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-		// recurse
-		range >>= 1;
-		Node* n = (Node*)q;
-		Patch* p = 0;
-		if (n->quad[0])
-		{
-			Patch* h = HitTerrain2(n->quad[0], x, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[1])
-		{
-			Patch* h = HitTerrain2(n->quad[1], x + range, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[2])
-		{
-			Patch* h = HitTerrain2(n->quad[2], x, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[3])
-		{
-			Patch* h = HitTerrain2(n->quad[3], x + range, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
+            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
 
-		return p;
-		*/
+            j = s->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
+
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
 
 		return 0;
 	}
 
 	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-		/*
-		int qlo = q->lo;
-		int qhi = q->hi;
+        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
+        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
+        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
 
-		if (qlo * ray[3] - ray[5] * x - ray[1] > 0 ||
-			ray[0] + qlo * ray[4] - ray[5] * y > 0 ||
-			ray[2] - ray[4] * (x + range) + ray[3] * y > 0 ||
-			ray[1] - qhi * ray[3] + ray[5] * (x + range) > 0 ||
-			ray[5] * (y + range) - ray[0] - qhi * ray[4] > 0 ||
-			ray[4] * x - ray[3] * (y + range) - ray[2] > 0)
+		if (z[0] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
+			ray[0] + z[0] * ray[4] - ray[5] * y[0] > 0 ||
+			ray[2] - ray[4] * x[1] + ray[3] * y[0] > 0 ||
+			ray[1] - z[1] * ray[3] + ray[5] * x[1] > 0 ||
+			ray[5] * y[1] - ray[0] - z[1] * ray[4] > 0 ||
+			ray[4] * x[0] - ray[3] * y[1] - ray[2] > 0)
 			return 0;
 
-		if (range == VISUAL_CELLS)
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
-			Patch* p = (Patch*)q;
-			if (HitPatch(p, x, y, ray, ret, nrm))
-				return p;
+			Inst* inst = (Inst*)q;
+			if (inst->HitFace(ray, ret, nrm))
+				return inst;
 			else
 				return 0;
 		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-		// recurse
-		range >>= 1;
-		Node* n = (Node*)q;
-		Patch* p = 0;
-		if (n->quad[0])
-		{
-			Patch* h = HitTerrain3(n->quad[0], x, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[1])
-		{
-			Patch* h = HitTerrain3(n->quad[1], x + range, y, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[2])
-		{
-			Patch* h = HitTerrain3(n->quad[2], x, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
-		if (n->quad[3])
-		{
-			Patch* h = HitTerrain3(n->quad[3], x + range, y + range, range, ray, ret, nrm);
-			if (h)
-				p = h;
-		}
+            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm);
+            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm);
+            i = j ? j : i;
 
-		return p;
-		*/
+            j = s->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
+
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+                if (j->HitFace(ray, ret, nrm))
+                    i=j;
+                j=j->next;
+            }
+            return i;
+        }
 
 		return 0;
 	}
@@ -2192,4 +2263,10 @@ World* LoadWorld(FILE* f)
     }
 
     return w;
+}
+
+
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3])
+{
+    return w->HitWorld(p,v,ret,nrm);
 }

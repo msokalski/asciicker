@@ -232,3 +232,64 @@ inline void CrossProduct(const V a[3], const V b[3], V ab[3])
 	ab[2] = a[0] * b[1] - a[1] * b[0];
 }
 
+inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], double v2[3], double ret[3])
+{
+	const double EPSILON = 0.0000001;
+
+	double edge1[3] = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] };
+	double edge2[3] = { v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2] };
+
+	double h[3] = // rayVector.crossProduct(edge2);
+	{
+		ray[4] * edge2[2] - ray[5] * edge2[1],
+		ray[5] * edge2[0] - ray[3] * edge2[2],
+		ray[3] * edge2[1] - ray[4] * edge2[0]
+	};
+	
+	double a = // edge1.dotProduct(h);
+		edge1[0] * h[0] + edge1[1] * h[1] + edge1[2] * h[2];
+
+	if (a > -EPSILON && a < EPSILON)
+		return false;    // This ray is parallel to this vangle.
+
+	double f = 1.0 / a;
+	double s[3] = // rayOrigin - vertex0;
+	{
+		ray[6] - v0[0],
+		ray[7] - v0[1],
+		ray[8] - v0[2],
+	};
+
+	double u = // f * (s.dotProduct(h));
+		f * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
+
+	if (u < 0.0 || u > 1.0)
+		return false;
+
+	double q[3] = //s.crossProduct(edge1);
+	{
+		s[1] * edge1[2] - s[2] * edge1[1],
+		s[2] * edge1[0] - s[0] * edge1[2],
+		s[0] * edge1[1] - s[1] * edge1[0]
+	};
+
+	double v = // f * rayVector.dotProduct(q);
+		f * (ray[3] * q[0] + ray[4] * q[1] + ray[5] * q[2]);
+
+	if (v < 0.0 || u + v > 1.0)
+		return false;
+
+	// At this stage we can compute t to find out where the intersection point is on the line.
+
+	double t = //f * edge2.dotProduct(q);
+		f * (edge2[0] * q[0] + edge2[1] * q[1] + edge2[2] * q[2]);
+
+	// POSITIVE DIR OF RAY ONLY?
+	// if (t < EPSILON)
+	//	  return false;
+
+	ret[0] = ray[6] + ray[3] * t;
+	ret[1] = ray[7] + ray[4] * t;
+	ret[2] = ray[8] + ray[5] * t;
+	return true;
+}

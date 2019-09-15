@@ -4672,7 +4672,12 @@ void my_render()
 						if (io.KeyCtrl || io.KeyShift)
 						{
 							// HITTEST!
-							// inst = ;
+							inst = HitWorld(world, ray_p, ray_v, hit, hit_nrm);
+
+							if (inst)
+								printf("HIT !!!\n");
+							else
+								printf("miss\n");
 
 							// and set this inst for hover hilight
 							// ...
@@ -4803,6 +4808,7 @@ void my_render()
 								if (inst_added && io.MouseDown[0])
 								{
 									// delete this inst (clear hilight too)
+									//DeleteInst();
 									inst_added = true;
 								}
 							}
