@@ -586,6 +586,9 @@ struct RenderContext
 				uniform sampler3D p_tex;
 				uniform vec4 lt;
 
+				uniform vec4 lt_dif_clr;
+				uniform vec4 lt_amb_clr;
+
 				layout(location = 0) out vec4 color;
 
 				flat in vec3 nrm;
@@ -605,7 +608,8 @@ struct RenderContext
 					vec3 light_pos = normalize(lt.xyz);
 					float light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(light_pos, normalize(nrm)));
 
-					color.rgb *= light;
+					color.rgb *= light * lt_dif_clr.rgb;
+					color.rgb += lt_amb_clr.rgb;
 
 					// palettize
 					color.rgb = texture(p_tex, color.xyz).rgb;
@@ -967,7 +971,6 @@ struct RenderContext
 			uniform sampler3D p_tex;
 
 			uniform vec4 lt; // light pos
-			// uniform vec3 lc; // light rgb
 			uniform vec4 br; // brush
 			uniform vec3 qd; // quad diag (.z==1 height quad, .z==2 visual map quad)
 			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
@@ -1292,6 +1295,9 @@ struct RenderContext
 		mesh_f_tex_loc = glGetUniformLocation(mesh_prg, "f_tex");
 		mesh_p_tex_loc = glGetUniformLocation(mesh_prg, "p_tex");
 
+		mesh_lt_dif_clr = glGetUniformLocation(mesh_prg, "lt_dif_clr");
+		mesh_lt_amb_clr = glGetUniformLocation(mesh_prg, "lt_amb_clr");
+
 		GLenum ghost_st[3] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
 		const char* ghost_src[3] = { ghost_vs_src, ghost_fs_src };
 		ghost_prg = glCreateProgram();
@@ -1542,6 +1548,12 @@ struct RenderContext
 		glUniform1i(mesh_m_tex_loc, 2);
 		glUniform1i(mesh_f_tex_loc, 3);
 		glUniform1i(mesh_p_tex_loc, 4);
+
+		float dif[4] = { 1,1,1,1 };
+		glUniform4fv(mesh_lt_dif_clr, 1, dif);
+
+		float amb[4] = { 0,0,0,0 };
+		glUniform4fv(mesh_lt_amb_clr, 1, amb);
 
 		glBindVertexArray(mesh_vao);
 
@@ -1835,6 +1847,8 @@ struct RenderContext
 	GLint mesh_m_tex_loc;
 	GLint mesh_f_tex_loc;
 	GLint mesh_p_tex_loc;
+	GLint mesh_lt_dif_clr;
+	GLint mesh_lt_amb_clr;
 
 	GLuint bsp_prg;
 	GLint bsp_tm_loc;
@@ -4263,6 +4277,8 @@ void my_render()
 
 	double inst_tm[16];
 	Mesh* inst_preview = 0;
+	Inst* hover_inst = 0;
+
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -4437,6 +4453,11 @@ void my_render()
 
 			if (p)
 			{
+				// limit hitworld to what we've already intersected with:
+				ray_p[0] = hit[0];
+				ray_p[1] = hit[1];
+				ray_p[2] = hit[2];
+
 				// normalize
 				hit_nrm[0] /= HEIGHT_SCALE;
 				hit_nrm[1] /= HEIGHT_SCALE;
@@ -4445,8 +4466,16 @@ void my_render()
 				hit_nrm[1] /= nrm_len;
 				hit_nrm[2] /= nrm_len;
 			}
+			else
+			{
+				// clip ray so it won't hit hidden mesh parts below bottom plane
+				// ray_p as at z=-1.1 and ray_v has z_length 0.1, so (p - v).z = -1.0 (bottom)
+				ray_p[0] -= ray_v[0];
+				ray_p[1] -= ray_v[1];
+				ray_p[2] -= ray_v[2];
+			}
 
-			if (p)
+			if (p || edit_mode == 2 && (io.KeyShift || io.KeyCtrl))
 			{
 				if (io.KeyAlt)
 				{
@@ -4680,7 +4709,7 @@ void my_render()
 								printf("miss\n");
 
 							// and set this inst for hover hilight
-							// ...
+							hover_inst = inst;
 						}
 
 						if (io.KeyShift)
@@ -4690,9 +4719,7 @@ void my_render()
 
 							if (inst && !inst_added && io.MouseDown[0])
 							{
-								// set it as current mesh
-								// ...
-
+								active_mesh = GetInstMesh(inst);
 								inst_added = true;
 							}
 						}
@@ -4787,7 +4814,8 @@ void my_render()
 							if (!inst_added && io.MouseDown[0])
 							{
 								int flags = INST_USE_TREE | INST_VISIBLE;
-								inst = CreateInst(active_mesh, flags, inst_tm, 0);
+								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
+								inst = URDO_Create(active_mesh, flags, inst_tm);
 
 								inst_added = true;
 								RebuildWorld(world);
@@ -4805,10 +4833,14 @@ void my_render()
 
 							if (inst)
 							{
-								if (inst_added && io.MouseDown[0])
+								if (!inst_added && io.MouseDown[0])
 								{
 									// delete this inst (clear hilight too)
-									//DeleteInst();
+									hover_inst = 0;
+
+									//DeleteInst(inst);
+									URDO_Delete(inst);
+
 									inst_added = true;
 								}
 							}
@@ -4963,6 +4995,39 @@ void my_render()
 
 	// overlay patch creation
 	// slihouette of newly created patch 
+
+	if (hover_inst)
+	{
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glEnable(GL_POLYGON_OFFSET_LINE);
+		glPolygonOffset(1, -1);
+
+		rc->BeginMeshes(tm, lt);
+		glEnable(GL_CULL_FACE);
+
+		float dif[4] = { 0,0,0,1 };
+		glUniform4fv(rc->mesh_lt_dif_clr, 1, dif);
+
+		float amb[4] = { 1,0,0,1 };
+		glUniform4fv(rc->mesh_lt_amb_clr, 1, amb);
+
+		if (io.KeyCtrl)
+			glLineWidth(3);
+		else
+			glLineWidth(1);
+
+		double itm[16];
+		GetInstTM(hover_inst,itm);
+		RenderContext::RenderMesh(GetInstMesh(hover_inst), itm, rc);
+		rc->EndMeshes();
+
+
+		glDisable(GL_CULL_FACE);
+		glPolygonOffset(0,0);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		glDisable(GL_POLYGON_OFFSET_LINE);
+		glLineWidth(1);
+	}
 
 	if (create_preview)
 	{

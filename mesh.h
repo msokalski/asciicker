@@ -22,6 +22,7 @@ Mesh* GetNextMesh(Mesh* m);
 void* GetMeshCookie(Mesh* m);
 void  SetMeshCookie(Mesh* m, void* cookie);
 
+World* GetMeshWorld(Mesh* m);
 int GetMeshName(Mesh* m, char* buf, int size);
 void GetMeshBBox(Mesh* m, float bbox[6]);
 
@@ -29,6 +30,10 @@ void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint32_t visual, void* cooki
 
 Inst* CreateInst(Mesh* m, int flags, const double tm[16] = 0, const char* name = 0);
 void DeleteInst(Inst* i);
+
+Mesh* GetInstMesh(Inst* i);
+int GetInstFlags(Inst* i);
+void GetInstTM(Inst* i, double tm[16]);
 
 enum INST_FLAGS
 {

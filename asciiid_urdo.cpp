@@ -106,6 +106,7 @@ struct URDO
 		CMD_PATCH_UPDATE_HEIGHT,
 		CMD_PATCH_UPDATE_VISUAL,
 		CMD_PATCH_DIAG,
+		CMD_INST_CREATE,
 	} cmd;
 
 	void Do(bool un);
@@ -164,6 +165,19 @@ struct URDO_PatchDiag : URDO
 	void Do(bool un);
 };
 
+struct URDO_InstCreate : URDO
+{
+	Mesh* mesh;
+	int flags;
+	double tm[16];
+	Inst* inst;
+
+	static void Delete(Inst* i);
+	static Inst* Create(Mesh* m, int flags, double tm[16]);
+
+	void Do(bool un);
+};
+
 static size_t bytes = 0;
 static URDO* undo = 0;
 static URDO* redo = 0;
@@ -181,6 +195,7 @@ void URDO::Do(bool un)
 		case CMD_PATCH_UPDATE_HEIGHT: ((URDO_PatchUpdateHeight*)this)->Do(un); break;
 		case CMD_PATCH_UPDATE_VISUAL: ((URDO_PatchUpdateVisual*)this)->Do(un); break;
 		case CMD_PATCH_DIAG: ((URDO_PatchDiag*)this)->Do(un); break;
+		case CMD_INST_CREATE: ((URDO_InstCreate*)this)->Do(un); break;
 		default:
 			assert(0);
 	}
@@ -221,6 +236,10 @@ void URDO::Free()
 			bytes -= sizeof(URDO_PatchDiag);
 			break;
 
+		case CMD_INST_CREATE:
+			bytes -= sizeof(URDO_InstCreate);
+			break;
+
 		default:
 			assert(0);
 	}
@@ -238,6 +257,7 @@ URDO* URDO::Alloc(CMD c)
 		case CMD_PATCH_UPDATE_HEIGHT: s = sizeof(URDO_PatchUpdateHeight); break;
 		case CMD_PATCH_UPDATE_VISUAL: s = sizeof(URDO_PatchUpdateVisual); break;
 		case CMD_PATCH_DIAG: s = sizeof(URDO_PatchDiag); break;
+		case CMD_INST_CREATE: s = sizeof(URDO_InstCreate); break;
 		default:
 			assert(0);
 	}
@@ -488,6 +508,18 @@ void URDO_Close()
 	URDO_Group::Close();
 }
 
+Inst* URDO_Create(Mesh* m, int flags, double tm[16])
+{
+	assert(group_open < 64);
+
+	return URDO_InstCreate::Create(m,flags,tm);
+}
+
+void URDO_Delete(Inst* i)
+{
+	assert(group_open < 64);
+	URDO_InstCreate::Delete(i);
+}
 
 Patch* URDO_Create(Terrain* t, int x, int y, int z)
 {
@@ -690,4 +722,52 @@ void URDO_PatchCreate::Do(bool un)
 		bytes -= TerrainAttach(terrain, patch, cx, cy);
 		attached = true;
 	}
+}
+
+void URDO_InstCreate::Delete(Inst* i)
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
+
+	urdo->mesh = GetInstMesh(i);
+	urdo->flags = GetInstFlags(i);
+	GetInstTM(i, urdo->tm);
+
+	DeleteInst(i);
+	urdo->inst = 0;
+}
+
+Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16])
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
+
+	urdo->mesh = 0;
+	urdo->flags = 0;
+	memset(urdo->tm, 0, sizeof(double[16]));
+	urdo->inst = CreateInst(m,flags,tm,0);
+
+	return urdo->inst;
+}
+
+void URDO_InstCreate::Do(bool un)
+{
+	if (!inst)
+	{
+		inst = CreateInst(mesh, flags, tm);
+	}
+	else
+	{
+		mesh = GetInstMesh(inst);
+		flags = GetInstFlags(inst);
+		GetInstTM(inst, tm);
+		DeleteInst(inst);
+		inst = 0;
+	}
+
+	RebuildWorld( GetMeshWorld(mesh) );
 }

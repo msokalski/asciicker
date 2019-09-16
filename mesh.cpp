@@ -204,7 +204,13 @@ struct Inst : BSP
             {
                 if (hit[2] > ret[2])
                 {
-                    // calc normal -> nrm
+					ret[0] = hit[0];
+					ret[1] = hit[1];
+					ret[2] = hit[2];
+
+                    // TODO: if (nrm) calc normal -> nrm
+					// ...
+
                     flag = true;
                 }
             }
@@ -997,9 +1003,9 @@ struct World
 
 	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
-        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
-        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
+        const float x[2] = {q->bbox[0],q->bbox[1]};
+		const float y[2] = {q->bbox[2],q->bbox[3]};
+		const float z[2] = {q->bbox[4],q->bbox[5]};
 
 		if (ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
 			ray[5] * y[1] - ray[0] - z[0] * ray[4] > 0 ||
@@ -1065,9 +1071,9 @@ struct World
 
 	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
-        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
-        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
+		const float x[2] = { q->bbox[0],q->bbox[1] };
+		const float y[2] = { q->bbox[2],q->bbox[3] };
+		const float z[2] = { q->bbox[4],q->bbox[5] };
 
 		if (ray[5] * y[1] - ray[0] - z[0] * ray[4] > 0 ||
 			z[0] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
@@ -1133,9 +1139,9 @@ struct World
 
 	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
-        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
-        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
+		const float x[2] = { q->bbox[0],q->bbox[1] };
+		const float y[2] = { q->bbox[2],q->bbox[3] };
+		const float z[2] = { q->bbox[4],q->bbox[5] };
 
 		if (ray[0] + z[0] * ray[4] - ray[5] * y[0] > 0 ||
 			ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
@@ -1201,9 +1207,9 @@ struct World
 
 	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
-        float x[2] = {q->bbox[0],q->bbox[0]+q->bbox[3]};
-        float y[2] = {q->bbox[1],q->bbox[0]+q->bbox[4]};
-        float z[2] = {q->bbox[2],q->bbox[0]+q->bbox[5]};
+		const float x[2] = { q->bbox[0],q->bbox[1] };
+		const float y[2] = { q->bbox[2],q->bbox[3] };
+		const float z[2] = { q->bbox[4],q->bbox[5] };
 
 		if (z[0] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
 			ray[0] + z[0] * ray[4] - ray[5] * y[0] > 0 ||
@@ -1609,10 +1615,228 @@ bool Mesh::Update(const char* path)
     int plannar = 0x7 | 0x8;
 
     char buf[1024];
+	char tail_str[1024];
 
-    // first pass - scan all verts
+	int num_verts = -1;
+	int num_faces = -1;
+	int element = 0;
 
-    while (fgets(buf,1024,f))
+	bool face_props = false;
+	int vert_props = 0;
+
+	// file header
+	if (!fgets(buf, 1024, f) || strcmp(buf,"ply"))
+	{
+		fclose(f);
+		return false;
+	}
+
+	if (!fgets(buf, 1024, f) || strcmp(buf, "format ascii 1.0"))
+	{
+		fclose(f);
+		return false;
+	}
+
+	// mesh header
+	while (fgets(buf, 1024, f))
+	{
+		int len = (int)strlen(buf);
+		while (len && (buf[len] == ' ' || buf[len] == '\r' || buf[len] == '\n' || buf[len] == '\t' || buf[len] == '\v'))
+			len--;
+		if (!len)
+			continue;
+		buf[len] = 0;
+
+		if (strncmp(buf, "comment", 7) == 0 && (buf[7] == 0 || buf[7] == ' ' || buf[7] == '\t' || buf[7] == '\r' || buf[7] == '\n'))
+			continue;
+
+		if (strncmp(buf, "element vertex ",15) == 0)
+		{
+			if (num_verts >= 0)
+			{
+				fclose(f);
+				return false;
+			}
+
+			if (sscanf(buf+15, "%d", &num_verts) != 1 || num_verts < 0)
+			{
+				fclose(f);
+				return false;
+			}
+
+			element = 'VERT';
+
+			continue;
+		}
+
+		if (strncmp(buf, "element face ",13) == 0)
+		{
+			if (num_faces >= 0)
+			{
+				fclose(f);
+				return false;
+			}
+
+			if (sscanf(buf+13, "%d", &num_faces) != 1 || num_faces < 0)
+			{
+				fclose(f);
+				return false;
+			}
+
+			element = 'FACE';
+
+			continue;
+		}
+
+		if (strncmp(buf, "property ", 9) == 0)
+		{
+			if (element == 'FACE')
+			{
+				if (strcmp(buf + 9, "list uchar uint vertex_indices") != 0)
+				{
+					fclose(f);
+					return false;
+				}
+
+				face_props = true;
+				continue;
+			}
+			else
+			if (element == 'VERT')
+			{
+				static const char* match[] = 
+				{
+					"property float x",
+					"property float y",
+					"property float z",
+					"property uchar red",
+					"property uchar green",
+					"property uchar blue",
+					"property uchar alpha",
+					0
+				};
+
+				if (!match[vert_props] || strcmp(buf,match[vert_props]) != 0)
+				{
+					fclose(f);
+					return false;
+				}
+
+				vert_props++;
+				continue;
+			}
+			else
+			{
+				fclose(f);
+				return false;
+			}
+		}
+
+		if (strcmp(buf, "end_header") == 0)
+		{
+			if (num_faces <= 0 || num_verts <= 0 || !face_props || vert_props != 3 && vert_props != 7)
+			{
+				fclose(f);
+				return false;
+			}
+			break;
+		}
+		else
+		{
+			fclose(f);
+			return false;
+		}
+	}
+
+	// verts
+	while (fgets(buf, 1024, f))
+	{
+		int len = (int)strlen(buf);
+		while (len && (buf[len] == ' ' || buf[len] == '\r' || buf[len] == '\n' || buf[len] == '\t' || buf[len] == '\v'))
+			len--;
+		if (!len)
+			continue;
+		buf[len] = 0;
+
+		if (strncmp(buf, "comment", 7) == 0 && (buf[7] == 0 || buf[7] == ' ' || buf[7] == '\t' || buf[7] == '\r' || buf[7] == '\n'))
+			continue;
+
+		float x=0, y=0, z=0;
+		int r=255, g=255, b=255, a=255;
+		if (vert_props == 3)
+		{
+			if (sscanf(buf, "%f %f %f %s", &x, &y, &z, tail_str) != 3)
+			{
+				fclose(f);
+				return false;
+			}
+		}
+		else
+		{
+			if (sscanf(buf, "%f %f %f %d %d %d %d %s", &x, &y, &z, &r, &g, &b, &a, tail_str) != 7)
+			{
+				fclose(f);
+				return false;
+			}
+		}
+
+		verts++;
+
+		if (verts == num_verts)
+			break;
+	}
+
+	// faces
+	while (fgets(buf, 1024, f))
+	{
+		int len = (int)strlen(buf);
+		while (len && (buf[len] == ' ' || buf[len] == '\r' || buf[len] == '\n' || buf[len] == '\t' || buf[len] == '\v'))
+			len--;
+		if (!len)
+			continue;
+		buf[len] = 0;
+
+		if (strncmp(buf, "comment", 7) == 0 && (buf[7] == 0 || buf[7] == ' ' || buf[7] == '\t' || buf[7] == '\r' || buf[7] == '\n'))
+			continue;
+
+		int n, a, b, c;
+
+		if (sscanf(buf, "%d %d %d %d %s", &n, &a, &b, &c, tail_str) != 4 || n != 3 ||
+			a < 0 || a >= num_verts || b < 0 || b >= num_verts || c < 0 || c >= num_verts ||
+			a == b || b == c || c == a)
+		{
+			fclose(f);
+			return false;
+		}
+
+		faces++;
+
+		if (faces == num_faces)
+			break;
+	}
+
+	// tail
+	while (fgets(buf, 1024, f))
+	{
+		int len = (int)strlen(buf);
+		while (len && (buf[len] == ' ' || buf[len] == '\r' || buf[len] == '\n' || buf[len] == '\t' || buf[len] == '\v'))
+			len--;
+		if (!len)
+			continue;
+		buf[len] = 0;
+
+		if (strncmp(buf, "comment", 7) == 0 && (buf[7] == 0 || buf[7] == ' ' || buf[7] == '\t' || buf[7] == '\r' || buf[7] == '\n'))
+			continue;
+
+		fclose(f);
+		return false;
+	}
+
+#if 0
+	// OLD .obj parser
+	
+	// first pass - scan all verts
+	while (fgets(buf,1024,f))
     {
         // note: on every char check for # or \n or \r or 0 -> end of line
 
@@ -1883,6 +2107,7 @@ bool Mesh::Update(const char* path)
 
         free(index);
     }
+	#endif // OLD .obj parser
 
     fclose(f);
     return true;
@@ -2010,6 +2235,11 @@ Mesh* GetNextMesh(Mesh* m)
     if (!m)
         return 0;
     return m->next;
+}
+
+World* GetMeshWorld(Mesh* m)
+{
+	return m->world;
 }
 
 int GetMeshName(Mesh* m, char* buf, int size)
@@ -2269,4 +2499,19 @@ World* LoadWorld(FILE* f)
 Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3])
 {
     return w->HitWorld(p,v,ret,nrm);
+}
+
+Mesh* GetInstMesh(Inst* i)
+{
+	return i->mesh;
+}
+
+int GetInstFlags(Inst* i)
+{
+	return i->flags;
+}
+
+void GetInstTM(Inst* i, double tm[16])
+{
+	memcpy(tm, i->tm, sizeof(double[16]));
 }
