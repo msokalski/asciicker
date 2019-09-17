@@ -28,7 +28,7 @@ struct Vert
     // regardless of mesh type (2d/3d)
     // we keep z (makes it easier to switch mesh types back and forth)
 	float xyzw[4];
-	float rgb[3];
+	unsigned char rgba[4];
 
     bool sel;
 };
@@ -1607,14 +1607,12 @@ struct World
 bool Mesh::Update(const char* path)
 {
     FILE* f = fopen(path,"rt");
-    if (!f)
-        return false;
+	if (!f)
+		return false;
 
-    Mesh* m = this;
+	int plannar = 0x7 | 0x8;
 
-    int plannar = 0x7 | 0x8;
-
-    char buf[1024];
+	char buf[1024];
 	char tail_str[1024];
 
 	int num_verts = -1;
@@ -1625,23 +1623,48 @@ bool Mesh::Update(const char* path)
 	int vert_props = 0;
 
 	// file header
-	if (!fgets(buf, 1024, f) || strcmp(buf,"ply"))
+	while (fgets(buf, 1024, f))
 	{
-		fclose(f);
-		return false;
+		int len = (int)strlen(buf);
+		while (len && (buf[len - 1] == ' ' || buf[len - 1] == '\r' || buf[len - 1] == '\n' || buf[len - 1] == '\t' || buf[len - 1] == '\v'))
+			len--;
+		if (!len)
+			continue;
+		buf[len] = 0;
+
+
+		if (strcmp(buf, "ply"))
+		{
+			fclose(f);
+			return false;
+		}
+		else
+			break;
 	}
 
-	if (!fgets(buf, 1024, f) || strcmp(buf, "format ascii 1.0"))
+	while (fgets(buf, 1024, f))
 	{
-		fclose(f);
-		return false;
+		int len = (int)strlen(buf);
+		while (len && (buf[len - 1] == ' ' || buf[len - 1] == '\r' || buf[len - 1] == '\n' || buf[len - 1] == '\t' || buf[len - 1] == '\v'))
+			len--;
+		if (!len)
+			continue;
+		buf[len] = 0;
+
+		if (strcmp(buf, "format ascii 1.0"))
+		{
+			fclose(f);
+			return false;
+		}
+		else
+			break;
 	}
 
 	// mesh header
 	while (fgets(buf, 1024, f))
 	{
 		int len = (int)strlen(buf);
-		while (len && (buf[len] == ' ' || buf[len] == '\r' || buf[len] == '\n' || buf[len] == '\t' || buf[len] == '\v'))
+		while (len && (buf[len - 1] == ' ' || buf[len - 1] == '\r' || buf[len - 1] == '\n' || buf[len - 1] == '\t' || buf[len - 1] == '\v'))
 			len--;
 		if (!len)
 			continue;
@@ -1748,11 +1771,13 @@ bool Mesh::Update(const char* path)
 		}
 	}
 
+	Vert** index = (Vert**)malloc(sizeof(Vert*)*num_verts);
+
 	// verts
 	while (fgets(buf, 1024, f))
 	{
 		int len = (int)strlen(buf);
-		while (len && (buf[len] == ' ' || buf[len] == '\r' || buf[len] == '\n' || buf[len] == '\t' || buf[len] == '\v'))
+		while (len && (buf[len - 1] == ' ' || buf[len - 1] == '\r' || buf[len - 1] == '\n' || buf[len - 1] == '\t' || buf[len - 1] == '\v'))
 			len--;
 		if (!len)
 			continue;
@@ -1767,6 +1792,7 @@ bool Mesh::Update(const char* path)
 		{
 			if (sscanf(buf, "%f %f %f %s", &x, &y, &z, tail_str) != 3)
 			{
+				free(index);
 				fclose(f);
 				return false;
 			}
@@ -1775,10 +1801,83 @@ bool Mesh::Update(const char* path)
 		{
 			if (sscanf(buf, "%f %f %f %d %d %d %d %s", &x, &y, &z, &r, &g, &b, &a, tail_str) != 7)
 			{
+				free(index);
 				fclose(f);
 				return false;
 			}
 		}
+
+		Vert* v = (Vert*)malloc(sizeof(Vert));
+		index[verts] = v;
+
+		v->xyzw[0] = x;
+		v->xyzw[1] = y;
+		v->xyzw[2] = z;
+		v->xyzw[3] = 1;
+		v->rgba[0] = r;
+		v->rgba[1] = g;
+		v->rgba[2] = b;
+		v->rgba[3] = a;
+
+		if (verts && plannar)
+		{
+			if (plannar & 1)
+			{
+				if (v->xyzw[0] != head_vert->xyzw[0])
+					plannar &= ~1;
+			}
+			if (plannar & 2)
+			{
+				if (v->xyzw[1] != head_vert->xyzw[1])
+					plannar &= ~2;
+			}
+			if (plannar & 4)
+			{
+				if (v->xyzw[2] != head_vert->xyzw[2])
+					plannar &= ~4;
+			}
+			if (plannar & 8)
+			{
+				if (v->rgba[0] != head_vert->rgba[0] ||
+					v->rgba[1] != head_vert->rgba[1] ||
+					v->rgba[2] != head_vert->rgba[2])
+				{
+					plannar &= ~8;
+				}
+			}
+		}
+
+		v->mesh = this;
+		v->face_list = 0;
+		v->line_list = 0;
+		v->next = 0;
+		v->prev = tail_vert;
+		if (tail_vert)
+			tail_vert->next = v;
+		else
+			head_vert = v;
+		tail_vert = v;
+
+		if (!verts)
+		{
+			bbox[0] = v->xyzw[0];
+			bbox[1] = v->xyzw[0];
+			bbox[2] = v->xyzw[1];
+			bbox[3] = v->xyzw[1];
+			bbox[4] = v->xyzw[2];
+			bbox[5] = v->xyzw[2];
+		}
+		else
+		{
+			bbox[0] = fminf(bbox[0], v->xyzw[0]);
+			bbox[1] = fmaxf(bbox[1], v->xyzw[0]);
+			bbox[2] = fminf(bbox[2], v->xyzw[1]);
+			bbox[3] = fmaxf(bbox[3], v->xyzw[1]);
+			bbox[4] = fminf(bbox[4], v->xyzw[2]);
+			bbox[5] = fmaxf(bbox[5], v->xyzw[2]);
+		}
+
+		v->sel = false;
 
 		verts++;
 
@@ -1805,8 +1904,32 @@ bool Mesh::Update(const char* path)
 			a < 0 || a >= num_verts || b < 0 || b >= num_verts || c < 0 || c >= num_verts ||
 			a == b || b == c || c == a)
 		{
+			free(index);
 			fclose(f);
 			return false;
+		}
+
+		////////////////
+		Face* f = (Face*)malloc(sizeof(Face));
+
+		int abc[3] = { a,b,c };
+
+		f->visual = 0;
+		f->mesh = this;
+
+		f->next = 0;
+		f->prev = tail_face;
+		if (tail_face)
+			tail_face->next = f;
+		else
+			head_face = f;
+		tail_face = f;
+
+		for (int i = 0; i < 3; i++)
+		{
+			f->abc[i] = index[abc[i]];
+			f->share_next[i] = f->abc[i]->face_list;
+			f->abc[i]->face_list = f;
 		}
 
 		faces++;
@@ -1814,6 +1937,8 @@ bool Mesh::Update(const char* path)
 		if (faces == num_faces)
 			break;
 	}
+
+	free(index);
 
 	// tail
 	while (fgets(buf, 1024, f))
@@ -2272,12 +2397,13 @@ void GetMeshBBox(Mesh* m, float bbox[6])
     bbox[5] = m->bbox[5];
 }
 
-void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint32_t visual, void* cookie), void* cookie)
+void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie), void* cookie)
 {
     if (!m || !cb)
         return;
 
     float coords[9];
+	uint8_t colors[12];
 
     Face* f = m->head_face;
     while (f)
@@ -2285,16 +2411,28 @@ void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint32_t visual, void* cooki
         coords[0] = f->abc[0]->xyzw[0];
         coords[1] = f->abc[0]->xyzw[1];
         coords[2] = f->abc[0]->xyzw[2];
+		colors[0] = f->abc[0]->rgba[0];
+		colors[1] = f->abc[0]->rgba[1];
+		colors[2] = f->abc[0]->rgba[2];
+		colors[3] = f->abc[0]->rgba[3];
 
         coords[3] = f->abc[1]->xyzw[0];
         coords[4] = f->abc[1]->xyzw[1];
         coords[5] = f->abc[1]->xyzw[2];
+		colors[4] = f->abc[1]->rgba[0];
+		colors[5] = f->abc[1]->rgba[1];
+		colors[6] = f->abc[1]->rgba[2];
+		colors[7] = f->abc[1]->rgba[3];
 
         coords[6] = f->abc[2]->xyzw[0];
         coords[7] = f->abc[2]->xyzw[1];
         coords[8] = f->abc[2]->xyzw[2];
+		colors[8] = f->abc[2]->rgba[0];
+		colors[9] = f->abc[2]->rgba[1];
+		colors[10] = f->abc[2]->rgba[2];
+		colors[11] = f->abc[2]->rgba[3];
 
-        cb(coords, f->visual, cookie);
+        cb(coords, colors, f->visual, cookie);
 
         f=f->next;
     }

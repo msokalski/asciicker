@@ -493,7 +493,7 @@ struct RenderContext
 	{
 		// meshes & bsp
 		glCreateBuffers(1, &mesh_vbo);
-		int mesh_face_size = 3*sizeof(float[3]) + sizeof(uint32_t); // 3*pos_xyz, visual
+		int mesh_face_size = 3*sizeof(float[3]) + 3*sizeof(uint8_t[4]) + sizeof(uint32_t); // 3*pos_xyz, visual, rgba
 		glNamedBufferStorage(mesh_vbo, 1024 * mesh_face_size, 0, GL_DYNAMIC_STORAGE_BIT);
 
 		glCreateVertexArrays(1, &mesh_vao);
@@ -501,14 +501,20 @@ struct RenderContext
 		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)0);
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)((char*)0 + sizeof(float[3])));
-		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)((char*)0 + 2*sizeof(float[3])));
-		glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT,   mesh_face_size, (void*)((char*)0 + 3*sizeof(float[3])));
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)((char*)0 + 2 * sizeof(float[3])));
+		glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_TRUE, mesh_face_size,   (void*)((char*)0 + 3 * sizeof(float[3])));
+		glVertexAttribPointer(4, 4, GL_UNSIGNED_BYTE, GL_TRUE, mesh_face_size,   (void*)((char*)0 + 3 * sizeof(float[3]) + sizeof(uint8_t[4])));
+		glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, mesh_face_size,   (void*)((char*)0 + 3 * sizeof(float[3]) + 2 * sizeof(uint8_t[4])));
+		glVertexAttribIPointer(6, 1, GL_UNSIGNED_INT, mesh_face_size,   (void*)((char*)0 + 3 * sizeof(float[3]) + 3 * sizeof(uint8_t[4])));
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
 		glEnableVertexAttribArray(2);
 		glEnableVertexAttribArray(3);
+		glEnableVertexAttribArray(4);
+		glEnableVertexAttribArray(5);
+		glEnableVertexAttribArray(6);
 		glBindVertexArray(0);
 
 		const char* mesh_vs_src =
@@ -517,17 +523,24 @@ struct RenderContext
 				layout(location = 0) in vec3 a;
 				layout(location = 1) in vec3 b;
 				layout(location = 2) in vec3 c;
-				layout(location = 3) in uint visual;
+				layout(location = 3) in vec4 ca;
+				layout(location = 4) in vec4 cb;
+				layout(location = 5) in vec4 cc;
+				layout(location = 6) in uint visual;
 
 				uniform mat4 inst_tm;
 
 				out vec3 va,vb,vc;
+				out vec4 vca, vcb, vcc;
 				out uint vis;
 				void main()
 				{
 					va = (inst_tm * vec4(a, 1.0)).xyz;
 					vb = (inst_tm * vec4(b, 1.0)).xyz;
 					vc = (inst_tm * vec4(c, 1.0)).xyz;
+					vca = ca;
+					vcb = cb;
+					vcc = cc;
 					vis = visual;
 				}
 			);
@@ -541,13 +554,18 @@ struct RenderContext
 				in vec3 va[];
 				in vec3 vb[];
 				in vec3 vc[];
+				in vec4 vca[];
+				in vec4 vcb[];
+				in vec4 vcc[];
 				in uint vis[];
 
 				flat out vec3 nrm;
+				flat out vec3 view_nrm;
 				flat out uint matid;
 
 				out float shade;
 				out float elev;
+				out vec4 tint;
 
 				void main()
 				{
@@ -557,19 +575,23 @@ struct RenderContext
 
 					matid = vis[0] & 0xFF;
 					nrm = normalize( cross( b-a, c-a ) );
+					view_nrm = normalize((tm * vec4(nrm, 0)).xyz);
 
 					shade = float((vis[0] >> 8) & 0x7f) / 8.0;
 					elev = float((vis[0] >> 15) & 0x1);
+					tint = vca[0];
 					gl_Position = tm * vec4(a, 1.0);
 					EmitVertex();
 
 					shade = float((vis[0] >> 16) & 0x7f) / 8.0;
 					elev = float((vis[0] >> 23) & 0x1);
+					tint = vcb[0];
 					gl_Position = tm * vec4(b, 1.0);
 					EmitVertex();
 
 					shade = float((vis[0] >> 24) & 0x7f) / 8.0;
 					elev = float((vis[0] >> 31) & 0x1);
+					tint = vcc[0];
 					gl_Position = tm * vec4(c, 1.0);
 					EmitVertex();
 
@@ -592,21 +614,30 @@ struct RenderContext
 				layout(location = 0) out vec4 color;
 
 				flat in vec3 nrm;
+				flat in vec3 view_nrm;
 				flat in uint matid;
 				in float shade;
 				in float elev;
+				in vec4 tint;
 				
 				void main()
 				{
+					/*
 					uint mat_x = 2 * (uint(round(shade)) & 0xF) + 32 * (uint(round(elev)) & 0x1);
 					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(0+mat_x, matid), 0);
 					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(1+mat_x, matid), 0);
-
 					float glyph = 0.0; // at the moment pure bkgnd					
 					color = vec4(mix(vec3(fill_rgbp.rgb), vec3(fill_rgbc.rgb), glyph) / 255.0, 1.0);
+					*/
+
+					color = tint;
 
 					vec3 light_pos = normalize(lt.xyz);
 					float light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(light_pos, normalize(nrm)));
+
+					// plus viewer light
+					light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(vec3(0,0,-1), view_nrm));
+
 
 					color.rgb *= light * lt_dif_clr.rgb;
 					color.rgb += lt_amb_clr.rgb;
@@ -1572,11 +1603,12 @@ struct RenderContext
 		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
 	}
 
-	static void RenderFace(float coords[9], uint32_t visual, void* cookie)
+	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
 		
 		memcpy(rc->mesh_map[rc->mesh_faces].abc, coords, sizeof(float[9]));
+		memcpy(rc->mesh_map[rc->mesh_faces].clr, colors, sizeof(uint8_t[12]));
 		rc->mesh_map[rc->mesh_faces].visual = visual;
 		rc->mesh_faces++;
 
@@ -1857,6 +1889,7 @@ struct RenderContext
 	struct Face
 	{
 		float abc[9];
+		uint8_t clr[12];
 		uint32_t visual;
 	}; // * mesh_map;
 	
