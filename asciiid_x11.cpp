@@ -43,22 +43,36 @@
 
 #include "asciiid_platform.h"
 
-bool mapped = false;
-WndMode wndmode = A3D_WND_NORMAL;
-int wndrect[4] = {0,0,0,0}; 
-bool wnddirty = false;
+Display* dpy=0;
+A3D_WND* wnd_head=0;
+A3D_WND* wnd_tail=0;
 
-Display* dpy;
-Window win;
-XIC ic;
+struct A3D_WND
+{
+	A3D_WND* prev;
+	A3D_WND* next;
 
-static PlatformInterface platform_api;
-static int mouse_b = 0;
-static int mouse_x = 0;
-static int mouse_y = 0;
-static bool track = false;
-static bool closing = false;
-static int force_key = A3D_NONE;
+	XIC ic;
+	Window win;
+	GLXContext rc;
+	void* cookie;
+
+	bool mapped;
+	WndMode wndmode;
+	int wndrect[4]; 
+	bool wnddirty;
+
+	PlatformInterface platform_api;
+	int mouse_b;
+	int mouse_x;
+	int mouse_y;
+	bool track;
+	bool closing;
+	int force_key;
+
+	int gwa_width;
+	int gwa_height;
+};
 
 A3D_PTY* head_pty = 0;
 A3D_PTY* tail_pty = 0;
@@ -462,22 +476,23 @@ static const unsigned char kc_to_ki[128]=
 };
 
 // creates window & initialized GL
-bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/)
+A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* share)
 {
 	if (!pi || !gd)
-		return false;
+		return 0;
 
 	PFNGLXCREATECONTEXTATTRIBSARBPROC glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC)
 		glXGetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
 	
 	if (!glXCreateContextAttribsARB)
-		return false;
+		return 0;
 
 	GLint                   att[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
 	GLXContext              glc;
 	XWindowAttributes       gwa;
 	XEvent                  xev;
 
+	int wndrect[4];
 
 	XIM im = 0;
 	bool im_ok = false;
@@ -490,9 +505,12 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	}	
 
 	// dpy is global
-	dpy = XOpenDisplay(NULL);
 	if (!dpy)
-		return false;
+	{
+		dpy = XOpenDisplay(NULL);
+		if (!dpy)
+			return 0;
+	}
 
 	Bool DetectableAutoRepeat = false;
 	XkbSetDetectableAutoRepeat(dpy, True, &DetectableAutoRepeat);
@@ -503,14 +521,14 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	if (!root)
 	{
 		XCloseDisplay(dpy);
-		return false;
+		return 0;
 	}
 
 	XVisualInfo* vi = glXChooseVisual(dpy, 0, att);
 	if (!vi)
 	{
 		XCloseDisplay(dpy);
-		return false;
+		return 0;
 	}
 
 	Colormap cmap = XCreateColormap(dpy, root, vi->visual, AllocNone);
@@ -546,20 +564,14 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		wndrect[3] = 600;
 	}
 	
-	wndmode = gd->wnd_mode == A3D_WND_CURRENT ? A3D_WND_NORMAL : gd->wnd_mode;
-	wnddirty = true;
-
-	win = XCreateWindow(dpy, root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
+	Window win = XCreateWindow(dpy, root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
 	if (!win)
 	{
 		XCloseDisplay(dpy);
-		return false;
+		return 0;
 	}
 
 	XSetWMProtocols(dpy, win, &wm_delete_window, 1);		
-
- 	// XMapWindow(dpy, win);
-	mapped = false;
 
 	char app_name[]="asciiid";
 	XStoreName(dpy, win, app_name);
@@ -592,14 +604,14 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		GLX_CONTEXT_MINOR_VERSION_ARB, 5,
 		0};
 
-	glc = glXCreateContextAttribsARB(dpy, *fbc, 0, true, attribs);
+	glc = glXCreateContextAttribsARB(dpy, *fbc, share ? share->rc : 0, true, attribs);
  	//glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
 
 	if (!glc)
 	{
 		XDestroyWindow(dpy, win);
 		XCloseDisplay(dpy);
-		return false;
+		return 0;
 	}
 
  	if (!glXMakeCurrent(dpy, win, glc))
@@ -607,13 +619,13 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		glXDestroyContext(dpy, glc);
 		XDestroyWindow(dpy, win);
 		XCloseDisplay(dpy);
-		return false;
+		return 0;
 	}
 
 	// try to connect to IM, if anything fails here
 	// we'd simply stick ascii codes 
 
-	ic = 0;
+	XIC ic = 0;
 
 	if (im_ok)
 	{
@@ -665,39 +677,108 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	}
 	*/
 
-	platform_api = *pi;
+	A3D_WND* wnd = (A3D_WND*)malloc(sizeof(A3D_WND));
 
-	if (platform_api.init)
-		platform_api.init();
+	// init wnd fields!
+	wnd->platform_api = *pi;
+	wnd->cookie = 0;
+	
+	wnd->win = win;
+	wnd->rc = glc;
+	wnd->ic = ic;
+
+	wnd->mapped = false;
+	wnd->wndmode = gd->wnd_mode == A3D_WND_CURRENT ? A3D_WND_NORMAL : gd->wnd_mode;
+	wnd->wndrect[0] = wndrect[0]; 
+	wnd->wndrect[1] = wndrect[1]; 
+	wnd->wndrect[2] = wndrect[2]; 
+	wnd->wndrect[3] = wndrect[3]; 
+	wnd->wnddirty = true;
+	wnd->mouse_b = 0;
+	wnd->mouse_x = 0;
+	wnd->mouse_y = 0;
+	wnd->track = false;
+	wnd->force_key = A3D_NONE;
+
+	wnd->prev = wnd_tail;
+	wnd->next = 0;
+	if (wnd_tail)
+		wnd_tail->next = wnd;
+	else
+		wnd_head = wnd;
+	wnd_tail = wnd;
+
+	if (wnd->platform_api.init)
+		wnd->platform_api.init(wnd);
 
 	// send initial notifications:
 	XGetWindowAttributes(dpy, win, &gwa);
-	int w = gwa.width, h = gwa.height;
+	wnd->gwa_width = gwa.width;
+	wnd->gwa_height = gwa.height;
 
-	if (platform_api.resize)
-		platform_api.resize(w,h);
+	if (wnd->platform_api.resize)
+		wnd->platform_api.resize(wnd,wnd->gwa_width,wnd->gwa_height);
 
-	while (!closing)
+	return wnd;
+}
+
+void a3dLoop()
+{
+	Window win;
+	XEvent                  xev;
+
+	Atom wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+
+	Bool DetectableAutoRepeat = false;
+	XkbSetDetectableAutoRepeat(dpy, True, &DetectableAutoRepeat);
+
+	while (wnd_head)
 	{
-		while (!closing && XPending(dpy))
+		while (XPending(dpy))
 		{
 			XNextEvent(dpy, &xev);
+
+			win = xev.xany.window;
 			if (XFilterEvent(&xev, win))
 				printf("%s","XFilter CONSUMED!\n");
+
+			// find wnd
+			A3D_WND* wnd = wnd_head;
+			while (wnd)
+			{
+				if (wnd->win == win)
+					break;
+				wnd=wnd->next;
+			}
+
+			if (!wnd)
+				continue;
+
+			glXMakeCurrent(dpy, win, wnd->rc);
 
 			if (xev.type == ClientMessage)
 			{
 				if ((Atom)xev.xclient.data.l[0] == wm_delete_window) 
 				{
-					if (platform_api.close)
-						platform_api.close();
+					if (wnd->platform_api.close)
+						wnd->platform_api.close(wnd);
 					else
 					{
-						closing = true;
-						memset(&platform_api,0,sizeof(PlatformInterface));
 						glXMakeCurrent(dpy, None, NULL);
-						glXDestroyContext(dpy, glc);
+						glXDestroyContext(dpy, wnd->rc);
 						XDestroyWindow(dpy,win);
+
+						if (wnd->prev)
+							wnd->prev->next = wnd->next;
+						else
+							wnd_head = wnd->next;
+
+						if (wnd->next)
+							wnd->next->prev = wnd->prev;
+						else
+							wnd_tail = wnd->prev;
+
+						free(wnd);
 						break;
 					}
 				}
@@ -710,35 +791,37 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
             else
 			if (xev.type == ConfigureNotify)
 			{
-				if (xev.xconfigure.width != w || xev.xconfigure.height != h)
+				if (xev.xconfigure.width != wnd->gwa_width || xev.xconfigure.height != wnd->gwa_height)
 				{
-					w = xev.xconfigure.width;
-					h = xev.xconfigure.height;
-					if (platform_api.resize)
-						platform_api.resize(w, h);
+					wnd->gwa_width = xev.xconfigure.width;
+					wnd->gwa_height = xev.xconfigure.height;
+					if (wnd->platform_api.resize)
+						wnd->platform_api.resize(wnd, wnd->gwa_width, wnd->gwa_height);
 				}
 			}
 			else
 			if (xev.type == FocusIn)
 			{
-				if (platform_api.keyb_focus)
-					platform_api.keyb_focus(true);
-				if (ic)
-					XSetICFocus(ic);					
+				if (wnd->platform_api.keyb_focus)
+					wnd->platform_api.keyb_focus(wnd,true);
+				if (wnd->ic)
+					XSetICFocus(wnd->ic);					
 			}
 			else
 			if (xev.type == FocusOut)
 			{
-				if (platform_api.keyb_focus)
-					platform_api.keyb_focus(false);
-				if (ic)
-					XUnsetICFocus(ic);					
+				if (wnd->platform_api.keyb_focus)
+					wnd->platform_api.keyb_focus(wnd,false);
+				if (wnd->ic)
+					XUnsetICFocus(wnd->ic);					
 			}
 			else
 			if (xev.type == Expose) 
 			{
-				if (platform_api.render && mapped)
-					platform_api.render();
+				/*
+				if (wnd->platform_api.render && mapped)
+					wnd->platform_api.render(wnd);
+				*/
 			}
 			else 
 			if(xev.type == EnterNotify) 
@@ -748,8 +831,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 				state |= xev.xcrossing.state & Button3Mask ? MouseInfo::RIGHT : 0;
 				state |= xev.xcrossing.state & Button2Mask ? MouseInfo::MIDDLE : 0;
 
-				if (platform_api.mouse)
-					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y,(MouseInfo)(MouseInfo::ENTER | state));
+				if (wnd->platform_api.mouse)
+					wnd->platform_api.mouse(wnd,xev.xcrossing.x,xev.xcrossing.y,(MouseInfo)(MouseInfo::ENTER | state));
 			}
 			else 
 			if(xev.type == LeaveNotify) 
@@ -759,34 +842,34 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 				state |= xev.xcrossing.state & Button3Mask ? MouseInfo::RIGHT : 0;
 				state |= xev.xcrossing.state & Button2Mask ? MouseInfo::MIDDLE : 0;
 
-				if (platform_api.mouse)
-					platform_api.mouse(xev.xcrossing.x,xev.xcrossing.y, (MouseInfo)(MouseInfo::LEAVE | state));
+				if (wnd->platform_api.mouse)
+					wnd->platform_api.mouse(wnd,xev.xcrossing.x,xev.xcrossing.y, (MouseInfo)(MouseInfo::LEAVE | state));
 			}			
 			else 
 			if(xev.type == KeyPress) 
 			{
-				if (platform_api.keyb_key)
+				if (wnd->platform_api.keyb_key)
 				{
 					int kc = xev.xkey.keycode;
 					if (kc>=0 && kc<128) 
 					{
-						force_key = kc_to_ki[kc];
-						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],true);
-						force_key = A3D_NONE;
+						wnd->force_key = kc_to_ki[kc];
+						wnd->platform_api.keyb_key(wnd,(KeyInfo)kc_to_ki[kc],true);
+						wnd->force_key = A3D_NONE;
 					}
 				}
 
-				if (ic)
+				if (wnd->ic)
 				{
 					int count = 0;
 					KeySym keysym = 0;
 					char buf[20];
 					Status status = 0;
-					count = Xutf8LookupString(ic, (XKeyPressedEvent*)&xev, buf, 20, &keysym, &status);
+					count = Xutf8LookupString(wnd->ic, (XKeyPressedEvent*)&xev, buf, 20, &keysym, &status);
 
 					if (count)
 					{
-						if (platform_api.keyb_char)
+						if (wnd->platform_api.keyb_char)
 						{
 							uint8_t* c = (uint8_t*)buf;
 							for (int i=0; i<count;)
@@ -829,7 +912,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 									i+=2;
 								}
 
-								platform_api.keyb_char(w);
+								wnd->platform_api.keyb_char(wnd,w);
 							}
 						}
 					}
@@ -844,9 +927,9 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					len = XLookupString( &xev.xkey, asciiCode, sizeof(asciiCode),
 										&keySym, &composeStatus);
 
-					if (platform_api.keyb_char)
+					if (wnd->platform_api.keyb_char)
 						for (int i=0; i<len; i++)
-							platform_api.keyb_char((wchar_t)asciiCode[i]);
+							wnd->platform_api.keyb_char(wnd,(wchar_t)asciiCode[i]);
 				}
 			}
 			else 
@@ -868,12 +951,12 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 					}
 				}
 
-				if (physical && platform_api.keyb_key)
+				if (physical && wnd->platform_api.keyb_key)
 				{
 					int kc = xev.xkey.keycode;
 					if (kc>=0 && kc<128) 
 					{
-						platform_api.keyb_key((KeyInfo)kc_to_ki[kc],false);
+						wnd->platform_api.keyb_key(wnd,(KeyInfo)kc_to_ki[kc],false);
 					}			
 				}
 
@@ -931,8 +1014,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 				mi = (MouseInfo)(mi |state);
 
-				if (platform_api.mouse)
-					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,mi);				
+				if (wnd->platform_api.mouse)
+					wnd->platform_api.mouse(wnd,xev.xbutton.x,xev.xbutton.y,mi);				
 			}
 			else
 			if (xev.type == ButtonRelease)
@@ -960,8 +1043,8 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 				mi = (MouseInfo)(mi | state);
 
-				if (platform_api.mouse)
-					platform_api.mouse(xev.xbutton.x,xev.xbutton.y,mi);
+				if (wnd->platform_api.mouse)
+					wnd->platform_api.mouse(wnd,xev.xbutton.x,xev.xbutton.y,mi);
 			}
 			else
 			if (xev.type == MotionNotify)
@@ -973,34 +1056,46 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 
 				MouseInfo mi = (MouseInfo)(MouseInfo::MOVE | state);
 
-				if (platform_api.mouse)
-					platform_api.mouse(xev.xmotion.x,xev.xmotion.y,mi);
+				if (wnd->platform_api.mouse)
+					wnd->platform_api.mouse(wnd,xev.xmotion.x,xev.xmotion.y,mi);
 			}
 		}
 
-		if (!closing && platform_api.render && mapped)
-			platform_api.render();
-	}
+		A3D_WND* wnd = wnd_head;
+		while (wnd)
+		{
+			if (wnd->platform_api.render && wnd->mapped)
+			{
+				glXMakeCurrent(dpy, wnd->win, wnd->rc);
+				wnd->platform_api.render(wnd);
+				glXSwapBuffers(dpy, wnd->win);
+			}
 
-	if (ic)
-	{
-		XDestroyIC(ic);
-		XCloseIM(im);
+			wnd = wnd->next;
+		}
 	}
 
 	XCloseDisplay(dpy);
-
-	return true;
+	dpy = 0;
 }
 
-void a3dClose()
+void a3dClose(A3D_WND* wnd)
 {
-	if (!closing)
-	{
-		XDestroyWindow(dpy,win);
-		memset(&platform_api, 0, sizeof(PlatformInterface));
-		closing = true;
-	}
+	glXMakeCurrent(dpy, None, NULL);
+	glXDestroyContext(dpy, wnd->rc);
+	XDestroyWindow(dpy,wnd->win);
+
+	if (wnd->prev)
+		wnd->prev->next = wnd->next;
+	else
+		wnd_head = wnd->next;
+
+	if (wnd->next)
+		wnd->next->prev = wnd->prev;
+	else
+		wnd_tail = wnd->prev;
+
+	free(wnd);
 }
 
 uint64_t a3dGetTime()
@@ -1010,12 +1105,14 @@ uint64_t a3dGetTime()
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+/*
 void a3dSwapBuffers()
 {
 	glXSwapBuffers(dpy, win);
 }
+*/
 
-bool a3dGetKeyb(KeyInfo ki)
+bool a3dGetKeyb(A3D_WND* wnd, KeyInfo ki)
 {
 	/*
 	unsigned int n;
@@ -1025,7 +1122,7 @@ bool a3dGetKeyb(KeyInfo ki)
 	if (ki <= 0 || ki >= A3D_MAPEND)
 		return false;
 
-	if (ki == force_key)
+	if (ki == wnd->force_key)
 		return true;
 
 	int kc = ki_to_kc[ki];
@@ -1038,7 +1135,7 @@ bool a3dGetKeyb(KeyInfo ki)
 	return ( bits[kc >> 3] & (1 << (kc & 7)) ) != 0;
 }
 
-void a3dSetTitle(const char* name)
+void a3dSetTitle(A3D_WND* wnd, const char* name)
 {
 	int rc;
 	size_t len = strlen(name);
@@ -1049,11 +1146,11 @@ void a3dSetTitle(const char* name)
 	wm_icon_name_atom = XInternAtom(dpy, "_NET_WM_ICON_NAME", False);
 	utf8_string_atom = XInternAtom(dpy, "UTF8_STRING", False);
 
-	rc = XChangeProperty(dpy, win, wm_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
-	rc = XChangeProperty(dpy, win, wm_icon_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
+	rc = XChangeProperty(dpy, wnd->win, wm_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
+	rc = XChangeProperty(dpy, wnd->win, wm_icon_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
 }
 
-int a3dGetTitle(char* utf8_name, int size)
+int a3dGetTitle(A3D_WND* wnd, char* utf8_name, int size)
 {
 	Atom wm_name_atom = XInternAtom(dpy,"_NET_WM_NAME", False);
 	Atom utf8_string_atom = XInternAtom(dpy,"UTF8_STRING", False);
@@ -1062,7 +1159,7 @@ int a3dGetTitle(char* utf8_name, int size)
 	unsigned long nitems, after;
 	char* data = 0;
 
-	if (Success == XGetWindowProperty(dpy, win, wm_name_atom, 0, 65536, false, utf8_string_atom, &type, &format, &nitems, &after, (unsigned char**)&data)) 
+	if (Success == XGetWindowProperty(dpy, wnd->win, wm_name_atom, 0, 65536, false, utf8_string_atom, &type, &format, &nitems, &after, (unsigned char**)&data)) 
 	{
 		if (data) 
 		{
@@ -1078,39 +1175,39 @@ int a3dGetTitle(char* utf8_name, int size)
 	return 0;
 }
 
-void a3dSetVisible(bool visible)
+void a3dSetVisible(A3D_WND* wnd, bool visible)
 {
-	mapped = visible;
+	wnd->mapped = visible;
 	if (visible)
 	{
-		XMapWindow(dpy, win);
-		if (wnddirty)
-			a3dSetRect(wndrect,wndmode);
+		XMapWindow(dpy, wnd->win);
+		if (wnd->wnddirty)
+			a3dSetRect(wnd,wnd->wndrect,wnd->wndmode);
 	}
 	else
 	{
-		XUnmapWindow(dpy, win);
+		XUnmapWindow(dpy, wnd->win);
 	}
 }
 
-bool a3dGetVisible()
+bool a3dGetVisible(A3D_WND* wnd)
 {
-	return mapped;
+	return wnd->mapped;
 }
 
-bool a3dIsMaximized()
+bool a3dIsMaximized(A3D_WND* wnd)
 {
 	return false;
 }
 
 // resize
-WndMode a3dGetRect(int* xywh, int* client_wh)
+WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh)
 {
 	if (xywh || client_wh)
 	{
 		int lrtb[4] = {0,0,0,0};
 		// deduce offsetting
-		if (wndmode == A3D_WND_NORMAL && xywh)
+		if (wnd->wndmode == A3D_WND_NORMAL && xywh)
 		{
 			long* extents;
 			Atom actual_type;
@@ -1124,7 +1221,7 @@ WndMode a3dGetRect(int* xywh, int* client_wh)
 			if (frame_extends_atom)
 			{
 				result = XGetWindowProperty(
-					dpy, win, frame_extends_atom,
+					dpy, wnd->win, frame_extends_atom,
 					0, 4, False, AnyPropertyType, 
 					&actual_type, &actual_format, 
 					&nitems, &bytes_after, &data);
@@ -1148,7 +1245,7 @@ WndMode a3dGetRect(int* xywh, int* client_wh)
 		
 		int x,y;
 		unsigned int w,h,b,d;
-		XGetGeometry(dpy,win,&root,&x,&y,&w,&h,&b,&d);
+		XGetGeometry(dpy,wnd->win,&root,&x,&y,&w,&h,&b,&d);
 
 		if (client_wh)
 		{
@@ -1160,7 +1257,7 @@ WndMode a3dGetRect(int* xywh, int* client_wh)
 		{
 			int rx,ry;
 			Window c;
-			XTranslateCoordinates(dpy,win,root,0,0,&rx,&ry,&c);
+			XTranslateCoordinates(dpy,wnd->win,root,0,0,&rx,&ry,&c);
 
 			// if _MOTIF_WM_HINTS and/or _NET_FRAME_EXTENTS are unsupported
 			// this may lead to unconsistent rect setter with getter !!!
@@ -1171,29 +1268,29 @@ WndMode a3dGetRect(int* xywh, int* client_wh)
 			xywh[3] = lrtb[2] + h + lrtb[3];
 		}
 	}
-	return wndmode;
+	return wnd->wndmode;
 }
 
-bool a3dSetRect(const int* xywh, WndMode wnd_mode)
+bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode)
 {
 	if (wnd_mode == A3D_WND_CURRENT)
-		wnd_mode = wndmode;
+		wnd_mode = wnd->wndmode;
 
-	if (!mapped)
+	if (!wnd->mapped)
 	{
 		// emulate success, 
 		// even on unmapped windows
 
-		wndmode = wnd_mode;
-		wnddirty = true;
+		wnd->wndmode = wnd_mode;
+		wnd->wnddirty = true;
 		if (!xywh)
-			a3dGetRect(wndrect, 0);
+			a3dGetRect(wnd,wnd->wndrect, 0);
 		else
 		{
-			wndrect[0] = xywh[0];
-			wndrect[1] = xywh[1];
-			wndrect[2] = xywh[2];
-			wndrect[3] = xywh[3];
+			wnd->wndrect[0] = xywh[0];
+			wnd->wndrect[1] = xywh[1];
+			wnd->wndrect[2] = xywh[2];
+			wnd->wndrect[3] = xywh[3];
 		}
 		
 		return true;
@@ -1209,7 +1306,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			a3dGetRect(wnd_xywh, 0);
+			a3dGetRect(wnd,wnd_xywh, 0);
 			xywh = wnd_xywh;
 		}
 
@@ -1260,7 +1357,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		xcm.serial = 0;	/* # of last request processed by server */
 		xcm.send_event=False;
 		xcm.display=dpy;
-		xcm.window=win;
+		xcm.window=wnd->win;
 		xcm.message_type = XInternAtom(dpy, "_NET_WM_FULLSCREEN_MONITORS", False);
 		xcm.format = 32;
 
@@ -1293,10 +1390,10 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		hints.inputMode = 0;
 		hints.status = 0;
 		Atom motif_hints_atom = XInternAtom(dpy, "_MOTIF_WM_HINTS", False);
-		XChangeProperty(dpy,win,motif_hints_atom,motif_hints_atom,32,PropModeReplace,(unsigned char *)&hints,5);
+		XChangeProperty(dpy,wnd->win,motif_hints_atom,motif_hints_atom,32,PropModeReplace,(unsigned char *)&hints,5);
 	}
 
-	wndmode = wnd_mode;
+	wnd->wndmode = wnd_mode;
 
 	if (wnd_mode == A3D_WND_FULLSCREEN)
 	{
@@ -1306,7 +1403,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		xcm.serial = 0;	/* # of last request processed by server */
 		xcm.send_event=False;
 		xcm.display=dpy;
-		xcm.window=win;
+		xcm.window=wnd->win;
 		xcm.message_type = XInternAtom(dpy, "_NET_WM_STATE", False);
 		xcm.format=32;
 		xcm.data.l[0]=1;//XInternAtom(dpy, "_NET_WM_STATE_ADD", False);
@@ -1328,7 +1425,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		xcm.serial = 0;	/* # of last request processed by server */
 		xcm.send_event=False;
 		xcm.display=dpy;
-		xcm.window=win;
+		xcm.window=wnd->win;
 		xcm.message_type = XInternAtom(dpy, "_NET_WM_STATE", False);
 		xcm.format=32;
 		xcm.data.l[0]=0;//XInternAtom(dpy, "_NET_WM_STATE_REMOVE", False);
@@ -1358,7 +1455,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 				if (frame_extends_atom)
 				{
 					result = XGetWindowProperty(
-						dpy, win, frame_extends_atom,
+						dpy, wnd->win, frame_extends_atom,
 						0, 4, False, AnyPropertyType, 
 						&actual_type, &actual_format, 
 						&nitems, &bytes_after, &data);
@@ -1377,16 +1474,16 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 					}
 				}
 
-				XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2] - lrtb[0] - lrtb[1], xywh[3] - lrtb[2] - lrtb[3]);
+				XMoveResizeWindow(dpy,wnd->win, xywh[0], xywh[1], xywh[2] - lrtb[0] - lrtb[1], xywh[3] - lrtb[2] - lrtb[3]);
 			}
 			else
-				XMoveResizeWindow(dpy,win, xywh[0], xywh[1], xywh[2], xywh[3]);
+				XMoveResizeWindow(dpy,wnd->win, xywh[0], xywh[1], xywh[2], xywh[3]);
 		}
 	}
 }
 
 // mouse
-MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no state
+MouseInfo a3dGetMouse(A3D_WND* wnd, int* x, int* y) // returns but flags, mouse wheel has no state
 {
 	// TODO
 	Window root;
@@ -1395,7 +1492,7 @@ MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no s
 	int win_x, win_y;
 	unsigned int mask;
 
-	if (XQueryPointer(dpy, win, &root, &child, &root_x, &root_y, &win_x, &win_y, &mask))
+	if (XQueryPointer(dpy, wnd->win, &root, &child, &root_x, &root_y, &win_x, &win_y, &mask))
 	{
 		int state = 0;
 		state |= mask & Button1Mask ? MouseInfo::LEFT : 0;
@@ -1413,23 +1510,33 @@ MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no s
 	return (MouseInfo)0;
 }
 
-void a3dSetFocus()
+void a3dSetCookie(A3D_WND* wnd, void* cookie)
 {
-	XSetInputFocus(dpy, win, RevertToNone, CurrentTime);
+	wnd->cookie = cookie;
 }
 
-bool a3dGetFocus()
+void* a3dGetCookie(A3D_WND* wnd)
+{
+	return wnd->cookie;
+}
+
+void a3dSetFocus(A3D_WND* wnd)
+{
+	XSetInputFocus(dpy, wnd->win, RevertToNone, CurrentTime);
+}
+
+bool a3dGetFocus(A3D_WND* wnd)
 {
 	Window focused;
 	int revert_to;
 	XGetInputFocus(dpy, &focused, &revert_to);
-	return focused == win;
+	return focused == wnd->win;
 }
 
-void a3dCharSync()
+void a3dCharSync(A3D_WND* wnd)
 {
-	if (ic)
-		Xutf8ResetIC(ic);					
+	if (wnd->ic)
+		Xutf8ResetIC(wnd->ic);					
 }
 
 #include "upng.h"
@@ -1475,6 +1582,7 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
     static Atom netWmIcon = XInternAtom(dpy,"_NET_WM_ICON", False);
+	A3D_WND* wnd = (A3D_WND*)cookie;
 
 	int wh = w*h;
 
@@ -1487,21 +1595,21 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 	// convert to 0x[0]AARRGGBB unsigned long!!!
 	Convert_UL_AARRGGBB(buf,f,w,h,data,palsize,palbuf);
 
-    XChangeProperty(dpy, win, netWmIcon, XA_CARDINAL, 32, PropModeReplace, 
+    XChangeProperty(dpy, wnd->win, netWmIcon, XA_CARDINAL, 32, PropModeReplace, 
 					(const unsigned char*)wh_buf, 2 + wh);
 
 	free(wh_buf);
 }
 
-bool a3dSetIconData(A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+bool a3dSetIconData(A3D_WND* wnd, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
-	_a3dSetIconData(0, f, w, h, data, palsize, palbuf);
+	_a3dSetIconData(wnd, f, w, h, data, palsize, palbuf);
 	return true;
 }
 
-bool a3dSetIcon(const char* path)
+bool a3dSetIcon(A3D_WND* wnd, const char* path)
 {
-	return a3dLoadImage(path, 0, _a3dSetIconData);
+	return a3dLoadImage(path, wnd, _a3dSetIconData);
 }
 
 int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* name, void* cookie), void* cookie)
