@@ -1,5 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "asciiid_platform.h"
 
-void SetScreen(bool alt);
+void TermOpen(A3D_WND* share);
+void TermCloseAll();

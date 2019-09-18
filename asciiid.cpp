@@ -35,6 +35,10 @@
 
 #include "fast_rand.h"
 
+#include "asciiid_term.h"
+
+
+// A3D_WND* wnd = 0;
 
 // just for write(fd)
 #ifndef _WIN32
@@ -2743,8 +2747,24 @@ void Load(const char* path)
 	active_mesh = GetFirstMesh(world);	
 }
 
-void my_render()
+void my_render(A3D_WND* wnd)
 {
+	// FPS DUMPER
+	{
+		static int frames = 0;
+		frames++;
+		static uint64_t p = a3dGetTime();
+		uint64_t t = a3dGetTime();
+		uint64_t d = t - p;
+		if (d > 1000000)
+		{
+			double fps = 1000000.0 * frames / (double)d;
+			printf("fps = %.2f\n", fps);
+			p = t;
+			frames = 0;
+		}
+	}
+
 	ImGuiIO& io = ImGui::GetIO();
 
 	#ifdef MOUSE_QUEUE
@@ -3174,10 +3194,10 @@ void my_render()
 		ImGui::Text("VT HEAP Ops: %d", last_heap_ops);
 
 		int xywh[4],wh[2];
-		a3dGetRect(xywh, wh);
+		a3dGetRect(wnd, xywh, wh);
 		ImGui::Text("%d,%d,%d,%d %d,%d %s", 
 			xywh[0], xywh[1], xywh[2], xywh[3],
-			wh[0], wh[1], a3dIsMaximized() ? "MAXIMIZED" : "normal");
+			wh[0], wh[1], a3dIsMaximized(wnd) ? "MAXIMIZED" : "normal");
 
 		if (ImGui::Button(io.KeyShift ? "DEPALETTIZE" : "PALETTIZE"))
 		{
@@ -3218,6 +3238,14 @@ void my_render()
 			{
 				New();
 			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("TERM++"))
+			{
+				TermOpen(wnd);
+			}
+
 		}
 		else
 		{
@@ -3233,24 +3261,24 @@ void my_render()
 
 		if (ImGui::Button("FULL"))
 		{
-			a3dSetRect(0, A3D_WND_FULLSCREEN);
+			a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("NORM"))
 		{
-			a3dSetRect(0, A3D_WND_NORMAL);
+			a3dSetRect(wnd, 0, A3D_WND_NORMAL);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("PURE"))
 		{
-			a3dSetRect(0, A3D_WND_FRAMELESS);
+			a3dSetRect(wnd, 0, A3D_WND_FRAMELESS);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("KEEP"))
 		{
 			int r[4];
-			WndMode mode = a3dGetRect(r, 0);
-			a3dSetRect(r, mode);
+			WndMode mode = a3dGetRect(wnd, r, 0);
+			a3dSetRect(wnd, r, mode);
 		}
 
 		static char utf8_buf[1024]="Z\xC3\xB3pa";
@@ -5119,10 +5147,10 @@ void my_render()
 	}
 	#endif
 
-	a3dSwapBuffers();
+	//a3dSwapBuffers();
 }
 
-void my_mouse(int x, int y, MouseInfo mi)
+void my_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 {
 	#ifdef MOUSE_QUEUE
 
@@ -5209,13 +5237,13 @@ void my_mouse(int x, int y, MouseInfo mi)
 	#endif
 }
 
-void my_resize(int w, int h)
+void my_resize(A3D_WND* wnd, int w, int h)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	io.DisplaySize = ImVec2((float)w, (float)h);
 }
 
-void my_init()
+void my_init(A3D_WND* wnd)
 {
 	#if 0
 	int term_w = 90;
@@ -5425,18 +5453,18 @@ void my_init()
 	pos_y = num1 * VISUAL_CELLS / 2;
 	pos_z = 0x0;
 
-	const char* utf8 = "gugu\xC5\xBB\xC3\xB3\xC5\x82\xC4\x87";
+	const char* utf8 = "ASCIIID Edit";
 
-	a3dSetTitle(utf8/*"ASCIIID"*/);
-	a3dSetIcon("./icons/app.png");
-	a3dSetVisible(true);
+	a3dSetTitle(wnd,utf8/*"ASCIIID"*/);
+	a3dSetIcon(wnd,"./icons/app.png");
+	a3dSetVisible(wnd,true);
 
 	//int rect[] = { 1920 * 2, 0, 1920,1080 };
 	int rect[] = { 1920, 0, 1920,1080 };
-	a3dSetRect(rect, A3D_WND_NORMAL);
+	a3dSetRect(wnd,rect, A3D_WND_NORMAL);
 }
 
-void my_keyb_char(wchar_t chr)
+void my_keyb_char(A3D_WND* wnd, wchar_t chr)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddInputCharacter((unsigned short)chr);
@@ -5495,16 +5523,16 @@ void my_keyb_char(wchar_t chr)
 	#endif
 }
 
-void my_keyb_key(KeyInfo ki, bool down)
+void my_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	if (ki < IM_ARRAYSIZE(io.KeysDown))
 		io.KeysDown[ki] = down;
 	
-	io.KeysDown[A3D_ENTER] = a3dGetKeyb(A3D_ENTER) || a3dGetKeyb(A3D_NUMPAD_ENTER);
-	io.KeyAlt = a3dGetKeyb(A3D_LALT);// || a3dGetKeyb(A3D_RALT);
-	io.KeyCtrl = a3dGetKeyb(A3D_LCTRL) || a3dGetKeyb(A3D_RCTRL);
-	io.KeyShift = a3dGetKeyb(A3D_LSHIFT) || a3dGetKeyb(A3D_RSHIFT);
+	io.KeysDown[A3D_ENTER] = a3dGetKeyb(wnd,A3D_ENTER) || a3dGetKeyb(wnd, A3D_NUMPAD_ENTER);
+	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);// || a3dGetKeyb(wnd,A3D_RALT);
+	io.KeyCtrl = a3dGetKeyb(wnd, A3D_LCTRL) || a3dGetKeyb(wnd, A3D_RCTRL);
+	io.KeyShift = a3dGetKeyb(wnd, A3D_LSHIFT) || a3dGetKeyb(wnd, A3D_RSHIFT);
 
 	#if 0
 	bool DECCKM = a3dGetVTCursorsMode(term);
@@ -5663,12 +5691,14 @@ void my_keyb_key(KeyInfo ki, bool down)
 	#endif
 }
 
-void my_keyb_focus(bool set)
+void my_keyb_focus(A3D_WND* wnd, bool set)
 {
 }
 
-void my_close()
+void my_close(A3D_WND* wnd)
 {
+	TermCloseAll();
+
 	// free mesh prefs !!!
 	Mesh* m = GetFirstMesh(world);
 	while (m)
@@ -5705,12 +5735,12 @@ void my_close()
 		a3dDestroyVT(term);
 	#endif
 
-	a3dClose();
-
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui::DestroyContext();
 
 	render_context.Delete();
+
+	a3dClose(wnd);
 
 	#if 0
 	SetScreen(false);
@@ -5784,7 +5814,9 @@ int main(int argc, char *argv[])
 	gd.wnd_mode = A3D_WND_NORMAL;
 	gd.wnd_xywh = 0;
 
-	a3dOpen(&pi, &gd);
+
+	a3dOpen(&pi, &gd, 0);
+	a3dLoop();
 
 	return 0;
 }

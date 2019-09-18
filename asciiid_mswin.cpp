@@ -29,19 +29,32 @@ struct A3D_PTY
 	*/
 };
 
-static PlatformInterface platform_api;
-static int mouse_b = 0;
-static int mouse_x = 0;
-static int mouse_y = 0;
-static bool track = false;
-static bool closing = false;
+LARGE_INTEGER coarse_perf, timer_freq;
+uint64_t coarse_micro;
 
-static LARGE_INTEGER coarse_perf, timer_freq;
-static uint64_t coarse_micro;
+A3D_WND* wnd_head = 0;
+A3D_WND* wnd_tail = 0;
 
-static bool mapped = false;
-static WndMode wndmode = A3D_WND_NORMAL;
-static int exit_full_xywh[4] = { 0,0,0,0 }; // always a3dGetRect
+struct A3D_WND
+{
+	PlatformInterface platform_api;
+
+	HWND hwnd;
+	HDC dc;
+	HGLRC rc;
+
+	A3D_WND* prev;
+	A3D_WND* next;
+	void* cookie;
+
+	int mouse_b = 0;
+	int mouse_x = 0;
+	int mouse_y = 0;
+	bool track = false;
+	bool mapped = false;
+	WndMode wndmode = A3D_WND_NORMAL;
+	int exit_full_xywh[4] = { 0,0,0,0 }; // always a3dGetRect
+};
 
 static const unsigned char ki_to_vk[256] =
 {
@@ -441,24 +454,73 @@ static const unsigned char vk_to_ki[256] =
 
 LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 {
+	A3D_WND* wnd = 0;
+
+	if (m == WM_CREATE)
+	{
+		wnd = (A3D_WND*)malloc(sizeof(A3D_WND));
+		wnd->cookie = 0;
+		wnd->track = false;
+		wnd->mouse_b = 0;
+
+		if (!wnd_head)
+		{
+			QueryPerformanceFrequency(&timer_freq);
+			QueryPerformanceCounter(&coarse_perf);
+			coarse_micro = 0;
+		}
+
+		SetWindowLongPtr(h, GWLP_USERDATA, (LONG_PTR)wnd);
+
+		// set timer to refresh coarse_perf & coarse_micro every minute
+		// to prevent overflows in a3dGetTIme 
+		SetTimer(h, 1, 60000, 0);
+
+
+		wnd->prev = wnd_tail;
+		wnd->next = 0;
+		if (wnd_tail)
+			wnd_tail->next = wnd;
+		else
+			wnd_head = wnd;
+		wnd_tail = wnd;
+
+		return TRUE;
+	}
+
+	wnd = (A3D_WND*)GetWindowLongPtr(h, GWLP_USERDATA);
+
+	if (!wnd)
+		return DefWindowProcW(h, m, w, l);
+
+	wglMakeCurrent(wnd->dc, wnd->rc);
+
 	int mi = 0;
 	int rep = 1;
 
 	switch (m)
 	{
-		case WM_CREATE:
-			closing = false;
-			track = false;
-			mouse_b = 0;
+		case WM_DESTROY:
+		{
+			SetWindowLongPtr(h, GWLP_USERDATA, (LONG_PTR)0);
 
-			QueryPerformanceFrequency(&timer_freq);
-			QueryPerformanceCounter(&coarse_perf);
-			coarse_micro = 0;
+			wglMakeCurrent(0, 0);
+			wglDeleteContext(wnd->rc);
+			ReleaseDC(h, wnd->dc);
 
-			// set timer to refresh coarse_perf & coarse_micro every minute
-			// to prevent overflows in a3dGetTIme 
-			SetTimer(h, 1, 60000, 0);
-			return TRUE;
+			if (wnd->prev)
+				wnd->prev->next = wnd->next;
+			else
+				wnd_head = wnd->next;
+
+			if (wnd->next)
+				wnd->next->prev = wnd->prev;
+			else
+				wnd_tail = wnd->prev;
+
+			free(wnd);
+			break;
+		}
 
 		case WM_ENTERMENULOOP:
 		{
@@ -486,7 +548,7 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 
 		case WM_TIMER:
 		{
-			if (w == 1)
+			if (w == 1 && wnd == wnd_head)
 			{
 				LARGE_INTEGER c;
 				QueryPerformanceCounter(&c);
@@ -498,25 +560,24 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 			else
 			if (w == 2 || w == 3)
 			{
-				if (platform_api.render)
-					platform_api.render();
+				if (wnd->platform_api.render)
+					wnd->platform_api.render(wnd);
 			}
 			break;
 		}
 		
 		case WM_CLOSE:
-			if (platform_api.close)
-				platform_api.close();
+			if (wnd->platform_api.close)
+				wnd->platform_api.close(wnd);
 			else
 			{
-				memset(&platform_api, 0, sizeof(PlatformInterface));
-				closing = true;
+				DestroyWindow(h);
 			}
 			return 0;
 
 		case WM_SIZE:
-			if (platform_api.resize)
-				platform_api.resize(LOWORD(l),HIWORD(l));
+			if (wnd->platform_api.resize)
+				wnd->platform_api.resize(wnd,LOWORD(l),HIWORD(l));
 			return 0;
 
 		case WM_ERASEBKGND:
@@ -541,18 +602,18 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 			break;
 
 		case WM_SETFOCUS:
-			if (platform_api.keyb_focus)
-				platform_api.keyb_focus(true);
+			if (wnd->platform_api.keyb_focus)
+				wnd->platform_api.keyb_focus(wnd,true);
 			break;
 
 		case WM_KILLFOCUS:
-			if (platform_api.keyb_focus)
-				platform_api.keyb_focus(false);
+			if (wnd->platform_api.keyb_focus)
+				wnd->platform_api.keyb_focus(wnd, false);
 			break;
 
 		case WM_CHAR:
-			if (platform_api.keyb_char)
-				platform_api.keyb_char((wchar_t)w);
+			if (wnd->platform_api.keyb_char)
+				wnd->platform_api.keyb_char(wnd, (wchar_t)w);
 			break;
 
 		case WM_SYSCOMMAND:
@@ -568,7 +629,7 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 		case WM_SYSKEYUP:
 		case WM_KEYDOWN:
 		case WM_KEYUP:
-			if (platform_api.keyb_key && w < 256)
+			if (wnd->platform_api.keyb_key && w < 256)
 			{
 				KeyInfo ki = (KeyInfo)vk_to_ki[w];
 				if (!ki)
@@ -589,7 +650,7 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 						ki = A3D_NUMPAD_ENTER;
 				}
 
-				platform_api.keyb_key(ki, m == WM_KEYDOWN || m == WM_SYSKEYDOWN);
+				wnd->platform_api.keyb_key(wnd, ki, m == WM_KEYDOWN || m == WM_SYSKEYDOWN);
 
 				/*
 				if (m == WM_SYSKEYUP || m == WM_KEYUP)
@@ -610,16 +671,16 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 		*/
 
 		case WM_MOUSELEAVE:
-			track = false;
-			if (platform_api.mouse)
-				platform_api.mouse(mouse_x, mouse_y, MouseInfo::LEAVE);
+			wnd->track = false;
+			if (wnd->platform_api.mouse)
+				wnd->platform_api.mouse(wnd, wnd->mouse_x, wnd->mouse_y, MouseInfo::LEAVE);
 			break;
 
 		case WM_MOUSEMOVE:
-			mouse_x = (short)LOWORD(l);
-			mouse_y = (short)HIWORD(l);
+			wnd->mouse_x = (short)LOWORD(l);
+			wnd->mouse_y = (short)HIWORD(l);
 			mi = MouseInfo::MOVE;
-			if (!track)
+			if (!wnd->track)
 			{
 				mi = MouseInfo::ENTER;
 				TRACKMOUSEEVENT tme;
@@ -628,51 +689,51 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 				tme.dwHoverTime = HOVER_DEFAULT;
 				tme.hwndTrack = h;
 				TrackMouseEvent(&tme);
-				track = true;
+				wnd->track = true;
 			}
 			break;
 
 		case WM_LBUTTONDOWN:
-			mouse_b |= MouseInfo::LEFT;
+			wnd->mouse_b |= MouseInfo::LEFT;
 			mi = MouseInfo::LEFT_DN;
 			SetCapture(h);
 			break;
 
 		case WM_LBUTTONUP:
-			mouse_b &= ~MouseInfo::LEFT;
+			wnd->mouse_b &= ~MouseInfo::LEFT;
 			mi = MouseInfo::LEFT_UP;
 			if (0 == (w & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)))
 				ReleaseCapture();
 			break;
 
 		case WM_RBUTTONDOWN:
-			mouse_b |= MouseInfo::RIGHT;
+			wnd->mouse_b |= MouseInfo::RIGHT;
 			mi = MouseInfo::RIGHT_DN;
 			SetCapture(h);
 			break;
 
 		case WM_RBUTTONUP:
-			mouse_b &= ~MouseInfo::RIGHT;
+			wnd->mouse_b &= ~MouseInfo::RIGHT;
 			mi = MouseInfo::RIGHT_UP;
 			if (0 == (w & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)))
 				ReleaseCapture();
 			break;
 
 		case WM_MBUTTONDOWN:
-			mouse_b |= MouseInfo::MIDDLE;
+			wnd->mouse_b |= MouseInfo::MIDDLE;
 			mi = MouseInfo::MIDDLE_DN;
 			SetCapture(h);
 			break;
 
 		case WM_MBUTTONUP:
-			mouse_b &= ~MouseInfo::MIDDLE;
+			wnd->mouse_b &= ~MouseInfo::MIDDLE;
 			mi = MouseInfo::MIDDLE_UP;
 			if (0 == (w & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)))
 				ReleaseCapture();
 			break;
 	}
 
-	if (mi && platform_api.mouse)
+	if (mi && wnd->platform_api.mouse)
 	{
 		if (w & MK_LBUTTON)
 			mi |= MouseInfo::LEFT;
@@ -682,7 +743,7 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 			mi |= MouseInfo::MIDDLE;
 
 		for (int i=0; i<rep; i++)
-			platform_api.mouse(mouse_x, mouse_y, (MouseInfo)mi);
+			wnd->platform_api.mouse(wnd, wnd->mouse_x, wnd->mouse_y, (MouseInfo)mi);
 
 		return 0;
 	}
@@ -700,8 +761,27 @@ LONG WINAPI a3dExceptionProc(EXCEPTION_POINTERS *ExceptionInfo)
 */
 
 // creates window & initialized GL
-bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/)
+A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* share)
 {
+	// push current context!
+	struct PUSH
+	{
+		PUSH()
+		{
+			dc = wglGetCurrentDC();
+			rc = wglGetCurrentContext();
+		}
+
+		~PUSH()
+		{
+			wglMakeCurrent(dc, rc);
+		}
+
+		HDC dc;
+		HGLRC rc;
+
+	} push;
+
 	//_CrtSetBreakAlloc(69);
 
 	if (!pi || !gd)
@@ -713,16 +793,15 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = 0;
 	wc.hInstance = GetModuleHandle(0);
-	wc.hIcon = LoadIcon(0,IDI_APPLICATION);
+	wc.hIcon = LoadIcon(0, IDI_APPLICATION);
 	wc.hCursor = LoadCursor(0, IDC_ARROW);
 	wc.hbrBackground = NULL;
 	wc.lpszMenuName = NULL;
 	wc.lpszClassName = L"A3DWNDCLASS";
 
-	if (!RegisterClass(&wc))
-		return false;
 
-	memset(&platform_api, 0, sizeof(PlatformInterface));
+	if (!wnd_head && !RegisterClass(&wc))
+		return false;
 
 	DWORD styles = WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 	styles |= WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
@@ -736,6 +815,10 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		UnregisterClass(wc.lpszClassName, wc.hInstance);
 		return false;
 	}
+
+	A3D_WND* wnd = (A3D_WND*)GetWindowLongPtr(h, GWLP_USERDATA);
+	memset(&wnd->platform_api, 0, sizeof(PlatformInterface));
+	wnd->hwnd = h;
 
 	styles |= WS_POPUP; // add it later (hack to make CW_USEDEFAULT working)
 	SetWindowLong(h, GWL_STYLE, styles);
@@ -807,7 +890,7 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	wglMakeCurrent(0, 0);
 	wglDeleteContext(rc);
 
-	rc = wglCreateContextAttribsARB(dc, 0/*shareRC*/, contextAttribs);
+	rc = wglCreateContextAttribsARB(dc, share ? share->rc : 0, contextAttribs);
 	if (!rc)
 	{
 		ReleaseDC(h, dc);
@@ -825,36 +908,42 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 		return false;
 	}
 
-	platform_api = *pi;
-
-	_CrtMemState mem_state;
-	_CrtMemCheckpoint(&mem_state);
+	wnd->platform_api = *pi;
 
 	bool mapped = false;
-	wndmode = A3D_WND_NORMAL;
+	wnd->wndmode = A3D_WND_NORMAL;
 
-	if (platform_api.init)
-		platform_api.init();
+	wnd->dc = dc;
+	wnd->rc = rc;
+
+	if (wnd->platform_api.init)
+		wnd->platform_api.init(wnd);
 
 	// send initial notifications:
 	RECT r;
 	GetClientRect(h, &r);
-	if (platform_api.resize)
-		platform_api.resize(r.right,r.bottom);
+	if (wnd->platform_api.resize)
+	{
+		wglMakeCurrent(dc, rc);
+		wnd->platform_api.resize(wnd, r.right, r.bottom);
+	}
+
+	return wnd;
 
 	// LPTOP_LEVEL_EXCEPTION_FILTER old_exception_proc = SetUnhandledExceptionFilter(a3dExceptionProc);
 
-	while (!closing)
+	/*
+	while (!wnd->closing)
 	{
 		MSG msg;
-		while (!closing && PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
+		while (!wnd->closing && PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
 		{
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
 
-		if (!closing && platform_api.render)
-			platform_api.render();
+		if (!wnd->closing && wnd->platform_api.render)
+			wnd->platform_api.render();
 	}
 
 	_CrtMemDumpAllObjectsSince(&mem_state);
@@ -868,12 +957,89 @@ bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioD
 	// SetUnhandledExceptionFilter(old_exception_proc);
 
 	return true;
+	*/
 }
 
-void a3dClose()
+void a3dLoop() // infinite untill all windows are destroyed
 {
-	memset(&platform_api, 0, sizeof(PlatformInterface));
-	closing = true;
+	// while (!wnd->closing)
+
+	while (wnd_head)
+	{
+		MSG msg;
+		while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+
+		WGLSWAP swap[WGL_SWAPMULTIPLE_MAX];
+		int num = 0;
+
+		A3D_WND* wnd = wnd_head;
+		while (wnd)
+		{
+			if (wnd->platform_api.render)
+			{
+				wglMakeCurrent(wnd->dc, wnd->rc);
+				wnd->platform_api.render(wnd);
+				swap[num].hdc = wnd->dc;
+				swap[num].uiFlags = 1;
+				num++;
+
+				if (num == WGL_SWAPMULTIPLE_MAX)
+				{
+					wglSwapMultipleBuffers(num,swap);
+					num = 0;
+				}
+			}
+			wnd = wnd->next;
+		}
+
+		if (num)
+			wglSwapMultipleBuffers(num, swap);
+	}
+
+	UnregisterClass(L"A3DWNDCLASS", GetModuleHandle(0));
+
+	// SetUnhandledExceptionFilter(old_exception_proc);
+}
+
+void a3dClose(A3D_WND* wnd)
+{
+	struct PUSH
+	{
+		PUSH()
+		{
+			dc = wglGetCurrentDC();
+			rc = wglGetCurrentContext();
+		}
+
+		~PUSH()
+		{
+			wglMakeCurrent(dc, rc);
+		}
+
+		HDC dc;
+		HGLRC rc;
+
+	} push;
+
+	DestroyWindow(wnd->hwnd);
+	/*
+	memset(&wnd->platform_api, 0, sizeof(PlatformInterface));
+	wnd->closing = true;
+	*/
+}
+
+void a3dSetCookie(A3D_WND* wnd, void* cookie)
+{
+	wnd->cookie = cookie;
+}
+
+void* a3dGetCookie(A3D_WND* wnd)
+{
+	return wnd->cookie;
 }
 
 uint64_t a3dGetTime()
@@ -883,15 +1049,20 @@ uint64_t a3dGetTime()
 	uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
 	return coarse_micro + diff * 1000000 / timer_freq.QuadPart;
 	// we can handle diff upto 3 minutes @ 100GHz clock
-	// this is why we refresh coarse time every minute on WM_TIMER
+	// this is why we refresh coarse time every minute on WM_TIMER of wnd_head
 }
 
+/*
 void a3dSwapBuffers()
 {
+	// no need wnd
+	// swap buffers can be called only inside render cb
+	// (caller makes appropriate MakeCurrent call)
 	SwapBuffers(wglGetCurrentDC());
 }
+*/
 
-bool a3dGetKeyb(KeyInfo ki)
+bool a3dGetKeyb(A3D_WND* wnd, KeyInfo ki)
 {
 	if (ki < 0 || ki >= A3D_MAPEND || ki_to_vk[ki] == 0)
 		return false;
@@ -900,20 +1071,20 @@ bool a3dGetKeyb(KeyInfo ki)
 	return false;
 }
 
-void a3dSetTitle(const char* utf8_name)
+void a3dSetTitle(A3D_WND* wnd, const char* utf8_name)
 {
 	int wchars_num = MultiByteToWideChar(CP_UTF8, 0, utf8_name, -1, NULL, 0);
 	wchar_t* wstr = (wchar_t*)malloc(sizeof(wchar_t)*(1+wchars_num));
 	MultiByteToWideChar(CP_UTF8, 0, utf8_name, -1, wstr, wchars_num);
 	wstr[wchars_num]=0;
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 	SetWindowTextW(hWnd, wstr);
 	free(wstr);
 }
 
-int a3dGetTitle(char* utf8_name, int size)
+int a3dGetTitle(A3D_WND* wnd, char* utf8_name, int size)
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 	int wchars_num = GetWindowTextLength(hWnd);
 	if (utf8_name && size>0)
 	{
@@ -930,21 +1101,21 @@ int a3dGetTitle(char* utf8_name, int size)
 	return 3*wchars_num; // 3 bytes / char is enough to store BMP 
 }
 
-void a3dSetVisible(bool visible)
+void a3dSetVisible(A3D_WND* wnd, bool visible)
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	mapped = visible;
+	HWND hWnd = wnd->hwnd;
+	wnd->mapped = visible;
 	ShowWindow(hWnd, visible ? SW_SHOW : SW_HIDE);
 }
 
-bool a3dGetVisible()
+bool a3dGetVisible(A3D_WND* wnd)
 {
-	return mapped;
+	return wnd->mapped;
 }
 
-WndMode a3dGetRect(int* xywh, int* client_wh)
+WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh)
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 	RECT r;
 
 	if (client_wh)
@@ -962,7 +1133,7 @@ WndMode a3dGetRect(int* xywh, int* client_wh)
 		xywh[2] = r.right - r.left;
 		xywh[3] = r.bottom - r.top;
 
-		if (wndmode == A3D_WND_NORMAL)
+		if (wnd->wndmode == A3D_WND_NORMAL)
 		{
 			HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL);
 			if (mon)
@@ -1009,30 +1180,30 @@ WndMode a3dGetRect(int* xywh, int* client_wh)
 		}
 	}
 
-	return wndmode;
+	return wnd->wndmode;
 }
 
-bool a3dIsMaximized()
+bool a3dIsMaximized(A3D_WND* wnd)
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
-	return wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd, GWL_STYLE));
+	HWND hWnd = wnd->hwnd;
+	return wnd->wndmode == A3D_WND_NORMAL && (WS_MAXIMIZE & GetWindowLong(hWnd, GWL_STYLE));
 }
 
-bool a3dSetRect(const int* xywh, WndMode wnd_mode)
+bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode)
 {
-	if (!mapped)
+	if (!wnd->mapped)
 		return false;
 
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 
 	if (wnd_mode == A3D_WND_FULLSCREEN)
 	{
 		DWORD s = GetWindowLong(hWnd, GWL_STYLE);
 		s &= ~(WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
 
-		if (wndmode != A3D_WND_FULLSCREEN)
+		if (wnd->wndmode != A3D_WND_FULLSCREEN)
 		{
-			a3dGetRect(exit_full_xywh, 0);
+			a3dGetRect(wnd,wnd->exit_full_xywh, 0);
 		}
 
 		struct EnumMon
@@ -1064,7 +1235,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			a3dGetRect(wnd_xywh, 0);
+			a3dGetRect(wnd,wnd_xywh, 0);
 			xywh = wnd_xywh;
 		}
 
@@ -1112,7 +1283,7 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		wnd_xywh[2] = em.r[right_mon][0] + em.r[right_mon][2] - em.r[left_mon][0];
 		wnd_xywh[3] = em.r[bottom_mon][1] + em.r[bottom_mon][3] - em.r[top_mon][1];
 
-		wndmode = wnd_mode;
+		wnd->wndmode = wnd_mode;
 
 		s &= ~WS_MAXIMIZE;
 		SetWindowLong(hWnd, GWL_STYLE, s);
@@ -1129,21 +1300,21 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			if (wndmode == A3D_WND_FULLSCREEN)
+			if (wnd->wndmode == A3D_WND_FULLSCREEN)
 			{
-				wnd_xywh[0] = exit_full_xywh[0];
-				wnd_xywh[1] = exit_full_xywh[1];
-				wnd_xywh[2] = exit_full_xywh[2];
-				wnd_xywh[3] = exit_full_xywh[3];
+				wnd_xywh[0] = wnd->exit_full_xywh[0];
+				wnd_xywh[1] = wnd->exit_full_xywh[1];
+				wnd_xywh[2] = wnd->exit_full_xywh[2];
+				wnd_xywh[3] = wnd->exit_full_xywh[3];
 			}
 			else
 			{
-				a3dGetRect(wnd_xywh, 0);
+				a3dGetRect(wnd,wnd_xywh, 0);
 			}
 			xywh = wnd_xywh;
 		}
 
-		wndmode = wnd_mode;
+		wnd->wndmode = wnd_mode;
 
 		s &= ~WS_MAXIMIZE;
 		SetWindowLong(hWnd, GWL_STYLE, s);
@@ -1160,22 +1331,22 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 		int wnd_xywh[4];
 		if (!xywh)
 		{
-			if (wndmode == A3D_WND_FULLSCREEN)
+			if (wnd->wndmode == A3D_WND_FULLSCREEN)
 			{
-				wnd_xywh[0] = exit_full_xywh[0];
-				wnd_xywh[1] = exit_full_xywh[1];
-				wnd_xywh[2] = exit_full_xywh[2];
-				wnd_xywh[3] = exit_full_xywh[3];
+				wnd_xywh[0] = wnd->exit_full_xywh[0];
+				wnd_xywh[1] = wnd->exit_full_xywh[1];
+				wnd_xywh[2] = wnd->exit_full_xywh[2];
+				wnd_xywh[3] = wnd->exit_full_xywh[3];
 			}
 			else
 			{
-				a3dGetRect(wnd_xywh, 0);
+				a3dGetRect(wnd,wnd_xywh, 0);
 			}
 
 			xywh = wnd_xywh;
 		}
 
-		wndmode = wnd_mode;
+		wnd->wndmode = wnd_mode;
 
 		s &= ~WS_MAXIMIZE;
 		SetWindowLong(hWnd, GWL_STYLE, s);
@@ -1188,9 +1359,9 @@ bool a3dSetRect(const int* xywh, WndMode wnd_mode)
 
 
 // mouse
-MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no state
+MouseInfo a3dGetMouse(A3D_WND* wnd, int* x, int* y) // returns but flags, mouse wheel has no state
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 	POINT p;
 	GetCursorPos(&p);
 	ScreenToClient(hWnd, &p);
@@ -1211,19 +1382,19 @@ MouseInfo a3dGetMouse(int* x, int* y) // returns but flags, mouse wheel has no s
 	return (MouseInfo)fl;
 }
 
-void a3dSetFocus()
+void a3dSetFocus(A3D_WND* wnd)
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 	SetFocus(hWnd);
 }
 
-bool a3dGetFocus()
+bool a3dGetFocus(A3D_WND* wnd)
 {
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 	return GetFocus() == hWnd;
 }
 
-void a3dCharSync()
+void a3dCharSync(A3D_WND* wnd)
 {
 	// seams to be handled by OS
 }
@@ -1270,6 +1441,8 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 
 void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
+	A3D_WND* wnd = (A3D_WND*)cookie;
+
 	BITMAPV5HEADER bi;
 	bi.bV5Size = sizeof(BITMAPV5HEADER);
 	bi.bV5Width = w;
@@ -1311,7 +1484,7 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 
 	HICON hSmall, hBig;
 
-	HWND hWnd = WindowFromDC(wglGetCurrentDC());
+	HWND hWnd = wnd->hwnd;
 	hSmall = (HICON)SendMessage(hWnd, WM_SETICON, 0, (LPARAM)hIcon);
 	hBig = (HICON)SendMessage(hWnd, WM_SETICON, 1, (LPARAM)hIcon);
 
@@ -1322,15 +1495,15 @@ void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* 
 		DestroyIcon(hBig);
 }
 
-bool a3dSetIconData(A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+bool a3dSetIconData(A3D_WND* wnd, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
-	_a3dSetIconData(0, f, w, h, data, palsize, palbuf);
+	_a3dSetIconData(wnd, f, w, h, data, palsize, palbuf);
 	return true;
 }
 
-bool a3dSetIcon(const char* path)
+bool a3dSetIcon(A3D_WND* wnd, const char* path)
 {
-	return a3dLoadImage(path, 0, _a3dSetIconData);
+	return a3dLoadImage(path, wnd, _a3dSetIconData);
 }
 
 int a3dListDir(const char* dir_path, bool(*cb)(A3D_DirItem item, const char* name, void* cookie), void* cookie)

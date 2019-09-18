@@ -11,6 +11,8 @@ struct AudioDesc
 };
 */
 
+struct A3D_WND;
+
 enum WndMode
 {
 	A3D_WND_CURRENT = 0,
@@ -201,14 +203,14 @@ enum KeyInfo
 
 struct PlatformInterface
 {
-	void(*init)();
-	void(*render)();
-	void(*resize)(int w, int h);
-	void(*close)();
-	void(*keyb_key)(KeyInfo vk, bool down);
-	void(*keyb_char)(wchar_t ch);
-	void(*keyb_focus)(bool set);
-	void(*mouse)(int x, int y, MouseInfo mi);
+	void(*init)(A3D_WND* wnd);
+	void(*render)(A3D_WND* wnd);
+	void(*resize)(A3D_WND* wnd, int w, int h);
+	void(*close)(A3D_WND* wnd);
+	void(*keyb_key)(A3D_WND* wnd, KeyInfo vk, bool down);
+	void(*keyb_char)(A3D_WND* wnd, wchar_t ch);
+	void(*keyb_focus)(A3D_WND* wnd, bool set);
+	void(*mouse)(A3D_WND* wnd, int x, int y, MouseInfo mi);
 
 	// asset loader
 	void(*image)(void* cookie, int width, int height, int channels, int depth, void* data);
@@ -218,35 +220,40 @@ struct PlatformInterface
 	//void(*audio)(int samples, void* buffer);
 };
 
-bool a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd/*, const AudioDesc* ad*/);
-void a3dClose(); // if PlatformInterface::close==null it is called automaticaly when user closes window
+A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* share);
+void a3dClose(A3D_WND* wnd); // if PlatformInterface::close==null it is called automaticaly when user closes window
 
-void a3dSwapBuffers();
+void a3dSetCookie(A3D_WND* wnd, void* cookie);
+void* a3dGetCookie(A3D_WND* wnd);
+
+void a3dLoop();
+
+//void a3dSwapBuffers();
 uint64_t a3dGetTime(); // in microsecs, wraps every 584542 years
 
-void a3dSetTitle(const char* utf8_name);
-int a3dGetTitle(char* utf8_name, int size);
+void a3dSetTitle(A3D_WND* wnd, const char* utf8_name);
+int a3dGetTitle(A3D_WND* wnd, char* utf8_name, int size);
 
-void a3dSetVisible(bool set);
-bool a3dGetVisible();
+void a3dSetVisible(A3D_WND* wnd, bool set);
+bool a3dGetVisible(A3D_WND* wnd);
 
-bool a3dIsMaximized();
+bool a3dIsMaximized(A3D_WND* wnd);
 
 // resize
-WndMode a3dGetRect(int* xywh, int* client_wh);
-bool a3dSetRect(const int* xywh, WndMode wnd_mode);
+WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh);
+bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode);
 
 // mouse
-MouseInfo a3dGetMouse(int* x, int* y); // returns but flags, mouse wheel has no state
+MouseInfo a3dGetMouse(A3D_WND* wnd, int* x, int* y); // returns but flags, mouse wheel has no state
 
 // keyb_key
-bool a3dGetKeyb(KeyInfo ki); // return true if vk is down, keyb_char has no state
+bool a3dGetKeyb(A3D_WND* wnd, KeyInfo ki); // return true if vk is down, keyb_char has no state
 
 // keyb_focus
-bool a3dGetFocus();
-void a3dSetFocus();
+bool a3dGetFocus(A3D_WND* wnd);
+void a3dSetFocus(A3D_WND* wnd);
 
-void a3dCharSync(); // call in case of internal widget input re-focusing
+void a3dCharSync(A3D_WND* wnd); // call in case of internal widget input re-focusing
 
 enum A3D_ImageFormat
 {
@@ -274,8 +281,8 @@ enum A3D_ImageFormat
 
 bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf));
 
-bool a3dSetIcon(const char* path);
-bool a3dSetIconData(A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf);
+bool a3dSetIcon(A3D_WND* wnd, const char* path);
+bool a3dSetIconData(A3D_WND* wnd, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf);
 
 enum A3D_DirItem
 {
