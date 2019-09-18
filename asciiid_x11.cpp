@@ -732,6 +732,9 @@ void a3dLoop()
 	Bool DetectableAutoRepeat = false;
 	XkbSetDetectableAutoRepeat(dpy, True, &DetectableAutoRepeat);
 
+	PFNGLXSWAPINTERVALEXTPROC glXSwapIntervalEXT = (PFNGLXSWAPINTERVALEXTPROC)
+		glXGetProcAddress((const GLubyte*)"glXSwapIntervalEXT");
+
 	while (wnd_head)
 	{
 		while (XPending(dpy))
@@ -1062,16 +1065,36 @@ void a3dLoop()
 		}
 
 		A3D_WND* wnd = wnd_head;
+		Window swap = 0;
+		Window focused = 0;
+
+		int revert_to;
+		XGetInputFocus(dpy, &focused, &revert_to);
+
 		while (wnd)
 		{
 			if (wnd->platform_api.render && wnd->mapped)
 			{
+				if (swap)
+				{
+					if (glXSwapIntervalEXT)
+						glXSwapIntervalEXT(dpy, swap, 0);
+					glXSwapBuffers(dpy, swap);
+				}
+
 				glXMakeCurrent(dpy, wnd->win, wnd->rc);
 				wnd->platform_api.render(wnd);
-				glXSwapBuffers(dpy, wnd->win);
+				swap = wnd->win;
 			}
 
 			wnd = wnd->next;
+		}
+
+		if (swap)
+		{
+			if (glXSwapIntervalEXT)
+				glXSwapIntervalEXT(dpy, swap, 1);
+			glXSwapBuffers(dpy, swap);
 		}
 	}
 
