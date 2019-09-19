@@ -11,6 +11,7 @@ SRCS :=	asciiid.cpp \
 		asciiid_xterm.cpp \
 		asciiid_x11.cpp \
 		asciiid_urdo.cpp \
+		asciiid_render.cpp \
 		terrain.cpp \
 		mesh.cpp \
 		water.cpp \
