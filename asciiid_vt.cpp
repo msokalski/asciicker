@@ -1,4 +1,13 @@
 
+
+// it should be much the same as asciiid_mswin and asciiid_x11
+// - with limited keyb/mouse intput )
+// - rendering to ANSI framebuffer
+// - window open / close should simply switch between normal / alternate screens (no window creation / destruction)
+// - on windows we have 2 options: if OS<Win10 -> keep 16 colors (ConsoleAPI) else use their Win10_VT (truecolor)
+
+// at the moment it implements some basic VT (unnecessary!) 
+
 #ifndef _WIN32
 
 #include <malloc.h>

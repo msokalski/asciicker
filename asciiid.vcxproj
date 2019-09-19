@@ -171,6 +171,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="asciiid_platform.h" />
+    <ClInclude Include="asciiid_render.h" />
     <ClInclude Include="asciiid_term.h" />
     <ClInclude Include="asciiid_urdo.h" />
     <ClInclude Include="fast_rand.h" />
@@ -193,6 +194,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp" />
+    <ClCompile Include="asciiid_render.cpp" />
     <ClCompile Include="asciiid_term.cpp" />
     <ClCompile Include="asciiid_urdo.cpp" />
     <ClCompile Include="asciiid_mswin.cpp" />

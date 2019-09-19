@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "asciiid_term.h"
 #include "asciiid_platform.h"
+#include "asciiid_render.h"
 #include "fast_rand.h"
 #include "gl.h"
 
@@ -20,9 +21,10 @@ void term_render(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
-	glClearColor((fast_rand() & 0xFF) / 255.0f, (fast_rand() & 0xFF) / 255.0f, (fast_rand() & 0xFF) / 255.0f, (fast_rand() & 0xFF) / 255.0f);
+	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
+	// query terrain, use renderer's RenderPatch as callback
 
 	// access terrain & world
 	// calc view transform and clipping planes
