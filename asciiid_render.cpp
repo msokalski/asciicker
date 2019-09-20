@@ -8,8 +8,6 @@
 #include "terrain.h"
 #include "mesh.h"
 
-#include <algorithm> // std::min/max
-
 // #include "sprite.h"
 
 struct Sample

@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <assert.h>
 
+#include <algorithm> // std::min/max
+
 struct AnsiCell
 {
 	uint8_t glyph; // CP437 only
