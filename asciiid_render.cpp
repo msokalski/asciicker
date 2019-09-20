@@ -14,16 +14,25 @@
 
 struct Sample
 {
-	AnsiCell cell;
-	float height;
+	uint16_t visual;
+	uint16_t height;
+	uint8_t spare;   // refl, patch xy parity etc...
+	uint8_t diffuse; // just in case
+
+	inline bool DepthTest(int z)
+	{
+		if (height >= z)
+			return false;
+		height = z;
+		return true;
+	}
 };
 
-typedef Sample SampleCell[4]; // {UL,UR,LL,LR}
 
 struct SampleBuffer
 {
-	int w, h;
-	SampleCell* ptr;
+	int w, h; // make 2x +2 bigger than terminal buffer
+	Sample* ptr;
 };
 
 struct Renderer
@@ -55,88 +64,124 @@ struct Renderer
 	void TriangleFill(Shader* shader, int xyz[3][3], float uv[3][2]);
 };
 
+// we could easily make it template of <Sample,Shader>
 void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie /*Renderer*/)
 {
+	struct Shader
+	{
+		void Fill(Sample* s, int bc[3]) const
+		{
+			if (s->height > water)
+			{
+				int u = (uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2] + 0x4000) >> 15;
+				int v = (uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2] + 0x4000) >> 15;
+
+				s->visual = map[v * VISUAL_CELLS + u];
+				s->diffuse = diffuse;
+				s->spare |= parity;
+			}
+			else
+			{
+				s->spare = 3;
+			}
+		}
+
+		int* uv; // points to array of 6 ints (u0,v0,u1,v1,u2,v2) each is equal to 0 or VISUAL_CELLS
+		uint16_t* map; // points to array of VISUAL_CELLS x VISUAL_CELLS ushorts
+		uint16_t water;
+		uint8_t diffuse; // shading experiment
+		uint8_t parity;
+	} shader;
+
+	// 2 parity bits for drawing lines around patches
+	// 0 - no patch rendered here
+	// 1 - odd
+	// 2 - even
+	// 3 - under water
+	shader.parity = ((x^y) & 1) + 1; 
+
 	Renderer* r = (Renderer*)cookie;
+
+	int w = r->sample_buffer.w;
+	int h = r->sample_buffer.h;
+	Sample* ptr = r->sample_buffer.ptr;
 
 	uint16_t* hmap = GetTerrainHeightMap(p);
 
 	// transform patch verts xy+dx+dy, together with hmap into this array
-	int xyz[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1][3];
+	int xyzf[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1][4];
 
 	// uvs are same for all patches, could be set in the renderer once!
 	// move to renderer:
 	const static float uv[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1] = { 0 };
 
-
-	// if every vertex would also have 4 bits indicating outside Nth edge
-	// ANDing such 3 vertices flags together would clearly indicate no need to paint
-	uint8_t flags[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1] = { 0 };
-
 	for (int dy = 0; dy <= HEIGHT_CELLS; dy++)
 	{
 		for (int dx = 0; dx <= HEIGHT_CELLS; dx++)
 		{
-			// transform, round, check if/which screen edges culls
+			// transform, round xyz 
 			// ...
-			flags[dy][dx] = 0;
-			xyz[dy][dx][0] = 0;
-			xyz[dy][dx][1] = 0;
-			xyz[dy][dx][2] = 0;
+			xyzf[dy][dx][0] = 0;
+			xyzf[dy][dx][1] = 0;
+			xyzf[dy][dx][2] = 0; // height directly from hmap
+
+			// check if / which screen edges cull it
+			xyzf[dy][dx][2] = 0;
+
+			// accum patch transformed xy bbox
+			// ...
 		}
 	}
 
 	uint16_t* vmap = GetTerrainVisualMap(p);
 	uint16_t  diag = GetTerrainDiag(p);
-	int mask = 1;
-	for (int dy = 0; dy <= HEIGHT_CELLS; dy++)
+	for (int dy = 0; dy < HEIGHT_CELLS; dy++)
 	{
-		for (int dx = 0; dx <= HEIGHT_CELLS; dx++,mask<<=1)
+		for (int dx = 0; dx < HEIGHT_CELLS; dx++,diag>>=1)
 		{
-			if (diag & mask)
+			if (diag & 1)
 			{
-				// todo: add some helper indices table    __
-				// {dx, dy} {dx + 1, dy} {dx, dy + 1} // |\ |
-				// {dx+1, dy+1} {dx, dy+1} {dx+1, dy} // |_\|
+				// .
+				// |\
+				// |_\
+				// '  '
+				// lower triangle
+				static int lo_uv[] = {0,0, 0,0, 0,0};
+				const int* lo[3] = { xyzf[dy][dx], xyzf[dy][dx + 1], xyzf[dy + 1][dx] };
+				shader.uv = lo_uv;
+				Rasterize(ptr, w, h, &shader, lo);
 
-			
-				if ((flags[][] & flags[][] & flags[][]) == 0)
-				{
-					// .
-					// |\
-					// |_\
-					// '  '
-				}
-
-				if ((flags[][] & flags[][] & flags[][]) == 0)
-				{
-					// .__.
-					//  \ |
-					//   \|
-					//    '
-				}
+				// .__.
+				//  \ |
+				//   \|
+				//    '
+				// upper triangle
+				static int up_uv[] = { 0,0, 0,0, 0,0 };
+				const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy + 1][dx], xyzf[dy][dx + 1] };
+				shader.uv = up_uv;
+				Rasterize(ptr, w, h, &shader, up);
 			}
 			else
 			{
-				// todo: add some helper indices table        __
-				// {dx + 1, dy} {dx + 1, dy + 1} {dx, dy} // | /|
-				// {dx, dy + 1} {dx, dy} {dx + 1, dy + 1} // |/_|
+				// lower triangle
+				//    .
+				//   /|
+				//  /_|
+				// '  '
+				static int lo_uv[] = { 0,0, 0,0, 0,0 };
+				const int* lo[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx + 1], xyzf[dy][dx] };
+				shader.uv = lo_uv;
+				Rasterize(ptr, w, h, &shader, lo);
 
-				if ((flags[][] & flags[][] & flags[][]) == 0)
-				{
-					//    .
-					//   /|
-					//  /_|
-					// '  '
-				}
-
-				if ((flags[][] & flags[][] & flags[][]) == 0)
-				{
-					// .__.
-					// | / 
-					// |/  
-					// '
-				}
+				// upper triangle
+				// .__.
+				// | / 
+				// |/  
+				// '
+				static int up_uv[] = { 0,0, 0,0, 0,0 };
+				const int* up[3] = { xyzf[dy + 1][dx], xyzf[dy][dx], xyzf[dy + 1][dx + 1] };
+				shader.uv = up_uv;
+				Rasterize(ptr, w, h, &shader, up);
 			}
 		}
 	}
@@ -149,6 +194,7 @@ Conversion from SampleBuffer to AnsiBuffer:
 // when converted to ansi buffer it is reduced to just 57600 bytes
 */
 
+#if 0
 template <typename Shader>
 void Renderer::PatchFill(Shader* shader, int xyz[HEIGHT_CELLS+1][3])
 {
@@ -174,7 +220,8 @@ void Renderer::TriangleFill(Shader* shader, int xyz[3][3], float uv[3][2])
 	bottom = std::max(0, bottom);
 	top = std::min(sample_buffer.h, top);
 
-	int area = edgeFunction2(xyz[0], xyz[1], xyz[2]);
+	int w[4];
+	w[3] = edgeFunction2(xyz[0], xyz[1], xyz[2]); // area (divisor)
 
 	for (int y = bottom; y < top; y++)
 	{
@@ -182,24 +229,15 @@ void Renderer::TriangleFill(Shader* shader, int xyz[3][3], float uv[3][2])
 		{
 			int p[2] = { x,y };
 
-			int w0 = edgeFunction2(xyz[1], xyz[2], p);
-			int w1 = edgeFunction2(xyz[2], xyz[0], p);
-			int w2 = edgeFunction2(xyz[0], xyz[1], p);
+			w[0] = edgeFunction2(xyz[1], xyz[2], p);
+			w[1] = edgeFunction2(xyz[2], xyz[0], p);
+			w[2] = edgeFunction2(xyz[0], xyz[1], p);
 
-			if (w0 >= 0 && w1 >= 0 && w2 >= 0)
+			if (w[0] >= 0 && w[1] >= 0 && w[2] >= 0)
 			{
 				SampleCell* c = sample_buffer.ptr + (y>>1)*sample_buffer.w + (x>>1);
 				Sample* s = &((*c)[((y&1)<<1)|(x&1)]);
-
-				// interpolate 
-				float uvz[3] =
-				{
-					 uv[0][0] * w0 +  uv[1][0] * w1 +  uv[2][0] * w2,
-					 uv[0][1] * w0 +  uv[1][1] * w1 +  uv[2][1] * w2,
-					(float)(xyz[0][2] * w0 + xyz[1][2] * w1 + xyz[2][2] * w2)
-				};
-
-				shader->Fill(s, uvz, area);
+				shader->Fill(s,w);
 			}
 		}
 	}
@@ -245,3 +283,4 @@ bool Render(Terrain* t, World* w, float angle, int cx, int cy, int w, int h, int
 
 	return false;
 }
+#endif
