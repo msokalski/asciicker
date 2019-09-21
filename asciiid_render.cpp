@@ -5,10 +5,80 @@
 #include <stdint.h>
 #include <malloc.h>
 #include <stdio.h>
+#include <math.h>
 #include "terrain.h"
 #include "mesh.h"
-
+#include "matrix.h"
+#include "fast_rand.h"
 // #include "sprite.h"
+
+template <typename Sample, typename Shader>
+inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
+{
+	// each v[i] must point to 4 ints: {x,y,z,f} where f should indicate culling bits (can be 0)
+	// shader must implement: bool Shader::Fill(Sample* s, int bc[3])
+	// where bc contains 3 barycentric weights which are normalized to 0x8000 (use '>>15' after averaging)
+	// Sample must implement bool DepthTest(int z, int divisor);
+	// it must return true if z/divisor passes depth test on this sample
+	// if test passes, it should write new z/d to sample's depth (if something like depth write mask is enabled)
+
+	// produces samples between buffer cells 
+	// #define BC(a,b,c) ((c)[0] - (a)[0]) * ((b)[1] - (a)[1]) - ((c)[1] - (a)[1]) * ((b)[0] - (a)[0])
+
+	// produces samples at centers of buffer cells 
+	#define BC(a,b,c) ((c)[0]*2+1 - (a)[0]*2) * ((b)[1] - (a)[1]) - ((c)[1]*2+1 - (a)[1]*2) * ((b)[0] - (a)[0])
+
+	if ((v[0][3] & v[1][3] & v[2][3]) == 0)
+	{
+		int area = BC(v[0], v[1], v[2]);
+
+		if (area > 0)
+		{
+			assert(area < 0x10000);
+			int mul = 0x80000000 / area;
+
+			// canvas intersection with triangle bbox
+			int left = std::max(0, std::min(v[0][0], std::min(v[1][0], v[2][0])));
+			int right = std::min(w, std::max(v[0][0], std::max(v[1][0], v[2][0])));
+			int bottom = std::max(0, std::min(v[0][1], std::min(v[1][1], v[2][1])));
+			int top = std::min(h, std::max(v[0][1], std::max(v[1][1], v[2][1])));
+
+			Sample* col = buf + bottom * w + left;
+			for (int y = bottom; y < top; y++, col+=w)
+			{
+				Sample* row = col;
+				for (int x = left; x < right; x++, row++)
+				{
+					int p[2] = { x,y };
+
+					int bc[3] =
+					{
+						BC(v[1], v[2], p),
+						BC(v[2], v[0], p),
+						BC(v[0], v[1], p)
+					};
+
+					// if (bc[0] >= 0 && bc[1] >= 0 && bc[2] >= 0)
+					if ((bc[0] | bc[1] | bc[2])>=0)
+					{
+						// normalize and round coords to 0..0x8000 range
+						bc[0] = (bc[0] * mul + 0x8000) >> 16;
+						bc[1] = (bc[1] * mul + 0x8000) >> 16;
+						bc[2] = (bc[2] * mul + 0x8000) >> 16;
+
+						int z = (bc[0] * v[0][2] + bc[1] * v[1][2] + bc[2] * v[2][2] + 0x4000) >> 15;
+
+						if (row->DepthTest(z))
+							s->Fill(row, bc);
+					}
+				}
+			}
+		}
+	}
+	#undef BC
+}
+
+
 
 struct Sample
 {
@@ -60,6 +130,12 @@ struct Renderer
 
 	template <typename Shader>
 	void TriangleFill(Shader* shader, int xyz[3][3], float uv[3][2]);
+
+	uint16_t water;
+	
+	// transform
+	double mul[6]; // 3x2 rot part
+	int add[2]; // post rotated and rounded translation
 };
 
 // we could easily make it template of <Sample,Shader>
@@ -91,14 +167,10 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 		uint8_t parity;
 	} shader;
 
-	// 2 parity bits for drawing lines around patches
-	// 0 - no patch rendered here
-	// 1 - odd
-	// 2 - even
-	// 3 - under water
-	shader.parity = ((x^y) & 1) + 1; 
-
 	Renderer* r = (Renderer*)cookie;
+
+	double* mul = r->mul;
+	int* add = r->add;
 
 	int w = r->sample_buffer.w;
 	int h = r->sample_buffer.h;
@@ -108,31 +180,42 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 	// transform patch verts xy+dx+dy, together with hmap into this array
 	int xyzf[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1][4];
-
-	// uvs are same for all patches, could be set in the renderer once!
-	// move to renderer:
-	const static float uv[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1] = { 0 };
+	int v[3];
 
 	for (int dy = 0; dy <= HEIGHT_CELLS; dy++)
 	{
+		int vy = y*HEIGHT_CELLS + dy;
+
 		for (int dx = 0; dx <= HEIGHT_CELLS; dx++)
 		{
-			// transform, round xyz 
-			// ...
-			xyzf[dy][dx][0] = 0;
-			xyzf[dy][dx][1] = 0;
-			xyzf[dy][dx][2] = 0; // height directly from hmap
+			int vx = x*HEIGHT_CELLS + dx;
+			int vz = *(hmap++);
 
-			// check if / which screen edges cull it
-			xyzf[dy][dx][2] = 0;
+			// transform 
+			int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + add[0];
+			int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + add[1];
 
-			// accum patch transformed xy bbox
-			// ...
+			xyzf[dy][dx][0] = tx;
+			xyzf[dy][dx][1] = ty;
+			xyzf[dy][dx][2] = vz;
+
+			// todo: if patch is known to fully fit in screen, set f=0 
+			// otherwise we need to check if / which screen edges cull each vertex
+			xyzf[dy][dx][3] = (tx<0) | ((tx>w)<<1) | ((ty<0)<<2) | ((ty>h)<<3);
 		}
 	}
 
-	uint16_t* vmap = GetTerrainVisualMap(p);
 	uint16_t  diag = GetTerrainDiag(p);
+
+	// 2 parity bits for drawing lines around patches
+	// 0 - no patch rendered here
+	// 1 - odd
+	// 2 - even
+	// 3 - under water
+	shader.parity = ((x^y) & 1) + 1; 
+	shader.water = r->water;
+	shader.map = GetTerrainVisualMap(p);
+
 	for (int dy = 0; dy < HEIGHT_CELLS; dy++)
 	{
 		for (int dx = 0; dx < HEIGHT_CELLS; dx++,diag>>=1)
@@ -144,9 +227,10 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				// |_\
 				// '  '
 				// lower triangle
-				static int lo_uv[] = {0,0, 0,0, 0,0};
+				static int lo_uv[] = {0,0, VISUAL_CELLS,0, 0,VISUAL_CELLS};
 				const int* lo[3] = { xyzf[dy][dx], xyzf[dy][dx + 1], xyzf[dy + 1][dx] };
 				shader.uv = lo_uv;
+				shader.diffuse = 0xff;
 				Rasterize(ptr, w, h, &shader, lo);
 
 				// .__.
@@ -154,9 +238,10 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				//   \|
 				//    '
 				// upper triangle
-				static int up_uv[] = { 0,0, 0,0, 0,0 };
+				static int up_uv[] = { VISUAL_CELLS,VISUAL_CELLS, 0,VISUAL_CELLS, VISUAL_CELLS,0 };
 				const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy + 1][dx], xyzf[dy][dx + 1] };
 				shader.uv = up_uv;
+				shader.diffuse = 0xff;
 				Rasterize(ptr, w, h, &shader, up);
 			}
 			else
@@ -166,9 +251,10 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				//   /|
 				//  /_|
 				// '  '
-				static int lo_uv[] = { 0,0, 0,0, 0,0 };
+				static int lo_uv[] = { VISUAL_CELLS,0, VISUAL_CELLS,VISUAL_CELLS, 0,0 };
 				const int* lo[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx + 1], xyzf[dy][dx] };
 				shader.uv = lo_uv;
+				shader.diffuse = 0xff;
 				Rasterize(ptr, w, h, &shader, lo);
 
 				// upper triangle
@@ -176,109 +262,92 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				// | / 
 				// |/  
 				// '
-				static int up_uv[] = { 0,0, 0,0, 0,0 };
+				static int up_uv[] = { 0,VISUAL_CELLS, 0,0, VISUAL_CELLS,VISUAL_CELLS };
 				const int* up[3] = { xyzf[dy + 1][dx], xyzf[dy][dx], xyzf[dy + 1][dx + 1] };
 				shader.uv = up_uv;
+				shader.diffuse = 0xff;
 				Rasterize(ptr, w, h, &shader, up);
 			}
 		}
 	}
 }
 
-
-/*
-Conversion from SampleBuffer to AnsiBuffer:
-// sample buffer for terminal 160x90 has 324x184 samples = 476928 bytes!
-// when converted to ansi buffer it is reduced to just 57600 bytes
-*/
-
-#if 0
-template <typename Shader>
-void Renderer::PatchFill(Shader* shader, int xyz[HEIGHT_CELLS+1][3])
+bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3], int width, int height, int pitch, AnsiCell* ptr)
 {
-	// optimized such 
-}
-
-template <typename Shader>
-void Renderer::TriangleFill(Shader* shader, int xyz[3][3], float uv[3][2])
-{
-	// samples are in cente
-	#define edgeFunction2(a,b,c) ((c)[0]*2+1 - (a)[0]*2) * ((b)[1] - (a)[1]) - ((c)[1]*2+1 - (a)[1]*2) * ((b)[0] - (a)[0])
-	//#define edgeFunction1(a,b,c) ((c)[0] - (a)[0]) * ((b)[1] - (a)[1]) - ((c)[1] - (a)[1]) * ((b)[0] - (a)[0])
-
-	// triangle bbox
-	int left   = xyz[0][0] < xyz[1][0] ? (xyz[0][0] < xyz[2][0] ? xyz[0][0] : xyz[2][0]) : (xyz[1][0] < xyz[2][0] ? xyz[1][0] : xyz[2][0]);
-	int right  = xyz[0][0] > xyz[1][0] ? (xyz[0][0] > xyz[2][0] ? xyz[0][0] : xyz[2][0]) : (xyz[1][0] > xyz[2][0] ? xyz[1][0] : xyz[2][0]);
-	int bottom = xyz[0][1] < xyz[1][1] ? (xyz[0][1] < xyz[2][1] ? xyz[0][1] : xyz[2][1]) : (xyz[1][1] < xyz[2][1] ? xyz[1][1] : xyz[2][1]);
-	int top    = xyz[0][1] > xyz[1][1] ? (xyz[0][1] > xyz[2][1] ? xyz[0][1] : xyz[2][1]) : (xyz[1][1] > xyz[2][1] ? xyz[1][1] : xyz[2][1]);
-
-	// intersect with render target
-	left = std::max(0, left);
-	right = std::min(sample_buffer.w, right);
-	bottom = std::max(0, bottom);
-	top = std::min(sample_buffer.h, top);
-
-	int w[4];
-	w[3] = edgeFunction2(xyz[0], xyz[1], xyz[2]); // area (divisor)
-
-	for (int y = bottom; y < top; y++)
-	{
-		for (int x = left; x < right; x++)
-		{
-			int p[2] = { x,y };
-
-			w[0] = edgeFunction2(xyz[1], xyz[2], p);
-			w[1] = edgeFunction2(xyz[2], xyz[0], p);
-			w[2] = edgeFunction2(xyz[0], xyz[1], p);
-
-			if (w[0] >= 0 && w[1] >= 0 && w[2] >= 0)
-			{
-				SampleCell* c = sample_buffer.ptr + (y>>1)*sample_buffer.w + (x>>1);
-				Sample* s = &((*c)[((y&1)<<1)|(x&1)]);
-				shader->Fill(s,w);
-			}
-		}
-	}
-}
-
-bool Render(Terrain* t, World* w, float angle, int cx, int cy, int w, int h, int pitch, AnsiCell* ptr)
-{
-
 	Renderer r;
 
-	double planes[4][4]; // 4 clip planes
+	int dw = 2+2*width;
+	int dh = 2+2*height;
+	float ds = 2*zoom;
 
+	r.sample_buffer.w = width;
+	r.sample_buffer.h = height;
+	r.sample_buffer.ptr = (Sample*)malloc(width*height*sizeof(Sample));
+
+
+	r.water = water;
+
+	static const double sin30 = sin(M_PI*30.0/180.0); 
+	static const double cos30 = cos(M_PI*30.0/180.0);
+
+	double tm[16];
+	tm[0] = +cos(yaw)*ds;
+	tm[1] = -sin(yaw)*sin30*ds;
+	tm[2] = 0;
+	tm[3] = 0;
+	tm[4] = +sin(yaw)*ds;
+	tm[5] = +cos(yaw)*sin30*ds;
+	tm[6] = 0;
+	tm[7] = 0;
+	tm[8] = 0;
+	tm[9] = +cos30/HEIGHT_SCALE*ds;
+	tm[10] = 1.0; //+2./0xffff;
+	tm[11] = 0;
+	tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + pos[2] * tm[8]);
+	tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + pos[2] * tm[9]);
+	tm[14] = 0.0; //-1.0;
+	tm[15] = 1.0;
+
+	r.mul[0] = tm[0];
+	r.mul[1] = tm[1];
+	r.mul[2] = tm[4];
+	r.mul[3] = tm[6];
+	r.mul[4] = 0;
+	r.mul[5] = tm[9];
+	r.add[0] = (int)floor(tm[12] + 0.5);
+	r.add[1] = (int)floor(tm[13] + 0.5);
+
+	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
-	QueryTerrain(t, 4, planes, view_flags, r.RenderPatch, &r);
+	double clip_world[4][4];
 
-	
-	QueryTerrain(t,)
+	double clip_left[4] =   { 1, 0, 0, 0 };
+	double clip_right[4] =  {-1, 0, 0, (double)dw };
+	double clip_bottom[4] = { 0, 1, 0, 0 };
+	double clip_top[4] =    { 0,-1, 0, (double)dh };
 
+	TransposeProduct(tm, clip_left, clip_world[0]);
+	TransposeProduct(tm, clip_right, clip_world[1]);
+	TransposeProduct(tm, clip_bottom, clip_world[2]);
+	TransposeProduct(tm, clip_top, clip_world[3]);
 
+	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 
+	// convert SampleBuffer to AnsiBuffer
+	// ...
 
-		// all in this call!
-		// -----------------
-	/*
-	struct Shader_A
+	for (int y=0; y<height; y++)
 	{
-		void Fill(Sample* s, float uvz[3], int area)
+		for (int x=0; x<width; x++, ptr++)
 		{
-			printf(".");
+			ptr->bk = fast_rand()&0xFF;
+			ptr->fg = fast_rand()&0xFF;
+			ptr->gl = fast_rand()&0xFF;
+			ptr->spare = 0xFF; // alpha?
 		}
+	}
 
-		// current patch visual map
-		const uint16_t* map;
-	} a;
 
-	Patch* p = 0; // patch to be rendered
-	a.map = GetTerrainVisualMap(p);
-	*/
-	int xyz[3][3];
-	float uv[3][2];
-	r.TriangleFill(&a, xyz, uv);
-
-	return false;
+	free(r.sample_buffer.ptr);
 }
-#endif
