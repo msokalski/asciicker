@@ -5,12 +5,14 @@
 #include <stdint.h>
 #include <malloc.h>
 #include <stdio.h>
-#include <math.h>
 #include "terrain.h"
 #include "mesh.h"
 #include "matrix.h"
 #include "fast_rand.h"
 // #include "sprite.h"
+
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 template <typename Sample, typename Shader>
 inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
@@ -180,7 +182,6 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 	// transform patch verts xy+dx+dy, together with hmap into this array
 	int xyzf[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1][4];
-	int v[3];
 
 	for (int dy = 0; dy <= HEIGHT_CELLS; dy++)
 	{
@@ -280,11 +281,9 @@ bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3]
 	int dh = 2+2*height;
 	float ds = 2*zoom;
 
-	r.sample_buffer.w = width;
-	r.sample_buffer.h = height;
-	r.sample_buffer.ptr = (Sample*)malloc(width*height*sizeof(Sample));
-
-
+	r.sample_buffer.w = dw;
+	r.sample_buffer.h = dh;
+	r.sample_buffer.ptr = (Sample*)malloc(dw*dh*sizeof(Sample));
 	r.water = water;
 
 	static const double sin30 = sin(M_PI*30.0/180.0); 
@@ -332,11 +331,12 @@ bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3]
 	TransposeProduct(tm, clip_bottom, clip_world[2]);
 	TransposeProduct(tm, clip_top, clip_world[3]);
 
-	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
+	// QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 
 	// convert SampleBuffer to AnsiBuffer
 	// ...
 
+	// noise temporarily
 	for (int y=0; y<height; y++)
 	{
 		for (int x=0; x<width; x++, ptr++)
@@ -350,4 +350,5 @@ bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3]
 
 
 	free(r.sample_buffer.ptr);
+	return true;
 }

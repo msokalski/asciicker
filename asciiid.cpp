@@ -429,6 +429,19 @@ int active_glyph = 0x40; //@
 int active_palette = 0;
 int active_material = 0;
 
+// used by Term
+int GetGLFont(int wh[2])
+{
+	MyFont* f = font + active_font;
+	if (wh)
+	{
+		wh[0] = f->width;
+		wh[1] = f->height;
+	}
+
+	return f->tex;
+}
+
 /*
 float dawn_color[3] = { 1,.8f,0 };
 float noon_color[3] = { 1,1,1 };
@@ -3243,9 +3256,9 @@ void my_render(A3D_WND* wnd)
 
 			if (ImGui::Button("TERM++"))
 			{
-				TermOpen(wnd);
+				float pos[3] = { pos_x,pos_y,pos_z };
+				TermOpen(wnd, rot_yaw, pos);
 			}
-
 		}
 		else
 		{

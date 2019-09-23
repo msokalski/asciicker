@@ -3,5 +3,5 @@
 #include <stdint.h>
 #include "asciiid_platform.h"
 
-void TermOpen(A3D_WND* share);
+void TermOpen(A3D_WND* share, float yaw, float pos[3]);
 void TermCloseAll();
