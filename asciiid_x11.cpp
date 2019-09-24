@@ -486,8 +486,8 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 			rc = 0;
 			if (dpy)
 			{
-				dr = glXGetCurrentContext();
-				rc = glXGetCurrentDrawable();
+				rc = glXGetCurrentContext();
+				dr = glXGetCurrentDrawable();
 			}
 		}
 
@@ -588,7 +588,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		wndrect[3] = 600;
 	}
 	
-	Window win = XCreateWindow(dpy, share ? share->win : root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
+	Window win = XCreateWindow(dpy, /*share ? share->win :*/ root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
 	if (!win)
 	{
 		XCloseDisplay(dpy);
@@ -1136,8 +1136,8 @@ void a3dClose(A3D_WND* wnd)
 			rc = 0;
 			if (dpy)
 			{
-				dr = glXGetCurrentContext();
-				rc = glXGetCurrentDrawable();
+				rc = glXGetCurrentContext();
+				dr = glXGetCurrentDrawable();
 			}
 		}
 

@@ -1,6 +1,7 @@
 
 #include <malloc.h>
 #include <stdio.h>
+#include <string.h>
 #include "asciiid_term.h"
 #include "asciiid_platform.h"
 #include "asciiid_render.h"
