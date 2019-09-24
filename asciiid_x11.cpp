@@ -478,6 +478,30 @@ static const unsigned char kc_to_ki[128]=
 // creates window & initialized GL
 A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* share)
 {
+	struct PUSH
+	{
+		PUSH()
+		{
+			dr = 0;
+			rc = 0;
+			if (dpy)
+			{
+				dr = glXGetCurrentContext();
+				rc = glXGetCurrentDrawable();
+			}
+		}
+
+		~PUSH()
+		{
+			if (dpy)
+				glXMakeCurrent(dpy, dr, rc);
+		}
+
+		GLXDrawable dr;
+		GLXContext rc;
+
+	} push;
+
 	if (!pi || !gd)
 		return 0;
 
@@ -564,7 +588,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		wndrect[3] = 600;
 	}
 	
-	Window win = XCreateWindow(dpy, root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
+	Window win = XCreateWindow(dpy, share ? share->win : root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
 	if (!win)
 	{
 		XCloseDisplay(dpy);
@@ -1104,6 +1128,30 @@ void a3dLoop()
 
 void a3dClose(A3D_WND* wnd)
 {
+	struct PUSH
+	{
+		PUSH()
+		{
+			dr = 0;
+			rc = 0;
+			if (dpy)
+			{
+				dr = glXGetCurrentContext();
+				rc = glXGetCurrentDrawable();
+			}
+		}
+
+		~PUSH()
+		{
+			if (dpy)
+				glXMakeCurrent(dpy, dr, rc);
+		}
+
+		GLXDrawable dr;
+		GLXContext rc;
+
+	} push;
+
 	glXMakeCurrent(dpy, None, NULL);
 	glXDestroyContext(dpy, wnd->rc);
 	XDestroyWindow(dpy,wnd->win);

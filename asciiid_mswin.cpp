@@ -799,7 +799,6 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wc.lpszMenuName = NULL;
 	wc.lpszClassName = L"A3DWNDCLASS";
 
-
 	if (!wnd_head && !RegisterClass(&wc))
 		return false;
 
@@ -808,7 +807,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
 	HWND h = CreateWindow(wc.lpszClassName, L"", styles,
 		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-		0, 0, wc.hInstance, 0);
+		share ? share->hwnd : 0, 0, wc.hInstance, 0);
 
 	if (!h)
 	{

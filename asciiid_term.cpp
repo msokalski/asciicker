@@ -44,7 +44,6 @@ void term_render(A3D_WND* wnd)
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	return;
 
 	int wnd_wh[2];
 
@@ -56,23 +55,32 @@ void term_render(A3D_WND* wnd)
 	int width = wnd_wh[0] / (fnt_wh[0] >> 4);
 	int height = wnd_wh[1] / (fnt_wh[1] >> 4);
 
-	// todo:
-	// limit to 160x90
+	if (width > term->max_width)
+		width = term->max_width;
+	if (height > term->max_height)
+		height = term->max_height;
 
-	int pitch = width;
-
-	int xy[2]=
+	int vp_wh[2] =
 	{
-		(wnd_wh[0] - width * (fnt_wh[0] >> 4)) / 2,
-		(wnd_wh[1] - height * (fnt_wh[1] >> 4)) / 2,
+		width * (fnt_wh[0] >> 4),
+		height * (fnt_wh[1] >> 4)
+	};
+
+	int vp_xy[2]=
+	{
+		(wnd_wh[0] - vp_wh[0]) / 2,
+		(wnd_wh[1] - vp_wh[1]) / 2
 	};
 
 	float zoom = 1.0;
-	Render(terrain, world, term->water, zoom, term->yaw, term->pos, width, height, pitch, term->buf);
+	Render(terrain, world, term->water, zoom, term->yaw, term->pos, width, height, term->buf);
 
 	// copy term->buf to some texture
 	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
 
+	glViewport(vp_xy[0], vp_xy[1], vp_wh[0], vp_wh[1]);
+
+	glUseProgram(term->prg);
 
 	glUniform2i(0, width, height);
 
@@ -85,9 +93,13 @@ void term_render(A3D_WND* wnd)
 	glUniform2i(3, term->max_width, term->max_height);
 	
 	glBindVertexArray(term->vao);
+
 	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+	glUseProgram(0);
 	glBindVertexArray(0);
 
+	glBindTextureUnit(0, 0);
+	glBindTextureUnit(1, 0);
 }
 
 void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
@@ -114,7 +126,7 @@ void term_init(A3D_WND* wnd)
 		CODE(#version 450\n)
 		CODE(
 			layout(location = 0) uniform ivec2 ansi_vp;  // viewport size in cells
-			in vec2 uv; // normalized to viewport size
+			layout(location = 0) in vec2 uv; // normalized to viewport size
 			out vec2 cell_coord;
 			void main()
 			{
@@ -127,7 +139,7 @@ void term_init(A3D_WND* wnd)
 		CODE(#version 450\n)
 		DEFN(P(r, g, b), vec3(r / 6., g / 7., b / 6.))
 		CODE(
-			uniform vec3 pal[252] = vec3[252](
+			/*uniform*/ const vec3 pal[252] = vec3[252](
 				P(0, 0, 0), P(0, 0, 1), P(0, 0, 2), P(0, 0, 3), P(0, 0, 4), P(0, 0, 5),
 				P(0, 1, 0), P(0, 1, 1), P(0, 1, 2), P(0, 1, 3), P(0, 1, 4), P(0, 1, 5),
 				P(0, 2, 0), P(0, 2, 1), P(0, 2, 2), P(0, 2, 3), P(0, 2, 4), P(0, 2, 5),
@@ -193,8 +205,9 @@ void term_init(A3D_WND* wnd)
 				vec4 cell = texture(ansi, ansi_coord);
 
 				int glyph_idx = int(round(cell.b * 255.0));
-				vec2 glyph_coord = ( vec2(glyph_idx & 0xF, glyph_idx >> 4) + frac_cell ) / vec2(16.0);
 
+				frac_cell.y = 1.0 - frac_cell.y;
+				vec2 glyph_coord = ( vec2(glyph_idx & 0xF, glyph_idx >> 4) + frac_cell ) / vec2(16.0);
 				float glyph_alpha = texture(font, glyph_coord).a;
 
 				vec3 fg_color = pal[int(round(cell.r * 255.0))];
@@ -297,9 +310,6 @@ void term_close(A3D_WND* wnd)
 	glDeleteProgram(term->prg);
 
 	a3dClose(wnd);
-
-	if (term->buf)
-		free(term->buf);
 
 	if (term->prev)
 		term->prev->next = term->next;

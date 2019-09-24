@@ -273,7 +273,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 	}
 }
 
-bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3], int width, int height, int pitch, AnsiCell* ptr)
+bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3], int width, int height, AnsiCell* ptr)
 {
 	Renderer r;
 
@@ -331,7 +331,7 @@ bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3]
 	TransposeProduct(tm, clip_bottom, clip_world[2]);
 	TransposeProduct(tm, clip_top, clip_world[3]);
 
-	// QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
+	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 
 	// convert SampleBuffer to AnsiBuffer
 	// ...
@@ -341,13 +341,12 @@ bool Render(Terrain* t, World* w, int water, float zoom, float yaw, float pos[3]
 	{
 		for (int x=0; x<width; x++, ptr++)
 		{
+			ptr->fg = fast_rand() & 0xFF;
 			ptr->bk = fast_rand()&0xFF;
-			ptr->fg = fast_rand()&0xFF;
 			ptr->gl = fast_rand()&0xFF;
 			ptr->spare = 0xFF; // alpha?
 		}
 	}
-
 
 	free(r.sample_buffer.ptr);
 	return true;
