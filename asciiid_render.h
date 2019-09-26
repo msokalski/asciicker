@@ -13,7 +13,33 @@ struct AnsiCell
 	uint8_t fg, bk, gl, spare; // for post pass
 };
 
-bool Render(Terrain* t, World* w, int water, 		// scene
+struct MatCell
+{
+	uint8_t fg[3];	// foreground color
+	uint8_t gl;		// glyph code
+	uint8_t bg[3];	// background color
+	uint8_t flags;
+
+	// transparency mask :
+	// 0x1 - fg 
+	// 0x2 - gl 
+	// 0x4 - bg
+
+	// blend modes 3x3 bits:
+	// 0x03 2-bits fg blend mode (0:replace, 1:multiply, 2:screen, 3:transparent)
+	// 0x04 glyph write mask (0:replace, 1:keep)
+	// 0x18 2-bits bg blend mode (0:replace, 1:multiply, 2:screen, 3:transparent)
+	// 3 bits left!
+
+};
+
+struct Material
+{
+	MatCell shade[4][16];
+
+};
+
+bool Render(Terrain* t, World* w, float water, 		// scene
 			float zoom, float yaw, float pos[3], 	// view
 			int width, int height, AnsiCell* ptr);	// target
 

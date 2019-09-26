@@ -19,7 +19,7 @@ struct TERM_LIST
 
 	float yaw;
 	float pos[3];
-	int water;
+	float water;
 
 	static const int max_width = 160;
 	static const int max_height = 90;
@@ -38,13 +38,16 @@ int GetGLFont(int wh[2]);
 TERM_LIST* term_head = 0;
 TERM_LIST* term_tail = 0;
 
+// SUPER_HACK LIVE VIEW
+extern float pos_x, pos_y, pos_z;
+extern float rot_yaw;
+
 void term_render(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT);
-
 
 	int wnd_wh[2];
 
@@ -61,6 +64,10 @@ void term_render(A3D_WND* wnd)
 	if (height > term->max_height)
 		height = term->max_height;
 
+	char utf8[64];
+	sprintf(utf8, "ASCIIID Term %d x %d", width, height);
+	a3dSetTitle(wnd, utf8);
+
 	int vp_wh[2] =
 	{
 		width * (fnt_wh[0] >> 4),
@@ -74,7 +81,11 @@ void term_render(A3D_WND* wnd)
 	};
 
 	float zoom = 1.0;
-	Render(terrain, world, term->water, zoom, term->yaw, term->pos, width, height, term->buf);
+	//Render(terrain, world, term->water, zoom, term->yaw, term->pos, width, height, term->buf);
+
+	float pos[3] = { pos_x, pos_y, pos_z };
+	float yaw = rot_yaw;
+	Render(terrain, world, term->water, zoom, yaw, pos, width, height, term->buf);
 
 	// copy term->buf to some texture
 	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
@@ -140,61 +151,27 @@ void term_init(A3D_WND* wnd)
 		CODE(#version 450\n)
 		DEFN(P(r, g, b), vec3(r / 6., g / 7., b / 6.))
 		CODE(
-			/*uniform*/ const vec3 pal[252] = vec3[252](
-				P(0, 0, 0), P(0, 0, 1), P(0, 0, 2), P(0, 0, 3), P(0, 0, 4), P(0, 0, 5),
-				P(0, 1, 0), P(0, 1, 1), P(0, 1, 2), P(0, 1, 3), P(0, 1, 4), P(0, 1, 5),
-				P(0, 2, 0), P(0, 2, 1), P(0, 2, 2), P(0, 2, 3), P(0, 2, 4), P(0, 2, 5),
-				P(0, 3, 0), P(0, 3, 1), P(0, 3, 2), P(0, 3, 3), P(0, 3, 4), P(0, 3, 5),
-				P(0, 4, 0), P(0, 4, 1), P(0, 4, 2), P(0, 4, 3), P(0, 4, 4), P(0, 4, 5),
-				P(0, 5, 0), P(0, 5, 1), P(0, 5, 2), P(0, 5, 3), P(0, 5, 4), P(0, 5, 5),
-				P(0, 6, 0), P(0, 6, 1), P(0, 6, 2), P(0, 6, 3), P(0, 6, 4), P(0, 6, 5),
-
-				P(1, 0, 0), P(1, 0, 1), P(1, 0, 2), P(1, 0, 3), P(1, 0, 4), P(1, 0, 5),
-				P(1, 1, 0), P(1, 1, 1), P(1, 1, 2), P(1, 1, 3), P(1, 1, 4), P(1, 1, 5),
-				P(1, 2, 0), P(1, 2, 1), P(1, 2, 2), P(1, 2, 3), P(1, 2, 4), P(1, 2, 5),
-				P(1, 3, 0), P(1, 3, 1), P(1, 3, 2), P(1, 3, 3), P(1, 3, 4), P(1, 3, 5),
-				P(1, 4, 0), P(1, 4, 1), P(1, 4, 2), P(1, 4, 3), P(1, 4, 4), P(1, 4, 5),
-				P(1, 5, 0), P(1, 5, 1), P(1, 5, 2), P(1, 5, 3), P(1, 5, 4), P(1, 5, 5),
-				P(1, 6, 0), P(1, 6, 1), P(1, 6, 2), P(1, 6, 3), P(1, 6, 4), P(1, 6, 5),
-
-				P(2, 0, 0), P(2, 0, 1), P(2, 0, 2), P(2, 0, 3), P(2, 0, 4), P(2, 0, 5),
-				P(2, 1, 0), P(2, 1, 1), P(2, 1, 2), P(2, 1, 3), P(2, 1, 4), P(2, 1, 5),
-				P(2, 2, 0), P(2, 2, 1), P(2, 2, 2), P(2, 2, 3), P(2, 2, 4), P(2, 2, 5),
-				P(2, 3, 0), P(2, 3, 1), P(2, 3, 2), P(2, 3, 3), P(2, 3, 4), P(2, 3, 5),
-				P(2, 4, 0), P(2, 4, 1), P(2, 4, 2), P(2, 4, 3), P(2, 4, 4), P(2, 4, 5),
-				P(2, 5, 0), P(2, 5, 1), P(2, 5, 2), P(2, 5, 3), P(2, 5, 4), P(2, 5, 5),
-				P(2, 6, 0), P(2, 6, 1), P(2, 6, 2), P(2, 6, 3), P(2, 6, 4), P(2, 6, 5),
-
-				P(3, 0, 0), P(3, 0, 1), P(3, 0, 2), P(3, 0, 3), P(3, 0, 4), P(3, 0, 5),
-				P(3, 1, 0), P(3, 1, 1), P(3, 1, 2), P(3, 1, 3), P(3, 1, 4), P(3, 1, 5),
-				P(3, 2, 0), P(3, 2, 1), P(3, 2, 2), P(3, 2, 3), P(3, 2, 4), P(3, 2, 5),
-				P(3, 3, 0), P(3, 3, 1), P(3, 3, 2), P(3, 3, 3), P(3, 3, 4), P(3, 3, 5),
-				P(3, 4, 0), P(3, 4, 1), P(3, 4, 2), P(3, 4, 3), P(3, 4, 4), P(3, 4, 5),
-				P(3, 5, 0), P(3, 5, 1), P(3, 5, 2), P(3, 5, 3), P(3, 5, 4), P(3, 5, 5),
-				P(3, 6, 0), P(3, 6, 1), P(3, 6, 2), P(3, 6, 3), P(3, 6, 4), P(3, 6, 5),
-
-				P(4, 0, 0), P(4, 0, 1), P(4, 0, 2), P(4, 0, 3), P(4, 0, 4), P(4, 0, 5),
-				P(4, 1, 0), P(4, 1, 1), P(4, 1, 2), P(4, 1, 3), P(4, 1, 4), P(4, 1, 5),
-				P(4, 2, 0), P(4, 2, 1), P(4, 2, 2), P(4, 2, 3), P(4, 2, 4), P(4, 2, 5),
-				P(4, 3, 0), P(4, 3, 1), P(4, 3, 2), P(4, 3, 3), P(4, 3, 4), P(4, 3, 5),
-				P(4, 4, 0), P(4, 4, 1), P(4, 4, 2), P(4, 4, 3), P(4, 4, 4), P(4, 4, 5),
-				P(4, 5, 0), P(4, 5, 1), P(4, 5, 2), P(4, 5, 3), P(4, 5, 4), P(4, 5, 5),
-				P(4, 6, 0), P(4, 6, 1), P(4, 6, 2), P(4, 6, 3), P(4, 6, 4), P(4, 6, 5),
-
-				P(5, 0, 0), P(5, 0, 1), P(5, 0, 2), P(5, 0, 3), P(5, 0, 4), P(5, 0, 5),
-				P(5, 1, 0), P(5, 1, 1), P(5, 1, 2), P(5, 1, 3), P(5, 1, 4), P(5, 1, 5),
-				P(5, 2, 0), P(5, 2, 1), P(5, 2, 2), P(5, 2, 3), P(5, 2, 4), P(5, 2, 5),
-				P(5, 3, 0), P(5, 3, 1), P(5, 3, 2), P(5, 3, 3), P(5, 3, 4), P(5, 3, 5),
-				P(5, 4, 0), P(5, 4, 1), P(5, 4, 2), P(5, 4, 3), P(5, 4, 4), P(5, 4, 5),
-				P(5, 5, 0), P(5, 5, 1), P(5, 5, 2), P(5, 5, 3), P(5, 5, 4), P(5, 5, 5),
-				P(5, 6, 0), P(5, 6, 1), P(5, 6, 2), P(5, 6, 3), P(5, 6, 4), P(5, 6, 5)
-			);
 
 			layout(location = 0) out vec4 color;
 			layout(location = 1) uniform sampler2D ansi;
 			layout(location = 2) uniform sampler2D font;
 			layout(location = 3) uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
 			in vec2 cell_coord;
+
+			vec3 XTermPal(int p)
+			{
+				p -= 16;
+				if (p < 0 || p >= 216)
+					return vec3(0, 0, 0);
+
+				int r = p % 6;
+				p = (p - r) / 6;
+				int g = p % 6;
+				p = (p - g) / 6;
+				
+				return vec3(r, g, p) * 0.2;
+			}
+
 			void main()
 			{
 				// sample ansi buffer
@@ -211,8 +188,8 @@ void term_init(A3D_WND* wnd)
 				vec2 glyph_coord = ( vec2(glyph_idx & 0xF, glyph_idx >> 4) + frac_cell ) / vec2(16.0);
 				float glyph_alpha = texture(font, glyph_coord).a;
 
-				vec3 fg_color = pal[int(round(cell.r * 255.0))];
-				vec3 bg_color = pal[int(round(cell.g * 255.0))];
+				vec3 fg_color = XTermPal(int(round(cell.r * 255.0)));
+				vec3 bg_color = XTermPal(int(round(cell.g * 255.0)));
 
 				color = vec4(mix(bg_color, fg_color, glyph_alpha), 1.0);
 			}
@@ -281,10 +258,6 @@ void term_init(A3D_WND* wnd)
 	term_tail = term;
 
 	a3dSetCookie(wnd, term);
-
-	const char* utf8 = "ASCIIID Term";
-
-	a3dSetTitle(wnd, utf8);
 	a3dSetIcon(wnd, "./icons/app.png");
 	a3dSetVisible(wnd, true);
 }
@@ -358,6 +331,7 @@ void TermOpen(A3D_WND* share, float yaw, float pos[3])
 	term->pos[0] = pos[0];
 	term->pos[1] = pos[1];
 	term->pos[2] = pos[2];
+	term->water = 0;
 }
 
 void TermCloseAll()

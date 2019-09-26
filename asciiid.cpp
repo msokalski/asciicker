@@ -37,6 +37,7 @@
 
 #include "asciiid_term.h"
 
+#include "asciiid_render.h"
 
 // A3D_WND* wnd = 0;
 
@@ -94,26 +95,7 @@ void* GetMaterialArr();
 void* GetPaletteArr();
 void* GetFontArr();
 
-struct Cell
-{
-	uint8_t fg[3];	// foreground color
-	uint8_t gl;		// glyph code
-	uint8_t bg[3];	// background color
-
-	uint8_t flags;  
-	// transparency mask :
-	// 0x1 - fg 
-	// 0x2 - gl 
-	// 0x4 - bg
-
-	// blend modes 3x3 bits:
-	// 0x03 2-bits fg blend mode (0:replace, 1:multiply, 2:screen, 3:transparent)
-	// 0x04 glyph write mask (0:replace, 1:keep)
-	// 0x18 2-bits bg blend mode (0:replace, 1:multiply, 2:screen, 3:transparent)
-	// 3 bits left!
-};
-
-struct MyMaterial
+struct MyMaterial : Material
 {
 	static void Free()
 	{
@@ -187,8 +169,6 @@ struct MyMaterial
 	}
 
 	static GLuint tex; // single texture for all materials 128x256
-
-	Cell shade[4][16]; // each cell has 2 texels !!! shade[3] is currently spare space.
 
 	// althought we have only 16 cells, shade map has 7bits!
 	// that makes timed shading 8x more precise spatialy :)
@@ -2705,7 +2685,7 @@ void Load(const char* path)
 		{
 			for (int i=0; i<256; i++)
 			{
-				if ( fread(mat[i].shade,1,sizeof(Cell)*4*16,f) != sizeof(Cell)*4*16 )
+				if ( fread(mat[i].shade,1,sizeof(MatCell)*4*16,f) != sizeof(MatCell)*4*16 )
 					break;
 				mat[i].Update();
 			}
@@ -3356,7 +3336,7 @@ void my_render(A3D_WND* wnd)
 						{
 							// save mats
 							for (int i=0; i<256; i++)
-								fwrite(mat[i].shade,1,sizeof(Cell)*4*16,f);
+								fwrite(mat[i].shade,1,sizeof(MatCell)*4*16,f);
 
 							SaveWorld(world,f);
 
@@ -3431,7 +3411,7 @@ void my_render(A3D_WND* wnd)
 						{
 							// save mats
 							for (int i=0; i<256; i++)
-								fwrite(mat[i].shade,1,sizeof(Cell)*4*16,f);
+								fwrite(mat[i].shade,1,sizeof(MatCell)*4*16,f);
 
 							SaveWorld(world,f);
 
@@ -4105,12 +4085,12 @@ void my_render(A3D_WND* wnd)
 							for (int dy = y1; dy <= y2; dy++)
 							{
 								// read endpoints
-								Cell c1 = mat[active_material].shade[dy][x1];
-								Cell c2 = mat[active_material].shade[dy][x2];
+								MatCell c1 = mat[active_material].shade[dy][x1];
+								MatCell c2 = mat[active_material].shade[dy][x2];
 
 								for (int dx = x1 + 1; dx < x2; dx++)
 								{
-									Cell* c = &(mat[active_material].shade[dy][dx]);
+									MatCell* c = &(mat[active_material].shade[dy][dx]);
 									float w = (float)(dx - x1) / (float)(x2 - x1);
 									// interpolate
 									if (paint_mat_foreground)
@@ -4978,10 +4958,10 @@ void my_render(A3D_WND* wnd)
 
 	// 4 clip planes in clip-space
 
-	double clip_left[4] =   { 1, 0, 0,+1 };
-	double clip_right[4] =  {-1, 0, 0,+1 };
-	double clip_bottom[4] = { 0, 1, 0,+1 }; 
-	double clip_top[4] =    { 0,-1, 0,+1 }; // adjust by max brush descent
+	double clip_left[4] =   { 1, 0, 0,+.9 };
+	double clip_right[4] =  {-1, 0, 0,+.9 };
+	double clip_bottom[4] = { 0, 1, 0,+.9 }; 
+	double clip_top[4] =    { 0,-1, 0,+.9 }; // adjust by max brush descent
 
 	double brush_extent = cos(pitch) * br_xyra[3] * br_xyra[2] / ry;
 
