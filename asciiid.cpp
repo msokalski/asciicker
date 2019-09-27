@@ -433,6 +433,8 @@ float font_size = 10;// 0.125;// 16; // so every visual cell appears as 16px
 float rot_yaw = 45;
 float rot_pitch = 30;//90;
 
+float global_lt[4] = { 0,0,1,0 };
+
 float inst_yaw = 0.0;
 bool  inst_yaw_rnd = false;
 float inst_pitch_avr = 0.0;
@@ -5025,6 +5027,12 @@ void my_render(A3D_WND* wnd)
 		(float)lit_pos[2],
 		ambience
 	};
+
+	// term
+	global_lt[0] = lit_pos[0];
+	global_lt[1] = lit_pos[1];
+	global_lt[2] = lit_pos[2];
+	global_lt[3] = ambience;
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_GEQUAL);

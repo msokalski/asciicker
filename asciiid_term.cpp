@@ -41,6 +41,8 @@ TERM_LIST* term_tail = 0;
 // SUPER_HACK LIVE VIEW
 extern float pos_x, pos_y, pos_z;
 extern float rot_yaw;
+extern float global_lt[];
+extern int probe_z;
 
 void term_render(A3D_WND* wnd)
 {
@@ -85,7 +87,17 @@ void term_render(A3D_WND* wnd)
 
 	float pos[3] = { pos_x, pos_y, pos_z };
 	float yaw = rot_yaw;
-	Render(terrain, world, term->water, zoom, yaw, pos, width, height, term->buf);
+
+	float ln = 1.0f/sqrtf(global_lt[0] * global_lt[0] + global_lt[1] * global_lt[1] + global_lt[2] * global_lt[2]);
+	float lt[4] =
+	{
+		global_lt[0] * ln,
+		global_lt[1] * ln,
+		global_lt[2] * ln,
+		global_lt[3]
+	};
+
+	Render(terrain, world, (float)probe_z/*term->water*/, zoom, yaw, pos, lt, width, height, term->buf);
 
 	// copy term->buf to some texture
 	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);

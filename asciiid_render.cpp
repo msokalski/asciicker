@@ -14,6 +14,8 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#define DBL
+
 template <typename Sample, typename Shader>
 inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 {
@@ -117,6 +119,17 @@ struct SampleBuffer
 
 struct Renderer
 {
+	Renderer()
+	{
+		memset(this, 0, sizeof(Renderer));
+	}
+
+	~Renderer()
+	{
+		if (sample_buffer.ptr)
+			free(sample_buffer.ptr);
+	}
+
 	SampleBuffer sample_buffer; // render surface
 
 	uint8_t* buffer;
@@ -145,8 +158,11 @@ struct Renderer
 
 	// transform
 	double mul[6]; // 3x2 rot part
-	int add[2]; // post rotated and rounded translation
+	double add[2]; // post rotated and rounded translation
+	float yaw;
 	float water;
+	float light[4];
+	bool yaw_changed;
 };
 
 // we could easily make it template of <Sample,Shader>
@@ -160,6 +176,13 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			{
 				int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
 				int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
+
+				/*
+				// UV-TEST
+				s->visual = (u * 36) | ((v * 36)<<8);
+				s->diffuse = diffuse;
+				s->spare |= parity;
+				*/
 
 				if (u >= VISUAL_CELLS || v >= VISUAL_CELLS)
 				{
@@ -177,9 +200,18 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				s->spare = 3;
 		}
 
+		inline void Diffuse(int dzdx, int dzdy)
+		{
+			float nl = (float)sqrt(dzdx * dzdx + dzdy * dzdy + HEIGHT_SCALE * HEIGHT_SCALE);
+			float df = (dzdx * light[0] + dzdy * light[1] + HEIGHT_SCALE * light[2]) / nl;
+			df = df * (1.0f - 0.5f*light[3]) + 0.5f*light[3];
+			diffuse = df <= 0 ? 0 : (int)(df * 0xFF);
+		}
+
 		int* uv; // points to array of 6 ints (u0,v0,u1,v1,u2,v2) each is equal to 0 or VISUAL_CELLS
 		uint16_t* map; // points to array of VISUAL_CELLS x VISUAL_CELLS ushorts
 		float water;
+		float light[4];
 		uint8_t diffuse; // shading experiment
 		uint8_t parity;
 	} shader;
@@ -187,7 +219,9 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 	Renderer* r = (Renderer*)cookie;
 
 	double* mul = r->mul;
-	int* add = r->add;
+
+	int iadd[2] = { (int)r->add[0], (int)r->add[1] };
+	double* add = r->add;
 
 	int w = r->sample_buffer.w;
 	int h = r->sample_buffer.h;
@@ -210,16 +244,32 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			int vz = *(hm++);
 
 			// transform 
-			int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + add[0];
-			int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + add[1];
+			if (r->yaw_changed)
+			{
+				int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
+				int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
 
-			xyzf[dy][dx][0] = tx;
-			xyzf[dy][dx][1] = ty;
-			xyzf[dy][dx][2] = vz;
+				xyzf[dy][dx][0] = tx;
+				xyzf[dy][dx][1] = ty;
+				xyzf[dy][dx][2] = vz;
 
-			// todo: if patch is known to fully fit in screen, set f=0 
-			// otherwise we need to check if / which screen edges cull each vertex
-			xyzf[dy][dx][3] = (tx<0) | ((tx>w)<<1) | ((ty<0)<<2) | ((ty>h)<<3);
+				// todo: if patch is known to fully fit in screen, set f=0 
+				// otherwise we need to check if / which screen edges cull each vertex
+				xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+			}
+			else
+			{
+				int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
+				int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
+
+				xyzf[dy][dx][0] = tx;
+				xyzf[dy][dx][1] = ty;
+				xyzf[dy][dx][2] = vz;
+
+				// todo: if patch is known to fully fit in screen, set f=0 
+				// otherwise we need to check if / which screen edges cull each vertex
+				xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+			}
 		}
 	}
 
@@ -234,15 +284,35 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 	shader.water = r->water;
 	shader.map = GetTerrainVisualMap(p);
 
+	shader.light[0] = r->light[0];
+	shader.light[1] = r->light[1];
+	shader.light[2] = r->light[2];
+	shader.light[3] = r->light[3];
+
+	/*
+	shader.light[0] = 0;
+	shader.light[1] = 0;
+	shader.light[2] = 1;
+	*/
+
 //	if (shader.parity == 1)
 //		return;
 
 	hm = hmap;
 
+	static const int uv[HEIGHT_CELLS][2] =
+	{
+		{0, VISUAL_CELLS / HEIGHT_CELLS},
+		{VISUAL_CELLS / HEIGHT_CELLS, 2 * VISUAL_CELLS / HEIGHT_CELLS},
+		{2 * VISUAL_CELLS / HEIGHT_CELLS, 3 * VISUAL_CELLS / HEIGHT_CELLS},
+		{3 * VISUAL_CELLS / HEIGHT_CELLS, 4 * VISUAL_CELLS / HEIGHT_CELLS}
+	};
+
 	for (int dy = 0; dy < HEIGHT_CELLS; dy++, hm++)
 	{
 		for (int dx = 0; dx < HEIGHT_CELLS; dx++,diag>>=1, hm++)
 		{
+			//if (!(diag & 1))
 			if (diag & 1)
 			{
 				// .
@@ -256,11 +326,10 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				// now we should simply use diffuse from terrain
 				// note: if terrain is being modified, we should clear its timestamp or immediately update diffuse
 
-
-				static int lo_uv[] = {0,0, VISUAL_CELLS,0, 0,VISUAL_CELLS};
+				int lo_uv[] = {uv[dx][0],uv[dy][0], uv[dx][1],uv[dy][0], uv[dx][0],uv[dy][1]};
 				const int* lo[3] = { xyzf[dy][dx], xyzf[dy][dx + 1], xyzf[dy + 1][dx] };
 				shader.uv = lo_uv;
-				shader.diffuse = 0xff;
+				shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx + 1][2], xyzf[dy][dx][2] - xyzf[dy + 1][dx][2]);
 				Rasterize(ptr, w, h, &shader, lo);
 
 				// .__.
@@ -268,10 +337,10 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				//   \|
 				//    '
 				// upper triangle
-				static int up_uv[] = { VISUAL_CELLS,VISUAL_CELLS, 0,VISUAL_CELLS, VISUAL_CELLS,0 };
+				int up_uv[] = {uv[dx][1],uv[dy][1], uv[dx][0],uv[dy][1], uv[dx][1],uv[dy][0]};
 				const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy + 1][dx], xyzf[dy][dx + 1] };
 				shader.uv = up_uv;
-				shader.diffuse = 0xff;
+				shader.Diffuse(xyzf[dy+1][dx][2] - xyzf[dy+1][dx+1][2], xyzf[dy][dx+1][2] - xyzf[dy+1][dx+1][2]);
 				Rasterize(ptr, w, h, &shader, up);
 			}
 			else
@@ -281,10 +350,10 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				//   /|
 				//  /_|
 				// '  '
-				static int lo_uv[] = { VISUAL_CELLS,0, VISUAL_CELLS,VISUAL_CELLS, 0,0 };
+				int lo_uv[] = {uv[dx][1],uv[dy][0], uv[dx][1],uv[dy][1], uv[dx][0],uv[dy][0]};
 				const int* lo[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx + 1], xyzf[dy][dx] };
 				shader.uv = lo_uv;
-				shader.diffuse = 0xff;
+				shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx+1][2], xyzf[dy][dx+1][2] - xyzf[dy+1][dx+1][2]);
 				Rasterize(ptr, w, h, &shader, lo);
 
 				// upper triangle
@@ -292,37 +361,66 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				// | / 
 				// |/  
 				// '
-				static int up_uv[] = { 0,VISUAL_CELLS, 0,0, VISUAL_CELLS,VISUAL_CELLS };
+				int up_uv[] = {uv[dx][0],uv[dy][1], uv[dx][0],uv[dy][0], uv[dx][1],uv[dy][1]};
 				const int* up[3] = { xyzf[dy + 1][dx], xyzf[dy][dx], xyzf[dy + 1][dx + 1] };
 				shader.uv = up_uv;
-				shader.diffuse = 0xff;
+				shader.Diffuse(xyzf[dy+1][dx][2] - xyzf[dy+1][dx+1][2], xyzf[dy][dx][2] - xyzf[dy+1][dx][2]);
 				Rasterize(ptr, w, h, &shader, up);
 			}
 		}
 	}
 }
 
-bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], int width, int height, AnsiCell* ptr)
+bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], float lt[4], int width, int height, AnsiCell* ptr)
 {
-	Renderer r;
+	static Renderer r;
 
+#ifdef DBL
 	float scale = 3.0;
+#else
+	float scale = 1.5;
+#endif
 
 	zoom *= scale;
 
-	/*
+#ifdef DBL
 	int dw = 4+2*width;
 	int dh = 4+2*height;
-	*/
+#else
 	int dw = 1 + width + 1;
 	int dh = 1 + height + 1;
+#endif
 
 	float ds = 2*zoom / VISUAL_CELLS;
 
-	r.sample_buffer.w = dw;
-	r.sample_buffer.h = dh;
-	r.sample_buffer.ptr = (Sample*)malloc(dw*dh*sizeof(Sample));
+	r.yaw_changed = true;
+
+	if (!r.sample_buffer.ptr)
+	{
+		r.sample_buffer.w = dw;
+		r.sample_buffer.h = dh;
+		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample));
+	}
+	else
+	if (r.sample_buffer.w != dw || r.sample_buffer.h != dh)
+	{
+		r.sample_buffer.w = dw;
+		r.sample_buffer.h = dh;
+		free(r.sample_buffer.ptr);
+		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample));
+	}
+	else
+	if (yaw == r.yaw)
+	{
+		r.yaw_changed = false;
+	}
+
+	r.yaw = yaw;
 	r.water = water;
+	r.light[0] = lt[0];
+	r.light[1] = lt[1];
+	r.light[2] = lt[2];
+	r.light[3] = lt[3];
 
 	// clear (at least depth!)
 	memset(r.sample_buffer.ptr, 0x00, dw*dh * sizeof(Sample));
@@ -358,8 +456,24 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	r.mul[3] = tm[5];
 	r.mul[4] = 0;
 	r.mul[5] = tm[9];
-	r.add[0] = (int)floor(tm[12] + 0.5);
-	r.add[1] = (int)floor(tm[13] + 0.5);
+
+	// if yaw didn't change, make it INTEGRAL (and EVEN in case of DBL)
+	r.add[0] = tm[12];
+	r.add[1] = tm[13] + 0.5;
+
+	if (!r.yaw_changed)
+	{
+		int x = (int)floor(r.add[0] + 0.5);
+		int y = (int)floor(r.add[1] + 0.5);
+
+		#ifdef DBL
+		x &= ~1;
+		y &= ~1;
+		#endif
+
+		r.add[0] = (double)x;
+		r.add[1] = (double)y;
+	}
 
 	int planes = 4;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
@@ -406,8 +520,40 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	Sample* src = r.sample_buffer.ptr + 1 + dw;
 	for (int y = 0; y < height; y++)
 	{
-		for (int x = 0; x < width; x++, ptr++, src++)
+		for (int x = 0; x < width; x++, ptr++)
 		{
+			#ifdef DBL
+			
+			// average 4 backgrounds
+			int mat[4] = { src[0].visual & 0x00FF , src[1].visual & 0x00FF, src[dw].visual & 0x00FF, src[dw + 1].visual & 0x00FF };
+			int dif[4] = { src[0].diffuse , src[1].diffuse, src[dw].diffuse, src[dw + 1].diffuse };
+			int shd = 0; // (src[0].visual >> 8) & 0x007F;
+			int elv = 0; // (src[0].visual >> 15) & 0x0001;
+
+			int gl = matlib[mat[0]].shade[1][shd].gl;
+			int bg[3] = { 0,0,0 };
+			int fg[3] = { 0,0,0 };
+			for (int i = 0; i < 4; i++)
+			{
+				// fill from material
+				
+				bg[0] += matlib[mat[i]].shade[1][shd].bg[0] * dif[i];
+				bg[1] += matlib[mat[i]].shade[1][shd].bg[1] * dif[i];
+				bg[2] += matlib[mat[i]].shade[1][shd].bg[2] * dif[i];
+				fg[0] += matlib[mat[i]].shade[1][shd].fg[0] * dif[i];
+				fg[1] += matlib[mat[i]].shade[1][shd].fg[1] * dif[i];
+				fg[2] += matlib[mat[i]].shade[1][shd].fg[2] * dif[i];
+			}
+
+			ptr->gl = gl;
+			ptr->bk = 16 + (((bg[0] + 26010) / 52020) + (((bg[1] + 26010) / 52020) * 6) + (((bg[2] + 26010) / 52020) * 36));
+			ptr->fg = 16 + (((fg[0] + 26010) / 52020) + (((fg[1] + 26010) / 52020) * 6) + (((fg[2] + 26010) / 52020) * 36));
+			ptr->spare = 0xFF;
+
+			src += 2;
+			
+			#else
+			
 			int mat = src[0].visual & 0x00FF;
 			int shd = 0; // (src[0].visual >> 8) & 0x007F;
 			int elv = 0; // (src[0].visual >> 15) & 0x0001;
@@ -418,32 +564,21 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			const uint8_t* fg = matlib[mat].shade[1][shd].fg;
 
 			ptr->gl = cell->gl;
-			ptr->bk = 16 + (((bg[0]+25) / 51) + (((bg[1]+25) / 51) * 6) + (((bg[2]+25) / 51) * 36));
-			ptr->fg = 16 + (((fg[0]+25) / 51) + (((fg[1]+25) / 51) * 6) + (((fg[2]+25) / 51) * 36));
+			ptr->bk = 16 + (((bg[0] + 25) / 51) + (((bg[1] + 25) / 51) * 6) + (((bg[2] + 25) / 51) * 36));
+			ptr->fg = 16 + (((fg[0] + 25) / 51) + (((fg[1] + 25) / 51) * 6) + (((fg[2] + 25) / 51) * 36));
 			ptr->spare = 0xFF;
+
+			src++;
+			#endif
+
 		}
 
+		#ifdef DBL
+		src += 4 + dw;
+		#else
 		src += 2;
+		#endif
 	}
 
-	/*
-	Sample* src = r.sample_buffer.ptr+2*dw+2;
-	for (int y=0; y<height; y++)
-	{
-		for (int x = 0; x < width; x++, ptr++, src += 2)
-		{
-			ptr->fg = 0x00;
-			ptr->bk = 0xF0;
-			ptr->gl = src[0].visual & 0xFF;
-			//ptr->gl ^= src[1].visual & 0xFF;
-			//ptr->gl ^= src[dw].visual & 0xFF;
-			//ptr->gl ^= src[dw+1].visual & 0xFF;
-			ptr->spare = 0xFF; // alpha?
-		}
-		src += 2 + dw + 2;
-	}
-	*/
-
-	free(r.sample_buffer.ptr);
 	return true;
 }

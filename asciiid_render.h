@@ -40,6 +40,6 @@ struct Material
 };
 
 bool Render(Terrain* t, World* w, float water, 		// scene
-			float zoom, float yaw, float pos[3], 	// view
+			float zoom, float yaw, float pos[3], float lt[4],	// view
 			int width, int height, AnsiCell* ptr);	// target
 
