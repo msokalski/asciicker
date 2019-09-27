@@ -2550,7 +2550,8 @@ void SaveWorld(World* w, FILE* f)
     }
 
     // then bsp ones
-    SaveQueryBSP(w->root,f);
+	if (w->root)
+		SaveQueryBSP(w->root,f);
 }
 
 World* LoadWorld(FILE* f)

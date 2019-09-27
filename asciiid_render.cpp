@@ -16,6 +16,47 @@
 
 #define DBL
 
+
+template <typename Sample>
+inline void Bresenham(Sample* buf, int w, int h, int from[2], int to[2])
+{
+	// we must run in lower horizontal resolution (from[0] and to[0] should be already even-aligned)
+	int sx = to[0] - from[0];
+	int sy = to[1] - from[1];
+
+	if (sx == 0)
+	{
+		if (sy == 0)
+			return;
+		// simple vertical case ';'
+	}
+
+	if (sy == 0)
+	{
+		// simple horizontal case ' or , (depending on y parity)
+	}
+
+	int ax = sx >= 0 ? sx : -sx;
+	int ay = sy >= 0 ? sy : -sy;
+
+	if (ax >= ay)
+	{
+		// horizontal domain
+		if (sx < 0)
+		{
+			// swap
+		}
+	}
+	else
+	{
+		// vertical domain
+		if (sy < 0)
+		{
+			// swap
+		}
+	}
+}
+
 template <typename Sample, typename Shader>
 inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 {
@@ -535,8 +576,6 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			int fg[3] = { 0,0,0 };
 			for (int i = 0; i < 4; i++)
 			{
-				// fill from material
-				
 				bg[0] += matlib[mat[i]].shade[1][shd].bg[0] * dif[i];
 				bg[1] += matlib[mat[i]].shade[1][shd].bg[1] * dif[i];
 				bg[2] += matlib[mat[i]].shade[1][shd].bg[2] * dif[i];
