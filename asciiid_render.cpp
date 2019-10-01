@@ -18,41 +18,76 @@
 
 
 template <typename Sample>
-inline void Bresenham(Sample* buf, int w, int h, int from[2], int to[2])
+inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
 {
-	// we must run in lower horizontal resolution (from[0] and to[0] should be already even-aligned)
 	int sx = to[0] - from[0];
 	int sy = to[1] - from[1];
 
-	if (sx == 0)
-	{
-		if (sy == 0)
-			return;
-		// simple vertical case ';'
-	}
+	if (sx == 0 && sy==0)
+		return;
 
-	if (sy == 0)
-	{
-		// simple horizontal case ' or , (depending on y parity)
-	}
+	int sz = to[2] - from[2];
 
 	int ax = sx >= 0 ? sx : -sx;
 	int ay = sy >= 0 ? sy : -sy;
 
 	if (ax >= ay)
 	{
+		float n = +1.0f / sx;
 		// horizontal domain
-		if (sx < 0)
+
+		if (from[0] > to[0])
 		{
-			// swap
+			int* swap = from;
+			from = to;
+			to = swap;
+		}
+
+		int	x0 = (std::max(0, from[0]) + 1) & ~1; // round up start x, so we won't produce out of domain samples
+		int	x1 = std::min(w, to[0]);
+
+		for (int x = x0; x < x1; x+=2)
+		{
+			float a = x - from[0] + 0.5f;
+			int y = (int)floor((a * sy)*n + from[1] + 0.5f);
+			if (y >= 0 && y < h)
+			{
+				float z = (a * sz) * n + from[2];
+				Sample* ptr = buf + w * y + x;
+				if (ptr->DepthTest_RO(z))
+					ptr->spare |= 4;
+				ptr++;
+				if (ptr->DepthTest_RO(z))
+					ptr->spare |= 4;
+			}
 		}
 	}
 	else
 	{
+		float n = 1.0f / sy;
 		// vertical domain
-		if (sy < 0)
+
+		if (from[1] > to[1])
 		{
-			// swap
+			int* swap = from;
+			from = to;
+			to = swap;
+		}
+
+		int y0 = std::max(0, from[1]);
+		int y1 = std::min(h, to[1]);
+
+		for (int y = y0; y < y1; y++)
+		{
+			int a = y - from[1];
+			int x = (int)floor((a * sx) * n + from[0] + 0.5f);
+			if (x >= 0 && x < w)
+			{
+				float z = (a * sz)*n + from[2];
+				Sample* ptr = buf + w * y + x;
+				if (ptr->DepthTest_RO(z))
+					ptr->spare |= 4;
+			}
 		}
 	}
 }
@@ -125,7 +160,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 
 					float z = nbc[0] * v[0][2] + nbc[1] * v[1][2] + nbc[2] * v[2][2];
 
-					if (row->DepthTest(z))
+					if (row->DepthTest_RW(z))
 						s->Fill(row, nbc);
 				}
 			}
@@ -139,16 +174,26 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 struct Sample
 {
 	uint16_t visual;
-	uint8_t spare;   // refl, patch xy parity etc...
+	uint8_t spare;   // refl, patch xy parity etc..., direct color bit (meshes): visual has just 565 color?
 	uint8_t diffuse; // just in case
 	float height;
 
-	inline bool DepthTest(float z)
+	inline bool DepthTest_RW(float z)
 	{
 		if (height > z)
 			return false;
+		spare &= ~0x4; // clear lines
 		height = z;
 		return true;
+	}
+
+	inline bool DepthTest_RO(float z)
+	{
+		if (height > z)
+		{
+			int a = 0;
+		}
+		return height <= z;
 	}
 };
 
@@ -410,6 +455,26 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			}
 		}
 	}
+
+
+	// grid lines thru middle of patch?
+	// TODO: RENDER AFTER ALL PATCHES!
+	// 
+
+	int mid = (HEIGHT_CELLS + 1) / 2;
+
+	for (int lin = 0; lin <= HEIGHT_CELLS; lin++)
+	{
+		xyzf[lin][mid][2] += HEIGHT_SCALE/2;
+		if (mid!=lin)
+			xyzf[mid][lin][2] += HEIGHT_SCALE / 2;
+	}
+
+	for (int lin = 0; lin < HEIGHT_CELLS; lin++)
+	{
+		Bresenham(ptr, w, h, xyzf[lin][mid], xyzf[lin + 1][mid]);
+		Bresenham(ptr, w, h, xyzf[mid][lin], xyzf[mid][lin + 1]);
+	}
 }
 
 bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], float lt[4], int width, int height, AnsiCell* ptr)
@@ -558,7 +623,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
 
-	Sample* src = r.sample_buffer.ptr + 1 + dw;
+	Sample* src = r.sample_buffer.ptr + 2 + 2*dw;
 	for (int y = 0; y < height; y++)
 	{
 		for (int x = 0; x < width; x++, ptr++)
@@ -568,8 +633,15 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			// average 4 backgrounds
 			int mat[4] = { src[0].visual & 0x00FF , src[1].visual & 0x00FF, src[dw].visual & 0x00FF, src[dw + 1].visual & 0x00FF };
 			int dif[4] = { src[0].diffuse , src[1].diffuse, src[dw].diffuse, src[dw + 1].diffuse };
-			int shd = 0; // (src[0].visual >> 8) & 0x007F;
+
+			// TODO:
+			// every material must have 16x16 map and uses visual shade to select Y and lighting to select X
+			// animated materials additionaly pre shifts and wraps visual shade by current time scaled by material's 'speed'
+
 			int elv = 0; // (src[0].visual >> 15) & 0x0001;
+
+			/*
+			int shd = 0; // (src[0].visual >> 8) & 0x007F;
 
 			int gl = matlib[mat[0]].shade[1][shd].gl;
 			int bg[3] = { 0,0,0 };
@@ -583,13 +655,79 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 				fg[1] += matlib[mat[i]].shade[1][shd].fg[1] * dif[i];
 				fg[2] += matlib[mat[i]].shade[1][shd].fg[2] * dif[i];
 			}
+			*/
+
+			int shd = (dif[0] + dif[1] + dif[2] + dif[3] + 17*2) / (17 * 4); // 17: FF->F, 4: avr
+			int gl = matlib[mat[0]].shade[1][shd].gl;
+
+			int bg[3] = { 0,0,0 };
+			int fg[3] = { 0,0,0 };
+
+			for (int i = 0; i < 4; i++)
+			{
+				bg[0] += matlib[mat[i]].shade[1][shd].bg[0];
+				bg[1] += matlib[mat[i]].shade[1][shd].bg[1];
+				bg[2] += matlib[mat[i]].shade[1][shd].bg[2];
+				fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
+				fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
+				fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+			}
+
+			int bk_rgb[3] =
+			{
+				(bg[0] + 102) / 204,
+				(bg[1] + 102) / 204,
+				(bg[2] + 102) / 204
+			};
 
 			ptr->gl = gl;
-			ptr->bk = 16 + (((bg[0] + 26010) / 52020) + (((bg[1] + 26010) / 52020) * 6) + (((bg[2] + 26010) / 52020) * 36));
-			ptr->fg = 16 + (((fg[0] + 26010) / 52020) + (((fg[1] + 26010) / 52020) * 6) + (((fg[2] + 26010) / 52020) * 36));
+			ptr->bk = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+			ptr->fg = 16 + (((fg[0] + 102) / 204) + (((fg[1] + 102) / 204) * 6) + (((fg[2] + 102) / 204) * 36));
 			ptr->spare = 0xFF;
 
+			// collect line bits
+			int linecase = ((src[0].spare & 0x4)>>2) | ((src[1].spare & 0x4) >> 1) | (src[dw].spare & 0x4) | ((src[dw+1].spare & 0x4)<<1);
+
+			static const int linecase_glyph[] = {0, ',', ',', ',', '`', ';', ';', ';', '`', ';', ';', ';', '`', ';', ';', ';'};
+			if (linecase)
+			{
+				/*
+				if ((bk_rgb[0] | bk_rgb[1] | bk_rgb[2]) == 0)
+				{
+					ptr->fg = 16 + 1 + 1 * 6 + 1 * 36;
+				}
+				else
+				{
+					bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+					bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+					bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+					ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+				}
+				*/
+				ptr->gl = linecase_glyph[linecase];
+			}
+
+			float z_hi = src[dw].height + src[dw + 1].height;
+			float z_lo = src[0].height + src[1].height;
+			float z_pr = src[-dw].height + src[1-dw].height;
+
+			if (z_hi + 4*HEIGHT_SCALE < z_lo)
+			{
+				ptr->gl = '-';
+				ptr->fg = 16;
+			}
+			else
+			if (z_lo + 2 * HEIGHT_SCALE < z_pr)
+			{
+				ptr->gl = '_';
+				ptr->fg = 16;
+			}
+
+			
+
 			src += 2;
+
+
 			
 			#else
 			

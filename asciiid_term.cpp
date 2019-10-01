@@ -2,6 +2,8 @@
 #include <malloc.h>
 #include <stdio.h>
 #include <string.h>
+#define _USE_MATH_DEFINES
+#include <math.h>
 #include "asciiid_term.h"
 #include "asciiid_platform.h"
 #include "asciiid_render.h"
@@ -21,8 +23,8 @@ struct TERM_LIST
 	float pos[3];
 	float water;
 
-	static const int max_width = 160;
-	static const int max_height = 90;
+	static const int max_width = 320; // 160;
+	static const int max_height = 180; // 90;
 	AnsiCell buf[max_width*max_height];
 	GLuint tex;
 	GLuint prg;
@@ -96,6 +98,18 @@ void term_render(A3D_WND* wnd)
 		global_lt[2] * ln,
 		global_lt[3]
 	};
+
+	// local light override
+	/*
+	lt[0] = cos((yaw-90) * M_PI / 180);
+	lt[1] = sin((yaw-90) * M_PI / 180);
+	lt[2] = 0.5;
+	ln = 1.0f / sqrtf(lt[0] * lt[0] + lt[1] * lt[1] + lt[2] * lt[2]);
+	lt[0] *= ln;
+	lt[1] *= ln;
+	lt[2] *= ln;
+	*/
+
 
 	Render(terrain, world, (float)probe_z/*term->water*/, zoom, yaw, pos, lt, width, height, term->buf);
 

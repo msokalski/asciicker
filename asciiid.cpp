@@ -5792,6 +5792,26 @@ void my_ptydata(A3D_PTY* pty)
 
 int main(int argc, char *argv[]) 
 {
+	/*
+	FILE* act = fopen("d:/xterm.act", "wb");
+	uint8_t act_data[0x300];
+	memset(act_data, 0, 16 * 3);
+	memset(act_data + 3*(16+6*6*6), 0, 3*24);
+
+	for (int i=0; i < 6 * 6 * 6; i++)
+	{
+		int c = i;
+		act_data[3 * i + 48] = (c % 6) * 51; c /= 6;
+		act_data[3 * i + 49] = (c % 6) * 51; c /= 6;
+		act_data[3 * i + 50] = c * 51;
+	}
+
+	fwrite(act_data, 1, 0x300, act);
+	fclose(act);
+	return 0;
+	*/
+
+
 	PlatformInterface pi;
 	pi.close = my_close;
 	pi.render = my_render;
