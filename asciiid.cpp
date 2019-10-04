@@ -621,22 +621,10 @@ struct RenderContext
 				
 				void main()
 				{
-					/*
-					uint mat_x = 2 * (uint(round(shade)) & 0xF) + 32 * (uint(round(elev)) & 0x1);
-					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(0+mat_x, matid), 0);
-					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(1+mat_x, matid), 0);
-					float glyph = 0.0; // at the moment pure bkgnd					
-					color = vec4(mix(vec3(fill_rgbp.rgb), vec3(fill_rgbc.rgb), glyph) / 255.0, 1.0);
-					*/
-
 					color = tint;
 
 					vec3 light_pos = normalize(lt.xyz);
 					float light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(light_pos, normalize(nrm)));
-
-					// plus viewer light
-					light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(vec3(0,0,-1), view_nrm));
-
 
 					color.rgb *= light * lt_dif_clr.rgb;
 					color.rgb += lt_amb_clr.rgb;

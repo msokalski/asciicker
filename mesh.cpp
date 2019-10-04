@@ -27,6 +27,8 @@ struct Vert
 
     // regardless of mesh type (2d/3d)
     // we keep z (makes it easier to switch mesh types back and forth)
+
+	int vert_id; // index into 
 	float xyzw[4];
 	unsigned char rgba[4];
 

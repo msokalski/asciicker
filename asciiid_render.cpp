@@ -111,7 +111,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 	if ((v[0][3] & v[1][3] & v[2][3]) == 0)
 	{
 		int area = BC_A(v[0],v[1],v[2]);
-		if (area > 0)
+		if (area != 0)
 		{
 			assert(area < 0x10000);
 			float normalizer = (1.0f - FLT_EPSILON) / area;
@@ -174,8 +174,8 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 struct Sample
 {
 	uint16_t visual;
+	uint8_t diffuse;
 	uint8_t spare;   // refl, patch xy parity etc..., direct color bit (meshes): visual has just 565 color?
-	uint8_t diffuse; // just in case
 	float height;
 
 	inline bool DepthTest_RW(float z)
@@ -235,6 +235,8 @@ struct Renderer
 	// but requires here some extra state
 	// ....
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie /*Renderer*/);
+	static void RenderMesh(Mesh* m, const double* tm, void* cookie /*Renderer*/);
+	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie /*Renderer*/);
 
 	template <typename Shader>
 	void LineStroke(Shader* shader, int xyz[2][3]);
@@ -249,7 +251,224 @@ struct Renderer
 	float water;
 	float light[4];
 	bool yaw_changed;
+
+	double inst_tm[16];
 };
+
+void create_auto_mat(uint8_t mat[/*b*/32/*g*/*32/*r*/*32/*bg,fg,gl*/*3])
+{
+	#define FLO(x) ((int)floor(5 * x / 31.0f))
+	#define REM(x) (5*x-31*flo[x])
+	static const int flo[32]=
+	{
+		FLO(0),  FLO(1),  FLO(2),  FLO(3),
+		FLO(4),  FLO(5),  FLO(6),  FLO(7),
+		FLO(8),  FLO(9),  FLO(10), FLO(11),
+		FLO(12), FLO(13), FLO(14), FLO(15),
+		FLO(16), FLO(17), FLO(18), FLO(19),
+		FLO(20), FLO(21), FLO(22), FLO(23),
+		FLO(24), FLO(25), FLO(26), FLO(27),
+		FLO(28), FLO(29), FLO(30), FLO(31),
+	};
+
+	static const int rem[32]=
+	{
+		REM(0),  REM(1),  REM(2),  REM(3),
+		REM(4),  REM(5),  REM(6),  REM(7),
+		REM(8),  REM(9),  REM(10), REM(11),
+		REM(12), REM(13), REM(14), REM(15),
+		REM(16), REM(17), REM(18), REM(19),
+		REM(20), REM(21), REM(22), REM(23),
+		REM(24), REM(25), REM(26), REM(27),
+		REM(28), REM(29), REM(30), REM(31),
+	};
+
+	static const char glyph[] = " ..::%";
+
+	int i = 0;
+	for (int b=0; b<32; b++)
+	{
+		int p[3];
+		p[2] = rem[b];
+		int B[2] = { flo[b],std::min(5, flo[b] + 1) };
+		for (int g = 0; b < 32; b++)
+		{
+			p[1] = rem[g];
+			int G[2] = { flo[g],std::min(5, flo[g] + 1) };
+			for (int r = 0; b < 32; b++,i++)
+			{
+				p[0] = rem[r];
+				int R[2] = { flo[r],std::min(5, flo[r] + 1) };
+
+				int best_sd = -1;
+				int best_pr;
+				int best_lo;
+				int best_hi;
+
+				for (int lo = 0; lo < 7; lo++)
+				{
+					int v0[3] = { R[lo & 1], G[(lo & 2) >> 1], B[(lo & 4) >> 2] };
+					for (int hi = lo + 1; hi < 8; hi++)
+					{
+						int v1[3] = { R[hi & 1], G[(hi & 2) >> 1], B[(hi & 4) >> 2] };
+						int v[3] = { 31*(v1[0] - v0[0]), 31*(v1[1] - v0[1]), 31*(v1[2] - v0[2]) };
+
+						// so we have a p[3] and v[3] (same coord system)
+						// calc distance & projection
+
+						// projection
+						int pr = v[0] * p[0] + v[1] * p[1] + v[2] * p[2]; // normalized to 2883=3*31*31
+
+						// projection point
+						int pp[3] = { v[0] * pr, v[1] * pr, v[2] * pr }; // normalized to 89373=31*3*31*31
+
+						// dist vect, renormalized so sqaure dist fit in 32 bits
+						int pv[3] = { (p[0] - pp[0] + 1) >> 1, (p[1] - pp[1] + 1) >> 1, (p[2] - pp[2] + 1) >> 1 };
+
+						// square dist
+						int sd = pv[0] * pv[0] + pv[1] * pv[1] + pv[2] * pv[2];
+
+						if (sd < best_sd || best_sd<0)
+						{
+							best_sd = sd;
+							best_pr = pr;
+							best_lo = lo;
+							best_hi = hi;
+						}
+					}
+				}
+
+				int idx = 3 * (r + 32 * (g + 32 * b));
+				int shd = best_pr / 241; // 0..11
+				if (shd < 6)
+				{
+					mat[idx + 0] = 16 + R[best_lo & 1] + 6 * G[(best_lo & 2) >> 1] + 36 * B[(best_lo & 4) >> 2];
+					mat[idx + 1] = 16 + R[best_hi & 1] + 6 * G[(best_hi & 2) >> 1] + 36 * B[(best_hi & 4) >> 2];
+					mat[idx + 2] = glyph[shd];
+				}
+				else
+				{
+					mat[idx + 0] = 16 + R[best_hi & 1] + 6 * G[(best_hi & 2) >> 1] + 36 * B[(best_hi & 4) >> 2];
+					mat[idx + 1] = 16 + R[best_lo & 1] + 6 * G[(best_lo & 2) >> 1] + 36 * B[(best_lo & 4) >> 2];
+					mat[idx + 2] = glyph[6-shd];
+				}
+			}
+		}
+	}
+}
+
+void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie)
+{
+	struct Shader
+	{
+		void Fill(Sample* s, float bc[3]) const
+		{
+			if (s->height >= water)
+			{
+				int r8 = (int)floor(rgb[0][0] * bc[0] + rgb[1][0] * bc[1] + rgb[2][0] * bc[2]);
+				int r5 = (r8 * 249 + 1014) >> 11;
+				int g8 = (int)floor(rgb[0][1] * bc[0] + rgb[1][1] * bc[1] + rgb[1][1] * bc[2]);
+				int g5 = (g8 * 249 + 1014) >> 11;
+				int b8 = (int)floor(rgb[0][2] * bc[0] + rgb[1][2] * bc[1] + rgb[1][2] * bc[2]);
+				int b5 = (b8 * 249 + 1014) >> 11;
+
+				s->visual = r5 | (g5 << 5) | (b5 << 10);
+				s->diffuse = diffuse;
+				s->spare |= 0x8;
+			}
+			else
+				s->spare = 3;
+		}
+
+		/*
+		inline void Diffuse(int dzdx, int dzdy)
+		{
+			float nl = (float)sqrt(dzdx * dzdx + dzdy * dzdy + HEIGHT_SCALE * HEIGHT_SCALE);
+			float df = (dzdx * light[0] + dzdy * light[1] + HEIGHT_SCALE * light[2]) / nl;
+			df = df * (1.0f - 0.5f*light[3]) + 0.5f*light[3];
+			diffuse = df <= 0 ? 0 : (int)(df * 0xFF);
+		}
+		*/
+
+		uint8_t* rgb[3]; // per vertex colors
+		float water;
+		float light[4];
+		uint8_t diffuse; // shading experiment
+	} shader;
+
+	shader.rgb[0] = colors + 0;
+	shader.rgb[1] = colors + 4;
+	shader.rgb[2] = colors + 8;
+
+	Renderer* r = (Renderer*)cookie;
+
+	// temporarily, let's transform verts for each face separately
+
+	int v[3][3];
+	const int* pv[3] = { v[0],v[1],v[2] };
+	
+	float tmp[4];
+	{
+		float xyzw[] = { VISUAL_CELLS * coords[0], VISUAL_CELLS * coords[1], VISUAL_CELLS * coords[2], 1.0f };
+		Product(r->inst_tm, xyzw, tmp);
+		v[0][0] = (int)floor(tmp[0] + 0.5f);
+		v[0][1] = (int)floor(tmp[1] + 0.5f);
+		v[0][2] = (int)floor(tmp[2] + 0.5f);
+	}
+
+	{
+		float xyzw[] = { VISUAL_CELLS * coords[3], VISUAL_CELLS * coords[4], VISUAL_CELLS * coords[5], 1.0f };
+		Product(r->inst_tm, xyzw, tmp);
+		v[1][0] = (int)floor(tmp[0] + 0.5f);
+		v[1][1] = (int)floor(tmp[1] + 0.5f);
+		v[1][2] = (int)floor(tmp[2] + 0.5f);
+	}
+
+	{
+		float xyzw[] = { VISUAL_CELLS * coords[6], VISUAL_CELLS * coords[7], VISUAL_CELLS * coords[8], 1.0f };
+		Product(r->inst_tm, xyzw, tmp);
+		v[2][0] = (int)floor(tmp[0] + 0.5f);
+		v[2][1] = (int)floor(tmp[1] + 0.5f);
+		v[2][2] = (int)floor(tmp[2] + 0.5f);
+	}
+
+	int w = r->sample_buffer.w;
+	int h = r->sample_buffer.h;
+	Sample* ptr = r->sample_buffer.ptr;
+
+	Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
+}
+
+void Renderer::RenderMesh(Mesh* m, const double* tm, void* cookie)
+{
+
+	Renderer* r = (Renderer*)cookie;
+	double view_tm[16]=
+	{
+		r->mul[0], r->mul[1], 0.0, 0.0,
+		r->mul[2], r->mul[3], 0.0, 0.0,
+		r->mul[4], r->mul[5], 1.0, 0.0,
+		r->add[0], r->add[1], 0.0, 1.0
+	};
+
+	MatProduct(view_tm, tm, r->inst_tm);
+	QueryMesh(m, Renderer::RenderFace, r);
+
+	// transform verts int integer coords
+	// ...
+
+	// given interpolated RGB -> round to 555, store it in visual
+	// copy to diffuse to diffuse
+	// mark mash 'auto-material' as 0x8 flag in spare
+
+	// in post pass:
+	// if sample has 0x8 flag
+	//   multiply rgb by diffuse (into 888 bg=fg)
+	// apply color mixing with neighbours
+	// if at least 1 sample have mesh bit in spare
+	// - round mixed bg rgb to R5G5B5 and use auto_material[32K] -> {bg,fg,gl}
+	// else apply gridlines etc.
+}
 
 // we could easily make it template of <Sample,Shader>
 void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie /*Renderer*/)
@@ -619,6 +838,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	}
 
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
+	QueryWorld(w, 0/*planes*/, clip_world, Renderer::RenderMesh, &r);
 
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
@@ -631,6 +851,8 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			#ifdef DBL
 			
 			// average 4 backgrounds
+			// mask 11 (something rendered)
+			int spr[4] = { src[0].spare & 11, src[1].spare & 11, src[dw].spare & 11, src[dw + 1].spare & 11 };
 			int mat[4] = { src[0].visual & 0x00FF , src[1].visual & 0x00FF, src[dw].visual & 0x00FF, src[dw + 1].visual & 0x00FF };
 			int dif[4] = { src[0].diffuse , src[1].diffuse, src[dw].diffuse, src[dw + 1].diffuse };
 
@@ -665,12 +887,15 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 			for (int i = 0; i < 4; i++)
 			{
-				bg[0] += matlib[mat[i]].shade[1][shd].bg[0];
-				bg[1] += matlib[mat[i]].shade[1][shd].bg[1];
-				bg[2] += matlib[mat[i]].shade[1][shd].bg[2];
-				fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
-				fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
-				fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+				if (spr[i])
+				{
+					bg[0] += matlib[mat[i]].shade[1][shd].bg[0];
+					bg[1] += matlib[mat[i]].shade[1][shd].bg[1];
+					bg[2] += matlib[mat[i]].shade[1][shd].bg[2];
+					fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
+					fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
+					fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+				}
 			}
 
 			int bk_rgb[3] =
@@ -707,23 +932,40 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 				ptr->gl = linecase_glyph[linecase];
 			}
 
+
+			// silhouette repetitoire:  _-/\| (should not be used by materials?)
+
 			float z_hi = src[dw].height + src[dw + 1].height;
 			float z_lo = src[0].height + src[1].height;
 			float z_pr = src[-dw].height + src[1-dw].height;
 
-			if (z_hi + 4*HEIGHT_SCALE < z_lo)
+			float minus = z_lo - z_hi;
+			float under = z_pr - z_lo;
+
+			static const float thresh = 1 * HEIGHT_SCALE;
+
+			if (minus > under)
 			{
-				ptr->gl = '-';
-				ptr->fg = 16;
+				if (minus > thresh)
+				{
+					ptr->gl = 0xC4; // '-'
+					bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+					bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+					bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+					ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+				}
 			}
 			else
-			if (z_lo + 2 * HEIGHT_SCALE < z_pr)
 			{
-				ptr->gl = '_';
-				ptr->fg = 16;
+				if (under > thresh)
+				{
+					ptr->gl = 0x5F; // '_'
+					bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+					bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+					bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+					ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+				}
 			}
-
-			
 
 			src += 2;
 
