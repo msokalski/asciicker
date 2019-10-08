@@ -5017,9 +5017,9 @@ void my_render(A3D_WND* wnd)
 	};
 
 	// term
-	global_lt[0] = lit_pos[0];
-	global_lt[1] = lit_pos[1];
-	global_lt[2] = lit_pos[2];
+	global_lt[0] = lt[0];
+	global_lt[1] = lt[1];
+	global_lt[2] = lt[2];
 	global_lt[3] = ambience;
 
 	glEnable(GL_DEPTH_TEST);
@@ -5451,6 +5451,7 @@ void my_init(A3D_WND* wnd)
 	//int rect[] = { 1920 * 2, 0, 1920,1080 };
 	int rect[] = { 1920, 0, 1920,1080 };
 	a3dSetRect(wnd,rect, A3D_WND_NORMAL);
+
 }
 
 void my_keyb_char(A3D_WND* wnd, wchar_t chr)

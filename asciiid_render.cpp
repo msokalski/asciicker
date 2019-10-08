@@ -111,7 +111,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 	if ((v[0][3] & v[1][3] & v[2][3]) == 0)
 	{
 		int area = BC_A(v[0],v[1],v[2]);
-		if (area != 0)
+		if (area > 0)
 		{
 			assert(area < 0x10000);
 			float normalizer = (1.0f - FLT_EPSILON) / area;
@@ -252,10 +252,16 @@ struct Renderer
 	float light[4];
 	bool yaw_changed;
 
-	double inst_tm[16];
+	double viewinst_tm[16];
+	const double* inst_tm;
+
+	int patch_uv[HEIGHT_CELLS][2]; // constant
 };
 
-void create_auto_mat(uint8_t mat[/*b*/32/*g*/*32/*r*/*32/*bg,fg,gl*/*3])
+static int create_auto_mat(uint8_t mat[]);
+static uint8_t auto_mat[/*b*/32/*g*/ * 32/*r*/ * 32/*bg,fg,gl*/ * 3];
+int auto_mat_result = create_auto_mat(auto_mat);
+static int create_auto_mat(uint8_t mat[])
 {
 	#define FLO(x) ((int)floor(5 * x / 31.0f))
 	#define REM(x) (5*x-31*flo[x])
@@ -285,17 +291,19 @@ void create_auto_mat(uint8_t mat[/*b*/32/*g*/*32/*r*/*32/*bg,fg,gl*/*3])
 
 	static const char glyph[] = " ..::%";
 
+	int max_pr = 0;
+
 	int i = 0;
 	for (int b=0; b<32; b++)
 	{
 		int p[3];
 		p[2] = rem[b];
 		int B[2] = { flo[b],std::min(5, flo[b] + 1) };
-		for (int g = 0; b < 32; b++)
+		for (int g = 0; g < 32; g++)
 		{
 			p[1] = rem[g];
 			int G[2] = { flo[g],std::min(5, flo[g] + 1) };
-			for (int r = 0; b < 32; b++,i++)
+			for (int r = 0; r < 32; r++,i++)
 			{
 				p[0] = rem[r];
 				int R[2] = { flo[r],std::min(5, flo[r] + 1) };
@@ -305,8 +313,18 @@ void create_auto_mat(uint8_t mat[/*b*/32/*g*/*32/*r*/*32/*bg,fg,gl*/*3])
 				int best_lo;
 				int best_hi;
 
+				// zjebane, todo: przejsc na floaty i normalizowac normalnie!
+
+				// check all pairs of 8 cube verts
 				for (int lo = 0; lo < 7; lo++)
 				{
+					int pp[3]=
+					{
+						p[0] * 5 - (lo & 1) * 5 * 31,
+						p[1] * 5 - ((lo & 2)>>1) * 5 * 31,
+						p[2] * 5 - ((lo & 4)>>2) * 5 * 31,
+					};
+
 					int v0[3] = { R[lo & 1], G[(lo & 2) >> 1], B[(lo & 4) >> 2] };
 					for (int hi = lo + 1; hi < 8; hi++)
 					{
@@ -316,14 +334,16 @@ void create_auto_mat(uint8_t mat[/*b*/32/*g*/*32/*r*/*32/*bg,fg,gl*/*3])
 						// so we have a p[3] and v[3] (same coord system)
 						// calc distance & projection
 
-						// projection
-						int pr = v[0] * p[0] + v[1] * p[1] + v[2] * p[2]; // normalized to 2883=3*31*31
+						// projection 31*5 * 5*31 *3
+						float pr = v[0] * pp[0] + v[1] * pp[1] + v[2] * pp[2]; // 31*5*31*5
+						if (max_pr < pr)
+							max_pr = pr;
 
 						// projection point
-						int pp[3] = { v[0] * pr, v[1] * pr, v[2] * pr }; // normalized to 89373=31*3*31*31
+						int pp[3] = { v[0] * pr, v[1] * pr, v[2] * pr }; // 31*5*31*5 * 31*5
 
 						// dist vect, renormalized so sqaure dist fit in 32 bits
-						int pv[3] = { (p[0] - pp[0] + 1) >> 1, (p[1] - pp[1] + 1) >> 1, (p[2] - pp[2] + 1) >> 1 };
+						int pv[3] = { (p[0] * (5 * 31 * 5 * 31 * 5)  - pp[0] + 1) >> 1, (p[1] * (5 * 31 * 5 * 31 * 5) - pp[1] + 1) >> 1, (p[2] * (5 * 31 * 5 * 31 * 5) - pp[2] + 1) >> 1 };
 
 						// square dist
 						int sd = pv[0] * pv[0] + pv[1] * pv[1] + pv[2] * pv[2];
@@ -339,7 +359,18 @@ void create_auto_mat(uint8_t mat[/*b*/32/*g*/*32/*r*/*32/*bg,fg,gl*/*3])
 				}
 
 				int idx = 3 * (r + 32 * (g + 32 * b));
-				int shd = best_pr / 241; // 0..11
+				int shd = (best_pr + 1092) / 2184; // / 241; // 0..11
+
+				if (shd > 11)
+				{
+					shd = 11;
+				}
+
+				if (shd < 0)
+				{
+					shd = 0;
+				}
+
 				if (shd < 6)
 				{
 					mat[idx + 0] = 16 + R[best_lo & 1] + 6 * G[(best_lo & 2) >> 1] + 36 * B[(best_lo & 4) >> 2];
@@ -350,11 +381,13 @@ void create_auto_mat(uint8_t mat[/*b*/32/*g*/*32/*r*/*32/*bg,fg,gl*/*3])
 				{
 					mat[idx + 0] = 16 + R[best_hi & 1] + 6 * G[(best_hi & 2) >> 1] + 36 * B[(best_hi & 4) >> 2];
 					mat[idx + 1] = 16 + R[best_lo & 1] + 6 * G[(best_lo & 2) >> 1] + 36 * B[(best_lo & 4) >> 2];
-					mat[idx + 2] = glyph[6-shd];
+					mat[idx + 2] = glyph[11-shd];
 				}
 			}
 		}
 	}
+
+	return 1;
 }
 
 void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie)
@@ -367,9 +400,9 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 			{
 				int r8 = (int)floor(rgb[0][0] * bc[0] + rgb[1][0] * bc[1] + rgb[2][0] * bc[2]);
 				int r5 = (r8 * 249 + 1014) >> 11;
-				int g8 = (int)floor(rgb[0][1] * bc[0] + rgb[1][1] * bc[1] + rgb[1][1] * bc[2]);
+				int g8 = (int)floor(rgb[0][1] * bc[0] + rgb[1][1] * bc[1] + rgb[2][1] * bc[2]);
 				int g5 = (g8 * 249 + 1014) >> 11;
-				int b8 = (int)floor(rgb[0][2] * bc[0] + rgb[1][2] * bc[1] + rgb[1][2] * bc[2]);
+				int b8 = (int)floor(rgb[0][2] * bc[0] + rgb[1][2] * bc[1] + rgb[2][2] * bc[2]);
 				int b5 = (b8 * 249 + 1014) >> 11;
 
 				s->visual = r5 | (g5 << 5) | (b5 << 10);
@@ -401,40 +434,71 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	shader.rgb[2] = colors + 8;
 
 	Renderer* r = (Renderer*)cookie;
+	shader.water = r->water;
 
 	// temporarily, let's transform verts for each face separately
 
-	int v[3][3];
+	int v[3][4];
 	const int* pv[3] = { v[0],v[1],v[2] };
 	
-	float tmp[4];
+	float tmp0[4], tmp1[4], tmp2[4];
+
 	{
-		float xyzw[] = { VISUAL_CELLS * coords[0], VISUAL_CELLS * coords[1], VISUAL_CELLS * coords[2], 1.0f };
-		Product(r->inst_tm, xyzw, tmp);
-		v[0][0] = (int)floor(tmp[0] + 0.5f);
-		v[0][1] = (int)floor(tmp[1] + 0.5f);
-		v[0][2] = (int)floor(tmp[2] + 0.5f);
+		float xyzw[] = { coords[0], coords[1], coords[2], 1.0f };
+		Product(r->viewinst_tm, xyzw, tmp0);
+		v[0][0] = (int)floor(tmp0[0] + 0.5f);
+		v[0][1] = (int)floor(tmp0[1] + 0.5f);
+		v[0][2] = (int)floor(tmp0[2] + 0.5f);
+		v[0][3] = 0; // clip flags
 	}
 
 	{
-		float xyzw[] = { VISUAL_CELLS * coords[3], VISUAL_CELLS * coords[4], VISUAL_CELLS * coords[5], 1.0f };
-		Product(r->inst_tm, xyzw, tmp);
-		v[1][0] = (int)floor(tmp[0] + 0.5f);
-		v[1][1] = (int)floor(tmp[1] + 0.5f);
-		v[1][2] = (int)floor(tmp[2] + 0.5f);
+		float xyzw[] = { coords[3], coords[4], coords[5], 1.0f };
+		Product(r->viewinst_tm, xyzw, tmp1);
+		v[1][0] = (int)floor(tmp1[0] + 0.5f);
+		v[1][1] = (int)floor(tmp1[1] + 0.5f);
+		v[1][2] = (int)floor(tmp1[2] + 0.5f);
+		v[1][3] = 0; // clip flags
 	}
 
 	{
-		float xyzw[] = { VISUAL_CELLS * coords[6], VISUAL_CELLS * coords[7], VISUAL_CELLS * coords[8], 1.0f };
-		Product(r->inst_tm, xyzw, tmp);
-		v[2][0] = (int)floor(tmp[0] + 0.5f);
-		v[2][1] = (int)floor(tmp[1] + 0.5f);
-		v[2][2] = (int)floor(tmp[2] + 0.5f);
+		float xyzw[] = { coords[6], coords[7], coords[8], 1.0f };
+		Product(r->viewinst_tm, xyzw, tmp2);
+		v[2][0] = (int)floor(tmp2[0] + 0.5f);
+		v[2][1] = (int)floor(tmp2[1] + 0.5f);
+		v[2][2] = (int)floor(tmp2[2] + 0.5f);
+		v[2][3] = 0; // clip flags
 	}
 
 	int w = r->sample_buffer.w;
 	int h = r->sample_buffer.h;
 	Sample* ptr = r->sample_buffer.ptr;
+
+	// normal is const, could be baked into mesh
+	float e1[] = { coords[3] - coords[0], coords[4] - coords[1], coords[5] - coords[2] };
+	float e2[] = { coords[6] - coords[0], coords[7] - coords[1], coords[8] - coords[2] };
+
+	float n[4] =
+	{
+		e1[1] * e2[2] - e1[2] * e2[1],
+		e1[2] * e2[0] - e1[0] * e2[2],
+		e1[0] * e2[1] - e1[1] * e2[0],
+		0
+	};
+
+	float inst_n[4];
+	Product(r->inst_tm, n, inst_n);
+	float nn = 1.0f / sqrtf(inst_n[0] * inst_n[0] + inst_n[1] * inst_n[1] + inst_n[2] * inst_n[2]);
+
+	float df = nn * (inst_n[0] * r->light[0] + inst_n[1] * r->light[1] + inst_n[2] * r->light[2]);
+
+	//diffuse = 1.0;
+
+	df = df * (1.0f - 0.5f*r->light[3]) + 0.5f*r->light[3];
+	if (df < 0)
+		df = 0;
+
+	shader.diffuse = (int)(df * 0xFF);
 
 	Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
 }
@@ -445,13 +509,14 @@ void Renderer::RenderMesh(Mesh* m, const double* tm, void* cookie)
 	Renderer* r = (Renderer*)cookie;
 	double view_tm[16]=
 	{
-		r->mul[0], r->mul[1], 0.0, 0.0,
-		r->mul[2], r->mul[3], 0.0, 0.0,
+		r->mul[0] * HEIGHT_CELLS, r->mul[1] * HEIGHT_CELLS, 0.0, 0.0,
+		r->mul[2] * HEIGHT_CELLS, r->mul[3] * HEIGHT_CELLS, 0.0, 0.0,
 		r->mul[4], r->mul[5], 1.0, 0.0,
 		r->add[0], r->add[1], 0.0, 1.0
 	};
 
-	MatProduct(view_tm, tm, r->inst_tm);
+	r->inst_tm = tm;
+	MatProduct(view_tm, tm, r->viewinst_tm);
 	QueryMesh(m, Renderer::RenderFace, r);
 
 	// transform verts int integer coords
@@ -605,13 +670,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 	hm = hmap;
 
-	static const int uv[HEIGHT_CELLS][2] =
-	{
-		{0, VISUAL_CELLS / HEIGHT_CELLS},
-		{VISUAL_CELLS / HEIGHT_CELLS, 2 * VISUAL_CELLS / HEIGHT_CELLS},
-		{2 * VISUAL_CELLS / HEIGHT_CELLS, 3 * VISUAL_CELLS / HEIGHT_CELLS},
-		{3 * VISUAL_CELLS / HEIGHT_CELLS, 4 * VISUAL_CELLS / HEIGHT_CELLS}
-	};
+	const int (*uv)[2] = r->patch_uv;
 
 	for (int dy = 0; dy < HEIGHT_CELLS; dy++, hm++)
 	{
@@ -700,6 +759,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 {
 	static Renderer r;
 
+
 #ifdef DBL
 	float scale = 3.0;
 #else
@@ -722,6 +782,13 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 	if (!r.sample_buffer.ptr)
 	{
+		for (int uv=0; uv<HEIGHT_CELLS; uv++)
+		{
+			r.patch_uv[uv][0] = uv * VISUAL_CELLS / HEIGHT_CELLS;
+			r.patch_uv[uv][1] = (uv+1) * VISUAL_CELLS / HEIGHT_CELLS;
+		};
+
+
 		r.sample_buffer.w = dw;
 		r.sample_buffer.h = dh;
 		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample));
@@ -838,7 +905,77 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	}
 
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
-	QueryWorld(w, 0/*planes*/, clip_world, Renderer::RenderMesh, &r);
+	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
+
+
+	////////////////////
+	// REFL
+
+	// once again for reflections
+	tm[8] = -tm[8];
+	tm[9] = -tm[9];
+	tm[10] = -tm[10]; // let them simply go below 0 :)
+
+	r.mul[0] = tm[0];
+	r.mul[1] = tm[1];
+	r.mul[2] = tm[4];
+	r.mul[3] = tm[5];
+	r.mul[4] = 0;
+	r.mul[5] = tm[9];
+
+	// if yaw didn't change, make it INTEGRAL (and EVEN in case of DBL)
+	r.add[0] = tm[12];
+	r.add[1] = tm[13] + 0.5;
+
+
+	if (!r.yaw_changed)
+	{
+		int x = (int)floor(r.add[0] + 0.5);
+		int y = (int)floor(r.add[1] + 0.5);
+
+		#ifdef DBL
+		x &= ~1;
+		y &= ~1;
+		#endif
+
+		r.add[0] = (double)x;
+		r.add[1] = (double)y;
+	}
+	
+	{
+		// somehow it works
+		double clip_tm[16];
+		clip_tm[0] = +cosyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
+		clip_tm[1] = -sinyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
+		clip_tm[2] = 0;
+		clip_tm[3] = 0;
+		clip_tm[4] = +sinyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
+		clip_tm[5] = +cosyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
+		clip_tm[6] = 0;
+		clip_tm[7] = 0;
+		clip_tm[8] = 0;
+		clip_tm[9] = +cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
+		clip_tm[10] = +2. / 0xffff;
+		clip_tm[11] = 0;
+		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + pos[2] * clip_tm[8]);
+		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + pos[2] * clip_tm[9]);
+		clip_tm[14] = -1.0;
+		clip_tm[15] = 1.0;
+
+		clip_tm[8]  = -clip_tm[8];
+		clip_tm[9]  = -clip_tm[8];
+		clip_tm[10] = -clip_tm[8];
+
+		TransposeProduct(clip_tm, clip_left, clip_world[0]);
+		TransposeProduct(clip_tm, clip_right, clip_world[1]);
+		TransposeProduct(clip_tm, clip_bottom, clip_world[2]);
+		TransposeProduct(clip_tm, clip_top, clip_world[3]);
+	}
+
+	// almost works (probably except z-test, lighting and ccw/cw)
+	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
+	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
+
 
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
@@ -848,6 +985,19 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	{
 		for (int x = 0; x < width; x++, ptr++)
 		{
+			// given interpolated RGB -> round to 555, store it in visual
+			// copy to diffuse to diffuse
+			// mark mash 'auto-material' as 0x8 flag in spare
+
+			// in post pass:
+			// if sample has 0x8 flag
+			//   multiply rgb by diffuse (into 888 bg=fg)
+			// apply color mixing with neighbours
+			// if at least 1 sample have mesh bit in spare
+			// - round mixed bg rgb to R5G5B5 and use auto_material[32K] -> {bg,fg,gl}
+			// else apply gridlines etc.
+
+
 			#ifdef DBL
 			
 			// average 4 backgrounds
@@ -855,6 +1005,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			int spr[4] = { src[0].spare & 11, src[1].spare & 11, src[dw].spare & 11, src[dw + 1].spare & 11 };
 			int mat[4] = { src[0].visual & 0x00FF , src[1].visual & 0x00FF, src[dw].visual & 0x00FF, src[dw + 1].visual & 0x00FF };
 			int dif[4] = { src[0].diffuse , src[1].diffuse, src[dw].diffuse, src[dw + 1].diffuse };
+			int vis[4] = { src[0].visual, src[1].visual, src[dw].visual, src[dw + 1].visual };
 
 			// TODO:
 			// every material must have 16x16 map and uses visual shade to select Y and lighting to select X
@@ -885,85 +1036,119 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			int bg[3] = { 0,0,0 };
 			int fg[3] = { 0,0,0 };
 
+			bool use_auto_mat = false;
+
 			for (int i = 0; i < 4; i++)
 			{
 				if (spr[i])
 				{
-					bg[0] += matlib[mat[i]].shade[1][shd].bg[0];
-					bg[1] += matlib[mat[i]].shade[1][shd].bg[1];
-					bg[2] += matlib[mat[i]].shade[1][shd].bg[2];
-					fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
-					fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
-					fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+					if (spr[i] & 0x8)
+					{
+						int r = ((vis[i] & 0x1F) * 527 + 23) >> 6;
+						int g = (((vis[i] >> 5) & 0x1F) * 527 + 23) >> 6;
+						int b = (((vis[i] >> 10) & 0x1F) * 527 + 23) >> 6;
+
+						bg[0] += r * dif[i] / 255;
+						bg[1] += g * dif[i] / 255;
+						bg[2] += b * dif[i] / 255;
+						use_auto_mat = true;
+					}
+					else
+					{
+						bg[0] += matlib[mat[i]].shade[1][shd].bg[0];
+						bg[1] += matlib[mat[i]].shade[1][shd].bg[1];
+						bg[2] += matlib[mat[i]].shade[1][shd].bg[2];
+						fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
+						fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
+						fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+					}
 				}
 			}
 
-			int bk_rgb[3] =
+			// odblokowac po przerobieniu auto_mat'a na floaty
+			if (false && use_auto_mat)
 			{
-				(bg[0] + 102) / 204,
-				(bg[1] + 102) / 204,
-				(bg[2] + 102) / 204
-			};
+				// works somehow...
+				// check if using half blocks would improve anything?
+				// but blending sprites should clear 0x8 flag on all 4 samples!
 
-			ptr->gl = gl;
-			ptr->bk = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
-			ptr->fg = 16 + (((fg[0] + 102) / 204) + (((fg[1] + 102) / 204) * 6) + (((fg[2] + 102) / 204) * 36));
-			ptr->spare = 0xFF;
-
-			// collect line bits
-			int linecase = ((src[0].spare & 0x4)>>2) | ((src[1].spare & 0x4) >> 1) | (src[dw].spare & 0x4) | ((src[dw+1].spare & 0x4)<<1);
-
-			static const int linecase_glyph[] = {0, ',', ',', ',', '`', ';', ';', ';', '`', ';', ';', ';', '`', ';', ';', ';'};
-			if (linecase)
-			{
-				/*
-				if ((bk_rgb[0] | bk_rgb[1] | bk_rgb[2]) == 0)
-				{
-					ptr->fg = 16 + 1 + 1 * 6 + 1 * 36;
-				}
-				else
-				{
-					bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
-					bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
-					bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-					ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
-				}
-				*/
-				ptr->gl = linecase_glyph[linecase];
-			}
-
-
-			// silhouette repetitoire:  _-/\| (should not be used by materials?)
-
-			float z_hi = src[dw].height + src[dw + 1].height;
-			float z_lo = src[0].height + src[1].height;
-			float z_pr = src[-dw].height + src[1-dw].height;
-
-			float minus = z_lo - z_hi;
-			float under = z_pr - z_lo;
-
-			static const float thresh = 1 * HEIGHT_SCALE;
-
-			if (minus > under)
-			{
-				if (minus > thresh)
-				{
-					ptr->gl = 0xC4; // '-'
-					bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
-					bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
-					bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-					ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
-				}
+				int auto_mat_idx = 3 * (bg[0]/33 + 32*(bg[1]/33) + 32*32*(bg[2]/33));
+				ptr->gl = auto_mat[auto_mat_idx + 2];
+				ptr->bk = auto_mat[auto_mat_idx + 0];
+				ptr->fg = auto_mat[auto_mat_idx + 1];
+				ptr->spare = 0xFF;
 			}
 			else
 			{
-				if (under > thresh)
+				if (use_auto_mat)
+					gl = '+';
+				int bk_rgb[3] =
 				{
-					ptr->gl = 0x5F; // '_'
-					bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
-					bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
-					bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-					ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+					(bg[0] + 102) / 204,
+					(bg[1] + 102) / 204,
+					(bg[2] + 102) / 204
+				};
+
+				ptr->gl = gl;
+				ptr->bk = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+				ptr->fg = 16 + (((fg[0] + 102) / 204) + (((fg[1] + 102) / 204) * 6) + (((fg[2] + 102) / 204) * 36));
+				ptr->spare = 0xFF;
+
+				// collect line bits
+				int linecase = ((src[0].spare & 0x4) >> 2) | ((src[1].spare & 0x4) >> 1) | (src[dw].spare & 0x4) | ((src[dw + 1].spare & 0x4) << 1);
+
+				static const int linecase_glyph[] = { 0, ',', ',', ',', '`', ';', ';', ';', '`', ';', ';', ';', '`', ';', ';', ';' };
+				if (linecase)
+				{
+					/*
+					if ((bk_rgb[0] | bk_rgb[1] | bk_rgb[2]) == 0)
+					{
+						ptr->fg = 16 + 1 + 1 * 6 + 1 * 36;
+					}
+					else
+					{
+						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+						ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+					}
+					*/
+					ptr->gl = linecase_glyph[linecase];
+				}
+
+
+				// silhouette repetitoire:  _-/\| (should not be used by materials?)
+
+				float z_hi = src[dw].height + src[dw + 1].height;
+				float z_lo = src[0].height + src[1].height;
+				float z_pr = src[-dw].height + src[1 - dw].height;
+
+				float minus = z_lo - z_hi;
+				float under = z_pr - z_lo;
+
+				static const float thresh = 1 * HEIGHT_SCALE;
+
+				if (minus > under)
+				{
+					if (minus > thresh)
+					{
+						ptr->gl = 0xC4; // '-'
+						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+						ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+					}
+				}
+				else
+				{
+					if (under > thresh)
+					{
+						ptr->gl = 0x5F; // '_'
+						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+						ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+					}
 				}
 			}
 
