@@ -1278,6 +1278,9 @@ struct World
     // RAY HIT using plucker
     Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3])
     {
+		if (!root)
+			return 0;
+
 		// p should be projected to the BOTTOM plane!
 		double ray[] =
 		{

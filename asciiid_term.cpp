@@ -351,6 +351,9 @@ void TermOpen(A3D_WND* share, float yaw, float pos[3])
 
 	A3D_WND* wnd = a3dOpen(&pi, &gd, share);
 
+	//a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
+	//a3dSetVisible(share, false);
+
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
 	term->yaw = yaw;

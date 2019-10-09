@@ -5450,6 +5450,7 @@ void my_init(A3D_WND* wnd)
 
 	//int rect[] = { 1920 * 2, 0, 1920,1080 };
 	int rect[] = { 1920, 0, 1920,1080 };
+	//int rect[] = { 0, 0, 1920,1080 };
 	a3dSetRect(wnd,rect, A3D_WND_NORMAL);
 
 }

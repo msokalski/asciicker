@@ -247,10 +247,10 @@ struct Renderer
 	// transform
 	double mul[6]; // 3x2 rot part
 	double add[2]; // post rotated and rounded translation
-	float yaw;
+	float yaw,pos[3];
 	float water;
 	float light[4];
-	bool yaw_changed;
+	bool int_flag;
 
 	double viewinst_tm[16];
 	const double* inst_tm;
@@ -308,8 +308,8 @@ static int create_auto_mat(uint8_t mat[])
 				p[0] = rem[r];
 				int R[2] = { flo[r],std::min(5, flo[r] + 1) };
 
-				int best_sd = -1;
-				int best_pr;
+				float best_sd = -1;
+				float best_pr;
 				int best_lo;
 				int best_hi;
 
@@ -318,37 +318,36 @@ static int create_auto_mat(uint8_t mat[])
 				// check all pairs of 8 cube verts
 				for (int lo = 0; lo < 7; lo++)
 				{
-					int pp[3]=
+					int v0[3] = { R[lo & 1], G[(lo & 2) >> 1], B[(lo & 4) >> 2] };
+
+					int pv0[3]=
 					{
-						p[0] * 5 - (lo & 1) * 5 * 31,
-						p[1] * 5 - ((lo & 2)>>1) * 5 * 31,
-						p[2] * 5 - ((lo & 4)>>2) * 5 * 31,
+						R[0] * 31 + p[0] - v0[0] * 31,
+						G[0] * 31 + p[1] - v0[1] * 31,
+						B[0] * 31 + p[2] - v0[2] * 31,
 					};
 
-					int v0[3] = { R[lo & 1], G[(lo & 2) >> 1], B[(lo & 4) >> 2] };
+					// float pv0_len = sqrtf((float)(pv0[0] * pv0[0] + pv0[1] * pv0[1] + pv0[2] * pv0[2]));
+
 					for (int hi = lo + 1; hi < 8; hi++)
 					{
 						int v1[3] = { R[hi & 1], G[(hi & 2) >> 1], B[(hi & 4) >> 2] };
-						int v[3] = { 31*(v1[0] - v0[0]), 31*(v1[1] - v0[1]), 31*(v1[2] - v0[2]) };
+						int v10[3] = { 31*(v1[0] - v0[0]), 31*(v1[1] - v0[1]), 31*(v1[2] - v0[2]) };
 
-						// so we have a p[3] and v[3] (same coord system)
-						// calc distance & projection
+						int v10_sqrlen = v10[0] * v10[0] + v10[1] * v10[1] + v10[2] * v10[2];
 
-						// projection 31*5 * 5*31 *3
-						float pr = v[0] * pp[0] + v[1] * pp[1] + v[2] * pp[2]; // 31*5*31*5
-						if (max_pr < pr)
-							max_pr = pr;
+						float pr = v10_sqrlen ? (v10[0] * pv0[0] + v10[1] * pv0[1] + v10[2] * pv0[2]) / (float)v10_sqrlen : 0.0f;
 
 						// projection point
-						int pp[3] = { v[0] * pr, v[1] * pr, v[2] * pr }; // 31*5*31*5 * 31*5
+						float prp[3] = { v10[0] * pr, v10[1] * pr, v10[2] * pr };
 
-						// dist vect, renormalized so sqaure dist fit in 32 bits
-						int pv[3] = { (p[0] * (5 * 31 * 5 * 31 * 5)  - pp[0] + 1) >> 1, (p[1] * (5 * 31 * 5 * 31 * 5) - pp[1] + 1) >> 1, (p[2] * (5 * 31 * 5 * 31 * 5) - pp[2] + 1) >> 1 };
+						// dist vect
+						float prv[3] = { pv0[0] - prp[0], pv0[1] - prp[1], pv0[2] - prp[2] };
 
 						// square dist
-						int sd = pv[0] * pv[0] + pv[1] * pv[1] + pv[2] * pv[2];
+						float sd = sqrtf(prv[0] * prv[0] + prv[1] * prv[1] + prv[2] * prv[2]);
 
-						if (sd < best_sd || best_sd<0)
+						if (sd < best_sd || best_sd < 0)
 						{
 							best_sd = sd;
 							best_pr = pr;
@@ -359,7 +358,7 @@ static int create_auto_mat(uint8_t mat[])
 				}
 
 				int idx = 3 * (r + 32 * (g + 32 * b));
-				int shd = (best_pr + 1092) / 2184; // / 241; // 0..11
+				int shd = (int)floorf( best_pr * 11 + 0.5f );
 
 				if (shd > 11)
 				{
@@ -613,8 +612,9 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			int vx = x * HEIGHT_CELLS + dx * VISUAL_CELLS;
 			int vz = *(hm++);
 
+
 			// transform 
-			if (r->yaw_changed)
+			if (r->int_flag)
 			{
 				int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
 				int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
@@ -778,10 +778,9 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 	float ds = 2*zoom / VISUAL_CELLS;
 
-	r.yaw_changed = true;
-
 	if (!r.sample_buffer.ptr)
 	{
+		r.int_flag = true;
 		for (int uv=0; uv<HEIGHT_CELLS; uv++)
 		{
 			r.patch_uv[uv][0] = uv * VISUAL_CELLS / HEIGHT_CELLS;
@@ -796,18 +795,31 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	else
 	if (r.sample_buffer.w != dw || r.sample_buffer.h != dh)
 	{
+		r.int_flag = true;
 		r.sample_buffer.w = dw;
 		r.sample_buffer.h = dh;
 		free(r.sample_buffer.ptr);
 		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample));
 	}
 	else
-	if (yaw == r.yaw)
 	{
-		r.yaw_changed = false;
+		if (pos[0] != r.pos[0] || pos[1] != r.pos[1] || pos[2] != r.pos[2])
+		{
+			r.int_flag = true;
+		}
+
+		if (yaw != r.yaw)
+		{
+			r.int_flag = false;
+		}
 	}
 
+
+	r.pos[0] = pos[0];
+	r.pos[1] = pos[1];
+	r.pos[2] = pos[2];
 	r.yaw = yaw;
+
 	r.water = water;
 	r.light[0] = lt[0];
 	r.light[1] = lt[1];
@@ -853,7 +865,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	r.add[0] = tm[12];
 	r.add[1] = tm[13] + 0.5;
 
-	if (!r.yaw_changed)
+	if (r.int_flag)
 	{
 		int x = (int)floor(r.add[0] + 0.5);
 		int y = (int)floor(r.add[1] + 0.5);
@@ -872,10 +884,10 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 	double clip_world[4][4];
 
-	double clip_left[4] =   { 1, 0, 0, .9 };
-	double clip_right[4] =  {-1, 0, 0, .9 };
-	double clip_bottom[4] = { 0, 1, 0, .9 };
-	double clip_top[4] =    { 0,-1, 0, .9 };
+	double clip_left[4] =   { 1, 0, 0, 1 };
+	double clip_right[4] =  {-1, 0, 0, 1 };
+	double clip_bottom[4] = { 0, 1, 0, 1 };
+	double clip_top[4] =    { 0,-1, 0, 1 };
 
 	// easier to use another transform for clipping
 	{
@@ -907,14 +919,16 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
 
-
+	/*
 	////////////////////
 	// REFL
+	// were fucked!
 
 	// once again for reflections
 	tm[8] = -tm[8];
 	tm[9] = -tm[9];
 	tm[10] = -tm[10]; // let them simply go below 0 :)
+	tm[11] = -tm[11];
 
 	r.mul[0] = tm[0];
 	r.mul[1] = tm[1];
@@ -928,7 +942,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	r.add[1] = tm[13] + 0.5;
 
 
-	if (!r.yaw_changed)
+	if (r.int_flag)
 	{
 		int x = (int)floor(r.add[0] + 0.5);
 		int y = (int)floor(r.add[1] + 0.5);
@@ -975,7 +989,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	// almost works (probably except z-test, lighting and ccw/cw)
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
-
+	*/
 
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
@@ -1033,55 +1047,229 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			int shd = (dif[0] + dif[1] + dif[2] + dif[3] + 17*2) / (17 * 4); // 17: FF->F, 4: avr
 			int gl = matlib[mat[0]].shade[1][shd].gl;
 
-			int bg[3] = { 0,0,0 };
+			int bg[3] = { 0,0,0 }; // 4
 			int fg[3] = { 0,0,0 };
+
+			int half_h[2][2] = { {0,1},{2,3} };
+			int half_v[2][2] = { {0,2},{1,3} };
+			int bg_h[2][3] = { { 0,0,0 },{ 0,0,0 } }; // 0+1 \ 2+3 
+			int bg_v[2][3] = { { 0,0,0 },{ 0,0,0 } }; // 0+2 | 1+3
 
 			bool use_auto_mat = false;
 
-			for (int i = 0; i < 4; i++)
-			{
-				if (spr[i])
-				{
-					if (spr[i] & 0x8)
-					{
-						int r = ((vis[i] & 0x1F) * 527 + 23) >> 6;
-						int g = (((vis[i] >> 5) & 0x1F) * 527 + 23) >> 6;
-						int b = (((vis[i] >> 10) & 0x1F) * 527 + 23) >> 6;
+			int err_h = 0;
+			int err_v = 0;
 
-						bg[0] += r * dif[i] / 255;
-						bg[1] += g * dif[i] / 255;
-						bg[2] += b * dif[i] / 255;
-						use_auto_mat = true;
-					}
-					else
+			for (int m = 0; m < 2; m++)
+			{
+				for (int i = 0; i < 4; i++)
+				{
+					if (spr[i])
 					{
-						bg[0] += matlib[mat[i]].shade[1][shd].bg[0];
-						bg[1] += matlib[mat[i]].shade[1][shd].bg[1];
-						bg[2] += matlib[mat[i]].shade[1][shd].bg[2];
-						fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
-						fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
-						fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+						if (spr[i] & 0x8)
+						{
+							int r = ((vis[i] & 0x1F) * 527 + 23) >> 6;
+							int g = (((vis[i] >> 5) & 0x1F) * 527 + 23) >> 6;
+							int b = (((vis[i] >> 10) & 0x1F) * 527 + 23) >> 6;
+
+							r = r * dif[i] / 255;
+							g = g * dif[i] / 255;
+							b = b * dif[i] / 255;
+
+							if (i == 0 || i == 1)
+							{
+								if (m)
+								{
+									err_h += abs(bg_h[0][0] - 4 * r);
+									err_h += abs(bg_h[0][1] - 4 * g);
+									err_h += abs(bg_h[0][2] - 4 * b);
+								}
+								else
+								{
+									bg_h[0][0] += 2 * r;
+									bg_h[0][1] += 2 * g;
+									bg_h[0][2] += 2 * b;
+								}
+							}
+							if (i == 2 || i == 3)
+							{
+								if (m)
+								{
+									err_h += abs(bg_h[1][0] - 4 * r);
+									err_h += abs(bg_h[1][1] - 4 * g);
+									err_h += abs(bg_h[1][2] - 4 * b);
+								}
+								else
+								{
+									bg_h[1][0] += 2 * r;
+									bg_h[1][1] += 2 * g;
+									bg_h[1][2] += 2 * b;
+								}
+							}
+
+							if (i == 0 || i == 2)
+							{
+								if (m)
+								{
+									err_v += abs(bg_v[0][0] - 4 * r);
+									err_v += abs(bg_v[0][1] - 4 * g);
+									err_v += abs(bg_v[0][2] - 4 * b);
+								}
+								else
+								{
+									bg_v[0][0] += 2 * r;
+									bg_v[0][1] += 2 * g;
+									bg_v[0][2] += 2 * b;
+								}
+							}
+							if (i == 1 || i == 3)
+							{
+								if (m)
+								{
+									err_v += abs(bg_v[1][0] - 4 * r);
+									err_v += abs(bg_v[1][1] - 4 * g);
+									err_v += abs(bg_v[1][2] - 4 * b);
+								}
+								else
+								{
+									bg_v[1][0] += 2 * r;
+									bg_v[1][1] += 2 * g;
+									bg_v[1][2] += 2 * b;
+								}
+							}
+
+							if (!m)
+							{
+								bg[0] += r;
+								bg[1] += g;
+								bg[2] += b;
+								use_auto_mat = true;
+							}
+						}
+						else
+						{
+							int r = matlib[mat[i]].shade[1][shd].bg[0];
+							int g = matlib[mat[i]].shade[1][shd].bg[1];
+							int b = matlib[mat[i]].shade[1][shd].bg[2];
+
+							if (i == 0 || i == 1)
+							{
+								if (m)
+								{
+									err_h += abs(bg_h[0][0] - 4 * r);
+									err_h += abs(bg_h[0][1] - 4 * g);
+									err_h += abs(bg_h[0][2] - 4 * b);
+								}
+								else
+								{
+									bg_h[0][0] += 2 * r;
+									bg_h[0][1] += 2 * g;
+									bg_h[0][2] += 2 * b;
+								}
+							}
+							if (i == 2 || i == 3)
+							{
+								if (m)
+								{
+									err_h += abs(bg_h[1][0] - 4 * r);
+									err_h += abs(bg_h[1][1] - 4 * g);
+									err_h += abs(bg_h[1][2] - 4 * b);
+								}
+								else
+								{
+									bg_h[1][0] += 2*r;
+									bg_h[1][1] += 2*g;
+									bg_h[1][2] += 2*b;
+								}
+							}
+
+							if (i == 0 || i == 2)
+							{
+								if (m)
+								{
+									err_v += abs(bg_v[0][0] - 4 * r);
+									err_v += abs(bg_v[0][1] - 4 * g);
+									err_v += abs(bg_v[0][2] - 4 * b);
+								}
+								else
+								{
+									bg_v[0][0] += 2*r;
+									bg_v[0][1] += 2*g;
+									bg_v[0][2] += 2*b;
+								}
+							}
+							if (i == 1 || i == 3)
+							{
+								if (m)
+								{
+									err_v += abs(bg_v[1][0] - 4 * r);
+									err_v += abs(bg_v[1][1] - 4 * g);
+									err_v += abs(bg_v[1][2] - 4 * b);
+								}
+								else
+								{
+									bg_v[1][0] += 2*r;
+									bg_v[1][1] += 2*g;
+									bg_v[1][2] += 2*b;
+								}
+							}
+
+							if (!m)
+							{
+								bg[0] += r;
+								bg[1] += g;
+								bg[2] += b;
+								fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
+								fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
+								fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+							}
+						}
 					}
 				}
 			}
 
-			// odblokowac po przerobieniu auto_mat'a na floaty
-			if (false && use_auto_mat)
+			if (use_auto_mat)
 			{
-				// works somehow...
-				// check if using half blocks would improve anything?
-				// but blending sprites should clear 0x8 flag on all 4 samples!
+				// WORKS REALY WELL! 
 
-				int auto_mat_idx = 3 * (bg[0]/33 + 32*(bg[1]/33) + 32*32*(bg[2]/33));
-				ptr->gl = auto_mat[auto_mat_idx + 2];
-				ptr->bk = auto_mat[auto_mat_idx + 0];
-				ptr->fg = auto_mat[auto_mat_idx + 1];
-				ptr->spare = 0xFF;
+				if (err_h < err_v)
+				{
+					// _FG_
+					//  BK
+					ptr->gl = 0xDF;
+
+					int auto_mat_lo = 3 * (bg_h[0][0] / 33 + 32 * (bg_h[0][1] / 33) + 32 * 32 * (bg_h[0][2] / 33));
+					int auto_mat_hi = 3 * (bg_h[1][0] / 33 + 32 * (bg_h[1][1] / 33) + 32 * 32 * (bg_h[1][2] / 33));
+
+					ptr->bk = auto_mat[auto_mat_lo + 0];
+					ptr->fg = auto_mat[auto_mat_hi + 0];
+				}
+				else
+				{
+					// B|F
+					// K|G
+					ptr->gl = 0xDE;
+
+					int auto_mat_lt = 3 * (bg_v[0][0] / 33 + 32 * (bg_v[0][1] / 33) + 32 * 32 * (bg_v[0][2] / 33));
+					int auto_mat_rt = 3 * (bg_v[1][0] / 33 + 32 * (bg_v[1][1] / 33) + 32 * 32 * (bg_v[1][2] / 33));
+
+					ptr->bk = auto_mat[auto_mat_lt + 0];
+					ptr->fg = auto_mat[auto_mat_rt + 0];
+				}
+
+				
+				if (ptr->bk == ptr->fg)
+				{
+					// avr4
+					int auto_mat_idx = 3 * (bg[0] / 33 + 32 * (bg[1] / 33) + 32 * 32 * (bg[2] / 33));
+					ptr->gl = auto_mat[auto_mat_idx + 2];
+					ptr->bk = auto_mat[auto_mat_idx + 0];
+					ptr->fg = auto_mat[auto_mat_idx + 1];
+					ptr->spare = 0xFF;
+				}
 			}
 			else
 			{
-				if (use_auto_mat)
-					gl = '+';
 				int bk_rgb[3] =
 				{
 					(bg[0] + 102) / 204,
@@ -1099,26 +1287,9 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 				static const int linecase_glyph[] = { 0, ',', ',', ',', '`', ';', ';', ';', '`', ';', ';', ';', '`', ';', ';', ';' };
 				if (linecase)
-				{
-					/*
-					if ((bk_rgb[0] | bk_rgb[1] | bk_rgb[2]) == 0)
-					{
-						ptr->fg = 16 + 1 + 1 * 6 + 1 * 36;
-					}
-					else
-					{
-						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
-						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
-						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-						ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
-					}
-					*/
 					ptr->gl = linecase_glyph[linecase];
-				}
-
 
 				// silhouette repetitoire:  _-/\| (should not be used by materials?)
-
 				float z_hi = src[dw].height + src[dw + 1].height;
 				float z_lo = src[0].height + src[1].height;
 				float z_pr = src[-dw].height + src[1 - dw].height;
