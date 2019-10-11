@@ -1692,7 +1692,7 @@ bool Mesh::Update(const char* path)
 				return false;
 			}
 
-			element = 'VERT';
+			element = 'V';
 
 			continue;
 		}
@@ -1711,14 +1711,14 @@ bool Mesh::Update(const char* path)
 				return false;
 			}
 
-			element = 'FACE';
+			element = 'F';
 
 			continue;
 		}
 
 		if (strncmp(buf, "property ", 9) == 0)
 		{
-			if (element == 'FACE')
+			if (element == 'F')
 			{
 				if (strcmp(buf + 9, "list uchar uint vertex_indices") != 0)
 				{
@@ -1730,7 +1730,7 @@ bool Mesh::Update(const char* path)
 				continue;
 			}
 			else
-			if (element == 'VERT')
+			if (element == 'V')
 			{
 				static const char* match[] = 
 				{
