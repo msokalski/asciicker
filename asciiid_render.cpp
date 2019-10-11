@@ -16,6 +16,7 @@
 
 #define DBL
 
+static bool global_refl_mode = false;
 
 template <typename Sample>
 inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
@@ -141,6 +142,19 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 					if (bc[0] < 0 || bc[1] < 0 || bc[2] < 0)
 						continue;
 
+					/*
+					if (area > 0)
+					{
+						if (bc[0] < 0 || bc[1] < 0 || bc[2] < 0)
+							continue;
+					}
+					else
+					{
+						if (bc[0] > 0 || bc[1] > 0 || bc[2] > 0)
+							continue;
+					}
+					*/
+
 					// edge pairing
 					if (bc[0] == 0 && v[1][0] <= v[2][0] ||
 						bc[1] == 0 && v[2][0] <= v[0][0] ||
@@ -160,8 +174,16 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 
 					float z = nbc[0] * v[0][2] + nbc[1] * v[1][2] + nbc[2] * v[2][2];
 
+					s->Blend(row,z,nbc);
+					/*
 					if (row->DepthTest_RW(z))
-						s->Fill(row, nbc);
+					{
+						if (global_refl_mode)
+							s->Refl(row, nbc);
+						else
+							s->Fill(row, nbc);
+					}
+					*/
 				}
 			}
 		}
@@ -178,6 +200,7 @@ struct Sample
 	uint8_t spare;   // refl, patch xy parity etc..., direct color bit (meshes): visual has just 565 color?
 	float height;
 
+	/*
 	inline bool DepthTest_RW(float z)
 	{
 		if (height > z)
@@ -186,6 +209,7 @@ struct Sample
 		height = z;
 		return true;
 	}
+	*/
 
 	inline bool DepthTest_RO(float z)
 	{
@@ -246,7 +270,7 @@ struct Renderer
 
 	// transform
 	double mul[6]; // 3x2 rot part
-	double add[2]; // post rotated and rounded translation
+	double add[3]; // post rotated and rounded translation
 	float yaw,pos[3];
 	float water;
 	float light[4];
@@ -263,9 +287,17 @@ static uint8_t auto_mat[/*b*/32/*g*/ * 32/*r*/ * 32/*bg,fg,gl*/ * 3];
 int auto_mat_result = create_auto_mat(auto_mat);
 static int create_auto_mat(uint8_t mat[])
 {
+	/*
 	#define FLO(x) ((int)floor(5 * x / 31.0f))
 	#define REM(x) (5*x-31*flo[x])
-	static const int flo[32]=
+	*/
+
+	#define MCV 5
+	#define MCV_TO_5(mcv) (((mcv) * 5 + MCV/2) / MCV)
+	#define FLO(x) ((int)floor(MCV * x / 31.0f))
+	#define REM(x) (MCV*x-31*flo[x])
+
+	static const int flo[32] =
 	{
 		FLO(0),  FLO(1),  FLO(2),  FLO(3),
 		FLO(4),  FLO(5),  FLO(6),  FLO(7),
@@ -298,22 +330,20 @@ static int create_auto_mat(uint8_t mat[])
 	{
 		int p[3];
 		p[2] = rem[b];
-		int B[2] = { flo[b],std::min(5, flo[b] + 1) };
+		int B[2] = { flo[b],std::min(MCV, flo[b] + 1) };
 		for (int g = 0; g < 32; g++)
 		{
 			p[1] = rem[g];
-			int G[2] = { flo[g],std::min(5, flo[g] + 1) };
+			int G[2] = { flo[g],std::min(MCV, flo[g] + 1) };
 			for (int r = 0; r < 32; r++,i++)
 			{
 				p[0] = rem[r];
-				int R[2] = { flo[r],std::min(5, flo[r] + 1) };
+				int R[2] = { flo[r],std::min(MCV, flo[r] + 1) };
 
 				float best_sd = -1;
 				float best_pr;
 				int best_lo;
 				int best_hi;
-
-				// zjebane, todo: przejsc na floaty i normalizowac normalnie!
 
 				// check all pairs of 8 cube verts
 				for (int lo = 0; lo < 7; lo++)
@@ -326,8 +356,6 @@ static int create_auto_mat(uint8_t mat[])
 						G[0] * 31 + p[1] - v0[1] * 31,
 						B[0] * 31 + p[2] - v0[2] * 31,
 					};
-
-					// float pv0_len = sqrtf((float)(pv0[0] * pv0[0] + pv0[1] * pv0[1] + pv0[2] * pv0[2]));
 
 					for (int hi = lo + 1; hi < 8; hi++)
 					{
@@ -372,14 +400,14 @@ static int create_auto_mat(uint8_t mat[])
 
 				if (shd < 6)
 				{
-					mat[idx + 0] = 16 + R[best_lo & 1] + 6 * G[(best_lo & 2) >> 1] + 36 * B[(best_lo & 4) >> 2];
-					mat[idx + 1] = 16 + R[best_hi & 1] + 6 * G[(best_hi & 2) >> 1] + 36 * B[(best_hi & 4) >> 2];
+					mat[idx + 0] = 16 + MCV_TO_5(R[best_lo & 1]) + 6 * MCV_TO_5(G[(best_lo & 2) >> 1]) + 36 * MCV_TO_5(B[(best_lo & 4) >> 2]);
+					mat[idx + 1] = 16 + MCV_TO_5(R[best_hi & 1]) + 6 * MCV_TO_5(G[(best_hi & 2) >> 1]) + 36 * MCV_TO_5(B[(best_hi & 4) >> 2]);
 					mat[idx + 2] = glyph[shd];
 				}
 				else
 				{
-					mat[idx + 0] = 16 + R[best_hi & 1] + 6 * G[(best_hi & 2) >> 1] + 36 * B[(best_hi & 4) >> 2];
-					mat[idx + 1] = 16 + R[best_lo & 1] + 6 * G[(best_lo & 2) >> 1] + 36 * B[(best_lo & 4) >> 2];
+					mat[idx + 0] = 16 + MCV_TO_5(R[best_hi & 1]) + 6 * MCV_TO_5(G[(best_hi & 2) >> 1]) + 36 * MCV_TO_5(B[(best_hi & 4) >> 2]);
+					mat[idx + 1] = 16 + MCV_TO_5(R[best_lo & 1]) + 6 * MCV_TO_5(G[(best_lo & 2) >> 1]) + 36 * MCV_TO_5(B[(best_lo & 4) >> 2]);
 					mat[idx + 2] = glyph[11-shd];
 				}
 			}
@@ -393,6 +421,67 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 {
 	struct Shader
 	{
+		void Blend(Sample*s, float z, float bc[3])
+		{
+			if (s->height < z)
+			{
+				if (global_refl_mode)
+				{
+					if (z < water)
+					{
+						s->height = z;
+
+						int r8 = (int)floor(rgb[0][0] * bc[0] + rgb[1][0] * bc[1] + rgb[2][0] * bc[2]);
+						int r5 = (r8 * 249 + 1014) >> 11;
+						int g8 = (int)floor(rgb[0][1] * bc[0] + rgb[1][1] * bc[1] + rgb[2][1] * bc[2]);
+						int g5 = (g8 * 249 + 1014) >> 11;
+						int b8 = (int)floor(rgb[0][2] * bc[0] + rgb[1][2] * bc[1] + rgb[2][2] * bc[2]);
+						int b5 = (b8 * 249 + 1014) >> 11;
+
+						s->visual = r5 | (g5 << 5) | (b5 << 10);
+						s->diffuse = diffuse;
+						s->spare = (s->spare & ~0x4) | 0x8 | 0x3;
+					}
+				}
+				else
+				{
+					if (z >= water)
+					{
+						s->height = z;
+
+						int r8 = (int)floor(rgb[0][0] * bc[0] + rgb[1][0] * bc[1] + rgb[2][0] * bc[2]);
+						int r5 = (r8 * 249 + 1014) >> 11;
+						int g8 = (int)floor(rgb[0][1] * bc[0] + rgb[1][1] * bc[1] + rgb[2][1] * bc[2]);
+						int g5 = (g8 * 249 + 1014) >> 11;
+						int b8 = (int)floor(rgb[0][2] * bc[0] + rgb[1][2] * bc[1] + rgb[2][2] * bc[2]);
+						int b5 = (b8 * 249 + 1014) >> 11;
+
+						s->visual = r5 | (g5 << 5) | (b5 << 10);
+						s->diffuse = diffuse;
+						s->spare = (s->spare & ~(0x3|0x4)) | 0x8 | 0x1;
+					}
+				}
+			}
+		}
+
+
+		void Refl(Sample* s, float bc[3]) const
+		{
+			if (s->height < water)
+			{
+				int r8 = (int)floor(rgb[0][0] * bc[0] + rgb[1][0] * bc[1] + rgb[2][0] * bc[2]);
+				int r5 = (r8 * 249 + 1014) >> 11;
+				int g8 = (int)floor(rgb[0][1] * bc[0] + rgb[1][1] * bc[1] + rgb[2][1] * bc[2]);
+				int g5 = (g8 * 249 + 1014) >> 11;
+				int b8 = (int)floor(rgb[0][2] * bc[0] + rgb[1][2] * bc[1] + rgb[2][2] * bc[2]);
+				int b5 = (b8 * 249 + 1014) >> 11;
+
+				s->visual = r5 | (g5 << 5) | (b5 << 10);
+				s->diffuse = diffuse;
+				s->spare |= 0x8 | 0x3;
+			}
+		}
+
 		void Fill(Sample* s, float bc[3]) const
 		{
 			if (s->height >= water)
@@ -409,7 +498,8 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 				s->spare |= 0x8;
 			}
 			else
-				s->spare = 3;
+				s->height = -1000000;
+			//	s->spare = 3;
 		}
 
 		/*
@@ -428,9 +518,6 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		uint8_t diffuse; // shading experiment
 	} shader;
 
-	shader.rgb[0] = colors + 0;
-	shader.rgb[1] = colors + 4;
-	shader.rgb[2] = colors + 8;
 
 	Renderer* r = (Renderer*)cookie;
 	shader.water = r->water;
@@ -438,8 +525,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	// temporarily, let's transform verts for each face separately
 
 	int v[3][4];
-	const int* pv[3] = { v[0],v[1],v[2] };
-	
+
 	float tmp0[4], tmp1[4], tmp2[4];
 
 	{
@@ -499,19 +585,37 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 
 	shader.diffuse = (int)(df * 0xFF);
 
-	Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
+	if (global_refl_mode)
+	{
+		const int* pv[3] = { v[2],v[1],v[0] };
+		shader.rgb[0] = colors + 8;
+		shader.rgb[1] = colors + 4;
+		shader.rgb[2] = colors + 0;
+
+		//for (int i = 0; i < 12; i++)
+		//	colors[i] = colors[i] * 3 / 4;
+
+		Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
+	}
+	else
+	{
+		const int* pv[3] = { v[0],v[1],v[2] };
+		shader.rgb[0] = colors + 0;
+		shader.rgb[1] = colors + 4;
+		shader.rgb[2] = colors + 8;
+		Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
+	}
 }
 
 void Renderer::RenderMesh(Mesh* m, const double* tm, void* cookie)
 {
-
 	Renderer* r = (Renderer*)cookie;
 	double view_tm[16]=
 	{
 		r->mul[0] * HEIGHT_CELLS, r->mul[1] * HEIGHT_CELLS, 0.0, 0.0,
 		r->mul[2] * HEIGHT_CELLS, r->mul[3] * HEIGHT_CELLS, 0.0, 0.0,
-		r->mul[4], r->mul[5], 1.0, 0.0,
-		r->add[0], r->add[1], 0.0, 1.0
+		r->mul[4], r->mul[5], global_refl_mode ? -1.0 : 1.0, 0.0,
+		r->add[0], r->add[1], r->add[2], 1.0
 	};
 
 	r->inst_tm = tm;
@@ -539,19 +643,86 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 {
 	struct Shader
 	{
+		void Blend(Sample*s, float z, float bc[3])
+		{
+			if (s->height < z)
+			{
+				if (global_refl_mode)
+				{
+					if (z < water)
+					{
+						s->height = z;
+
+						int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
+						int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
+
+						if (u >= VISUAL_CELLS || v >= VISUAL_CELLS)
+						{
+							// detect overflow
+							s->visual = 2;
+						}
+						else
+						{
+							s->visual = map[v * VISUAL_CELLS + u];
+							s->diffuse = diffuse;
+							s->spare |= parity | 0x3;
+							s->spare &= ~0x8; // clear mesh
+						}
+					}
+				}
+				else
+				{
+					if (z >= water)
+					{
+						s->height = z;
+
+						int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
+						int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
+
+						if (u >= VISUAL_CELLS || v >= VISUAL_CELLS)
+						{
+							// detect overflow
+							s->visual = 2;
+						}
+						else
+						{
+							s->visual = map[v * VISUAL_CELLS + u];
+							s->diffuse = diffuse;
+							s->spare = (s->spare & ~(0x8|0x3|0x4)) | parity; // clear refl, mesh and line, then add parity
+						}
+					}
+				}
+			}
+		}
+
+
+		void Refl(Sample* s, float bc[3]) const
+		{
+			if (s->height < water)
+			{
+				int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
+				int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
+
+				if (u >= VISUAL_CELLS || v >= VISUAL_CELLS)
+				{
+					// detect overflow
+					s->visual = 2;
+				}
+				else
+				{
+					s->visual = map[v * VISUAL_CELLS + u];
+					s->diffuse = diffuse;
+					s->spare |= parity;
+				}
+			}
+		}
+
 		void Fill(Sample* s, float bc[3]) const
 		{
 			if (s->height >= water)
 			{
 				int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
 				int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
-
-				/*
-				// UV-TEST
-				s->visual = (u * 36) | ((v * 36)<<8);
-				s->diffuse = diffuse;
-				s->spare |= parity;
-				*/
 
 				if (u >= VISUAL_CELLS || v >= VISUAL_CELLS)
 				{
@@ -566,7 +737,9 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				}
 			}
 			else
-				s->spare = 3;
+				s->height = -1000000;
+			//else
+			//	s->spare = 3;
 		}
 
 		inline void Diffuse(int dzdx, int dzdy)
@@ -612,33 +785,64 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			int vx = x * HEIGHT_CELLS + dx * VISUAL_CELLS;
 			int vz = *(hm++);
 
-
-			// transform 
-			if (r->int_flag)
+			if (global_refl_mode)
 			{
-				int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
-				int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
+				if (r->int_flag)
+				{
+					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
+					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
 
-				xyzf[dy][dx][0] = tx;
-				xyzf[dy][dx][1] = ty;
-				xyzf[dy][dx][2] = vz;
+					xyzf[dy][dx][0] = tx;
+					xyzf[dy][dx][1] = ty;
+					xyzf[dy][dx][2] = (int)(2 * r->water / HEIGHT_CELLS) - vz;
 
-				// todo: if patch is known to fully fit in screen, set f=0 
-				// otherwise we need to check if / which screen edges cull each vertex
-				xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					// todo: if patch is known to fully fit in screen, set f=0 
+					// otherwise we need to check if / which screen edges cull each vertex
+					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+				}
+				else
+				{
+					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
+					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
+
+					xyzf[dy][dx][0] = tx;
+					xyzf[dy][dx][1] = ty;
+					xyzf[dy][dx][2] = (int)(2 * r->water / HEIGHT_CELLS) - vz;
+
+					// todo: if patch is known to fully fit in screen, set f=0 
+					// otherwise we need to check if / which screen edges cull each vertex
+					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+				}
 			}
 			else
 			{
-				int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
-				int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
+				// transform 
+				if (r->int_flag)
+				{
+					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
+					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
 
-				xyzf[dy][dx][0] = tx;
-				xyzf[dy][dx][1] = ty;
-				xyzf[dy][dx][2] = vz;
+					xyzf[dy][dx][0] = tx;
+					xyzf[dy][dx][1] = ty;
+					xyzf[dy][dx][2] = vz;
 
-				// todo: if patch is known to fully fit in screen, set f=0 
-				// otherwise we need to check if / which screen edges cull each vertex
-				xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					// todo: if patch is known to fully fit in screen, set f=0 
+					// otherwise we need to check if / which screen edges cull each vertex
+					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+				}
+				else
+				{
+					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
+					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
+
+					xyzf[dy][dx][0] = tx;
+					xyzf[dy][dx][1] = ty;
+					xyzf[dy][dx][2] = vz;
+
+					// todo: if patch is known to fully fit in screen, set f=0 
+					// otherwise we need to check if / which screen edges cull each vertex
+					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+				}
 			}
 		}
 	}
@@ -689,23 +893,46 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				// then if current light timestamp is different than in terrain we need to update diffuse (into terrain)
 				// now we should simply use diffuse from terrain
 				// note: if terrain is being modified, we should clear its timestamp or immediately update diffuse
-
-				int lo_uv[] = {uv[dx][0],uv[dy][0], uv[dx][1],uv[dy][0], uv[dx][0],uv[dy][1]};
-				const int* lo[3] = { xyzf[dy][dx], xyzf[dy][dx + 1], xyzf[dy + 1][dx] };
-				shader.uv = lo_uv;
-				shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx + 1][2], xyzf[dy][dx][2] - xyzf[dy + 1][dx][2]);
-				Rasterize(ptr, w, h, &shader, lo);
+				if (global_refl_mode)
+				{
+					//done
+					int lo_uv[] = { uv[dx][0],uv[dy][1], uv[dx][1],uv[dy][0], uv[dx][0],uv[dy][0] };
+					const int* lo[3] = { xyzf[dy + 1][dx], xyzf[dy][dx + 1], xyzf[dy][dx] };
+					shader.uv = lo_uv;
+					shader.Diffuse(-xyzf[dy][dx][2] + xyzf[dy][dx + 1][2], -xyzf[dy][dx][2] + xyzf[dy + 1][dx][2]);
+					Rasterize(ptr, w, h, &shader, lo);
+				}
+				else
+				{
+					int lo_uv[] = { uv[dx][0],uv[dy][0], uv[dx][1],uv[dy][0], uv[dx][0],uv[dy][1] };
+					const int* lo[3] = { xyzf[dy][dx], xyzf[dy][dx + 1], xyzf[dy + 1][dx] };
+					shader.uv = lo_uv;
+					shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx + 1][2], xyzf[dy][dx][2] - xyzf[dy + 1][dx][2]);
+					Rasterize(ptr, w, h, &shader, lo);
+				}
 
 				// .__.
 				//  \ |
 				//   \|
 				//    '
 				// upper triangle
-				int up_uv[] = {uv[dx][1],uv[dy][1], uv[dx][0],uv[dy][1], uv[dx][1],uv[dy][0]};
-				const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy + 1][dx], xyzf[dy][dx + 1] };
-				shader.uv = up_uv;
-				shader.Diffuse(xyzf[dy+1][dx][2] - xyzf[dy+1][dx+1][2], xyzf[dy][dx+1][2] - xyzf[dy+1][dx+1][2]);
-				Rasterize(ptr, w, h, &shader, up);
+				if (global_refl_mode)
+				{
+					//done
+					int up_uv[] = { uv[dx][1],uv[dy][0], uv[dx][0],uv[dy][1], uv[dx][1],uv[dy][1] };
+					const int* up[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx], xyzf[dy + 1][dx + 1] };
+					shader.uv = up_uv;
+					shader.Diffuse(-xyzf[dy + 1][dx][2] + xyzf[dy + 1][dx + 1][2], -xyzf[dy][dx + 1][2] + xyzf[dy + 1][dx + 1][2]);
+					Rasterize(ptr, w, h, &shader, up);
+				}
+				else
+				{
+					int up_uv[] = { uv[dx][1],uv[dy][1], uv[dx][0],uv[dy][1], uv[dx][1],uv[dy][0] };
+					const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy + 1][dx], xyzf[dy][dx + 1] };
+					shader.uv = up_uv;
+					shader.Diffuse(xyzf[dy + 1][dx][2] - xyzf[dy + 1][dx + 1][2], xyzf[dy][dx + 1][2] - xyzf[dy + 1][dx + 1][2]);
+					Rasterize(ptr, w, h, &shader, up);
+				}
 			}
 			else
 			{
@@ -714,22 +941,47 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				//   /|
 				//  /_|
 				// '  '
-				int lo_uv[] = {uv[dx][1],uv[dy][0], uv[dx][1],uv[dy][1], uv[dx][0],uv[dy][0]};
-				const int* lo[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx + 1], xyzf[dy][dx] };
-				shader.uv = lo_uv;
-				shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx+1][2], xyzf[dy][dx+1][2] - xyzf[dy+1][dx+1][2]);
-				Rasterize(ptr, w, h, &shader, lo);
+				if (global_refl_mode)
+				{
+					// done
+					int lo_uv[] = { uv[dx][0],uv[dy][0], uv[dx][1],uv[dy][1], uv[dx][1],uv[dy][0] };
+					const int* lo[3] = { xyzf[dy][dx], xyzf[dy + 1][dx + 1], xyzf[dy][dx + 1] };
+					shader.uv = lo_uv;
+					shader.Diffuse(-xyzf[dy][dx][2] + xyzf[dy][dx + 1][2], -xyzf[dy][dx + 1][2] + xyzf[dy + 1][dx + 1][2]);
+					Rasterize(ptr, w, h, &shader, lo);
+				}
+				else
+				{
+					int lo_uv[] = { uv[dx][1],uv[dy][0], uv[dx][1],uv[dy][1], uv[dx][0],uv[dy][0] };
+					const int* lo[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx + 1], xyzf[dy][dx] };
+					shader.uv = lo_uv;
+					shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx + 1][2], xyzf[dy][dx + 1][2] - xyzf[dy + 1][dx + 1][2]);
+					Rasterize(ptr, w, h, &shader, lo);
+				}
+
 
 				// upper triangle
 				// .__.
 				// | / 
 				// |/  
 				// '
-				int up_uv[] = {uv[dx][0],uv[dy][1], uv[dx][0],uv[dy][0], uv[dx][1],uv[dy][1]};
-				const int* up[3] = { xyzf[dy + 1][dx], xyzf[dy][dx], xyzf[dy + 1][dx + 1] };
-				shader.uv = up_uv;
-				shader.Diffuse(xyzf[dy+1][dx][2] - xyzf[dy+1][dx+1][2], xyzf[dy][dx][2] - xyzf[dy+1][dx][2]);
-				Rasterize(ptr, w, h, &shader, up);
+				if (global_refl_mode)
+				{
+					//done
+					int up_uv[] = { uv[dx][1],uv[dy][1], uv[dx][0],uv[dy][0], uv[dx][0],uv[dy][1] };
+					const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy][dx], xyzf[dy + 1][dx]  };
+					shader.uv = up_uv;
+					shader.Diffuse(-xyzf[dy + 1][dx][2] + xyzf[dy + 1][dx + 1][2], -xyzf[dy][dx][2] + xyzf[dy + 1][dx][2]);
+					Rasterize(ptr, w, h, &shader, up);
+				}
+				else
+				{
+					int up_uv[] = { uv[dx][0],uv[dy][1], uv[dx][0],uv[dy][0], uv[dx][1],uv[dy][1] };
+					const int* up[3] = { xyzf[dy + 1][dx], xyzf[dy][dx], xyzf[dy + 1][dx + 1] };
+					shader.uv = up_uv;
+					shader.Diffuse(xyzf[dy + 1][dx][2] - xyzf[dy + 1][dx + 1][2], xyzf[dy][dx][2] - xyzf[dy + 1][dx][2]);
+					Rasterize(ptr, w, h, &shader, up);
+				}
 			}
 		}
 	}
@@ -758,7 +1010,6 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], float lt[4], int width, int height, AnsiCell* ptr)
 {
 	static Renderer r;
-
 
 #ifdef DBL
 	float scale = 3.0;
@@ -826,8 +1077,14 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	r.light[2] = lt[2];
 	r.light[3] = lt[3];
 
-	// clear (at least depth!)
-	memset(r.sample_buffer.ptr, 0x00, dw*dh * sizeof(Sample));
+	// memset(r.sample_buffer.ptr, 0x00, dw*dh * sizeof(Sample));
+	for (int cl = 0; cl < dw*dh; cl++)
+	{
+		r.sample_buffer.ptr[cl].height = -1000000;
+		r.sample_buffer.ptr[cl].spare = 0x8;
+		r.sample_buffer.ptr[cl].diffuse = 0xFF;
+		r.sample_buffer.ptr[cl].visual = 0x0C | (0x0C<<5) | (0x1B<<10);
+	}
 
 	static const double sin30 = sin(M_PI*30.0/180.0); 
 	static const double cos30 = cos(M_PI*30.0/180.0);
@@ -864,6 +1121,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	// if yaw didn't change, make it INTEGRAL (and EVEN in case of DBL)
 	r.add[0] = tm[12];
 	r.add[1] = tm[13] + 0.5;
+	r.add[2] = tm[14];
 
 	if (r.int_flag)
 	{
@@ -919,16 +1177,17 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
 
-	/*
 	////////////////////
 	// REFL
-	// were fucked!
 
 	// once again for reflections
 	tm[8] = -tm[8];
 	tm[9] = -tm[9];
 	tm[10] = -tm[10]; // let them simply go below 0 :)
-	tm[11] = -tm[11];
+
+	tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + ((int)(2 * water / HEIGHT_CELLS) - pos[2]) * tm[8]) * HEIGHT_CELLS;
+	tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + ((int)(2 * water / HEIGHT_CELLS) - pos[2]) * tm[9]) * HEIGHT_CELLS;
+	tm[14] = 2*r.water;
 
 	r.mul[0] = tm[0];
 	r.mul[1] = tm[1];
@@ -940,7 +1199,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	// if yaw didn't change, make it INTEGRAL (and EVEN in case of DBL)
 	r.add[0] = tm[12];
 	r.add[1] = tm[13] + 0.5;
-
+	r.add[2] = tm[14];
 
 	if (r.int_flag)
 	{
@@ -968,17 +1227,13 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		clip_tm[6] = 0;
 		clip_tm[7] = 0;
 		clip_tm[8] = 0;
-		clip_tm[9] = +cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
-		clip_tm[10] = +2. / 0xffff;
+		clip_tm[9] = -cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
+		clip_tm[10] = -2. / 0xffff;
 		clip_tm[11] = 0;
-		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + pos[2] * clip_tm[8]);
-		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + pos[2] * clip_tm[9]);
-		clip_tm[14] = -1.0;
+		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2*r.water - pos[2]) * clip_tm[8]);
+		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2*r.water - pos[2]) * clip_tm[9]);
+		clip_tm[14] = +1.0;
 		clip_tm[15] = 1.0;
-
-		clip_tm[8]  = -clip_tm[8];
-		clip_tm[9]  = -clip_tm[8];
-		clip_tm[10] = -clip_tm[8];
 
 		TransposeProduct(clip_tm, clip_left, clip_world[0]);
 		TransposeProduct(clip_tm, clip_right, clip_world[1]);
@@ -986,10 +1241,10 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
 	}
 
-	// almost works (probably except z-test, lighting and ccw/cw)
+	global_refl_mode=true;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
-	*/
+	global_refl_mode=false;
 
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
@@ -1064,7 +1319,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			{
 				for (int i = 0; i < 4; i++)
 				{
-					if (spr[i])
+					//if (spr[i])
 					{
 						if (spr[i] & 0x8)
 						{
@@ -1072,9 +1327,18 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 							int g = (((vis[i] >> 5) & 0x1F) * 527 + 23) >> 6;
 							int b = (((vis[i] >> 10) & 0x1F) * 527 + 23) >> 6;
 
-							r = r * dif[i] / 255;
-							g = g * dif[i] / 255;
-							b = b * dif[i] / 255;
+							if ((spr[i] & 0x3) == 3)
+							{
+								r = r * dif[i] / 400;
+								g = g * dif[i] / 400;
+								b = b * dif[i] / 400;
+							}
+							else
+							{
+								r = r * dif[i] / 255;
+								g = g * dif[i] / 255;
+								b = b * dif[i] / 255;
+							}
 
 							if (i == 0 || i == 1)
 							{
@@ -1152,6 +1416,13 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 							int g = matlib[mat[i]].shade[1][shd].bg[1];
 							int b = matlib[mat[i]].shade[1][shd].bg[2];
 
+							if ((spr[i] & 0x3) == 3)
+							{
+								r = r * 255 / 400;
+								g = g * 255 / 400;
+								b = b * 255 / 400;
+							}
+
 							if (i == 0 || i == 1)
 							{
 								if (m)
@@ -1219,9 +1490,19 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 								bg[0] += r;
 								bg[1] += g;
 								bg[2] += b;
-								fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
-								fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
-								fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+
+								if ((spr[i] & 0x3) == 0x3)
+								{
+									fg[0] += matlib[mat[i]].shade[1][shd].fg[0] * 255 / 400;
+									fg[1] += matlib[mat[i]].shade[1][shd].fg[1] * 255 / 400;
+									fg[2] += matlib[mat[i]].shade[1][shd].fg[2] * 255 / 400;
+								}
+								else
+								{
+									fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
+									fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
+									fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+								}
 							}
 						}
 					}
@@ -1231,9 +1512,11 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			if (use_auto_mat)
 			{
 				// WORKS REALY WELL! 
+				bool vh_near = true;
 
-				if (err_h < err_v)
+				if (err_h * 1000 < err_v * 999)
 				{
+					vh_near = false;
 					// _FG_
 					//  BK
 					ptr->gl = 0xDF;
@@ -1245,7 +1528,9 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 					ptr->fg = auto_mat[auto_mat_hi + 0];
 				}
 				else
+				if (err_v * 1000 < err_h * 999)
 				{
+					vh_near = false;
 					// B|F
 					// K|G
 					ptr->gl = 0xDE;
@@ -1258,7 +1543,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 				}
 
 				
-				if (ptr->bk == ptr->fg)
+				if (ptr->bk == ptr->fg || vh_near)
 				{
 					// avr4
 					int auto_mat_idx = 3 * (bg[0] / 33 + 32 * (bg[1] / 33) + 32 * 32 * (bg[2] / 33));
