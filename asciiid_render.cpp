@@ -427,9 +427,12 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 			{
 				if (global_refl_mode)
 				{
-					if (z < water)
+					if (z < water + HEIGHT_SCALE / 8)
 					{
-						s->height = z;
+						if (z > water)
+							s->height = water;
+						else
+							s->height = z;
 
 						int r8 = (int)floor(rgb[0][0] * bc[0] + rgb[1][0] * bc[1] + rgb[2][0] * bc[2]);
 						int r5 = (r8 * 249 + 1014) >> 11;
@@ -441,13 +444,16 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 						s->visual = r5 | (g5 << 5) | (b5 << 10);
 						s->diffuse = diffuse;
 						s->spare = (s->spare & ~0x4) | 0x8 | 0x3;
-					}
+					}  
 				}
-				else
+				else 
 				{
-					if (z >= water)
+					if (z >= water - HEIGHT_SCALE / 8)
 					{
-						s->height = z;
+						if (z < water)
+							s->height = water;
+						else
+							s->height = z;
 
 						int r8 = (int)floor(rgb[0][0] * bc[0] + rgb[1][0] * bc[1] + rgb[2][0] * bc[2]);
 						int r5 = (r8 * 249 + 1014) >> 11;
@@ -464,7 +470,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 			}
 		}
 
-
+		/*
 		void Refl(Sample* s, float bc[3]) const
 		{
 			if (s->height < water)
@@ -501,6 +507,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 				s->height = -1000000;
 			//	s->spare = 3;
 		}
+		*/
 
 		/*
 		inline void Diffuse(int dzdx, int dzdy)
@@ -580,6 +587,9 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	//diffuse = 1.0;
 
 	df = df * (1.0f - 0.5f*r->light[3]) + 0.5f*r->light[3];
+	df += 0.5;
+	if (df > 1)
+		df = 1;
 	if (df < 0)
 		df = 0;
 
@@ -649,9 +659,12 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			{
 				if (global_refl_mode)
 				{
-					if (z < water)
+					if (z < water + HEIGHT_SCALE / 8)
 					{
-						s->height = z;
+						if (z > water)
+							s->height = water;
+						else
+							s->height = z;
 
 						int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
 						int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
@@ -666,15 +679,18 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 							s->visual = map[v * VISUAL_CELLS + u];
 							s->diffuse = diffuse;
 							s->spare |= parity | 0x3;
-							s->spare &= ~0x8; // clear mesh
+							s->spare &= ~(0x4|0x8); // clear mesh and lines
 						}
 					}
 				}
 				else
 				{
-					if (z >= water)
+					if (z >= water - HEIGHT_SCALE / 8)
 					{
-						s->height = z;
+						if (z < water)
+							s->height = water;
+						else
+							s->height = z;
 
 						int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
 						int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
@@ -695,7 +711,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			}
 		}
 
-
+		/*
 		void Refl(Sample* s, float bc[3]) const
 		{
 			if (s->height < water)
@@ -741,6 +757,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			//else
 			//	s->spare = 3;
 		}
+		*/
 
 		inline void Diffuse(int dzdx, int dzdy)
 		{
@@ -794,7 +811,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 					xyzf[dy][dx][0] = tx;
 					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = (int)(2 * r->water / HEIGHT_CELLS) - vz;
+					xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
 
 					// todo: if patch is known to fully fit in screen, set f=0 
 					// otherwise we need to check if / which screen edges cull each vertex
@@ -807,7 +824,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 					xyzf[dy][dx][0] = tx;
 					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = (int)(2 * r->water / HEIGHT_CELLS) - vz;
+					xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
 
 					// todo: if patch is known to fully fit in screen, set f=0 
 					// otherwise we need to check if / which screen edges cull each vertex
@@ -987,23 +1004,23 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 	}
 
 
-	// grid lines thru middle of patch?
-	// TODO: RENDER AFTER ALL PATCHES!
-	// 
-
-	int mid = (HEIGHT_CELLS + 1) / 2;
-
-	for (int lin = 0; lin <= HEIGHT_CELLS; lin++)
+	if (!global_refl_mode) // disabled on reflections
 	{
-		xyzf[lin][mid][2] += HEIGHT_SCALE/2;
-		if (mid!=lin)
-			xyzf[mid][lin][2] += HEIGHT_SCALE / 2;
-	}
+		// grid lines thru middle of patch?
+		int mid = (HEIGHT_CELLS + 1) / 2;
 
-	for (int lin = 0; lin < HEIGHT_CELLS; lin++)
-	{
-		Bresenham(ptr, w, h, xyzf[lin][mid], xyzf[lin + 1][mid]);
-		Bresenham(ptr, w, h, xyzf[mid][lin], xyzf[mid][lin + 1]);
+		for (int lin = 0; lin <= HEIGHT_CELLS; lin++)
+		{
+			xyzf[lin][mid][2] += HEIGHT_SCALE / 2;
+			if (mid != lin)
+				xyzf[mid][lin][2] += HEIGHT_SCALE / 2;
+		}
+
+		for (int lin = 0; lin < HEIGHT_CELLS; lin++)
+		{
+			Bresenham(ptr, w, h, xyzf[lin][mid], xyzf[lin + 1][mid]);
+			Bresenham(ptr, w, h, xyzf[mid][lin], xyzf[mid][lin + 1]);
+		}
 	}
 }
 
@@ -1071,7 +1088,6 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	r.pos[2] = pos[2];
 	r.yaw = yaw;
 
-	r.water = water;
 	r.light[0] = lt[0];
 	r.light[1] = lt[1];
 	r.light[2] = lt[2];
@@ -1088,6 +1104,19 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 	static const double sin30 = sin(M_PI*30.0/180.0); 
 	static const double cos30 = cos(M_PI*30.0/180.0);
+
+
+	static int frame = 0;
+	frame++;
+	if (frame == 200)
+		frame = 0;
+	water += HEIGHT_SCALE * 5 * sinf(frame*M_PI*0.01);
+
+	// water integerificator (there's 4 instead of 2 because reflection goes 2x faster than water)
+	int water_i = (int)floor(water / (HEIGHT_SCALE / (4 * ds * cos30)));
+	water = (float)(water_i * (HEIGHT_SCALE / (4 * ds * cos30)));
+
+	r.water = water;
 
 	double a = yaw * M_PI / 180.0;
 	double sinyaw = sin(a);
@@ -1185,8 +1214,8 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	tm[9] = -tm[9];
 	tm[10] = -tm[10]; // let them simply go below 0 :)
 
-	tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + ((int)(2 * water / HEIGHT_CELLS) - pos[2]) * tm[8]) * HEIGHT_CELLS;
-	tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + ((int)(2 * water / HEIGHT_CELLS) - pos[2]) * tm[9]) * HEIGHT_CELLS;
+	tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[8]) * HEIGHT_CELLS;
+	tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[9]) * HEIGHT_CELLS;
 	tm[14] = 2*r.water;
 
 	r.mul[0] = tm[0];
@@ -1214,42 +1243,42 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		r.add[0] = (double)x;
 		r.add[1] = (double)y;
 	}
-	
+
 	{
 		// somehow it works
 		double clip_tm[16];
-		clip_tm[0] = +cosyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
-		clip_tm[1] = -sinyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
-		clip_tm[2] = 0;
-		clip_tm[3] = 0;
-		clip_tm[4] = +sinyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
-		clip_tm[5] = +cosyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
-		clip_tm[6] = 0;
-		clip_tm[7] = 0;
-		clip_tm[8] = 0;
-		clip_tm[9] = -cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
-		clip_tm[10] = -2. / 0xffff;
-		clip_tm[11] = 0;
-		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2*r.water - pos[2]) * clip_tm[8]);
-		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2*r.water - pos[2]) * clip_tm[9]);
-		clip_tm[14] = +1.0;
-		clip_tm[15] = 1.0;
+clip_tm[0] = +cosyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
+clip_tm[1] = -sinyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
+clip_tm[2] = 0;
+clip_tm[3] = 0;
+clip_tm[4] = +sinyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
+clip_tm[5] = +cosyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
+clip_tm[6] = 0;
+clip_tm[7] = 0;
+clip_tm[8] = 0;
+clip_tm[9] = -cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
+clip_tm[10] = -2. / 0xffff;
+clip_tm[11] = 0;
+clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2 * r.water - pos[2]) * clip_tm[8]);
+clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2 * r.water - pos[2]) * clip_tm[9]);
+clip_tm[14] = +1.0;
+clip_tm[15] = 1.0;
 
-		TransposeProduct(clip_tm, clip_left, clip_world[0]);
-		TransposeProduct(clip_tm, clip_right, clip_world[1]);
-		TransposeProduct(clip_tm, clip_bottom, clip_world[2]);
-		TransposeProduct(clip_tm, clip_top, clip_world[3]);
+TransposeProduct(clip_tm, clip_left, clip_world[0]);
+TransposeProduct(clip_tm, clip_right, clip_world[1]);
+TransposeProduct(clip_tm, clip_bottom, clip_world[2]);
+TransposeProduct(clip_tm, clip_top, clip_world[3]);
 	}
 
-	global_refl_mode=true;
+	global_refl_mode = true;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
-	global_refl_mode=false;
+	global_refl_mode = false;
 
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
 
-	Sample* src = r.sample_buffer.ptr + 2 + 2*dw;
+	Sample* src = r.sample_buffer.ptr + 2 + 2 * dw;
 	for (int y = 0; y < height; y++)
 	{
 		for (int x = 0; x < width; x++, ptr++)
@@ -1267,10 +1296,10 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			// else apply gridlines etc.
 
 
-			#ifdef DBL
-			
-			// average 4 backgrounds
-			// mask 11 (something rendered)
+#ifdef DBL
+
+// average 4 backgrounds
+// mask 11 (something rendered)
 			int spr[4] = { src[0].spare & 11, src[1].spare & 11, src[dw].spare & 11, src[dw + 1].spare & 11 };
 			int mat[4] = { src[0].visual & 0x00FF , src[1].visual & 0x00FF, src[dw].visual & 0x00FF, src[dw + 1].visual & 0x00FF };
 			int dif[4] = { src[0].diffuse , src[1].diffuse, src[dw].diffuse, src[dw + 1].diffuse };
@@ -1299,7 +1328,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 			}
 			*/
 
-			int shd = (dif[0] + dif[1] + dif[2] + dif[3] + 17*2) / (17 * 4); // 17: FF->F, 4: avr
+			int shd = (dif[0] + dif[1] + dif[2] + dif[3] + 17 * 2) / (17 * 4); // 17: FF->F, 4: avr
 			int gl = matlib[mat[0]].shade[1][shd].gl;
 
 			int bg[3] = { 0,0,0 }; // 4
@@ -1314,6 +1343,14 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 			int err_h = 0;
 			int err_v = 0;
+
+			// if cell contains both refl and non-refl terrain enable auto-mat
+			bool has_refl = (spr[0] & 3) == 3 || (spr[1] & 3) == 3 || (spr[2] & 3) == 3 || (spr[3] & 3) == 3;
+			bool has_norm = (spr[0] & 3) == 1 || (spr[1] & 3) == 1 || (spr[2] & 3) == 1 || (spr[3] & 3) == 1;
+			if (has_refl && has_norm)
+			{
+				use_auto_mat = true;
+			}
 
 			for (int m = 0; m < 2; m++)
 			{

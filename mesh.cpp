@@ -1005,6 +1005,9 @@ struct World
 
 	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
+		if (!q)
+			return 0;
+
         const float x[2] = {q->bbox[0],q->bbox[1]};
 		const float y[2] = {q->bbox[2],q->bbox[3]};
 		const float z[2] = {q->bbox[4],q->bbox[5]};
@@ -1073,6 +1076,9 @@ struct World
 
 	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
+		if (!q)
+			return 0;
+
 		const float x[2] = { q->bbox[0],q->bbox[1] };
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
@@ -1141,6 +1147,9 @@ struct World
 
 	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
+		if (!q)
+			return 0;
+
 		const float x[2] = { q->bbox[0],q->bbox[1] };
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
@@ -1209,6 +1218,9 @@ struct World
 
 	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3])
 	{
+		if (!q)
+			return 0;
+
 		const float x[2] = { q->bbox[0],q->bbox[1] };
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };

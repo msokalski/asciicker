@@ -2742,7 +2742,7 @@ void my_render(A3D_WND* wnd)
 		if (d > 1000000)
 		{
 			double fps = 1000000.0 * frames / (double)d;
-			printf("fps = %.2f\n", fps);
+			printf("fps = %.2f, water = %d\n", fps, probe_z);
 			p = t;
 			frames = 0;
 		}
