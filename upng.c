@@ -504,6 +504,28 @@ static void inflate_huffman(upng_t* upng, unsigned char* out, unsigned long outs
 
 			/* store output */
 			out[(*pos)++] = (unsigned char)(code);
+
+			if (upng->format == UPNG_XP && *pos==16)
+			{
+				int* hdr = (int*)out;
+				if (hdr[0] != -1 || hdr[1] < 1 || hdr[1]>16 || hdr[2] < 1 || hdr[2]>1024 || hdr[3] < 1 || hdr[3]>1024)
+				{
+					SET_ERROR(upng, UPNG_EMALFORMED);
+					return;
+				}
+				else
+				{
+					int size = 8 + hdr[1] * (8 + hdr[2] * hdr[3] * 10);
+					unsigned char* data = (unsigned char*)malloc(size);
+					memcpy(data, out, 16);
+					data[0] = size; data[1] = size >> 8; data[2] = size >> 16; data[3] = size >> 24;
+					out = data;
+					upng->buffer = data;
+					upng->size = size;
+					outsize = size;
+				}
+			}
+
 		} else if (code >= FIRST_LENGTH_CODE_INDEX && code <= LAST_LENGTH_CODE_INDEX) {	/*length code */
 			/* part 1: get length base */
 			unsigned long length = LENGTH_BASE[code - FIRST_LENGTH_CODE_INDEX];
@@ -549,7 +571,9 @@ static void inflate_huffman(upng_t* upng, unsigned char* out, unsigned long outs
 			start = (*pos);
 			backward = start - distance;
 
-			if ((*pos) + length >= outsize) {
+			// #MS FIX
+			//if ((*pos) + length >= outsize) {
+			if ((*pos) + length > outsize) {
 				SET_ERROR(upng, UPNG_EMALFORMED);
 				return;
 			}
@@ -557,6 +581,27 @@ static void inflate_huffman(upng_t* upng, unsigned char* out, unsigned long outs
 			for (forward = 0; forward < length; forward++) {
 				out[(*pos)++] = out[backward];
 				backward++;
+
+				if (upng->format == UPNG_XP && *pos == 16)
+				{
+					int* hdr = (int*)out;
+					if (hdr[0] != -1 || hdr[1] < 1 || hdr[1]>16 || hdr[2] < 1 || hdr[2]>1024 || hdr[3] < 1 || hdr[3]>1024)
+					{
+						SET_ERROR(upng, UPNG_EMALFORMED);
+						return;
+					}
+					else
+					{
+						int size = 8 + hdr[1] * (8 + hdr[2] * hdr[3] * 10);
+						unsigned char* data = (unsigned char*)malloc(size);
+						memcpy(data, out, 16);
+						data[0] = size; data[1] = size >> 8; data[2] = size >> 16; data[3] = size >> 24;
+						out = data;
+						upng->buffer = data;
+						upng->size = size;
+						outsize = size;
+					}
+				}
 
 				if (backward >= start) {
 					backward = start - distance;
@@ -607,6 +652,27 @@ static void inflate_uncompressed(upng_t* upng, unsigned char* out, unsigned long
 
 	for (n = 0; n < len; n++) {
 		out[(*pos)++] = in[p++];
+
+		if (upng->format == UPNG_XP && *pos == 16)
+		{
+			int* hdr = (int*)out;
+			if (hdr[0] != -1 || hdr[1] < 1 || hdr[1]>16 || hdr[2] < 1 || hdr[2]>1024 || hdr[3] < 1 || hdr[3]>1024)
+			{
+				SET_ERROR(upng, UPNG_EMALFORMED);
+				return;
+			}
+			else
+			{
+				int size = 8 + hdr[1] * (8 + hdr[2] * hdr[3] * 10);
+				unsigned char* data = (unsigned char*)malloc(size);
+				memcpy(data, out, 16);
+				data[0] = size; data[1] = size >> 8; data[2] = size >> 16; data[3] = size >> 24;
+				out = data;
+				upng->buffer = data;
+				upng->size = size;
+				outsize = size;
+			}
+		}
 	}
 
 	(*bp) = p * 8;
@@ -646,6 +712,12 @@ static upng_error uz_inflate_data(upng_t* upng, unsigned char* out, unsigned lon
 		/* stop if an error has occured */
 		if (upng->error != UPNG_EOK) {
 			return upng->error;
+		}
+
+		if (upng->format == UPNG_XP)
+		{
+			out = upng->buffer;
+			outsize = upng->size;
 		}
 	}
 
@@ -1376,4 +1448,28 @@ const unsigned char* upng_get_pal_buffer(const upng_t* upng)
 unsigned upng_get_pal_size(const upng_t* upng)
 {
 	return upng->pal.len;
+}
+
+void* u_inflate(const unsigned char *in, unsigned long insize)
+{
+	upng_t upng = { 0 };
+	upng.format = UPNG_XP;
+
+	unsigned char xp_header[16];
+	int err = uz_inflate_data(&upng, xp_header, 16, in, insize, 0);
+
+	if (err)
+	{
+		if (upng.buffer)
+			free(upng.buffer);
+		return 0;
+	}
+
+	return upng.buffer;
+}
+
+void u_inflate_free(void* ptr)
+{
+	if (ptr)
+		free(ptr);
 }

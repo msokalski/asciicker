@@ -1107,12 +1107,13 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	static const double sin30 = sin(M_PI*30.0/180.0); 
 	static const double cos30 = cos(M_PI*30.0/180.0);
 
-
+	/*
 	static int frame = 0;
 	frame++;
 	if (frame == 200)
 		frame = 0;
 	water += HEIGHT_SCALE * 5 * sinf(frame*M_PI*0.01);
+	*/
 
 	// water integerificator (there's 4 instead of 2 because reflection goes 2x faster than water)
 	int water_i = (int)floor(water / (HEIGHT_SCALE / (4 * ds * cos30)));

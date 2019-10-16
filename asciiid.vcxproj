@@ -190,6 +190,7 @@
     <ClInclude Include="matrix.h" />
     <ClInclude Include="mesh.h" />
     <ClInclude Include="rgba8.h" />
+    <ClInclude Include="sprite.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="terrain.h" />
@@ -212,6 +213,7 @@
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="imgui_impl_opengl3.cpp" />
+    <ClCompile Include="sprite.cpp" />
     <ClCompile Include="terrain.cpp" />
     <ClCompile Include="texheap.cpp" />
     <ClCompile Include="upng.c" />

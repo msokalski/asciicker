@@ -90,6 +90,9 @@
     <ClInclude Include="asciiid_render.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="sprite.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp">
@@ -147,6 +150,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="asciiid_render.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sprite.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
