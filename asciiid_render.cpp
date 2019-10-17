@@ -1,6 +1,7 @@
 
 // this is CPU scene renderer into ANSI framebuffer
 #include "asciiid_render.h"
+#include "sprite.h"
 
 #include <stdint.h>
 #include <malloc.h>
@@ -19,6 +20,7 @@
 #define DBL
 
 static bool global_refl_mode = false;
+extern Sprite* player_sprite;
 
 template <typename Sample>
 inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
@@ -247,28 +249,12 @@ struct Renderer
 	uint8_t* buffer;
 	int buffer_size; // ansi_buffer allocation size in cells (minimize reallocs)
 
-	// current angles & position!
-	// ....
-
-	// derived transform and clipping planes
-	// ....
-
-	void Clear();
-	void PostFx();
-	void Ansify();
-
-	// it has its own Shaders for fill & stroke
-	// but requires here some extra state
-	// ....
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie /*Renderer*/);
 	static void RenderMesh(Mesh* m, const double* tm, void* cookie /*Renderer*/);
 	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie /*Renderer*/);
-
-	template <typename Shader>
-	void LineStroke(Shader* shader, int xyz[2][3]);
-
-	template <typename Shader>
-	void TriangleFill(Shader* shader, int xyz[3][3], float uv[3][2]);
+	
+	// unstatic -> needs R/W access to sample_buffer.ptr[].height for depth testing!
+	void RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, bool refl, int anim, int frame, int angle, int pos[3]);
 
 	// transform
 	double mul[6]; // 3x2 rot part
@@ -1026,8 +1012,162 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 	}
 }
 
+void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, bool refl, int anim, int frame, int angle, int pos[3])
+{
+	// intersect frame with screen buffer
+	int i = frame + angle * s->anim[anim].length;
+	if (refl)
+		i += s->anim[anim].length * s->angles;
+
+	Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
+
+	int dx = f->ref[0] / 2;
+	int dy = f->ref[1] / 2;
+
+	int left   = pos[0] - dx;
+	int right  = left + f->width;
+	int bottom = pos[1] - dy;
+	int top    = bottom + f->height;
+
+	left = std::max(0, left);
+	right = std::min(width, right);
+
+	if (left >= right)
+		return;
+
+	bottom = std::max(0, bottom);
+	top = std::min(height, top);
+
+	if (bottom >= top)
+		return;
+
+	int sample_xy = 2 + 2 * (2 + 2 * width + 2);
+	int sample_dx = 2;
+	int sample_dy = 2 * (2 + 2 * width + 2);
+	int sample_ofs[4] = { 0, 1, 2 + 2 * width + 2, 2 + 2 * width + 2 + 1 };
+
+	static const float height_scale = HEIGHT_SCALE / 1.5;
+
+	for (int y = bottom; y < top; y++)
+	{
+		int fy = y - pos[1] + dy;
+		for (int x = left; x < right; x++)
+		{
+			int fx = x - pos[0] + dx;
+			AnsiCell* dst = ptr + x + width * y;
+			const AnsiCell* src = f->cell + fx + fy * f->width;
+
+			int depth_passed = 0;
+
+			Sample* s00 = sample_buffer.ptr + sample_xy + x * sample_dx + y * sample_dy;
+			Sample* s01 = s00 + 1;
+			Sample* s10 = s00 + 2 + 2 * width + 2;
+			Sample* s11 = s10 + 1;
+
+			float height = (src->spare + f->ref[2]) * height_scale; // transform!
+
+			if (src->bk != 255)
+			{
+				if (src->fg != 255)
+				{
+					// check if at least 2/4 samples passes depth test, update all 4
+					// ...
+
+					if (height >= s00->height)
+						depth_passed++;
+					if (height >= s01->height)
+						depth_passed++;
+					if (height >= s10->height)
+						depth_passed++;
+					if (height >= s11->height)
+						depth_passed++;
+
+					if (depth_passed >= 2)
+					{
+						*dst = *src;
+						s00->height = height;
+						s01->height = height;
+						s10->height = height;
+						s11->height = height;
+					}
+				}
+				else
+				{
+					// check if at least 1/2 bk sample passes depth test, update both
+					// ...
+
+					if (height >= s00->height)
+						depth_passed++;
+					if (height >= s01->height)
+						depth_passed++;
+					if (height >= s10->height)
+						depth_passed++;
+					if (height >= s11->height)
+						depth_passed++;
+
+					if (depth_passed >= 2)
+					{
+						if (dst->gl == 0xDC && src->gl == 0xDF || dst->gl == 0xDD && src->gl == 0xDE ||
+							dst->gl == 0xDF && src->gl == 0xDC || dst->gl == 0xDE && src->gl == 0xDD)
+						{
+							dst->fg = src->bk;
+						}
+						else
+						{
+							dst->bk = src->bk;
+							dst->gl = src->gl;
+						}
+
+						s00->height = height;
+						s01->height = height;
+						s10->height = height;
+						s11->height = height;
+					}
+				}
+			}
+			else
+			{
+				if (src->fg != 255)
+				{
+					// check if at least 1/2 fg samples passes depth test, update both
+					// ...
+
+					if (height >= s00->height)
+						depth_passed++;
+					if (height >= s01->height)
+						depth_passed++;
+					if (height >= s10->height)
+						depth_passed++;
+					if (height >= s11->height)
+						depth_passed++;
+
+					if (depth_passed >= 2)
+					{
+						if (dst->gl == 0xDC && src->gl == 0xDF || dst->gl == 0xDD && src->gl == 0xDE ||
+							dst->gl == 0xDF && src->gl == 0xDC || dst->gl == 0xDE && src->gl == 0xDD)
+						{
+							dst->bk = src->fg;
+						}
+						else
+						{
+							dst->fg = src->fg;
+							dst->gl = src->gl;
+						}
+
+						s00->height = height;
+						s01->height = height;
+						s10->height = height;
+						s11->height = height;
+					}
+				}
+			}
+		}
+	}
+}
+
 bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], float lt[4], int width, int height, AnsiCell* ptr)
 {
+	AnsiCell* out_ptr = ptr;
 	static Renderer r;
 
 #ifdef DBL
@@ -1250,27 +1390,27 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	{
 		// somehow it works
 		double clip_tm[16];
-clip_tm[0] = +cosyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
-clip_tm[1] = -sinyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
-clip_tm[2] = 0;
-clip_tm[3] = 0;
-clip_tm[4] = +sinyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
-clip_tm[5] = +cosyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
-clip_tm[6] = 0;
-clip_tm[7] = 0;
-clip_tm[8] = 0;
-clip_tm[9] = -cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
-clip_tm[10] = -2. / 0xffff;
-clip_tm[11] = 0;
-clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2 * r.water - pos[2]) * clip_tm[8]);
-clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2 * r.water - pos[2]) * clip_tm[9]);
-clip_tm[14] = +1.0;
-clip_tm[15] = 1.0;
+		clip_tm[0] = +cosyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
+		clip_tm[1] = -sinyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
+		clip_tm[2] = 0;
+		clip_tm[3] = 0;
+		clip_tm[4] = +sinyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
+		clip_tm[5] = +cosyaw * sin30 / (0.5 * dh) * ds * HEIGHT_CELLS;
+		clip_tm[6] = 0;
+		clip_tm[7] = 0;
+		clip_tm[8] = 0;
+		clip_tm[9] = -cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
+		clip_tm[10] = -2. / 0xffff;
+		clip_tm[11] = 0;
+		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2 * r.water - pos[2]) * clip_tm[8]);
+		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2 * r.water - pos[2]) * clip_tm[9]);
+		clip_tm[14] = +1.0;
+		clip_tm[15] = 1.0;
 
-TransposeProduct(clip_tm, clip_left, clip_world[0]);
-TransposeProduct(clip_tm, clip_right, clip_world[1]);
-TransposeProduct(clip_tm, clip_bottom, clip_world[2]);
-TransposeProduct(clip_tm, clip_top, clip_world[3]);
+		TransposeProduct(clip_tm, clip_left, clip_world[0]);
+		TransposeProduct(clip_tm, clip_right, clip_world[1]);
+		TransposeProduct(clip_tm, clip_bottom, clip_world[2]);
+		TransposeProduct(clip_tm, clip_top, clip_world[3]);
 	}
 
 	global_refl_mode = true;
@@ -1679,6 +1819,35 @@ TransposeProduct(clip_tm, clip_top, clip_world[3]);
 		src += 2;
 		#endif
 	}
+
+	// so blend sprites directly to ansi
+
+	int player_pos[3]=
+	{
+		width/2,
+		height/2,
+		(int)floorf(pos[2]+.5f)
+	};
+
+	int ang = (int)floor(-yaw * player_sprite->angles / 360.0f + 0.5f);
+	if (ang < 0)
+		ang += player_sprite->angles * (1 - ang / player_sprite->angles);
+	else
+	if (ang >= player_sprite->angles)
+		ang -= ang / player_sprite->angles;
+
+
+	int anim = 1;
+	int slower = 2;
+	static int fr = 0;
+	fr++;
+	if (fr == player_sprite->anim[anim].length*slower)
+		fr = 0;
+
+	printf("ang=%d\n", ang);
+
+	r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr/slower, ang, player_pos);
+	r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr/slower, ang, player_pos);
 
 	return true;
 }

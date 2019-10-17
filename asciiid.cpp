@@ -5781,9 +5781,11 @@ void my_ptydata(A3D_PTY* pty)
 */
 
 #include "sprite.h"
+Sprite* player_sprite = 0;
+
 int main(int argc, char *argv[]) 
 {
-	Sprite* sprite = LoadPlayer("./sprites/player.xp");
+	player_sprite = LoadPlayer("./sprites/player.xp");
 
 	/*
 	FILE* act = fopen("d:/xterm.act", "wb");

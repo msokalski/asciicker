@@ -12,9 +12,8 @@ struct Sprite
 		AnsiCell* cell; // cell[].spare encodes cell height relative to ref[2]
 	};
 
-	// from all frames and angles
-	int proj_bbox[6];
-	int refl_bbox[6];
+	// from all frames angles anims and projections
+	float proj_bbox[6];
 
 	int anims;  // must be 0 for 'still' Sprite
 	int frames; // must be 1 for 'still' Sprite
@@ -23,12 +22,12 @@ struct Sprite
 
 	struct Anim
 	{
-		int speed;
 		int length;
-		int* frame_idx; // if frames need different timings, use higher fps ie 4x and dup frame references x3/x4/x5
+		int* frame_idx; // [angles * 2]
 	};
 
 	Anim anim[1];
 };
 
 Sprite* LoadPlayer(const char* path);
+void FreeSprite(Sprite* spr);
