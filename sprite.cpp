@@ -16,6 +16,17 @@ struct SpriteInst
 	int anim_time; // ?
 };
 
+/*
+Sprite* LoadPlayerSword(const char* path);
+Sprite* LoadPlayerShield(const char* path);
+Sprite* LoadPlayerSwordShield(const char* path);
+Sprite* LoadWolf(const char* path);
+Sprite* LoadWolfPlayer(const char* path);
+Sprite* LoadWolfPlayerSword(const char* path);
+Sprite* LoadWolfPlayerShield(const char* path);
+Sprite* LoadWolfPlayerSwordShield(const char* path);
+*/
+
 Sprite* LoadPlayer(const char* path)
 {
 	FILE* f = fopen(path, "rb");
@@ -148,15 +159,15 @@ Sprite* LoadPlayer(const char* path)
 
 			if (2 * fr_x < fr_num_x)
 			{
-				// proj
+				// proj:
 				frame->ref[1] = 2; // in half blocks!
-				frame->ref[2] = -1;
+				frame->ref[2] = -1; // foot cell (spare=1) gets z = 0.5*dz/dy (half cell above reference)
 			}
 			else
 			{
 				// refl
 				frame->ref[1] = (fr_height - 1) * 2; // in half blocks!
-				frame->ref[2] = -8;
+				frame->ref[2] = -15; // foot cell (spare=7) gets z = -0.5*dz/dy (half cell below reference)
 
 				rgb_div = 400;
 			}

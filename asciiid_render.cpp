@@ -1046,7 +1046,10 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 	int sample_dy = 2 * (2 + 2 * width + 2);
 	int sample_ofs[4] = { 0, 1, 2 + 2 * width + 2, 2 + 2 * width + 2 + 1 };
 
-	static const float height_scale = HEIGHT_SCALE / 1.5;
+	static const float height_scale = HEIGHT_SCALE / 1.5; // WHY?????  HS*DBL/ZOOM ?
+
+	static const float ds = 2.0 * (/*zoom*/ 1.0 * /*scale*/ 3.0) / VISUAL_CELLS * 0.5 /*we're not dbl_wh*/;
+	static const float dz_dy = HEIGHT_SCALE / (cos(30 * M_PI / 180) * HEIGHT_CELLS * ds);
 
 	for (int y = bottom; y < top; y++)
 	{
@@ -1064,7 +1067,8 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 			Sample* s10 = s00 + 2 + 2 * width + 2;
 			Sample* s11 = s10 + 1;
 
-			float height = (src->spare + f->ref[2]) * height_scale; // transform!
+			// spare is in full blocks, ref in half!
+			float height = (2 * src->spare + f->ref[2]) * 0.5 * dz_dy + pos[2]; // *height_scale + pos[2]; // transform!
 
 			if (src->bk != 255)
 			{
@@ -1073,16 +1077,19 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					// check if at least 2/4 samples passes depth test, update all 4
 					// ...
 
-					if (height >= s00->height)
-						depth_passed++;
-					if (height >= s01->height)
-						depth_passed++;
-					if (height >= s10->height)
-						depth_passed++;
-					if (height >= s11->height)
-						depth_passed++;
+					if (!refl && height >= water || refl && height <= water)
+					{
+						if (height >= s00->height)
+							depth_passed++;
+						if (height >= s01->height)
+							depth_passed++;
+						if (height >= s10->height)
+							depth_passed++;
+						if (height >= s11->height)
+							depth_passed++;
+					}
 
-					if (depth_passed >= 2)
+					if (depth_passed >= 3)
 					{
 						*dst = *src;
 						s00->height = height;
@@ -1096,16 +1103,19 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					// check if at least 1/2 bk sample passes depth test, update both
 					// ...
 
-					if (height >= s00->height)
-						depth_passed++;
-					if (height >= s01->height)
-						depth_passed++;
-					if (height >= s10->height)
-						depth_passed++;
-					if (height >= s11->height)
-						depth_passed++;
+					if (!refl && height >= water || refl && height <= water)
+					{
+						if (height >= s00->height)
+							depth_passed++;
+						if (height >= s01->height)
+							depth_passed++;
+						if (height >= s10->height)
+							depth_passed++;
+						if (height >= s11->height)
+							depth_passed++;
+					}
 
-					if (depth_passed >= 2)
+					if (depth_passed >= 3)
 					{
 						if (dst->gl == 0xDC && src->gl == 0xDF || dst->gl == 0xDD && src->gl == 0xDE ||
 							dst->gl == 0xDF && src->gl == 0xDC || dst->gl == 0xDE && src->gl == 0xDD)
@@ -1131,17 +1141,19 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 				{
 					// check if at least 1/2 fg samples passes depth test, update both
 					// ...
+					if (!refl && height >= water || refl && height <= water)
+					{
+						if (height >= s00->height)
+							depth_passed++;
+						if (height >= s01->height)
+							depth_passed++;
+						if (height >= s10->height)
+							depth_passed++;
+						if (height >= s11->height)
+							depth_passed++;
+					}
 
-					if (height >= s00->height)
-						depth_passed++;
-					if (height >= s01->height)
-						depth_passed++;
-					if (height >= s10->height)
-						depth_passed++;
-					if (height >= s11->height)
-						depth_passed++;
-
-					if (depth_passed >= 2)
+					if (depth_passed >= 3)
 					{
 						if (dst->gl == 0xDC && src->gl == 0xDF || dst->gl == 0xDD && src->gl == 0xDE ||
 							dst->gl == 0xDF && src->gl == 0xDC || dst->gl == 0xDE && src->gl == 0xDD)
@@ -1165,7 +1177,7 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 	}
 }
 
-bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], float lt[4], int width, int height, AnsiCell* ptr)
+bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp)
 {
 	AnsiCell* out_ptr = ptr;
 	static Renderer r;
@@ -1278,8 +1290,10 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	tm[9] = +cos30/HEIGHT_SCALE*ds*HEIGHT_CELLS;
 	tm[10] = 1.0; //+2./0xffff;
 	tm[11] = 0;
-	tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + pos[2] * tm[8]) * HEIGHT_CELLS;
-	tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + pos[2] * tm[9]) * HEIGHT_CELLS;
+	//tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + pos[2] * tm[8]) * HEIGHT_CELLS;
+	//tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + pos[2] * tm[9]) * HEIGHT_CELLS;
+	tm[12] = dw*0.5 - (pos[0] * tm[0] * HEIGHT_CELLS + pos[1] * tm[4] * HEIGHT_CELLS + pos[2] * tm[8]);
+	tm[13] = dh*0.5 - (pos[0] * tm[1] * HEIGHT_CELLS + pos[1] * tm[5] * HEIGHT_CELLS + pos[2] * tm[9]);
 	tm[14] = 0.0; //-1.0;
 	tm[15] = 1.0;
 
@@ -1357,8 +1371,10 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	tm[9] = -tm[9];
 	tm[10] = -tm[10]; // let them simply go below 0 :)
 
-	tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[8]) * HEIGHT_CELLS;
-	tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[9]) * HEIGHT_CELLS;
+	//tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[8]) * HEIGHT_CELLS;
+	//tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[9]) * HEIGHT_CELLS;
+	tm[12] = dw*0.5 - (pos[0] * tm[0] * HEIGHT_CELLS + pos[1] * tm[4] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[8]);
+	tm[13] = dh*0.5 - (pos[0] * tm[1] * HEIGHT_CELLS + pos[1] * tm[5] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[9]);
 	tm[14] = 2*r.water;
 
 	r.mul[0] = tm[0];
@@ -1822,32 +1838,60 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 	// so blend sprites directly to ansi
 
-	int player_pos[3]=
+	/*
 	{
-		width/2,
-		height/2,
-		(int)floorf(pos[2]+.5f)
-	};
+		double p[3] = { pos[0],pos[1],-1 };
+		double v[3] = { 0,0,-1 };
+		double r[4] = { 0,0,0,1 };
+		Patch* patch = HitTerrain(t, p, v, r);
 
-	int ang = (int)floor(-yaw * player_sprite->angles / 360.0f + 0.5f);
+		if (patch)
+		{
+			player_pos[2] = r[2];
+		}
+	}
+	*/
+
+	int ang = (int)floor((player_dir-yaw) * player_sprite->angles / 360.0f + 0.5f);
+	/*
 	if (ang < 0)
 		ang += player_sprite->angles * (1 - ang / player_sprite->angles);
 	else
 	if (ang >= player_sprite->angles)
 		ang -= ang / player_sprite->angles;
+	*/
+	ang = ang >= 0 ? ang % player_sprite->angles : (ang % player_sprite->angles + player_sprite->angles) % player_sprite->angles;
 
 
 	int anim = 1;
-	int slower = 2;
-	static int fr = 0;
-	fr++;
-	if (fr == player_sprite->anim[anim].length*slower)
+	int fr = player_stp/8 % player_sprite->anim[anim].length;
+
+	if (player_stp < 0)
+	{
+		anim = 0;
 		fr = 0;
+	}
 
 	printf("ang=%d\n", ang);
 
-	r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr/slower, ang, player_pos);
-	r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr/slower, ang, player_pos);
+	static const float dy_dz = (cos(30 * M_PI / 180) * HEIGHT_CELLS * (ds / 2/*we're not dbl_wh*/)) / HEIGHT_SCALE;
+
+	int player_pos[3] =
+	{
+		width / 2,
+		height / 2,
+		(int)floor(pos[2]+0.5)
+	};
+
+	r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr, ang, player_pos);
+
+	// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
+	player_pos[1] = height / 2 - (int)floor(2*(pos[2]-r.water)*dy_dz + 0.5);
+
+	// player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5);
+	player_pos[2] = (int)floor(2* r.water - pos[2] + 0.5);
+
+	r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
 
 	return true;
 }

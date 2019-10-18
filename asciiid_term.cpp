@@ -20,8 +20,19 @@ struct TERM_LIST
 	A3D_WND* wnd;
 
 	float yaw;
+	float player_dir;
+	int player_stp;
+
 	float pos[3];
 	float water;
+
+	float vel[3];
+
+	uint8_t keys[32];
+	bool IsKeyDown(int key)
+	{
+		return (keys[key >> 3] & (1 << (key & 0x7))) != 0;
+	}
 
 	static const int max_width = 320; // 160;
 	static const int max_height = 180; // 90;
@@ -46,9 +57,95 @@ extern float rot_yaw;
 extern float global_lt[];
 extern int probe_z;
 
+void term_animate(TERM_LIST* term)
+{
+	// YAW
+	{
+		int da = 0;
+		if (term->IsKeyDown(A3D_E))
+			da--;
+		if (term->IsKeyDown(A3D_Q))
+			da++;
+
+		term->yaw += 4*da;
+	}
+
+	// XY: innertia / friction / vel threshold
+	{
+		int dx = 0, dy = 0;
+		if (term->IsKeyDown(A3D_A))
+			dx--;
+		if (term->IsKeyDown(A3D_D))
+			dx++;
+		if (term->IsKeyDown(A3D_W))
+			dy++;
+		if (term->IsKeyDown(A3D_S))
+			dy--;
+
+
+		float dir[3][3] =
+		{
+			{315,  0 , 45},
+			{270, -1 , 90},
+			{225, 180, 135},
+		};
+
+		if (dir[dy + 1][dx + 1] >= 0)
+			term->player_dir = dir[dy + 1][dx + 1] + term->yaw;
+
+		term->vel[0] += dx * cos(term->yaw * (M_PI / 180)) - dy * sin(term->yaw * (M_PI / 180));
+		term->vel[1] += dx * sin(term->yaw * (M_PI / 180)) + dy * cos(term->yaw * (M_PI / 180));
+
+		float sqr_vel_xy = term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1];
+		if (sqr_vel_xy < 1 && !dx && !dy)
+		{
+			term->vel[0] = 0;
+			term->vel[1] = 0;
+			term->player_stp = -1;
+		}
+		else
+		{
+			if (sqr_vel_xy > 27)
+			{
+				float n = sqrt(27 / sqr_vel_xy);
+				sqr_vel_xy = 27;
+				term->vel[0] *= n;
+				term->vel[1] *= n;
+			}
+
+			term->pos[0] += 0.1 * term->vel[0];
+			term->pos[1] += 0.1 * term->vel[1];
+
+			if (term->player_stp < 0)
+				term->player_stp = 0;
+
+			term->player_stp = (~(1<<31))&(term->player_stp + (int)(1 * sqrt(sqr_vel_xy)));
+
+			term->vel[0] *= 0.9;
+			term->vel[1] *= 0.9;
+		}
+	}
+
+	// after updating x,y,z by time and keyb bits
+	// we need to fix z so player doesn't penetrate terrain
+	{
+		double p[3] = { term->pos[0],term->pos[1],-1 };
+		double v[3] = { 0,0,-1 };
+		double r[4] = { 0,0,0,1 };
+		Patch* patch = HitTerrain(terrain, p, v, r);
+
+		if (patch)
+			term->pos[2] = r[2];
+		else
+			term->pos[2] = 0;
+	}
+}
+
 void term_render(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+
+	term_animate(term);
 
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -87,8 +184,10 @@ void term_render(A3D_WND* wnd)
 	float zoom = 1.0;
 	//Render(terrain, world, term->water, zoom, term->yaw, term->pos, width, height, term->buf);
 
+	/*
 	float pos[3] = { pos_x, pos_y, pos_z };
 	float yaw = rot_yaw;
+	*/
 
 	float ln = 1.0f/sqrtf(global_lt[0] * global_lt[0] + global_lt[1] * global_lt[1] + global_lt[2] * global_lt[2]);
 	float lt[4] =
@@ -110,8 +209,10 @@ void term_render(A3D_WND* wnd)
 	lt[2] *= ln;
 	*/
 
+	float pos_cpy[3] = { term->pos[0],term->pos[1],term->pos[2] };
+	Render(terrain, world, (float)probe_z/*term->water*/, zoom, term->yaw, pos_cpy, lt, width, height, term->buf, term->player_dir, term->player_stp);
 
-	Render(terrain, world, (float)probe_z/*term->water*/, zoom, yaw, pos, lt, width, height, term->buf);
+
 
 	// copy term->buf to some texture
 	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
@@ -152,6 +253,18 @@ void term_init(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)malloc(sizeof(TERM_LIST));
 	term->wnd = wnd;
+
+	term->yaw = rot_yaw;
+	term->water = probe_z;
+	term->pos[0] = pos_x;
+	term->pos[1] = pos_y;
+	term->pos[2] = pos_z;
+	term->vel[0] = 0;
+	term->vel[1] = 0;
+	term->vel[2] = 0;
+
+	term->player_dir = 0;
+	term->player_stp = -1;
 
 	int loglen = 999;
 	char logstr[1000] = "";
@@ -294,10 +407,18 @@ void term_keyb_char(A3D_WND* wnd, wchar_t chr)
 
 void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 {
+	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+
+	if (down)
+		term->keys[ki >> 3] |= 1 << (ki & 0x7);
+	else
+		term->keys[ki >> 3] &= ~(1 << (ki & 0x7));
 }
 
 void term_keyb_focus(A3D_WND* wnd, bool set)
 {
+	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+	memset(term->keys, 0, 32);
 }
 
 void term_close(A3D_WND* wnd)

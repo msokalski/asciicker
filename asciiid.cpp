@@ -5834,5 +5834,7 @@ int main(int argc, char *argv[])
 	a3dOpen(&pi, &gd, 0);
 	a3dLoop();
 
+	FreeSprite(player_sprite);
+
 	return 0;
 }
