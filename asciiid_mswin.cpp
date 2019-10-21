@@ -1208,7 +1208,7 @@ bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode)
 		struct EnumMon
 		{
 			EnumMon() : num(0) {}
-			static BOOL Enum(HMONITOR h, HDC dc, LPRECT pr, LPARAM em)
+			static BOOL CALLBACK Enum(HMONITOR h, HDC dc, LPRECT pr, LPARAM em)
 			{
 				EnumMon* e = (EnumMon*)em;
 				if (e->num < 16)

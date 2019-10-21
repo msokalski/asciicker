@@ -1363,6 +1363,56 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
 
+
+	// player shadow
+
+	double inv_tm[16];
+	Invert(tm, inv_tm);
+
+	void* GetMaterialArr();
+	Material* matlib = (Material*)GetMaterialArr();
+
+	int sh_x = (dw/2 + 1) & ~1;
+	for (int y = 0; y < dh; y++)
+	{
+		for (int x = sh_x-10; x <= sh_x+10; x++)
+		{
+			Sample* s = r.sample_buffer.ptr + x + y * dw;
+			if (abs(s->height - pos[2]) <= 64)
+			{
+				double screen_space[] = { x+.5,y+.5,s->height,1.0 };
+				double world_space[4];
+
+				Product(inv_tm, screen_space, world_space);
+				double dx = world_space[0]/HEIGHT_CELLS - pos[0];
+				double dy = world_space[1]/HEIGHT_CELLS - pos[1];
+				if (dx*dx + dy*dy <= 2.00)
+				{
+					if (s->spare & 0x8)
+					{
+						s->diffuse = s->diffuse * 200 / 255;
+					}
+					else
+					{
+						int mat = s->visual & 0xFF;
+						int shd = (s->visual >> 8) & 0x7F;
+
+						int r = (matlib[mat].shade[1][shd].bg[0] * 249 + 1014) >> 11;
+						int g = (matlib[mat].shade[1][shd].bg[1] * 249 + 1014) >> 11;
+						int b = (matlib[mat].shade[1][shd].bg[2] * 249 + 1014) >> 11;
+						s->visual = r | (g << 5) | (b << 10);
+
+						// if this is terrain sample, convert it to rgb first
+						// s->visual = ;
+						s->spare |= 0x8;
+						s->spare &= ~4;
+						s->diffuse = 230;
+					}
+				}
+			}
+		}
+	}
+
 	////////////////////
 	// REFL
 
@@ -1433,9 +1483,6 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
 	global_refl_mode = false;
-
-	void* GetMaterialArr();
-	Material* matlib = (Material*)GetMaterialArr();
 
 	Sample* src = r.sample_buffer.ptr + 2 + 2 * dw;
 	for (int y = 0; y < height; y++)
@@ -1880,7 +1927,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	{
 		width / 2,
 		height / 2,
-		(int)floor(pos[2]+0.5)
+		(int)floor(pos[2]+0.5) + HEIGHT_SCALE / 4
 	};
 
 	r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr, ang, player_pos);
@@ -1889,9 +1936,11 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	player_pos[1] = height / 2 - (int)floor(2*(pos[2]-r.water)*dy_dz + 0.5);
 
 	// player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5);
-	player_pos[2] = (int)floor(2* r.water - pos[2] + 0.5);
+	player_pos[2] = (int)floor(2* r.water - pos[2] + 0.5) - HEIGHT_SCALE/4;
 
 	r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
+
+
 
 	return true;
 }

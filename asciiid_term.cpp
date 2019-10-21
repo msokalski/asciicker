@@ -19,7 +19,12 @@ struct TERM_LIST
 	TERM_LIST* next;
 	A3D_WND* wnd;
 
+	uint64_t stamp;
+
 	float yaw;
+	float yaw_vel;
+
+	float player_slope; // z-coord of terrain normal
 	float player_dir;
 	int player_stp;
 
@@ -59,6 +64,11 @@ extern int probe_z;
 
 void term_animate(TERM_LIST* term)
 {
+	uint64_t stamp = a3dGetTime();
+	uint64_t elaps = stamp - term->stamp;
+	term->stamp = stamp;
+	float dt = elaps * (60.0f / 1000000.0f);
+
 	// YAW
 	{
 		int da = 0;
@@ -67,7 +77,22 @@ void term_animate(TERM_LIST* term)
 		if (term->IsKeyDown(A3D_Q))
 			da++;
 
-		term->yaw += 4*da;
+		term->yaw_vel += dt * da;
+
+		if (term->yaw_vel > 10)
+			term->yaw_vel = 10;
+		else
+		if (term->yaw_vel < -10)
+			term->yaw_vel = -10;
+
+		if (abs(term->yaw_vel) < 1 && !da)
+			term->yaw_vel = 0;
+
+		term->yaw += dt * 0.5f * term->yaw_vel;
+
+		float vel_damp = pow(0.9, dt);
+		term->yaw_vel *= vel_damp;
+		term->yaw_vel *= vel_damp;
 	}
 
 	// XY: innertia / friction / vel threshold
@@ -93,8 +118,8 @@ void term_animate(TERM_LIST* term)
 		if (dir[dy + 1][dx + 1] >= 0)
 			term->player_dir = dir[dy + 1][dx + 1] + term->yaw;
 
-		term->vel[0] += dx * cos(term->yaw * (M_PI / 180)) - dy * sin(term->yaw * (M_PI / 180));
-		term->vel[1] += dx * sin(term->yaw * (M_PI / 180)) + dy * cos(term->yaw * (M_PI / 180));
+		term->vel[0] += dt * (dx * cos(term->yaw * (M_PI / 180)) - dy * sin(term->yaw * (M_PI / 180)));
+		term->vel[1] += dt * (dx * sin(term->yaw * (M_PI / 180)) + dy * cos(term->yaw * (M_PI / 180)));
 
 		float sqr_vel_xy = term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1];
 		if (sqr_vel_xy < 1 && !dx && !dy)
@@ -102,6 +127,9 @@ void term_animate(TERM_LIST* term)
 			term->vel[0] = 0;
 			term->vel[1] = 0;
 			term->player_stp = -1;
+
+			term->pos[2] += dt * term->vel[2];
+			term->vel[2] -= dt * 0.5;
 		}
 		else
 		{
@@ -113,16 +141,20 @@ void term_animate(TERM_LIST* term)
 				term->vel[1] *= n;
 			}
 
-			term->pos[0] += 0.1 * term->vel[0];
-			term->pos[1] += 0.1 * term->vel[1];
+			term->pos[0] += term->player_slope * dt * term->vel[0];
+			term->pos[1] += term->player_slope * dt * term->vel[1];
+			term->pos[2] += dt * term->vel[2];
+
 
 			if (term->player_stp < 0)
 				term->player_stp = 0;
 
 			term->player_stp = (~(1<<31))&(term->player_stp + (int)(1 * sqrt(sqr_vel_xy)));
 
-			term->vel[0] *= 0.9;
-			term->vel[1] *= 0.9;
+			float vel_damp = pow(0.9, dt);
+			term->vel[0] *= vel_damp;
+			term->vel[1] *= vel_damp;
+			term->vel[2] -= dt*0.5;
 		}
 	}
 
@@ -132,12 +164,40 @@ void term_animate(TERM_LIST* term)
 		double p[3] = { term->pos[0],term->pos[1],-1 };
 		double v[3] = { 0,0,-1 };
 		double r[4] = { 0,0,0,1 };
-		Patch* patch = HitTerrain(terrain, p, v, r);
+		double n[3];
+		Patch* patch = HitTerrain(terrain, p, v, r, n);
 
 		if (patch)
-			term->pos[2] = r[2];
+		{
+			// we need contact to jump
+			if (term->IsKeyDown(A3D_SPACE) && r[2] - term->pos[2] > -16)
+				term->vel[2] = 10;
+			else
+				term->keys[A3D_SPACE >> 3] &= ~(1 << (A3D_SPACE & 7));
+
+			if (r[2] >= term->pos[2])
+			{
+				double n_len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+				term->player_slope = min(0.1,n[2] / n_len);
+				term->pos[2] = r[2];
+				if (term->vel[2]<0)
+					term->vel[2] = 0;
+			}
+			else
+				term->player_slope = 0.1;
+		}
 		else
-			term->pos[2] = 0;
+		{
+			// we need contact to jump
+			if (term->IsKeyDown(A3D_SPACE) && term->pos[2] < 16)
+				term->vel[2] = 10;
+			else
+				term->keys[A3D_SPACE >> 3] &= ~(1 << (A3D_SPACE & 7));
+
+			term->player_slope = 0.1;
+			if (term->pos[2] < 0)
+				term->pos[2] = 0;
+		}
 	}
 }
 
@@ -243,6 +303,23 @@ void term_render(A3D_WND* wnd)
 
 void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 {
+	if (mi == LEFT_DN)
+	{
+		// get heigth from frame
+		// get highest of 4 samples at mouse coord
+		float z = 0;
+
+		// transform screen_x, screen_y, z back to worldspace
+		
+		// store goto xy info handled by animate()
+		
+		// todo later:
+		// calc path at some resolution to avoid obstacles
+
+
+		// should be cleared on any WSAD key down
+
+	}
 }
 
 void term_resize(A3D_WND* wnd, int w, int h)
@@ -254,7 +331,11 @@ void term_init(A3D_WND* wnd)
 	TERM_LIST* term = (TERM_LIST*)malloc(sizeof(TERM_LIST));
 	term->wnd = wnd;
 
+	term->stamp = a3dGetTime();
+
 	term->yaw = rot_yaw;
+	term->yaw_vel = 0;
+
 	term->water = probe_z;
 	term->pos[0] = pos_x;
 	term->pos[1] = pos_y;
@@ -263,6 +344,7 @@ void term_init(A3D_WND* wnd)
 	term->vel[1] = 0;
 	term->vel[2] = 0;
 
+	term->player_slope = 0.1;
 	term->player_dir = 0;
 	term->player_stp = -1;
 
