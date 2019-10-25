@@ -8,6 +8,7 @@
 #include "asciiid_platform.h"
 #include "asciiid_render.h"
 #include "fast_rand.h"
+#include "matrix.h"
 #include "gl.h"
 
 #define CODE(...) #__VA_ARGS__
@@ -24,7 +25,7 @@ struct TERM_LIST
 	float yaw;
 	float yaw_vel;
 
-	float player_slope; // z-coord of terrain normal
+	//float player_slope; // z-coord of terrain normal
 	float player_dir;
 	int player_stp;
 
@@ -46,6 +47,72 @@ struct TERM_LIST
 	GLuint prg;
 	GLuint vbo;
 	GLuint vao;
+
+	int col_num[3];
+	int col_msh;
+	float col_tm[16];
+	float col_nrm[3][3];
+
+	static void FaceCollision(float coords[9], uint8_t* colors, uint32_t visual, void* cookie)
+	{
+		TERM_LIST* term = (TERM_LIST*)cookie;
+
+		double radius_cells = 2; // in full x-cells
+		double patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
+		double world_patch = VISUAL_CELLS; // patch size in world coords
+		double world_radius = radius_cells / patch_cells * world_patch;
+
+		double height_cells = 8.0;
+		double world_height = height_cells * 2 / 3 /*1/(zoom*sin30)*/ / cos(30 * M_PI / 180) * HEIGHT_SCALE;
+
+		float v0[] = { coords[0],coords[1],coords[2],1 };
+		float v1[] = { coords[3],coords[4],coords[5],1 };
+		float v2[] = { coords[6],coords[7],coords[8],1 };
+		float tri[12];
+		Product(term->col_tm, v0, tri + 0);
+		Product(term->col_tm, v1, tri + 4);
+		Product(term->col_tm, v2, tri + 8);
+
+		float zs = 1.0f / HEIGHT_SCALE;
+
+		tri[2] *= zs;
+		tri[6] *= zs;
+		tri[10] *= zs;
+
+		float sphere[3][4] =
+		{
+			{ term->pos[0], term->pos[1], term->pos[2] * zs + 1*world_radius, world_radius },
+			{ term->pos[0], term->pos[1], term->pos[2] * zs + 2*world_radius, world_radius },
+			{ term->pos[0], term->pos[1], term->pos[2] * zs + 3*world_radius, world_radius },
+		};
+
+		for (int i=0; i<3; i++)
+		if (SphereIntersectTriangle(sphere[i], tri + 0, tri + 4, tri + 8))
+		{
+			float a[3] = { tri[4] - tri[0], tri[5] - tri[1], tri[6] - tri[2] };
+			float b[3] = { tri[8] - tri[0], tri[9] - tri[1], tri[10] - tri[2] };
+
+			float n[3];
+			CrossProduct(a, b, n);
+
+			float l = 1.0f / sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+			term->col_nrm[i][0] += n[0] * l;
+			term->col_nrm[i][1] += n[1] * l;
+			term->col_nrm[i][2] += n[2] * l;
+
+			term->col_num[i]++;
+		}
+	}
+
+	static void MeshCollision(Mesh* m, double tm[16], void* cookie)
+	{
+		TERM_LIST* term = (TERM_LIST*)cookie;
+		term->col_msh++;
+		for (int i=0; i<16; i++)
+			term->col_tm[i] = (float)(tm[i]);
+		QueryMesh(m, FaceCollision, cookie);
+	}
 };
 
 // HACK: get it from editor
@@ -68,6 +135,9 @@ void term_animate(TERM_LIST* term)
 	uint64_t elaps = stamp - term->stamp;
 	term->stamp = stamp;
 	float dt = elaps * (60.0f / 1000000.0f);
+
+	// in fact we should do it in discrete frames 
+	// so split dt into 1/60 frames and loop with constant dt=1/60:
 
 	// YAW
 	{
@@ -95,7 +165,7 @@ void term_animate(TERM_LIST* term)
 		term->yaw_vel *= vel_damp;
 	}
 
-	// XY: innertia / friction / vel threshold
+	// VEL & ACC
 	{
 		int dx = 0, dy = 0;
 		if (term->IsKeyDown(A3D_A))
@@ -106,7 +176,6 @@ void term_animate(TERM_LIST* term)
 			dy++;
 		if (term->IsKeyDown(A3D_S))
 			dy--;
-
 
 		float dir[3][3] =
 		{
@@ -127,9 +196,6 @@ void term_animate(TERM_LIST* term)
 			term->vel[0] = 0;
 			term->vel[1] = 0;
 			term->player_stp = -1;
-
-			term->pos[2] += dt * term->vel[2];
-			term->vel[2] -= dt * 0.5;
 		}
 		else
 		{
@@ -141,25 +207,120 @@ void term_animate(TERM_LIST* term)
 				term->vel[1] *= n;
 			}
 
-			term->pos[0] += term->player_slope * dt * term->vel[0];
-			term->pos[1] += term->player_slope * dt * term->vel[1];
-			term->pos[2] += dt * term->vel[2];
-
-
 			if (term->player_stp < 0)
 				term->player_stp = 0;
 
-			term->player_stp = (~(1<<31))&(term->player_stp + (int)(1 * sqrt(sqr_vel_xy)));
+			term->player_stp = (~(1 << 31))&(term->player_stp + (int)(1 * sqrt(sqr_vel_xy)));
 
 			float vel_damp = pow(0.9, dt);
 			term->vel[0] *= vel_damp;
 			term->vel[1] *= vel_damp;
-			term->vel[2] -= dt*0.5;
 		}
+
+		term->vel[2] -= dt * 0.5;
 	}
 
+	// POS - troubles!
+	{
+		////////////////////
+		double radius_cells = 2; // in full x-cells
+		double patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
+		double world_patch = VISUAL_CELLS; // patch size in world coords
+		double world_radius = radius_cells / patch_cells * world_patch;
+
+		double height_cells = 8.0;
+
+		// 2/3 = 1/(zoom*sin30)
+		double world_height = height_cells * 2/3  / cos(30 * M_PI / 180) * HEIGHT_SCALE;
+
+		double dx = dt * term->vel[0];
+		double dy = dt * term->vel[1];
+
+		double cx = term->pos[0] + dx * 0.5;
+		double cy = term->pos[1] + dy * 0.5;
+		double th = 0.1;
+
+		double qx = fabs(dx) * 0.5 + world_radius + th;
+		double qy = fabs(dy) * 0.5 + world_radius + th;
+
+		double clip_world[4][4] =
+		{
+			{ 1, 0, 0, qx - cx },
+			{-1, 0, 0, qx + cx },
+			{ 0, 1, 0, qy - cy },
+			{ 0,-1, 0, qy + cy },
+		//	{ 0, 0, 1,            0 - term->pos[2] },
+		//	{ 0, 0,-1, world_height + term->pos[2] }
+		};
+
+		// create triangle soup of (SoupItem):
+		QueryWorld(world, 4, clip_world, TERM_LIST::MeshCollect, term);
+		QueryTerrain(terrain, 4, clip_world, 0xAA, TERM_LIST::PatchCollect, term);
+
+		// note: term should keep soup allocation, resize it x2 if needed
+
+		// transform Z so our ellipsolid becomes a sphere
+		// just multiply: 
+		//   px,py, dx,dy, and all verts x,y coords by 1.0/horizontal_radius
+		//   pz, dz and all verts z coords by 1.0/(HEIGHT_SCALE*vertical_radius)
+
+		float sphere_pos[3]; // set current sphere center
+		float sphere_vel[3]; // set velocity (must include gravity impact)
+			
+		const float xy_thresh = 0.002f;
+		const float z_thresh = 0.001f;
+
+		while (abs(sphere_vel[0])>xy_thresh || abs(sphere_vel[1]) > xy_thresh || abs(sphere_vel[2]) > z_thresh)
+		{
+			SoupItem* collision_item = 0;
+			float collision_time = 2.0f; // (greater than current velocity range)
+			float collision_pos[3];
+
+			for (SoupItem* item = soup; item!=last; item++)
+			{
+				float contact_pos[3];
+				float time = item->CheckCollision(sphere_pos, sphere_vel, contact_pos); // must return >=2 if no collision occurs
+
+				if (time < collision_time)
+				{
+					collision_item = item;
+					collision_time = time;
+					collision_pos = contact_pos;
+				}
+			}
+
+			if (!collision_item)
+			{
+				sphere_pos += sphere_vel;
+				break;
+			}
+
+			collision_time -= 0.001; // fix to prevent intersections with current sliding triangle plane
+					
+			sphere_pos += sphere_vel * collision_time;
+			sphere_vel *= 1.0 - collision_time;
+
+			float slide_normal[3];
+			slide_normal = sphere_pos - collision_pos;
+
+			sphere_vel -= slide_normal * Dot(sphere_vel, slide_normal);
+		}
+
+		// convert back to world coords
+		// just multiply: 
+		//   px,py by horizontal_radius
+		//   and pz by (HEIGHT_SCALE*vertical_radius)
+
+		// we are done, update 
+		term->pos[0] = sphere_pos[0];
+		term->pos[1] = sphere_pos[1];
+		term->pos[2] = sphere_pos[2] - world_height*0.5; // offset by ellipsolid's center
+	}
+
+	// OLD POS
 	// after updating x,y,z by time and keyb bits
 	// we need to fix z so player doesn't penetrate terrain
+	/*
 	{
 		double p[3] = { term->pos[0],term->pos[1],-1 };
 		double v[3] = { 0,0,-1 };
@@ -167,8 +328,45 @@ void term_animate(TERM_LIST* term)
 		double n[3];
 		Patch* patch = HitTerrain(terrain, p, v, r, n);
 
-		if (patch)
+		double r2[4] = { 0,0,0,1 };
+		double n2[4];
+
 		{
+			// it's almost ok, but need to exclude all meshes hanging above player
+			// so initialize p[2] to plyer's center.z (instead of -1)
+			double height_cells = 8.0;
+
+			// 2/3 = 1.0/(zoom*sin30)
+			double world_height = height_cells * 2/3 / cos(30 * M_PI / 180) * HEIGHT_SCALE;
+			p[2] = term->pos[2] + world_height*0.5;
+		}
+
+		Inst* inst = HitWorld(world, p, v, r2, n2, true); // true = positive only
+
+		if (inst && (!patch || patch && r2[2] > r[2]))
+		{
+			n[0] = n2[0];
+			n[1] = n2[1];
+			n[2] = n2[2];
+			r[2] = r2[2];
+			patch = 0;
+		}
+
+		if (inst || patch)
+		{
+			if (!patch && r[2] - term->pos[2] > 48) // do pasa
+			{
+				// nie pozwalamy na wslizg
+				term->pos[0] = push[0];
+				term->pos[1] = push[1];
+				term->pos[2] = push[2];
+				term->vel[0] = 0;
+				term->vel[1] = 0;
+				term->vel[2] = 0;
+				return;
+			}
+
+
 			// we need contact to jump
 			if (term->IsKeyDown(A3D_SPACE) && r[2] - term->pos[2] > -16)
 				term->vel[2] = 10;
@@ -199,11 +397,29 @@ void term_animate(TERM_LIST* term)
 				term->pos[2] = 0;
 		}
 	}
+	*/
 }
 
 void term_render(A3D_WND* wnd)
 {
+
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+
+	// FPS DUMPER
+	{
+		static int frames = 0;
+		frames++;
+		static uint64_t p = a3dGetTime();
+		uint64_t t = a3dGetTime();
+		uint64_t d = t - p;
+		if (d > 1000000)
+		{
+			double fps = 1000000.0 * frames / (double)d;
+			printf("fps = %.2f, x = %.2f, y = %.2f, z = %.2f\n", fps, term->pos[0],term->pos[1],term->pos[2]);
+			p = t;
+			frames = 0;
+		}
+	}
 
 	term_animate(term);
 
@@ -271,8 +487,6 @@ void term_render(A3D_WND* wnd)
 
 	float pos_cpy[3] = { term->pos[0],term->pos[1],term->pos[2] };
 	Render(terrain, world, (float)probe_z/*term->water*/, zoom, term->yaw, pos_cpy, lt, width, height, term->buf, term->player_dir, term->player_stp);
-
-
 
 	// copy term->buf to some texture
 	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
@@ -344,7 +558,20 @@ void term_init(A3D_WND* wnd)
 	term->vel[1] = 0;
 	term->vel[2] = 0;
 
-	term->player_slope = 0.1;
+	// todo:
+	// check safe initial position so it won't intersect with anything!!!
+	{
+		double p[3] = { term->pos[0],term->pos[1],-1 };
+		double v[3] = { 0,0,-1 };
+		double r[4] = { 0,0,0,1 };
+		double n[3];
+		Patch* patch = HitTerrain(terrain, p, v, r, n);
+
+		if (patch)
+			term->pos[2] = r[2] + 200; // assuming no mesh stands above terrain by more than 200 units
+	}
+
+	//term->player_slope = 0.1;
 	term->player_dir = 0;
 	term->player_stp = -1;
 

@@ -86,6 +86,202 @@ struct MeshPrefs
 	float rotate_align;
 };
 
+struct Merge
+{
+	Terrain* _terrain;
+	World* _world;
+
+	static void CommitPatch(Patch* p, int x, int y, int view_flags, void* cookie)
+	{
+		Merge* mrg = (Merge*)cookie;
+
+		Patch* d = GetTerrainPatch(terrain, x / VISUAL_CELLS, y / VISUAL_CELLS);
+
+		uint16_t diag = 0;
+
+		if (!d)
+		{
+			// d = AddTerrainPatch(terrain, x / VISUAL_CELLS, y / VISUAL_CELLS, 0);
+			d = URDO_Create(terrain, x / VISUAL_CELLS, y / VISUAL_CELLS, 0);
+			URDO_Patch(d, true);
+			uint16_t* src = GetTerrainVisualMap(p);
+			uint16_t* dst = GetTerrainVisualMap(d);
+			memcpy(dst, src, sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
+			UpdateTerrainVisualMap(d);
+			diag = 1;
+		}
+		else
+		{
+			URDO_Patch(d, false);
+		}
+
+		uint16_t* src = GetTerrainHeightMap(p);
+		uint16_t* dst = GetTerrainHeightMap(d);
+
+		for (int i = 0, y = 0; y < HEIGHT_CELLS + 1; y++)
+		{
+			for (int x = 0; x < HEIGHT_CELLS + 1; x++,i++)
+			{
+				if (src[i] > dst[i])
+				{
+					dst[i] = src[i];
+				}
+			}
+		}
+
+		UpdateTerrainHeightMap(d);
+
+		if (diag)
+		{
+			URDO_Diag(d);
+			diag = GetTerrainDiag(p);
+			SetTerrainDiag(d, diag);
+		}
+	}
+
+	static void CommitInst(Mesh* m, double tm[16], void* cookie)
+	{
+		Merge* mrg = (Merge*)cookie;
+
+		double ttm[16];
+		memcpy(ttm, tm, sizeof(double) * 16);
+		ttm[12] += mrg->dx * VISUAL_CELLS;
+		ttm[13] += mrg->dy * VISUAL_CELLS;
+
+		char mesh_name[256];
+		GetMeshName(m, mesh_name, 256);
+		int flags = INST_USE_TREE | INST_VISIBLE;
+
+		Mesh* m2 = GetFirstMesh(world);
+		while (m2)
+		{
+			char mesh_name2[256];
+			GetMeshName(m2, mesh_name2, 256);
+			if (strcmp(mesh_name, mesh_name2) == 0)
+			{
+				//CreateInst(m2, flags, ttm, 0);
+				URDO_Create(m2, flags, ttm);
+				break;
+			}
+
+			m2 = GetNextMesh(m2);
+		}
+	}
+
+	int dx,dy;
+
+	// todo:
+	bool flip_x;
+	bool flip_y;
+	bool swap_xy;
+};
+
+Merge merge = { 0,0 };
+float pos_x = 0, pos_y = 0, pos_z = 0;
+
+void MergeCancel()
+{
+	if (merge._terrain)
+		DeleteTerrain(merge._terrain);
+	merge._terrain = 0;
+
+	if (merge._world)
+		DeleteWorld(merge._world);
+	merge._world = 0;
+}
+
+static bool MeshScan(A3D_DirItem item, const char* name, void* cookie);
+
+void MergeOpen(const char* path)
+{
+	assert(!merge._terrain && !merge._world);
+
+	// URDO_Purge();
+
+	FILE* f = fopen(path, "rb");
+	if (f)
+	{
+		merge._terrain = LoadTerrain(f);
+
+		if (merge._terrain)
+		{
+			// skip mats
+			for (int i = 0; i < 256; i++)
+			{
+				MatCell skip[64];
+				if (fread(skip, 1, sizeof(MatCell) * 4 * 16, f) != sizeof(MatCell) * 4 * 16)
+					break;
+			}
+
+			merge._world = LoadWorld(f);
+
+			if (merge._world)
+			{
+				// reload meshes too
+				Mesh* m = GetFirstMesh(merge._world);
+
+				while (m)
+				{
+					char mesh_name[256];
+					GetMeshName(m, mesh_name, 256);
+					char obj_path[4096];
+					sprintf(obj_path, "%smeshes/%s", root_path, mesh_name);
+					if (!UpdateMesh(m, obj_path))
+					{
+						// what now?
+						// missing mesh file!
+					}
+
+					MeshPrefs* mp = (MeshPrefs*)malloc(sizeof(MeshPrefs));
+					memset(mp, 0, sizeof(MeshPrefs));
+					SetMeshCookie(m, mp);
+
+					m = GetNextMesh(m);
+				}
+			}
+		}
+
+		fclose(f);
+	}
+
+	if (!merge._terrain)
+		merge._terrain = CreateTerrain();
+
+	if (!merge._world)
+		merge._world = CreateWorld();
+
+	RebuildWorld(merge._world, true);
+}
+
+void MergeCommit()
+{
+	URDO_Open();
+
+	merge.dx = (int)floor(pos_x / VISUAL_CELLS + 0.5);
+	merge.dy = (int)floor(pos_y / VISUAL_CELLS + 0.5);
+
+	if (merge._terrain)
+	{
+		int t[2];
+		GetTerrainBase(merge._terrain, t);
+		int o[2] = { t[0] - merge.dx, t[1] - merge.dy };
+		SetTerrainBase(merge._terrain, o);
+		QueryTerrain(merge._terrain, 0, 0, 0xAA, Merge::CommitPatch, &merge);
+	}
+
+	if (merge._world)
+	{
+		QueryWorld(merge._world, 0, 0, Merge::CommitInst, &merge);
+		RebuildWorld(world, false);
+	}
+
+
+	URDO_Close();
+
+	MergeCancel();
+
+}
+
 int fonts_loaded = 0;
 int palettes_loaded = 0;
 GLuint pal_tex = 0;
@@ -448,7 +644,6 @@ float lit_time = 12.0f;
 float ambience = 0.5;
 
 bool spin_anim = false;
-float pos_x = 0, pos_y = 0, pos_z = 0;
 int mouse_in = 0;
 
 int panning = 0;
@@ -1608,7 +1803,7 @@ struct RenderContext
 		}
 	}
 
-	static void RenderMesh(Mesh* m, const double tm[16], void* cookie)
+	static void RenderMesh(Mesh* m, double tm[16], void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
 
@@ -1623,6 +1818,13 @@ struct RenderContext
 		float ftm[16];
 		for (int i=0; i<16; i++)
 			ftm[i] = (float)tm[i];
+
+		if (GetMeshWorld(m) == merge._world)
+		{
+			ftm[12] += merge.dx * VISUAL_CELLS;
+			ftm[13] += merge.dy * VISUAL_CELLS;
+		}
+
 		glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, ftm);
 		QueryMesh(m, RenderFace, rc);
 	}
@@ -2621,7 +2823,90 @@ void New()
 
 	// init some planar terrain
 
-	const int num1 = 16;
+	struct Perlin
+	{
+		Perlin()
+		{
+			SEED = 0;
+
+			static const int data[] =
+			{
+				208,34,231,213,32,248,233,56,161,78,24,140,71,48,140,254,245,255,247,247,40,
+				185,248,251,245,28,124,204,204,76,36,1,107,28,234,163,202,224,245,128,167,204,
+				9,92,217,54,239,174,173,102,193,189,190,121,100,108,167,44,43,77,180,204,8,81,
+				70,223,11,38,24,254,210,210,177,32,81,195,243,125,8,169,112,32,97,53,195,13,
+				203,9,47,104,125,117,114,124,165,203,181,235,193,206,70,180,174,0,167,181,41,
+				164,30,116,127,198,245,146,87,224,149,206,57,4,192,210,65,210,129,240,178,105,
+				228,108,245,148,140,40,35,195,38,58,65,207,215,253,65,85,208,76,62,3,237,55,89,
+				232,50,217,64,244,157,199,121,252,90,17,212,203,149,152,140,187,234,177,73,174,
+				193,100,192,143,97,53,145,135,19,103,13,90,135,151,199,91,239,247,33,39,145,
+				101,120,99,3,186,86,99,41,237,203,111,79,220,135,158,42,30,154,120,67,87,167,
+				135,176,183,191,253,115,184,21,233,58,129,233,142,39,128,211,118,137,139,255,
+				114,20,218,113,154,27,127,246,250,1,8,198,250,209,92,222,173,21,88,102,219
+			};
+
+			hash = data;
+		}
+
+		int SEED;
+		const int* hash;
+
+		int noise2(int x, int y)
+		{
+			int tmp = hash[(y + SEED) % 256];
+			return hash[(tmp + x) % 256];
+		}
+
+		float lin_inter(float x, float y, float s)
+		{
+			return x + s * (y - x);
+		}
+
+		float smooth_inter(float x, float y, float s)
+		{
+			return lin_inter(x, y, s * s * (3 - 2 * s));
+		}
+
+		float noise2d(float x, float y)
+		{
+			int x_int = x;
+			int y_int = y;
+			float x_frac = x - x_int;
+			float y_frac = y - y_int;
+			int s = noise2(x_int, y_int);
+			int t = noise2(x_int + 1, y_int);
+			int u = noise2(x_int, y_int + 1);
+			int v = noise2(x_int + 1, y_int + 1);
+			float low = smooth_inter(s, t, x_frac);
+			float high = smooth_inter(u, v, x_frac);
+			return smooth_inter(low, high, y_frac);
+		}
+
+		float perlin2d(float x, float y, float freq, int depth)
+		{
+			float xa = x * freq;
+			float ya = y * freq;
+			float amp = 1.0;
+			float fin = 0;
+			float div = 0.0;
+
+			int i;
+			for (i = 0; i < depth; i++)
+			{
+				div += 256 * amp;
+				fin += noise2d(xa, ya) * amp;
+				amp /= 2;
+				xa *= 2;
+				ya *= 2;
+			}
+
+			return fin / div;
+		}
+	};
+
+	Perlin perlin;
+
+	const int num1 = 256;
 	const int num2 = num1*num1;
 
 	uint32_t* rnd = (uint32_t*)malloc(sizeof(uint32_t)*num2);
@@ -2637,7 +2922,7 @@ void New()
 		rnd[r] = rnd[--n];
 		uint32_t u = uv % num1;
 		uint32_t v = uv / num1;
-		AddTerrainPatch(terrain, u, v, 0/*fast_rand()&0x7F*/);
+		AddTerrainPatch(terrain, u, v, (int)(300*perlin.perlin2d(u,v,0.1,10)));
 	}
 
 	free(rnd);
@@ -2645,6 +2930,70 @@ void New()
 	pos_x = num1 * VISUAL_CELLS / 2;
 	pos_y = num1 * VISUAL_CELLS / 2;
 	pos_z = 0x0;
+}
+
+void TranslateMap(int delta_z, bool water_limit)
+{
+	struct Translate
+	{
+		static void QueryPatch(Patch* p, int x, int y, int vf, void* cookie)
+		{
+			Translate* t = (Translate*)cookie;
+			uint16_t* map = GetTerrainHeightMap(p);
+			int num = (HEIGHT_CELLS + 1)*(HEIGHT_CELLS + 1);
+
+			if (!t->water_limit)
+			{
+				if (t->delta_z > 0)
+				{
+					for (int i = 0; i < num; i++)
+						map[i] = min(0xFFFF, map[i] + t->delta_z);
+				}
+				else
+				{
+					for (int i = 0; i < num; i++)
+						map[i] = max(0, map[i] + t->delta_z);
+				}
+			}
+			else
+			{
+				if (t->delta_z > 0)
+				{
+					for (int i = 0; i < num; i++)
+						if (map[i] >= t->water)
+							map[i] = min(0xFFFF, map[i] + t->delta_z);
+				}
+				else
+				{
+					for (int i = 0; i < num; i++)
+						if (map[i] < t->water)
+							map[i] = max(0, map[i] + t->delta_z);
+				}
+			}
+
+			UpdateTerrainHeightMap(p);
+		}
+
+		static void QueryInst(Mesh* m, double* tm, void* cookie)
+		{
+			Translate* t = (Translate*)cookie;
+			tm[14] += t->delta_z;
+		}
+
+		int delta_z;
+		int water;
+		bool water_limit;
+	};
+
+	Translate t;
+	t.delta_z = delta_z;
+	t.water = probe_z;
+	t.water_limit = water_limit;
+
+	QueryTerrain(terrain, 0, 0, 0xAA, Translate::QueryPatch, &t);
+	QueryWorld(world, 0, 0, Translate::QueryInst, &t);
+
+	RebuildWorld(world, true);
 }
 
 void Load(const char* path)
@@ -2728,25 +3077,13 @@ void Load(const char* path)
 	RebuildWorld(world, true);
 
 	active_mesh = GetFirstMesh(world);	
+
+
+	//TranslateMap(-100, false);
 }
 
 void my_render(A3D_WND* wnd)
 {
-	// FPS DUMPER
-	{
-		static int frames = 0;
-		frames++;
-		static uint64_t p = a3dGetTime();
-		uint64_t t = a3dGetTime();
-		uint64_t d = t - p;
-		if (d > 1000000)
-		{
-			double fps = 1000000.0 * frames / (double)d;
-			printf("fps = %.2f, water = %d\n", fps, probe_z);
-			p = t;
-			frames = 0;
-		}
-	}
 
 	ImGuiIO& io = ImGui::GetIO();
 
@@ -3217,6 +3554,21 @@ void my_render(A3D_WND* wnd)
 
 			ImGui::SameLine();
 
+			if (ImGui::Button("MERGE"))
+			{
+				save = 3;
+
+				if (dir_arr)
+					FreeDir(dir_arr);
+				dir_arr = 0;
+
+				a3dGetCurDir(save_path, 4096);
+				AllocDir(&dir_arr);
+			}
+
+			ImGui::SameLine();
+
+
 			if (ImGui::Button("NEW"))
 			{
 				New();
@@ -3234,6 +3586,9 @@ void my_render(A3D_WND* wnd)
 		{
 			if (ImGui::Button("Cancel"))
 			{
+				if (save == 3)
+					MergeCancel();
+
 				save = 0;
 				if (dir_arr)
 					FreeDir(dir_arr);
@@ -3310,7 +3665,7 @@ void my_render(A3D_WND* wnd)
 		{
 			bool save_do = false; // dbl click indicator
 			bool show = true;
-			ImGui::Begin(save == 1 ? "SAVE" : "LOAD", &show);
+			ImGui::Begin(save == 1 ? "SAVE" : save == 2 ? "LOAD" : "MERGE", &show);
 
 			DirItem* cwd = 0;
 			ImGui::PushItemWidth(-1);
@@ -3345,11 +3700,23 @@ void my_render(A3D_WND* wnd)
 				{
 					Load(save_path);
 
-					// close save dialog
+					// close load dialog
 					save = 0;
 					if (dir_arr)
 						FreeDir(dir_arr);
 					dir_arr = 0;					
+				}
+				else
+				if (save == 3)
+				{
+					// apply merge
+					MergeCommit();
+
+					// close merge dialog
+					save = 0;
+					if (dir_arr)
+						FreeDir(dir_arr);
+					dir_arr = 0;
 				}
 			}
 
@@ -3371,6 +3738,15 @@ void my_render(A3D_WND* wnd)
 							a3dGetCurDir(cd,4096);
 							snprintf(save_path,4096,"%s%s",cd,(*di)->name);
 
+							if (save == 3)
+							{
+								// unload any pending merge
+								MergeCancel();
+
+								// load new one
+								MergeOpen(save_path);
+							}
+
 							if (ImGui::IsMouseDoubleClicked(0))
 								save_do = true;								
 						}
@@ -3389,7 +3765,7 @@ void my_render(A3D_WND* wnd)
 
 			
 
-			if (save && (ImGui::Button(save == 1 ? "SAVE" : "LOAD") || save_do))
+			if (save && (ImGui::Button(save == 1 ? "SAVE" : save == 2 ? "LOAD" : "MERGE") || save_do))
 			{
 				if (save == 1)
 				{
@@ -3427,12 +3803,27 @@ void my_render(A3D_WND* wnd)
 						FreeDir(dir_arr);
 					dir_arr = 0;					
 				}
+				else
+				if (save == 3)
+				{
+					// apply merge
+					MergeCommit();
+
+					// close merge dialog
+					save = 0;
+					if (dir_arr)
+						FreeDir(dir_arr);
+					dir_arr = 0;
+				}
 			}	
 
 			ImGui::SameLine();
 			if (save && ImGui::Button("CANCEL"))
 			{
-				// close save dialog
+				// close save/load/merge dialog
+				if (save == 3)
+					MergeCancel();
+
 				save = 0;
 				if (dir_arr)
 					FreeDir(dir_arr);
@@ -3441,6 +3832,9 @@ void my_render(A3D_WND* wnd)
 
 			if (save && cwd && show)
 			{
+				if (save == 3)
+					MergeCancel();
+
 				a3dSetCurDir(cwd->name);
 				a3dGetCurDir(save_path,4096);
 				if (dir_arr)
@@ -3455,6 +3849,9 @@ void my_render(A3D_WND* wnd)
 
 			if (!show)
 			{
+				if (save == 3)
+					MergeCancel();
+
 				if (dir_arr)
 					FreeDir(dir_arr);
 				dir_arr = 0;
@@ -5026,11 +5423,30 @@ void my_render(A3D_WND* wnd)
 	glDepthFunc(GL_GEQUAL);
 	rc->BeginPatches(tm, lt, br_xyra, br_quad, br_probe);
 	QueryTerrain(terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
+
+
+	merge.dx = (int)floor(pos_x / VISUAL_CELLS + 0.5);
+	merge.dy = (int)floor(pos_y / VISUAL_CELLS + 0.5);
+
+	if (merge._terrain)
+	{
+		int t[2];
+		GetTerrainBase(merge._terrain, t);
+		int o[2] = { t[0] - merge.dx, t[1] - merge.dy};
+		SetTerrainBase(merge._terrain, o);
+		QueryTerrain(merge._terrain, planes, clip_world, view_flags, RenderContext::RenderPatch, rc);
+		SetTerrainBase(merge._terrain, t);
+	}
+
 	rc->EndPatches();
 
 
 	rc->BeginMeshes(tm, lt);
 	QueryWorld(world, planes, clip_world, RenderContext::RenderMesh, rc);
+
+	if (merge._world)
+		QueryWorld(merge._world, 0,0/*planes, clip_world*/, RenderContext::RenderMesh, rc);
+
 	if (inst_preview)
 		RenderContext::RenderMesh(inst_preview, inst_tm, rc);
 	rc->EndMeshes();

@@ -34,6 +34,7 @@ void DeleteInst(Inst* i);
 Mesh* GetInstMesh(Inst* i);
 int GetInstFlags(Inst* i);
 void GetInstTM(Inst* i, double tm[16]);
+void GetInstBBox(Inst* i, double bbox[6]);
 
 enum INST_FLAGS
 {
@@ -41,10 +42,10 @@ enum INST_FLAGS
     INST_USE_TREE = 0x2,
 };
 
-void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie);
+void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie);
 void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie);
 
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3]);
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only = false);
 
 void SaveWorld(World* w, FILE* f);
 World* LoadWorld(FILE* f);

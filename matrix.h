@@ -232,7 +232,13 @@ inline void CrossProduct(const V a[3], const V b[3], V ab[3])
 	ab[2] = a[0] * b[1] - a[1] * b[0];
 }
 
-inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], double v2[3], double ret[3])
+template <typename V>
+inline V DotProduct(const V a[3], const V b[3])
+{
+	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], double v2[3], double ret[3], bool positive_only = false)
 {
 	const double EPSILON = 0.0000001;
 
@@ -284,12 +290,74 @@ inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], dou
 	double t = //f * edge2.dotProduct(q);
 		f * (edge2[0] * q[0] + edge2[1] * q[1] + edge2[2] * q[2]);
 
-	// POSITIVE DIR OF RAY ONLY?
-	// if (t < EPSILON)
-	//	  return false;
+	if (positive_only && t < EPSILON)
+		  return false;
 
 	ret[0] = ray[6] + ray[3] * t;
 	ret[1] = ray[7] + ray[4] * t;
 	ret[2] = ray[8] + ray[5] * t;
+	return true;
+}
+
+inline bool SphereIntersectTriangle(float S[4]/*center,radius*/, float v0[3], float v1[3], float v2[3])
+{
+	float A[] = { v0[0] - S[0], v0[1] - S[1], v0[2] - S[2] };
+	float B[] = { v1[0] - S[0], v1[1] - S[1], v1[2] - S[2] };
+	float C[] = { v2[0] - S[0], v2[1] - S[1], v2[2] - S[2] };
+	float rr = S[3] * S[3];
+	
+	float AB[] = { B[0] - A[0], B[1] - A[1], B[2] - A[2] };
+	float AC[] = { C[0] - A[0], C[1] - A[1], C[2] - A[2] };
+
+	float V[3];
+	CrossProduct(AB, AC, V);
+
+	float d = DotProduct(A, V);
+	float e = DotProduct(V, V);
+
+	if (d * d > rr * e)
+		return false;
+
+	float aa = DotProduct(A, A);
+	float ab = DotProduct(A, B);
+	float ac = DotProduct(A, C);
+	if (aa > rr && ab > aa && ac > aa)
+		return false;
+
+	float bb = DotProduct(B, B);
+	float bc = DotProduct(B, C);
+	if (bb > rr && ab > bb && bc > bb)
+		return false;
+
+	float cc = DotProduct(C, C);
+	if (cc > rr && ac > cc && bc > cc)
+		return false;
+
+	float d1 = ab - aa;
+	float d2 = bc - bb;
+	float d3 = ac - cc;
+
+	float BC[] = { C[0] - B[0], C[1] - B[1], C[2] - B[2] };
+	//float CA[] = { -AC }
+
+	float e1 = DotProduct(AB, AB);
+	float e2 = DotProduct(BC, BC);
+	float e3 = DotProduct(AC, AC);
+
+	float Q1[] = { A[0] * e1 - AB[0] * d1, A[1] * e1 - AB[1] * d1, A[2] * e1 - AB[2] * d1 };
+	float QC[] = { C[0] * e1 - Q1[0], C[1] * e1 - Q1[1], C[2] * e1 - Q1[2] };
+	if (DotProduct(Q1, Q1) > rr * e1 * e1 && DotProduct(Q1, QC) > 0)
+		return false;
+
+	float Q2[] = { B[0] * e2 - BC[0] * d2, B[1] * e2 - BC[1] * d2, B[2] * e2 - BC[2] * d2 };
+	float QA[] = { A[0] * e2 - Q2[0], A[1] * e2 - Q2[1], A[2] * e2 - Q2[2] };
+	if (DotProduct(Q2, Q2) > rr * e2 * e2 && DotProduct(Q2, QA) > 0)
+		return false;
+
+	float Q3[] = { C[0] * e3 + AC[0] * d3, C[1] * e3 + AC[1] * d3, C[2] * e3 + AC[2] * d3 };
+	float QB[] = { B[0] * e3 - Q3[0], B[1] * e3 - Q3[1], B[2] * e3 - Q3[2] };
+	if (DotProduct(Q3, Q3) > rr * e3 * e3 && DotProduct(Q3, QB) > 0)
+		return false;
+
 	return true;
 }

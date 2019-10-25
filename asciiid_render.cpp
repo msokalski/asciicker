@@ -250,7 +250,7 @@ struct Renderer
 	int buffer_size; // ansi_buffer allocation size in cells (minimize reallocs)
 
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie /*Renderer*/);
-	static void RenderMesh(Mesh* m, const double* tm, void* cookie /*Renderer*/);
+	static void RenderMesh(Mesh* m, double* tm, void* cookie /*Renderer*/);
 	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie /*Renderer*/);
 	
 	// unstatic -> needs R/W access to sample_buffer.ptr[].height for depth testing!
@@ -605,7 +605,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	}
 }
 
-void Renderer::RenderMesh(Mesh* m, const double* tm, void* cookie)
+void Renderer::RenderMesh(Mesh* m, double* tm, void* cookie)
 {
 	Renderer* r = (Renderer*)cookie;
 	double view_tm[16]=
@@ -1046,7 +1046,7 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 	int sample_dy = 2 * (2 + 2 * width + 2);
 	int sample_ofs[4] = { 0, 1, 2 + 2 * width + 2, 2 + 2 * width + 2 + 1 };
 
-	static const float height_scale = HEIGHT_SCALE / 1.5; // WHY?????  HS*DBL/ZOOM ?
+	//static const float height_scale = HEIGHT_SCALE / 1.5; // WHY?????  HS*DBL/ZOOM ?
 
 	static const float ds = 2.0 * (/*zoom*/ 1.0 * /*scale*/ 3.0) / VISUAL_CELLS * 0.5 /*we're not dbl_wh*/;
 	static const float dz_dy = HEIGHT_SCALE / (cos(30 * M_PI / 180) * HEIGHT_CELLS * ds);
@@ -1918,8 +1918,6 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		anim = 0;
 		fr = 0;
 	}
-
-	printf("ang=%d\n", ang);
 
 	static const float dy_dz = (cos(30 * M_PI / 180) * HEIGHT_CELLS * (ds / 2/*we're not dbl_wh*/)) / HEIGHT_SCALE;
 

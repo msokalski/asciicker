@@ -92,6 +92,18 @@ struct Terrain
 #endif
 };
 
+void GetTerrainBase(Terrain* t, int b[2])
+{
+	b[0] = t->x;
+	b[1] = t->y;
+}
+
+void SetTerrainBase(Terrain* t, const int b[2])
+{
+	t->x = b[0];
+	t->y = b[1];
+}
+
 Terrain* CreateTerrain(int z)
 {
 	Terrain* t = (Terrain*)malloc(sizeof(Terrain));

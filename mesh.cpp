@@ -186,7 +186,7 @@ struct Inst : BSP
 		}
 	}
 
-    bool HitFace(double ray[6], double ret[3], double nrm[3])
+    bool HitFace(double ray[6], double ret[3], double nrm[3], bool positive_only)
     {
         if (!mesh)
             return false;
@@ -202,7 +202,7 @@ struct Inst : BSP
             Product(tm,f->abc[2]->xyzw,v2);
 
             double hit[3];
-            if (RayIntersectsTriangle(ray,v0,v1,v2,hit))
+            if (RayIntersectsTriangle(ray,v0,v1,v2,hit, positive_only))
             {
                 if (hit[2] > ret[2])
                 {
@@ -210,8 +210,12 @@ struct Inst : BSP
 					ret[1] = hit[1];
 					ret[2] = hit[2];
 
-                    // TODO: if (nrm) calc normal -> nrm
-					// ...
+					if (nrm)
+					{
+						double d1[3] = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] };
+						double d2[3] = { v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2] };
+						CrossProduct(d1, d2, nrm);
+					}
 
                     flag = true;
                 }
@@ -1003,7 +1007,7 @@ struct World
         }
     }
 
-	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3])
+	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
 	{
 		if (!q)
 			return 0;
@@ -1011,6 +1015,11 @@ struct World
         const float x[2] = {q->bbox[0],q->bbox[1]};
 		const float y[2] = {q->bbox[2],q->bbox[3]};
 		const float z[2] = {q->bbox[4],q->bbox[5]};
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
 
 		if (ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
 			ray[5] * y[1] - ray[0] - z[0] * ray[4] > 0 ||
@@ -1023,7 +1032,7 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm))
+			if (inst->HitFace(ray, ret, nrm, positive_only))
 				return inst;
 			else
 				return 0;
@@ -1032,8 +1041,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
             return i;
         }
@@ -1042,14 +1051,14 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1064,7 +1073,7 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1074,7 +1083,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3])
+	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
 	{
 		if (!q)
 			return 0;
@@ -1082,6 +1091,11 @@ struct World
 		const float x[2] = { q->bbox[0],q->bbox[1] };
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
 
 		if (ray[5] * y[1] - ray[0] - z[0] * ray[4] > 0 ||
 			z[0] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
@@ -1094,7 +1108,7 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm))
+			if (inst->HitFace(ray, ret, nrm, positive_only))
 				return inst;
 			else
 				return 0;
@@ -1103,8 +1117,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
             return i;
         }
@@ -1113,14 +1127,14 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1135,7 +1149,7 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1145,7 +1159,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3])
+	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
 	{
 		if (!q)
 			return 0;
@@ -1153,6 +1167,11 @@ struct World
 		const float x[2] = { q->bbox[0],q->bbox[1] };
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
 
 		if (ray[0] + z[0] * ray[4] - ray[5] * y[0] > 0 ||
 			ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
@@ -1165,7 +1184,7 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm))
+			if (inst->HitFace(ray, ret, nrm, positive_only))
 				return inst;
 			else
 				return 0;
@@ -1174,8 +1193,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
             return i;
         }
@@ -1184,14 +1203,14 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1206,7 +1225,7 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1216,7 +1235,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3])
+	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
 	{
 		if (!q)
 			return 0;
@@ -1224,6 +1243,11 @@ struct World
 		const float x[2] = { q->bbox[0],q->bbox[1] };
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
 
 		if (z[0] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
 			ray[0] + z[0] * ray[4] - ray[5] * y[0] > 0 ||
@@ -1236,7 +1260,7 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm))
+			if (inst->HitFace(ray, ret, nrm, positive_only))
 				return inst;
 			else
 				return 0;
@@ -1245,8 +1269,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
             return i;
         }
@@ -1255,14 +1279,14 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm);
-            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm);
+            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, positive_only);
+            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, positive_only);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1277,7 +1301,7 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm))
+                if (j->HitFace(ray, ret, nrm, positive_only))
                     i=j;
                 j=j->next;
             }
@@ -1288,7 +1312,7 @@ struct World
 	}
 
     // RAY HIT using plucker
-    Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3])
+    Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3], bool positive_only)
     {
 		if (!root)
 			return 0;
@@ -1314,7 +1338,7 @@ struct World
 
 		assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
 
-		static Inst* (*const func_vect[])(BSP* q, double ray[6], double ret[3], double nrm[3]) =
+		static Inst* (*const func_vect[])(BSP* q, double ray[6], double ret[3], double nrm[3], bool) =
 		{
 			HitWorld0,
 			HitWorld1,
@@ -1322,11 +1346,15 @@ struct World
 			HitWorld3
 		};
 
-		ret[0] = p[0];
-		ret[1] = p[1];
-		ret[2] = p[2];
+		if (!positive_only)
+		{
+			// otherwie ret must be preinitialized
+			ret[0] = p[0];
+			ret[1] = p[1];
+			ret[2] = p[2];
+		}
 
-		Inst* inst = func_vect[sign_case](root, ray, ret, nrm);
+		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, positive_only);
 		return inst;
     }
 
@@ -1383,7 +1411,7 @@ struct World
     // MESHES IN HULL
 
     // recursive no clipping
-    static void Query(BSP* bsp, void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
+    static void Query(BSP* bsp, void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
     {
         if (bsp->type == BSP::BSP_TYPE_LEAF)
         {
@@ -1436,7 +1464,7 @@ struct World
     }
 
     // recursive
-    static void Query(BSP* bsp, int planes, double* plane[], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
+    static void Query(BSP* bsp, int planes, double* plane[], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
     {
         float c[4] = { bsp->bbox[0], bsp->bbox[2], bsp->bbox[4], 1 }; // 0,0,0
 
@@ -1578,7 +1606,7 @@ struct World
     }
 
     // main
-    void Query(int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
+    void Query(int planes, double plane[][4], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
     {
         bsp_tests=0;
         bsp_insts=0;
@@ -1589,7 +1617,9 @@ struct World
         {
 			if (planes > 0)
 			{
-				double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+				//double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+				double* pp[6] = { plane[0],plane[1],plane[2],plane[3],plane[4],plane[5] };
+
 				Query(root, planes, pp, cb, cookie);
 			}
 			else
@@ -1602,7 +1632,9 @@ struct World
 		Inst* i = head_inst;
 		if (planes > 0)
 		{
-			double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+			// double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+			double* pp[6] = { plane[0],plane[1],plane[2],plane[3],plane[4],plane[5] };
+
 			while (i)
 			{
 				Query(i, planes, pp, cb, cookie);
@@ -2336,7 +2368,7 @@ void DeleteInst(Inst* i)
     i->mesh->world->DelInst(i);
 }
 
-void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, const double tm[16], void* cookie), void* cookie)
+void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
 {
     if (!w)
         return;
@@ -2652,9 +2684,9 @@ World* LoadWorld(FILE* f)
 }
 
 
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3])
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only)
 {
-    return w->HitWorld(p,v,ret,nrm);
+    return w->HitWorld(p,v,ret,nrm, positive_only);
 }
 
 Mesh* GetInstMesh(Inst* i)

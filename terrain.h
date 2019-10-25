@@ -15,6 +15,9 @@ struct Terrain;
 Terrain* CreateTerrain(int z=-1);
 void DeleteTerrain(Terrain* t);
 
+void GetTerrainBase(Terrain* t, int b[2]);
+void SetTerrainBase(Terrain* t, const int b[2]);
+
 bool SaveTerrain(const Terrain* t, FILE* f);
 Terrain* LoadTerrain(FILE* f);
 
