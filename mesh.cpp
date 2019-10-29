@@ -2703,3 +2703,8 @@ void GetInstTM(Inst* i, double tm[16])
 {
 	memcpy(tm, i->tm, sizeof(double[16]));
 }
+
+int GetMeshFaces(Mesh* m)
+{
+	return m->faces;
+}

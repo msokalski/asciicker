@@ -26,6 +26,7 @@ World* GetMeshWorld(Mesh* m);
 int GetMeshName(Mesh* m, char* buf, int size);
 void GetMeshBBox(Mesh* m, float bbox[6]);
 
+int GetMeshFaces(Mesh* m);
 void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie), void* cookie);
 
 Inst* CreateInst(Mesh* m, int flags, const double tm[16] = 0, const char* name = 0);

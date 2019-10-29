@@ -1507,7 +1507,7 @@ void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, voi
 		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, view_flags & 0xAA, cb, cookie);
 	else
 	{
-		double* pp[4] = { plane[0],plane[1],plane[2],plane[3] };
+		double* pp[6] = { plane[0],plane[1],plane[2],plane[3],plane[4],plane[5] };
 		QueryTerrain(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, planes, pp, view_flags & 0xAA, cb, cookie);
 	}
 }

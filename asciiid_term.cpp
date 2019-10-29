@@ -14,6 +14,227 @@
 #define CODE(...) #__VA_ARGS__
 #define DEFN(a,s) "#define " #a #s "\n"
 
+struct SoupItem
+{
+	float tri[3][3];
+	float nrm[4]; // {nrm, w} is plane equ
+
+	float CheckCollision(const float sphere_pos[3], const float sphere_vel[3], float contact_pos[3])
+	{
+		float col[3] = // on sphere @ time 0.0
+		{
+			sphere_pos[0] - nrm[0],
+			sphere_pos[1] - nrm[1],
+			sphere_pos[2] - nrm[2]
+		};
+
+		float vel_dot_nrm = -DotProduct(sphere_vel, nrm);
+		float plane_t = 2;
+
+		if (vel_dot_nrm > 0) // else: backface or (almost) parallel
+		{
+			float dist = DotProduct(col, nrm) + nrm[3];
+
+			if (dist > 0)
+			{
+				plane_t = dist / vel_dot_nrm;
+			}
+			else
+			if (dist > -1)
+			{
+				// embedded!
+				dist = 1.0f + dist;
+				contact_pos[0] = col[0] - dist * nrm[0];
+				contact_pos[1] = col[1] - dist * nrm[1];
+				contact_pos[2] = col[2] - dist * nrm[2];
+				plane_t = 0;
+			}
+			else
+				return 2;
+
+			// contact pos on triangle plane
+			contact_pos[0] = col[0] + plane_t * sphere_vel[0];
+			contact_pos[1] = col[1] + plane_t * sphere_vel[1];
+			contact_pos[2] = col[2] + plane_t * sphere_vel[2];
+
+			// is it inside triangle?
+
+			float edge[3][3] =
+			{
+				{tri[1][0] - tri[0][0], tri[1][1] - tri[0][1], tri[1][2] - tri[0][2]},
+				{tri[2][0] - tri[1][0], tri[2][1] - tri[1][1], tri[2][2] - tri[1][2]},
+				{tri[0][0] - tri[2][0], tri[0][1] - tri[2][1], tri[0][2] - tri[2][2]}
+			};
+
+			// collision point relative to given edge 
+			float vect[3][3] =
+			{
+				{ contact_pos[0] - tri[0][0], contact_pos[1] - tri[0][1], contact_pos[2] - tri[0][2]},
+				{ contact_pos[0] - tri[1][0], contact_pos[1] - tri[1][1], contact_pos[2] - tri[1][2]},
+				{ contact_pos[0] - tri[2][0], contact_pos[1] - tri[2][1], contact_pos[2] - tri[2][2]},
+			};
+
+			float cross[3][3];
+			float dot[3];
+
+			CrossProduct(edge[0], vect[0], cross[0]);
+			dot[0] = DotProduct(cross[0], nrm);
+
+			CrossProduct(edge[1], vect[1], cross[1]);
+			dot[1] = DotProduct(cross[1], nrm);
+
+			CrossProduct(edge[2], vect[2], cross[2]);
+			dot[2] = DotProduct(cross[2], nrm);
+
+			if (dot[0] >= 0 && dot[1] >= 0 && dot[2] >= 0)
+			{
+				// inside
+				return plane_t > 1 ? 2 : plane_t; // last thing to check is range (2=out of range)
+			}
+			else
+			{
+				 plane_t = 2;
+
+				// spheres (ps,r)
+				/*
+				( p+v*t - ps )^2 = r^2
+
+				( p-ps + v*t )^2 = r^2
+				(p-ps)^2 + t*2*(p-ps)*v + t^2*v^2 = r^2
+
+				A := v^2
+				B := 2*dot(p-ps,v)
+				C := (p-ps)^2 - r^2
+				*/
+				{
+					float A = DotProduct(sphere_vel, sphere_vel);
+
+					for (int s = 0; s < 3; s++)
+					{
+						float p_ps[3] =
+						{
+							sphere_pos[0] - tri[s][0],
+							sphere_pos[1] - tri[s][1],
+							sphere_pos[2] - tri[s][2]
+						};
+
+						float B = 2 * DotProduct(p_ps, sphere_vel);
+						float C = DotProduct(p_ps, p_ps) - 1;
+
+						float D = B * B - 4 * A*C;
+						if (D >= 0)
+						{
+							// pick smaller root (A is positive, so take -sqrt)
+							float t = (-B - sqrtf(D)) / (2 * A);
+
+							if (t >= 0 && t <= 1)
+							{
+								if (t < plane_t)
+								{
+									plane_t = t;
+									contact_pos[0] = tri[s][0];
+									contact_pos[1] = tri[s][1];
+									contact_pos[2] = tri[s][2];
+								}
+							}
+						}
+					}
+				}
+
+				// cylinders (pc,vx,r)
+				/*
+							   __       __
+				( p+v*t - pc - vc * dot(vc, p+v*t - pc) )^2 = r^2
+
+				( p+v*t - pc - vc * dot(vc, p+v*t - pc) / vc^2 )^2 = r^2
+
+				( (p+v*t-pc)*vc^2 - vc * dot(vc, p+v*t - pc) )^2 = r^2 * vc^4
+
+				( (p-pc)*vc^2 + t*v*vc^2 - vc * dot(vc, p-pc) - t * vc * dot(vc,v) )^2 = r^2 * vc^4
+
+				( (p-pc)*vc^2 - vc * dot(vc, p-pc) + t * (v*vc^2 - vc * dot(vc,v)) )^2 = r^2 * vc^4
+
+				U := (p-pc)*vc^2 - vc * dot(vc, p-pc)
+				V := v*vc^2 - vc*dot(vc,v)
+
+				( U + t * V )^2 = r^2 * vc^4
+
+				U^2 + t*2*U*V + t^2*V^2 - r^2 * vc^4 = 0
+
+				A = V^2
+				B = 2*dot(U,V)
+				C = U^2 - (r*vc^2)^2
+				*/
+				{
+					for (int c = 0; c < 3; c++)
+					{
+						float vcvc = DotProduct(edge[c], edge[c]);
+						float p_pc[3] =
+						{
+							sphere_pos[0] - tri[c][0],
+							sphere_pos[1] - tri[c][1],
+							sphere_pos[2] - tri[c][2]
+						};
+
+						float vc_dot_p_pc = DotProduct(edge[c], p_pc);
+
+						float U[3] =
+						{
+							p_pc[0] * vcvc - edge[c][0] * vc_dot_p_pc,
+							p_pc[1] * vcvc - edge[c][1] * vc_dot_p_pc,
+							p_pc[2] * vcvc - edge[c][2] * vc_dot_p_pc
+						};
+
+						float vc_dot_v = DotProduct(edge[c], sphere_vel);
+
+						float V[3] =
+						{
+							sphere_vel[0] * vcvc - edge[c][0] * vc_dot_v,
+							sphere_vel[1] * vcvc - edge[c][1] * vc_dot_v,
+							sphere_vel[2] * vcvc - edge[c][2] * vc_dot_v
+						};
+
+						float A = DotProduct(V, V);
+						float B = 2 * DotProduct(U, V);
+						float C = DotProduct(U, U) - vcvc * vcvc;
+
+						float D = B * B - 4 * A*C;
+						if (D >= 0)
+						{
+							// pick smaller root (A is positive, so take -sqrt)
+							float t = (-B - sqrtf(D)) / (2 * A);
+
+							if (t >= 0 && t <= 1)
+							{
+								if (t < plane_t)
+								{
+									float _pc[3] =
+									{
+										sphere_pos[0] + t * sphere_vel[0] - tri[c][0],
+										sphere_pos[1] + t * sphere_vel[1] - tri[c][1],
+										sphere_pos[2] + t * sphere_vel[2] - tri[c][2]
+									};
+
+									float h_mul_vc = DotProduct(_pc, edge[c]);
+									if (h_mul_vc >= 0 && h_mul_vc <= vcvc)
+									{
+										plane_t = t;
+										float h_div_vc = h_mul_vc / vcvc;
+										contact_pos[0] = tri[c][0] + edge[c][0] * h_div_vc;
+										contact_pos[1] = tri[c][1] + edge[c][1] * h_div_vc;
+										contact_pos[2] = tri[c][2] + edge[c][2] * h_div_vc;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return plane_t;
+	}
+};
+
 struct TERM_LIST
 {
 	TERM_LIST* prev;
@@ -48,11 +269,255 @@ struct TERM_LIST
 	GLuint vbo;
 	GLuint vao;
 
+	/*
 	int col_num[3];
 	int col_msh;
 	float col_tm[16];
 	float col_nrm[3][3];
+	*/
 
+	SoupItem* soup;
+	int soup_alloc;
+	int soup_items;
+
+	double* collect_tm;
+	float collect_mul_xy;
+	float collect_mul_z;
+
+	static void FaceCollect(float coords[9], uint8_t* colors, uint32_t visual, void* cookie)
+	{
+		TERM_LIST* term = (TERM_LIST*)cookie;
+		SoupItem* item = term->soup + term->soup_items;
+
+		// multiply coords by collect_tm
+		// then multiply x & y by collect_mul_xy and z by collect_mul_z
+		// ...
+
+		float v[3][4]=
+		{
+			{coords[0],coords[1],coords[2],1},
+			{coords[3],coords[4],coords[5],1},
+			{coords[6],coords[7],coords[8],1},
+		};
+
+		float tmv[4];
+
+		Product(term->collect_tm, v[0], tmv);
+
+		item->tri[0][0] = tmv[0] * term->collect_mul_xy;
+		item->tri[0][1] = tmv[1] * term->collect_mul_xy;
+		item->tri[0][2] = tmv[2] * term->collect_mul_z;
+
+		Product(term->collect_tm, v[1], tmv);
+
+		item->tri[1][0] = tmv[0] * term->collect_mul_xy;
+		item->tri[1][1] = tmv[1] * term->collect_mul_xy;
+		item->tri[1][2] = tmv[2] * term->collect_mul_z;
+
+		Product(term->collect_tm, v[2], tmv);
+
+		item->tri[2][0] = tmv[0] * term->collect_mul_xy;
+		item->tri[2][1] = tmv[1] * term->collect_mul_xy;
+		item->tri[2][2] = tmv[2] * term->collect_mul_z;
+
+		{
+			float* v[3] = { item->tri[0], item->tri[1], item->tri[2] };
+			float e1[3] = { v[0][0] - v[2][0],v[0][1] - v[2][1],v[0][2] - v[2][2] };
+			float e2[3] = { v[1][0] - v[2][0],v[1][1] - v[2][1],v[1][2] - v[2][2] };
+			CrossProduct(e1, e2, item->nrm);
+			float nrm = 1.0f / sqrtf(
+				item->nrm[0] * item->nrm[0] +
+				item->nrm[1] * item->nrm[1] +
+				item->nrm[2] * item->nrm[2]);
+			item->nrm[0] *= nrm;
+			item->nrm[1] *= nrm;
+			item->nrm[2] *= nrm;
+			item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
+		}
+
+		term->soup_items ++;
+	}
+
+	static void MeshCollect(Mesh* m, double tm[16], void* cookie)
+	{
+		TERM_LIST* term = (TERM_LIST*)cookie;
+
+		int faces = GetMeshFaces(m);
+		if (term->soup_alloc < term->soup_items + faces)
+		{
+			term->soup_alloc = 1414 * term->soup_alloc / 1000 + faces;
+			term->soup = (SoupItem*)realloc(term->soup, sizeof(SoupItem) * term->soup_alloc);
+		}
+
+		term->collect_tm = tm;
+
+		QueryMesh(m, FaceCollect, cookie);
+	}
+	
+	static void PatchCollect(Patch* p, int x, int y, int view_flags, void* cookie)
+	{
+		TERM_LIST* term = (TERM_LIST*)cookie;
+
+		int faces = 2 * HEIGHT_CELLS*HEIGHT_CELLS;
+
+		if (term->soup_alloc < term->soup_items + faces)
+		{
+			term->soup_alloc = 1414 * term->soup_alloc / 1000 + faces;
+			term->soup = (SoupItem*)realloc(term->soup, sizeof(SoupItem) * term->soup_alloc);
+		}
+
+		SoupItem* item = term->soup + term->soup_items;
+		uint16_t diag = GetTerrainDiag(p);
+		uint16_t* hmap = GetTerrainHeightMap(p);
+
+		static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
+		bool hit = false;
+
+		int rot = GetTerrainDiag(p);
+
+		for (int hy = 0; hy < HEIGHT_CELLS; hy++)
+		{
+			for (int hx = 0; hx < HEIGHT_CELLS; hx++)
+			{
+				float x0 = (x + hx * sxy) * term->collect_mul_xy, x1 = x0 + sxy * term->collect_mul_xy;
+				float y0 = (y + hy * sxy) * term->collect_mul_xy, y1 = y0 + sxy * term->collect_mul_xy;
+
+				float v[4][3] =
+				{
+					{x0,y0,(float)hmap[hy*(HEIGHT_CELLS+1) + hx] * term->collect_mul_z},
+					{x1,y0,(float)hmap[hy*(HEIGHT_CELLS + 1) + hx + 1] * term->collect_mul_z},
+					{x0,y1,(float)hmap[(hy + 1)*(HEIGHT_CELLS + 1) + hx] * term->collect_mul_z},
+					{x1,y1,(float)hmap[(hy + 1)*(HEIGHT_CELLS + 1) + hx + 1] * term->collect_mul_z},
+				};
+
+				if (rot & 1)
+				{
+					// v[2], v[0], v[1]
+					{
+						item->tri[0][0] = v[2][0];
+						item->tri[0][1] = v[2][1];
+						item->tri[0][2] = v[2][2];
+
+						item->tri[1][0] = v[0][0];
+						item->tri[1][1] = v[0][1];
+						item->tri[1][2] = v[0][2];
+
+						item->tri[2][0] = v[1][0];
+						item->tri[2][1] = v[1][1];
+						item->tri[2][2] = v[1][2];
+
+						float e1[3] = { v[0][0] - v[2][0],v[0][1] - v[2][1],v[0][2] - v[2][2] };
+						float e2[3] = { v[1][0] - v[2][0],v[1][1] - v[2][1],v[1][2] - v[2][2] };
+						CrossProduct(e1, e2, item->nrm);
+						float nrm = 1.0f / sqrtf(
+							item->nrm[0] * item->nrm[0] + 
+							item->nrm[1] * item->nrm[1] + 
+							item->nrm[2] * item->nrm[2]);
+						item->nrm[0] *= nrm;
+						item->nrm[1] *= nrm;
+						item->nrm[2] *= nrm;
+						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
+
+						item++;
+					}
+
+					// v[2], v[1], v[3]
+					{
+						item->tri[0][0] = v[2][0];
+						item->tri[0][1] = v[2][1];
+						item->tri[0][2] = v[2][2];
+
+						item->tri[1][0] = v[1][0];
+						item->tri[1][1] = v[1][1];
+						item->tri[1][2] = v[1][2];
+
+						item->tri[2][0] = v[3][0];
+						item->tri[2][1] = v[3][1];
+						item->tri[2][2] = v[3][2];
+
+						float e1[3] = { v[1][0] - v[2][0],v[1][1] - v[2][1],v[1][2] - v[2][2] };
+						float e2[3] = { v[3][0] - v[2][0],v[3][1] - v[2][1],v[3][2] - v[2][2] };
+						CrossProduct(e1, e2, item->nrm);
+						float nrm = 1.0f / sqrtf(
+							item->nrm[0] * item->nrm[0] +
+							item->nrm[1] * item->nrm[1] +
+							item->nrm[2] * item->nrm[2]);
+						item->nrm[0] *= nrm;
+						item->nrm[1] *= nrm;
+						item->nrm[2] *= nrm;
+						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
+
+						item++;
+					}
+				}
+				else
+				{
+					// v[0], v[3], v[2]
+					{
+						item->tri[0][0] = v[0][0];
+						item->tri[0][1] = v[0][1];
+						item->tri[0][2] = v[0][2];
+
+						item->tri[1][0] = v[3][0];
+						item->tri[1][1] = v[3][1];
+						item->tri[1][2] = v[3][2];
+
+						item->tri[2][0] = v[2][0];
+						item->tri[2][1] = v[2][1];
+						item->tri[2][2] = v[2][2];
+
+						float e1[3] = { v[3][0] - v[0][0],v[3][1] - v[0][1],v[3][2] - v[0][2] };
+						float e2[3] = { v[2][0] - v[0][0],v[2][1] - v[0][1],v[2][2] - v[0][2] };
+						CrossProduct(e1, e2, item->nrm);
+						float nrm = 1.0f / sqrtf(
+							item->nrm[0] * item->nrm[0] +
+							item->nrm[1] * item->nrm[1] +
+							item->nrm[2] * item->nrm[2]);
+						item->nrm[0] *= nrm;
+						item->nrm[1] *= nrm;
+						item->nrm[2] *= nrm;
+						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
+
+						item++;
+					}
+
+					// v[0], v[1], v[3]
+					{
+						item->tri[0][0] = v[0][0];
+						item->tri[0][1] = v[0][1];
+						item->tri[0][2] = v[0][2];
+
+						item->tri[1][0] = v[1][0];
+						item->tri[1][1] = v[1][1];
+						item->tri[1][2] = v[1][2];
+
+						item->tri[2][0] = v[3][0];
+						item->tri[2][1] = v[3][1];
+						item->tri[2][2] = v[3][2];
+
+						float e1[3] = { v[1][0] - v[0][0],v[1][1] - v[0][1],v[1][2] - v[0][2] };
+						float e2[3] = { v[3][0] - v[0][0],v[3][1] - v[0][1],v[3][2] - v[0][2] };
+						CrossProduct(e1, e2, item->nrm);
+						float nrm = 1.0f / sqrtf(
+							item->nrm[0] * item->nrm[0] +
+							item->nrm[1] * item->nrm[1] +
+							item->nrm[2] * item->nrm[2]);
+						item->nrm[0] *= nrm;
+						item->nrm[1] *= nrm;
+						item->nrm[2] *= nrm;
+						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
+
+						item++;
+					}
+				}
+
+				rot >>= 1;
+			}
+		}
+		term->soup_items += faces;
+	}
+
+	/*
 	static void FaceCollision(float coords[9], uint8_t* colors, uint32_t visual, void* cookie)
 	{
 		TERM_LIST* term = (TERM_LIST*)cookie;
@@ -63,7 +528,8 @@ struct TERM_LIST
 		double world_radius = radius_cells / patch_cells * world_patch;
 
 		double height_cells = 8.0;
-		double world_height = height_cells * 2 / 3 /*1/(zoom*sin30)*/ / cos(30 * M_PI / 180) * HEIGHT_SCALE;
+		// 2/3 == 1/(zoom*sin30)
+		double world_height = height_cells * 2/3  / cos(30 * M_PI / 180) * HEIGHT_SCALE;
 
 		float v0[] = { coords[0],coords[1],coords[2],1 };
 		float v1[] = { coords[3],coords[4],coords[5],1 };
@@ -113,6 +579,7 @@ struct TERM_LIST
 			term->col_tm[i] = (float)(tm[i]);
 		QueryMesh(m, FaceCollision, cookie);
 	}
+	*/
 };
 
 // HACK: get it from editor
@@ -136,8 +603,17 @@ void term_animate(TERM_LIST* term)
 	term->stamp = stamp;
 	float dt = elaps * (60.0f / 1000000.0f);
 
-	// in fact we should do it in discrete frames 
-	// so split dt into 1/60 frames and loop with constant dt=1/60:
+	dt = 1;
+
+	static const float radius_cells = 2; // in full x-cells
+	static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
+	static const float world_patch = VISUAL_CELLS; // patch size in world coords
+	static const float world_radius = radius_cells / patch_cells * world_patch;
+
+	static const float height_cells = 7.5;
+
+	// 2/3 = 1/(zoom*sin30)
+	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
 
 	// YAW
 	{
@@ -160,7 +636,7 @@ void term_animate(TERM_LIST* term)
 
 		term->yaw += dt * 0.5f * term->yaw_vel;
 
-		float vel_damp = pow(0.9, dt);
+		float vel_damp = powf(0.9f, dt);
 		term->yaw_vel *= vel_damp;
 		term->yaw_vel *= vel_damp;
 	}
@@ -187,8 +663,8 @@ void term_animate(TERM_LIST* term)
 		if (dir[dy + 1][dx + 1] >= 0)
 			term->player_dir = dir[dy + 1][dx + 1] + term->yaw;
 
-		term->vel[0] += dt * (dx * cos(term->yaw * (M_PI / 180)) - dy * sin(term->yaw * (M_PI / 180)));
-		term->vel[1] += dt * (dx * sin(term->yaw * (M_PI / 180)) + dy * cos(term->yaw * (M_PI / 180)));
+		term->vel[0] += (float)(dt * (dx * cos(term->yaw * (M_PI / 180)) - dy * sin(term->yaw * (M_PI / 180))));
+		term->vel[1] += (float)(dt * (dx * sin(term->yaw * (M_PI / 180)) + dy * cos(term->yaw * (M_PI / 180))));
 
 		float sqr_vel_xy = term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1];
 		if (sqr_vel_xy < 1 && !dx && !dy)
@@ -212,29 +688,30 @@ void term_animate(TERM_LIST* term)
 
 			term->player_stp = (~(1 << 31))&(term->player_stp + (int)(1 * sqrt(sqr_vel_xy)));
 
-			float vel_damp = pow(0.9, dt);
+			float vel_damp = powf(0.9f, dt);
 			term->vel[0] *= vel_damp;
 			term->vel[1] *= vel_damp;
 		}
 
-		term->vel[2] -= dt * 0.5;
+		if (term->pos[2] > term->water - 0.75*world_height)
+			term->vel[2] -= dt * 0.5f; // newton
+		else
+		if (term->vel[2] < 1)
+		{
+			if (term->vel[2] < -1)
+				term->vel[2] = -1; // capped by viscosity
+			term->vel[2] += dt * 0.1f; // archimedes
+		}
+		else
+			term->vel[2] = 1; // capped by viscosity
+
 	}
 
 	// POS - troubles!
 	{
 		////////////////////
-		double radius_cells = 2; // in full x-cells
-		double patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
-		double world_patch = VISUAL_CELLS; // patch size in world coords
-		double world_radius = radius_cells / patch_cells * world_patch;
-
-		double height_cells = 8.0;
-
-		// 2/3 = 1/(zoom*sin30)
-		double world_height = height_cells * 2/3  / cos(30 * M_PI / 180) * HEIGHT_SCALE;
-
-		double dx = dt * term->vel[0];
-		double dy = dt * term->vel[1];
+		float dx = dt * term->vel[0];
+		float dy = dt * term->vel[1];
 
 		double cx = term->pos[0] + dx * 0.5;
 		double cy = term->pos[1] + dy * 0.5;
@@ -254,6 +731,9 @@ void term_animate(TERM_LIST* term)
 		};
 
 		// create triangle soup of (SoupItem):
+		term->soup_items = 0;
+		term->collect_mul_xy = 1.0 / world_radius;
+		term->collect_mul_z = 2.0 / world_height;
 		QueryWorld(world, 4, clip_world, TERM_LIST::MeshCollect, term);
 		QueryTerrain(terrain, 4, clip_world, 0xAA, TERM_LIST::PatchCollect, term);
 
@@ -264,20 +744,35 @@ void term_animate(TERM_LIST* term)
 		//   px,py, dx,dy, and all verts x,y coords by 1.0/horizontal_radius
 		//   pz, dz and all verts z coords by 1.0/(HEIGHT_SCALE*vertical_radius)
 
-		float sphere_pos[3]; // set current sphere center
-		float sphere_vel[3]; // set velocity (must include gravity impact)
+		float sphere_pos[3] =  // set current sphere center
+		{
+			term->pos[0] * term->collect_mul_xy,
+			term->pos[1] * term->collect_mul_xy,
+			(term->pos[2] + world_height*0.5) * term->collect_mul_z,
+		};
+
+		float sphere_vel[3] = 
+		{
+			0.1 * term->vel[0] * dt * term->collect_mul_xy,
+			0.1 * term->vel[1] * dt * term->collect_mul_xy,
+			term->vel[2] * dt * term->collect_mul_z,
+		}; // set velocity (must include gravity impact)
 			
 		const float xy_thresh = 0.002f;
 		const float z_thresh = 0.001f;
 
+		int items = term->soup_items;
+		int iters_left = 10;
 		while (abs(sphere_vel[0])>xy_thresh || abs(sphere_vel[1]) > xy_thresh || abs(sphere_vel[2]) > z_thresh)
 		{
 			SoupItem* collision_item = 0;
 			float collision_time = 2.0f; // (greater than current velocity range)
 			float collision_pos[3];
 
-			for (SoupItem* item = soup; item!=last; item++)
+			for (int i=0; i<items; i++)
 			{
+				SoupItem* item = term->soup + i;
+
 				float contact_pos[3];
 				float time = item->CheckCollision(sphere_pos, sphere_vel, contact_pos); // must return >=2 if no collision occurs
 
@@ -285,25 +780,53 @@ void term_animate(TERM_LIST* term)
 				{
 					collision_item = item;
 					collision_time = time;
-					collision_pos = contact_pos;
+					collision_pos[0] = contact_pos[0];
+					collision_pos[1] = contact_pos[1];
+					collision_pos[2] = contact_pos[2];
 				}
 			}
 
 			if (!collision_item)
 			{
-				sphere_pos += sphere_vel;
+				sphere_pos[0] += sphere_vel[0];
+				sphere_pos[1] += sphere_vel[1];
+				sphere_pos[2] += sphere_vel[2];
 				break;
 			}
 
-			collision_time -= 0.001; // fix to prevent intersections with current sliding triangle plane
+			// collision_time = max(0, collision_time - 0.001f); // fix to prevent intersections with current sliding triangle plane
+			collision_time -= 0.001f;
 					
-			sphere_pos += sphere_vel * collision_time;
-			sphere_vel *= 1.0 - collision_time;
+			sphere_pos[0] += sphere_vel[0] * collision_time;
+			sphere_pos[1] += sphere_vel[1] * collision_time;
+			sphere_pos[2] += sphere_vel[2] * collision_time;
 
-			float slide_normal[3];
-			slide_normal = sphere_pos - collision_pos;
+			float remain = 1.0f - collision_time;
+			sphere_vel[0] *= remain;
+			sphere_vel[1] *= remain;
+			sphere_vel[2] *= remain;
 
-			sphere_vel -= slide_normal * Dot(sphere_vel, slide_normal);
+			float slide_normal[3] =
+			{
+				sphere_pos[0] - collision_pos[0],
+				sphere_pos[1] - collision_pos[1],
+				sphere_pos[2] - collision_pos[2]
+			};
+
+			// move bit away from plane
+			/*
+			sphere_pos[0] += slide_normal[0] * 0.001;
+			sphere_pos[1] += slide_normal[1] * 0.001;
+			sphere_pos[2] += slide_normal[2] * 0.001;
+			*/
+
+			float project = DotProduct(sphere_vel, slide_normal);
+			sphere_vel[0] -= slide_normal[0] * project;
+			sphere_vel[1] -= slide_normal[1] * project;
+			sphere_vel[2] -= slide_normal[2] * project;
+
+			if (!--iters_left)
+				break;
 		}
 
 		// convert back to world coords
@@ -312,9 +835,45 @@ void term_animate(TERM_LIST* term)
 		//   and pz by (HEIGHT_SCALE*vertical_radius)
 
 		// we are done, update 
-		term->pos[0] = sphere_pos[0];
-		term->pos[1] = sphere_pos[1];
-		term->pos[2] = sphere_pos[2] - world_height*0.5; // offset by ellipsolid's center
+
+		float pos[3] =
+		{
+			sphere_pos[0] / term->collect_mul_xy,
+			sphere_pos[1] / term->collect_mul_xy,
+			sphere_pos[2] / term->collect_mul_z - world_height * 0.5f
+		};
+
+		float vel[3] =
+		{
+			(pos[0] - term->pos[0]) / dt,
+			(pos[1] - term->pos[1]) / dt,
+			(pos[2] - term->pos[2]) / (dt*HEIGHT_SCALE)
+		};
+
+		term->vel[2] /= HEIGHT_SCALE;
+		float vn = 1.0f / sqrtf(term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1] + term->vel[2] * term->vel[2]);
+
+		// leave direction only
+		term->vel[0] *= vn;
+		term->vel[1] *= vn;
+		term->vel[2] *= vn;
+
+		// project
+		vn = DotProduct(term->vel, vel);
+
+		// apply magnitude from poisition offs
+		term->vel[0] *= vn * 10;
+		term->vel[1] *= vn * 10;
+		term->vel[2] *= vn * HEIGHT_SCALE;
+
+		if (fabsf(term->pos[0] - pos[0]) > 0.1 ||
+			fabsf(term->pos[1] - pos[1]) > 0.1 ||
+			fabsf(term->pos[2] - pos[2]) > 0.1)
+		{
+			term->pos[0] = pos[0];
+			term->pos[1] = pos[1];
+			term->pos[2] = pos[2];
+		}
 	}
 
 	// OLD POS
@@ -402,7 +961,6 @@ void term_animate(TERM_LIST* term)
 
 void term_render(A3D_WND* wnd)
 {
-
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
 	// FPS DUMPER
@@ -421,6 +979,7 @@ void term_render(A3D_WND* wnd)
 		}
 	}
 
+	term->water = probe_z; // hack
 	term_animate(term);
 
 	glClearColor(0,0,0,0);
@@ -542,15 +1101,45 @@ void term_resize(A3D_WND* wnd, int w, int h)
 
 void term_init(A3D_WND* wnd)
 {
+	/*
+	SoupItem it;
+	it.tri[0][0] = 0;
+	it.tri[0][1] = 10;
+	it.tri[0][2] = 0;
+
+	it.tri[1][0] = 0;
+	it.tri[1][1] = 0;
+	it.tri[1][2] = 10;
+
+	it.tri[2][0] = 10;
+	it.tri[2][1] = 0;
+	it.tri[2][2] = 0;
+
+	it.nrm[0] = 1 / sqrtf(3);
+	it.nrm[1] = 1 / sqrtf(3);
+	it.nrm[2] = 1 / sqrtf(3);
+	it.nrm[3] = -10 / sqrtf(3);
+
+	float pos[3] = { .5,.5,10 };
+	float vel[3] = { 0,0,-10 };
+	float col[3];
+	it.CheckCollision(pos, vel, col);
+	*/
+
+
 	TERM_LIST* term = (TERM_LIST*)malloc(sizeof(TERM_LIST));
 	term->wnd = wnd;
 
 	term->stamp = a3dGetTime();
 
+	term->soup = 0;
+	term->soup_alloc = 0;
+	term->soup_items = 0;
+
 	term->yaw = rot_yaw;
 	term->yaw_vel = 0;
 
-	term->water = probe_z;
+	term->water = (float)probe_z;
 	term->pos[0] = pos_x;
 	term->pos[1] = pos_y;
 	term->pos[2] = pos_z;
@@ -568,7 +1157,7 @@ void term_init(A3D_WND* wnd)
 		Patch* patch = HitTerrain(terrain, p, v, r, n);
 
 		if (patch)
-			term->pos[2] = r[2] + 200; // assuming no mesh stands above terrain by more than 200 units
+			term->pos[2] = (float)r[2] + 200; // assuming no mesh stands above terrain by more than 200 units
 	}
 
 	//term->player_slope = 0.1;
@@ -734,6 +1323,9 @@ void term_close(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
+	if (term->soup)
+		free(term->soup);
+
 	glDeleteTextures(1, &term->tex);
 	glDeleteVertexArrays(1, &term->vao);
 	glDeleteBuffers(1, &term->vbo);
@@ -786,11 +1378,13 @@ void TermOpen(A3D_WND* share, float yaw, float pos[3])
 
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
+	/*
 	term->yaw = yaw;
 	term->pos[0] = pos[0];
 	term->pos[1] = pos[1];
 	term->pos[2] = pos[2];
 	term->water = 0;
+	*/
 }
 
 void TermCloseAll()

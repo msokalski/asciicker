@@ -1323,15 +1323,16 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		r.add[1] = (double)y;
 	}
 
-	int planes = 4;
+	int planes = 4; // 5
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
-	double clip_world[4][4];
+	double clip_world[5][4];
 
 	double clip_left[4] =   { 1, 0, 0, 1 };
 	double clip_right[4] =  {-1, 0, 0, 1 };
 	double clip_bottom[4] = { 0, 1, 0, 1 };
 	double clip_top[4] =    { 0,-1, 0, 1 };
+	double clip_water[4] =  { 0, 0, 1, 1 - r.water };
 
 	// easier to use another transform for clipping
 	{
@@ -1358,6 +1359,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		TransposeProduct(clip_tm, clip_right, clip_world[1]);
 		TransposeProduct(clip_tm, clip_bottom, clip_world[2]);
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
+		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
 
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
@@ -1453,6 +1455,10 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		r.add[1] = (double)y;
 	}
 
+
+	clip_water[2] = -1; // was +1
+	clip_water[3] = 1 + r.water; // was 1 - r.water
+
 	{
 		// somehow it works
 		double clip_tm[16];
@@ -1477,6 +1483,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		TransposeProduct(clip_tm, clip_right, clip_world[1]);
 		TransposeProduct(clip_tm, clip_bottom, clip_world[2]);
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
+		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
 
 	global_refl_mode = true;
