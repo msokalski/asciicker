@@ -198,7 +198,8 @@ enum KeyInfo
 	A3D_OEM_BACKSLASH,  //  '\|' for US
 	A3D_OEM_QUOTATION,  //  ''"' for US
 
-	A3D_MAPEND
+	A3D_MAPEND,
+	A3D_AUTO_REPEAT = 256
 };
 
 struct PlatformInterface

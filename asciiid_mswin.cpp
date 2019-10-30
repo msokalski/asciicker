@@ -637,18 +637,40 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 
 				if ((l >> 24) & 1) // enh
 				{
-					if (ki == A3D_LSHIFT)
-						ki = A3D_RSHIFT;
-					else
-					if (ki == A3D_LCTRL)
-						ki = A3D_RCTRL;
-					else
-					if (ki == A3D_LALT)
-						ki = A3D_RALT;
-					else
-					if (ki == A3D_ENTER)
-						ki = A3D_NUMPAD_ENTER;
+					switch (ki)
+					{
+					case A3D_LSHIFT:   ki = A3D_RSHIFT;			break;
+					case A3D_LCTRL:    ki = A3D_RCTRL;			break;
+					case A3D_LALT:     ki = A3D_RALT;			break;
+					case A3D_ENTER:    ki = A3D_NUMPAD_ENTER;	break;
+					}
 				}
+				else
+				{
+					KeyInfo ki_numlock = ki;
+					switch (ki)
+					{
+					case A3D_INSERT:   ki_numlock = A3D_NUMPAD_0;		break;
+					case A3D_DELETE:   ki_numlock = A3D_NUMPAD_DECIMAL; break;
+					case A3D_END:      ki_numlock = A3D_NUMPAD_1;		break;
+					case A3D_DOWN:     ki_numlock = A3D_NUMPAD_2;		break;
+					case A3D_PAGEDOWN: ki_numlock = A3D_NUMPAD_3;		break;
+					case A3D_LEFT:     ki_numlock = A3D_NUMPAD_4;		break;
+					case A3D_RIGHT:    ki_numlock = A3D_NUMPAD_6;		break;
+					case A3D_HOME:     ki_numlock = A3D_NUMPAD_7;		break;
+					case A3D_UP:       ki_numlock = A3D_NUMPAD_8;		break;
+					case A3D_PAGEUP:   ki_numlock = A3D_NUMPAD_9;		break;
+					}
+
+					if (ki != ki_numlock)
+					{
+						if (!(GetKeyState(VK_NUMLOCK) & 1))
+							ki = ki_numlock;
+					}
+				}
+
+				if (m == WM_KEYDOWN && (l & (1 << 30)))
+					ki = (KeyInfo)((int)ki | A3D_AUTO_REPEAT);
 
 				wnd->platform_api.keyb_key(wnd, ki, m == WM_KEYDOWN || m == WM_SYSKEYDOWN);
 
@@ -978,7 +1000,7 @@ void a3dLoop() // infinite untill all windows are destroyed
 		A3D_WND* wnd = wnd_head;
 		while (wnd)
 		{
-			if (wnd->platform_api.render)
+			if (wnd->platform_api.render && (GetWindowLong(wnd->hwnd,GWL_STYLE)&WS_VISIBLE))
 			{
 				wglMakeCurrent(wnd->dc, wnd->rc);
 				wnd->platform_api.render(wnd);

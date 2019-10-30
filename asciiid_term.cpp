@@ -603,7 +603,9 @@ void term_animate(TERM_LIST* term)
 	term->stamp = stamp;
 	float dt = elaps * (60.0f / 1000000.0f);
 
-	dt = 1;
+	// dt = 1;
+
+	float xy_speed = 0.13;
 
 	static const float radius_cells = 2; // in full x-cells
 	static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
@@ -675,10 +677,17 @@ void term_animate(TERM_LIST* term)
 		}
 		else
 		{
-			if (sqr_vel_xy > 27)
+			// speed limit is 27 for air / ground and 10 for full in water
+			float xy_limit = 27 - 17*(term->water - term->pos[2]) / world_height;
+			if (xy_limit > 27)
+				xy_limit = 27;
+			if (xy_limit < 10)
+				xy_limit = 10;
+
+			if (sqr_vel_xy > xy_limit)
 			{
-				float n = sqrt(27 / sqr_vel_xy);
-				sqr_vel_xy = 27;
+				float n = sqrt(xy_limit / sqr_vel_xy);
+				sqr_vel_xy = xy_limit;
 				term->vel[0] *= n;
 				term->vel[1] *= n;
 			}
@@ -693,6 +702,31 @@ void term_animate(TERM_LIST* term)
 			term->vel[1] *= vel_damp;
 		}
 
+
+		// newton vs archimedes 
+		float cnt = 0.6;
+		float acc = (term->water - (term->pos[2] + cnt*world_height)) / (2*cnt*world_height);
+		if (acc < 0-cnt)
+			acc = 0-cnt;
+		if (acc > 1-cnt)
+			acc = 1-cnt;
+
+		term->vel[2] += dt * acc;
+
+//		if (term->vel[2] < -1)
+//			term->vel[2] = -1;
+
+		// water resistance
+		float res = (term->water - term->pos[2]) / world_height;
+		if (res < 0)
+			res = 0;
+		if (res > 1)
+			res = 1;
+
+		res = powf(1.0 - 0.1 * res, dt);
+		term->vel[2] *= res;
+
+		/*
 		if (term->pos[2] > term->water - 0.75*world_height)
 			term->vel[2] -= dt * 0.5f; // newton
 		else
@@ -704,10 +738,11 @@ void term_animate(TERM_LIST* term)
 		}
 		else
 			term->vel[2] = 1; // capped by viscosity
-
+		*/
 	}
 
 	// POS - troubles!
+	float contact_normal_z = 0;
 	{
 		////////////////////
 		float dx = dt * term->vel[0];
@@ -753,8 +788,8 @@ void term_animate(TERM_LIST* term)
 
 		float sphere_vel[3] = 
 		{
-			0.1 * term->vel[0] * dt * term->collect_mul_xy,
-			0.1 * term->vel[1] * dt * term->collect_mul_xy,
+			xy_speed * term->vel[0] * dt * term->collect_mul_xy,
+			xy_speed * term->vel[1] * dt * term->collect_mul_xy,
 			term->vel[2] * dt * term->collect_mul_z,
 		}; // set velocity (must include gravity impact)
 			
@@ -825,6 +860,8 @@ void term_animate(TERM_LIST* term)
 			sphere_vel[1] -= slide_normal[1] * project;
 			sphere_vel[2] -= slide_normal[2] * project;
 
+			contact_normal_z = max(contact_normal_z, slide_normal[2]);
+
 			if (!--iters_left)
 				break;
 		}
@@ -850,31 +887,56 @@ void term_animate(TERM_LIST* term)
 			(pos[2] - term->pos[2]) / (dt*HEIGHT_SCALE)
 		};
 
+		term->vel[0] *= xy_speed;
+		term->vel[1] *= xy_speed;
 		term->vel[2] /= HEIGHT_SCALE;
-		float vn = 1.0f / sqrtf(term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1] + term->vel[2] * term->vel[2]);
+		float vn = sqrtf(term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1] + term->vel[2] * term->vel[2]);
 
-		// leave direction only
-		term->vel[0] *= vn;
-		term->vel[1] *= vn;
-		term->vel[2] *= vn;
+		if (vn > 0.001)
+		{
+			vn = 1.0 / vn;
+			// leave direction only
+			term->vel[0] *= vn;
+			term->vel[1] *= vn;
+			term->vel[2] *= vn;
 
-		// project
-		vn = DotProduct(term->vel, vel);
+			// project
+			vn = DotProduct(term->vel, vel);
 
-		// apply magnitude from poisition offs
-		term->vel[0] *= vn * 10;
-		term->vel[1] *= vn * 10;
-		term->vel[2] *= vn * HEIGHT_SCALE;
+			// apply magnitude from poisition offs
+			term->vel[0] *= vn / xy_speed;
+			term->vel[1] *= vn / xy_speed;
+			term->vel[2] *= vn * HEIGHT_SCALE;
+		}
+		else
+		{
+			term->vel[0] = 0;
+			term->vel[1] = 0;
+			term->vel[2] = 0;
+		}
 
+		/*
 		if (fabsf(term->pos[0] - pos[0]) > 0.1 ||
 			fabsf(term->pos[1] - pos[1]) > 0.1 ||
 			fabsf(term->pos[2] - pos[2]) > 0.1)
+		*/
 		{
 			term->pos[0] = pos[0];
 			term->pos[1] = pos[1];
 			term->pos[2] = pos[2];
 		}
 	}
+
+	// jump
+	if (contact_normal_z > 0.2)
+	{
+		if (term->IsKeyDown(A3D_SPACE))
+		{
+			term->vel[2] = 10;
+			term->keys[A3D_SPACE >> 3] &= ~(1 << (A3D_SPACE & 7));
+		}
+	} 
+
 
 	// OLD POS
 	// after updating x,y,z by time and keyb bits
@@ -1306,6 +1368,9 @@ void term_keyb_char(A3D_WND* wnd, wchar_t chr)
 void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+
+	if (ki&A3D_AUTO_REPEAT)
+		return;
 
 	if (down)
 		term->keys[ki >> 3] |= 1 << (ki & 0x7);

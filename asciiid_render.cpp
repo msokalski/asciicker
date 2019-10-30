@@ -144,6 +144,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 
 					// outside
 					if (bc[0] < 0 || bc[1] < 0 || bc[2] < 0)
+					//if ((bc[0] | bc[1] | bc[2]) < 0)
 						continue;
 
 					/*
@@ -177,6 +178,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 					};
 
 					float z = nbc[0] * v[0][2] + nbc[1] * v[1][2] + nbc[2] * v[2][2];
+					//float z = (bc[0] * v[0][2] + bc[1] * v[1][2] + bc[2] * v[2][2]) * normalizer;
 
 					s->Blend(row,z,nbc);
 					/*
@@ -657,12 +659,14 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 						int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
 						int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
 
+						/*
 						if (u >= VISUAL_CELLS || v >= VISUAL_CELLS)
 						{
 							// detect overflow
 							s->visual = 2;
 						}
 						else
+						*/
 						{
 							s->visual = map[v * VISUAL_CELLS + u];
 							s->diffuse = diffuse;
@@ -683,12 +687,14 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 						int u = (int)floor(uv[0] * bc[0] + uv[2] * bc[1] + uv[4] * bc[2]);
 						int v = (int)floor(uv[1] * bc[0] + uv[3] * bc[1] + uv[5] * bc[2]);
 
+						/*
 						if (u >= VISUAL_CELLS || v >= VISUAL_CELLS)
 						{
 							// detect overflow
 							s->visual = 2;
 						}
 						else
+						*/
 						{
 							s->visual = map[v * VISUAL_CELLS + u];
 							s->diffuse = diffuse;
@@ -1212,7 +1218,15 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 		r.sample_buffer.w = dw;
 		r.sample_buffer.h = dh;
-		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample));
+		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample) * 2); // upper half is clear cache
+
+		for (int cl = dw * dh; cl < 2*dw*dh; cl++)
+		{
+			r.sample_buffer.ptr[cl].height = -1000000;
+			r.sample_buffer.ptr[cl].spare = 0x8;
+			r.sample_buffer.ptr[cl].diffuse = 0xFF;
+			r.sample_buffer.ptr[cl].visual = 0xC | (0xC << 5) | (0x1B << 10);
+		}
 	}
 	else
 	if (r.sample_buffer.w != dw || r.sample_buffer.h != dh)
@@ -1221,7 +1235,15 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		r.sample_buffer.w = dw;
 		r.sample_buffer.h = dh;
 		free(r.sample_buffer.ptr);
-		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample));
+		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample) * 2); // upper half is clear cache
+
+		for (int cl = dw * dh; cl < 2 * dw*dh; cl++)
+		{
+			r.sample_buffer.ptr[cl].height = -1000000;
+			r.sample_buffer.ptr[cl].spare = 0x8;
+			r.sample_buffer.ptr[cl].diffuse = 0xFF;
+			r.sample_buffer.ptr[cl].visual = 0xC | (0xC << 5) | (0x1B << 10);
+		}
 	}
 	else
 	{
@@ -1248,13 +1270,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	r.light[3] = lt[3];
 
 	// memset(r.sample_buffer.ptr, 0x00, dw*dh * sizeof(Sample));
-	for (int cl = 0; cl < dw*dh; cl++)
-	{
-		r.sample_buffer.ptr[cl].height = -1000000;
-		r.sample_buffer.ptr[cl].spare = 0x8;
-		r.sample_buffer.ptr[cl].diffuse = 0xFF;
-		r.sample_buffer.ptr[cl].visual = 0x0C | (0x0C<<5) | (0x1B<<10);
-	}
+	memcpy(r.sample_buffer.ptr, r.sample_buffer.ptr + dw * dh, dw*dh * sizeof(Sample));
 
 	static const double sin30 = sin(M_PI*30.0/180.0); 
 	static const double cos30 = cos(M_PI*30.0/180.0);
@@ -1323,7 +1339,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 		r.add[1] = (double)y;
 	}
 
-	int planes = 4; // 5
+	int planes = 5;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
 	double clip_world[5][4];
@@ -1332,7 +1348,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 	double clip_right[4] =  {-1, 0, 0, 1 };
 	double clip_bottom[4] = { 0, 1, 0, 1 };
 	double clip_top[4] =    { 0,-1, 0, 1 };
-	double clip_water[4] =  { 0, 0, 1, 1 - r.water };
+	double clip_water[4] =  { 0, 0, 1, -((r.water-1)*2.0/0xffff - 1.0) };
 
 	// easier to use another transform for clipping
 	{
@@ -1457,7 +1473,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 
 	clip_water[2] = -1; // was +1
-	clip_water[3] = 1 + r.water; // was 1 - r.water
+	clip_water[3] = +((r.water+1)*-2.0 / 0xffff + 1.0); // was -((r.water-1)*2.0/0xffff - 1.0)
 
 	{
 		// somehow it works

@@ -1774,7 +1774,7 @@ struct RenderContext
 		glBindTextureUnit(3, font[active_font].tex);
 		glBindTextureUnit(4, pal_tex);
 
-//		glEnable(GL_CULL_FACE);
+		glEnable(GL_CULL_FACE);
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_GEQUAL);
 		glCullFace(GL_BACK);
@@ -2812,6 +2812,7 @@ void New()
 	terrain = CreateTerrain();
 	world = CreateWorld();
 
+
 	// add meshes from library that aren't present in scene file
 	char mesh_dirname[4096];
 	sprintf(mesh_dirname,"%smeshes",root_path);
@@ -2822,6 +2823,7 @@ void New()
 	active_mesh = GetFirstMesh(world);	
 
 	// init some planar terrain
+	#if 0
 
 	struct Perlin
 	{
@@ -2930,6 +2932,41 @@ void New()
 	pos_x = num1 * VISUAL_CELLS / 2;
 	pos_y = num1 * VISUAL_CELLS / 2;
 	pos_z = 0x0;
+	#endif
+
+	struct MAP
+	{
+		static void cb(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+		{
+			if (f != A3D_RGB8)
+				return;
+			int patches_x = (w-1) / 4;
+			int patches_y = (h-1) / 4;
+
+			uint8_t* rgb = (uint8_t*)data;
+
+			for (int py = 0; py < patches_y; py++)
+			{
+				for (int px = 0; px < patches_x; px++)
+				{
+					Patch* p = AddTerrainPatch(terrain, px, py, 0);
+					uint16_t* map = GetTerrainHeightMap(p);
+					const uint8_t* pix = (const uint8_t*)data + 3*(HEIGHT_CELLS * px + (HEIGHT_CELLS * py)*w);
+					for (int vy = 0; vy <= HEIGHT_CELLS; vy++)
+					{
+						for (int vx = 0; vx <= HEIGHT_CELLS; vx++)
+						{
+							map[vx + vy * (HEIGHT_CELLS + 1)] = 4*pix[3*(vx+vy*w)+2];
+						}
+					}
+					UpdateTerrainHeightMap(p);
+				}
+			}
+
+		};
+	};
+
+	a3dLoadImage("./maps/new.png", 0, MAP::cb);
 }
 
 void TranslateMap(int delta_z, bool water_limit)
@@ -5869,6 +5906,13 @@ void my_init(A3D_WND* wnd)
 	//int rect[] = { 0, 0, 1920,1080 };
 	a3dSetRect(wnd,rect, A3D_WND_NORMAL);
 
+	// do the perf test
+	/*
+	Load("./a3d/fence_test4.a3d");
+	float pos[3] = { pos_x,pos_y,pos_z };
+	TermOpen(wnd, rot_yaw, pos);
+	a3dSetVisible(wnd, false);
+	*/
 }
 
 void my_keyb_char(A3D_WND* wnd, wchar_t chr)
@@ -5932,6 +5976,8 @@ void my_keyb_char(A3D_WND* wnd, wchar_t chr)
 
 void my_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 {
+	ki = (KeyInfo)(ki & ~A3D_AUTO_REPEAT);
+
 	ImGuiIO& io = ImGui::GetIO();
 	if (ki < IM_ARRAYSIZE(io.KeysDown))
 		io.KeysDown[ki] = down;
