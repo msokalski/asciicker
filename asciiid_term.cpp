@@ -246,7 +246,6 @@ struct TERM_LIST
 	float yaw;
 	float yaw_vel;
 
-	//float player_slope; // z-coord of terrain normal
 	float player_dir;
 	int player_stp;
 
@@ -254,6 +253,8 @@ struct TERM_LIST
 	float water;
 
 	float vel[3];
+
+	float slope;
 
 	uint8_t keys[32];
 	bool IsKeyDown(int key)
@@ -283,6 +284,8 @@ struct TERM_LIST
 	double* collect_tm;
 	float collect_mul_xy;
 	float collect_mul_z;
+
+	bool collision_failure;
 
 	static void FaceCollect(float coords[9], uint8_t* colors, uint32_t visual, void* cookie)
 	{
@@ -644,16 +647,16 @@ void term_animate(TERM_LIST* term)
 	}
 
 	// VEL & ACC
+	int ix = 0, iy = 0; 
 	{
-		int dx = 0, dy = 0;
 		if (term->IsKeyDown(A3D_A))
-			dx--;
+			ix--;
 		if (term->IsKeyDown(A3D_D))
-			dx++;
+			ix++;
 		if (term->IsKeyDown(A3D_W))
-			dy++;
+			iy++;
 		if (term->IsKeyDown(A3D_S))
-			dy--;
+			iy--;
 
 		float dir[3][3] =
 		{
@@ -662,14 +665,21 @@ void term_animate(TERM_LIST* term)
 			{225, 180, 135},
 		};
 
-		if (dir[dy + 1][dx + 1] >= 0)
-			term->player_dir = dir[dy + 1][dx + 1] + term->yaw;
+		if (dir[iy + 1][ix + 1] >= 0)
+			term->player_dir = dir[iy + 1][ix + 1] + term->yaw;
 
-		term->vel[0] += (float)(dt * (dx * cos(term->yaw * (M_PI / 180)) - dy * sin(term->yaw * (M_PI / 180))));
-		term->vel[1] += (float)(dt * (dx * sin(term->yaw * (M_PI / 180)) + dy * cos(term->yaw * (M_PI / 180))));
+		if (ix || iy)
+		{
+			float cs = cosf(term->slope);
+			float dn = 1.0 / sqrtf(ix * ix + iy * iy);
+			float dx = ix * dn * cs, dy = iy * dn * cs;
+
+			term->vel[0] += (float)(dt * (dx * cos(term->yaw * (M_PI / 180)) - dy * sin(term->yaw * (M_PI / 180))));
+			term->vel[1] += (float)(dt * (dx * sin(term->yaw * (M_PI / 180)) + dy * cos(term->yaw * (M_PI / 180))));
+		}
 
 		float sqr_vel_xy = term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1];
-		if (sqr_vel_xy < 1 && !dx && !dy)
+		if (sqr_vel_xy < 1 && !ix && !iy)
 		{
 			term->vel[0] = 0;
 			term->vel[1] = 0;
@@ -695,7 +705,8 @@ void term_animate(TERM_LIST* term)
 			if (term->player_stp < 0)
 				term->player_stp = 0;
 
-			term->player_stp = (~(1 << 31))&(term->player_stp + (int)(1 * sqrt(sqr_vel_xy)));
+			// so 8 frame walk anim divides stp / 1024 to get frame num
+			term->player_stp = (~(1 << 31))&(term->player_stp + (int)(64 * sqrt(sqr_vel_xy)));
 
 			float vel_damp = powf(0.9f, dt);
 			term->vel[0] *= vel_damp;
@@ -723,22 +734,12 @@ void term_animate(TERM_LIST* term)
 		if (res > 1)
 			res = 1;
 
-		res = powf(1.0 - 0.1 * res, dt);
-		term->vel[2] *= res;
+		float xy_res = powf(1.0 - 0.5 * res, dt);
+		float z_res = powf(1.0 - 0.1 * res, dt);
 
-		/*
-		if (term->pos[2] > term->water - 0.75*world_height)
-			term->vel[2] -= dt * 0.5f; // newton
-		else
-		if (term->vel[2] < 1)
-		{
-			if (term->vel[2] < -1)
-				term->vel[2] = -1; // capped by viscosity
-			term->vel[2] += dt * 0.1f; // archimedes
-		}
-		else
-			term->vel[2] = 1; // capped by viscosity
-		*/
+		term->vel[0] *= xy_res;
+		term->vel[1] *= xy_res;
+		term->vel[2] *= z_res;
 	}
 
 	// POS - troubles!
@@ -798,6 +799,8 @@ void term_animate(TERM_LIST* term)
 
 		int items = term->soup_items;
 		int iters_left = 10;
+		bool ignore_roof = false;
+		retry_without_roof:
 		while (abs(sphere_vel[0])>xy_thresh || abs(sphere_vel[1]) > xy_thresh || abs(sphere_vel[2]) > z_thresh)
 		{
 			SoupItem* collision_item = 0;
@@ -813,11 +816,14 @@ void term_animate(TERM_LIST* term)
 
 				if (time < collision_time)
 				{
-					collision_item = item;
-					collision_time = time;
-					collision_pos[0] = contact_pos[0];
-					collision_pos[1] = contact_pos[1];
-					collision_pos[2] = contact_pos[2];
+					if (!ignore_roof || contact_pos[2] < sphere_pos[2] + 0.5)
+					{
+						collision_item = item;
+						collision_time = time;
+						collision_pos[0] = contact_pos[0];
+						collision_pos[1] = contact_pos[1];
+						collision_pos[2] = contact_pos[2];
+					}
 				}
 			}
 
@@ -866,6 +872,25 @@ void term_animate(TERM_LIST* term)
 				break;
 		}
 
+		if (iters_left)
+			term->collision_failure = false;
+		else
+		if (!term->collision_failure && !ix && !iy && contact_normal_z>0)
+		{
+			// something's wrong
+			// relax - ignore collisions from top
+			term->collision_failure = true;
+			printf("CRITICAL! move to resolve\n");
+		}
+
+		if (term->collision_failure && !ignore_roof)
+		{
+			ignore_roof = true;
+			goto retry_without_roof;
+		}
+
+		printf("iters_left:%d\n", iters_left);
+
 		// convert back to world coords
 		// just multiply: 
 		//   px,py by horizontal_radius
@@ -880,11 +905,20 @@ void term_animate(TERM_LIST* term)
 			sphere_pos[2] / term->collect_mul_z - world_height * 0.5f
 		};
 
+		/*
+
 		float vel[3] =
 		{
 			(pos[0] - term->pos[0]) / dt,
 			(pos[1] - term->pos[1]) / dt,
 			(pos[2] - term->pos[2]) / (dt*HEIGHT_SCALE)
+		};
+
+		float org_vel[3] =
+		{
+			term->vel[0],
+			term->vel[1],
+			term->vel[2]
 		};
 
 		term->vel[0] *= xy_speed;
@@ -894,6 +928,8 @@ void term_animate(TERM_LIST* term)
 
 		if (vn > 0.001)
 		{
+
+
 			vn = 1.0 / vn;
 			// leave direction only
 			term->vel[0] *= vn;
@@ -907,6 +943,13 @@ void term_animate(TERM_LIST* term)
 			term->vel[0] *= vn / xy_speed;
 			term->vel[1] *= vn / xy_speed;
 			term->vel[2] *= vn * HEIGHT_SCALE;
+
+			printf("iters_left:%d, in: %f,%f out: %f,%f\n", iters_left, org_vel[0], org_vel[1], term->vel[0], term->vel[1]);
+
+			// average org and new
+			term->vel[0] = term->vel[0] * 0.0 + org_vel[0] * 1.0;
+			term->vel[1] = term->vel[1] * 0.0 + org_vel[1] * 1.0;
+			term->vel[2] = term->vel[2] * 0.0 + org_vel[2] * 1.0;
 		}
 		else
 		{
@@ -914,25 +957,54 @@ void term_animate(TERM_LIST* term)
 			term->vel[1] = 0;
 			term->vel[2] = 0;
 		}
-
-		/*
-		if (fabsf(term->pos[0] - pos[0]) > 0.1 ||
-			fabsf(term->pos[1] - pos[1]) > 0.1 ||
-			fabsf(term->pos[2] - pos[2]) > 0.1)
 		*/
+
+		float org_vel[3] =
+		{
+			term->vel[0],
+			term->vel[1],
+			term->vel[2]
+		};
+
+		term->vel[0] = (pos[0] - term->pos[0]) / (xy_speed * dt);
+		term->vel[1] = (pos[1] - term->pos[1]) / (xy_speed * dt);
+		term->vel[2] = (pos[2] - term->pos[2]) / dt;
+
+		float adz = fmaxf(0,term->vel[2]) / HEIGHT_SCALE * 4;
+		float adxy = xy_speed * sqrtf(term->vel[0] * term->vel[0] + term->vel[1] * term->vel[1]);
+		term->slope = atan2(adz, adxy);
+
+		// printf("iters_left:%d, in: %f,%f out: %f,%f\n", iters_left, org_vel[0], org_vel[1], term->vel[0], term->vel[1]);
+
+		// slippery threshold?
+		// use org (no-slippery) use new (full slippery)
+
+		term->vel[0] = 1.0 * term->vel[0] + org_vel[0] * 0.0;
+		term->vel[1] = 1.0 * term->vel[1] + org_vel[1] * 0.0;
+		term->vel[2] = 1.0 * term->vel[2] + org_vel[2] * 0.0;
+
+		// printf("contact_normal_z:%f, vel[0]: %f, vel[1]:%f, vel[2]:%f\n", contact_normal_z,fabsf(term->vel[0]),fabsf(term->vel[1]),fabsf(term->vel[2]));
+
+		if (ix || iy || contact_normal_z <= 0.0 || fabsf(term->vel[0]) > 0.1 || fabsf(term->vel[1]) > 0.1 || fabsf(term->vel[2]) > 0.1*16)
 		{
 			term->pos[0] = pos[0];
 			term->pos[1] = pos[1];
 			term->pos[2] = pos[2];
 		}
+		else
+		{
+			term->vel[0] = 0;
+			term->vel[1] = 0;
+			term->vel[2] = 0;
+		}
 	}
 
 	// jump
-	if (contact_normal_z > 0.2)
+	if (contact_normal_z > 0.0)
 	{
 		if (term->IsKeyDown(A3D_SPACE))
 		{
-			term->vel[2] = 10;
+			term->vel[2]+= 10;
 			term->keys[A3D_SPACE >> 3] &= ~(1 << (A3D_SPACE & 7));
 		}
 	} 
@@ -1194,6 +1266,8 @@ void term_init(A3D_WND* wnd)
 
 	term->stamp = a3dGetTime();
 
+	term->collision_failure = false;
+
 	term->soup = 0;
 	term->soup_alloc = 0;
 	term->soup_items = 0;
@@ -1222,7 +1296,7 @@ void term_init(A3D_WND* wnd)
 			term->pos[2] = (float)r[2] + 200; // assuming no mesh stands above terrain by more than 200 units
 	}
 
-	//term->player_slope = 0.1;
+	term->slope = 0;
 	term->player_dir = 0;
 	term->player_stp = -1;
 

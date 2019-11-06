@@ -97,6 +97,12 @@ inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
 	}
 }
 
+// todo: lets add "int varyings" template arg
+// and add "const float varying[3][varyings]" function param (values at verts)
+// so we can calc here values in lower-left corner and x,y gradients
+// and provide all varyings interpolated into shader->Blend() call
+// we should do it also for 'z' coord
+
 template <typename Sample, typename Shader>
 inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 {
@@ -116,6 +122,11 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 	if ((v[0][3] & v[1][3] & v[2][3]) == 0)
 	{
 		int area = BC_A(v[0],v[1],v[2]);
+
+		// todo:
+		// calc all varyings at 0,0 screen coord
+		// and their dx,dy gradients
+
 		if (area > 0)
 		{
 			assert(area < 0x10000);
@@ -177,8 +188,21 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 						bc[2] * normalizer
 					};
 
+					// todo: calc 'z' as z @ 0,0 + x*dzdx + y*dzdy
+					// ...
+					
+					// todo: separate depth+water test from fill
+					// make test here, if it passes calc all other varyings similarly to 'z'
+					// ...
+
 					float z = nbc[0] * v[0][2] + nbc[1] * v[1][2] + nbc[2] * v[2][2];
 					//float z = (bc[0] * v[0][2] + bc[1] * v[1][2] + bc[2] * v[2][2]) * normalizer;
+
+					// currently we have 3 muls (normalization) and 3 muls, 2 adds per varying
+					// that for {z,r,g,b} results in: 15 muls and 8 adds
+
+					// if we use gradients, we'd have: 2 muls and 2 adds per varying
+					// resulting in: 8 muls and 8 adds
 
 					s->Blend(row,z,nbc);
 					/*
@@ -1934,7 +1958,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 
 
 	int anim = 1;
-	int fr = player_stp/8 % player_sprite->anim[anim].length;
+	int fr = player_stp/1024 % player_sprite->anim[anim].length;
 
 	if (player_stp < 0)
 	{
