@@ -866,7 +866,7 @@ void term_animate(TERM_LIST* term)
 			sphere_vel[1] -= slide_normal[1] * project;
 			sphere_vel[2] -= slide_normal[2] * project;
 
-			contact_normal_z = max(contact_normal_z, slide_normal[2]);
+			contact_normal_z = fmaxf(contact_normal_z, slide_normal[2]);
 
 			if (!--iters_left)
 				break;

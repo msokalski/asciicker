@@ -14,6 +14,7 @@ SRCS :=	asciiid.cpp \
 		asciiid_render.cpp \
 		terrain.cpp \
 		mesh.cpp \
+		sprite.cpp \
 		water.cpp \
 		texheap.cpp \
 		rgba8.cpp \

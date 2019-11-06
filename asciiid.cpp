@@ -2984,12 +2984,12 @@ void TranslateMap(int delta_z, bool water_limit)
 				if (t->delta_z > 0)
 				{
 					for (int i = 0; i < num; i++)
-						map[i] = min(0xFFFF, map[i] + t->delta_z);
+						map[i] = std::min(0xFFFF, map[i] + t->delta_z);
 				}
 				else
 				{
 					for (int i = 0; i < num; i++)
-						map[i] = max(0, map[i] + t->delta_z);
+						map[i] = std::max(0, map[i] + t->delta_z);
 				}
 			}
 			else
@@ -2998,13 +2998,13 @@ void TranslateMap(int delta_z, bool water_limit)
 				{
 					for (int i = 0; i < num; i++)
 						if (map[i] >= t->water)
-							map[i] = min(0xFFFF, map[i] + t->delta_z);
+							map[i] = std::min(0xFFFF, map[i] + t->delta_z);
 				}
 				else
 				{
 					for (int i = 0; i < num; i++)
 						if (map[i] < t->water)
-							map[i] = max(0, map[i] + t->delta_z);
+							map[i] = std::max(0, map[i] + t->delta_z);
 				}
 			}
 
