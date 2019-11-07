@@ -9,7 +9,10 @@
 #include <string.h>
 #include <assert.h>
 
+#ifdef EDITOR
 #include "texheap.h"
+#endif
+
 #include "terrain.h"
 #include "matrix.h"
 

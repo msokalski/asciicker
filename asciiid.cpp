@@ -6295,7 +6295,6 @@ int main(int argc, char *argv[])
 	gd.wnd_mode = A3D_WND_NORMAL;
 	gd.wnd_xywh = 0;
 
-
 	a3dOpen(&pi, &gd, 0);
 	a3dLoop();
 

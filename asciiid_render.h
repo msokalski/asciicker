@@ -36,7 +36,6 @@ struct MatCell
 struct Material
 {
 	MatCell shade[4][16];
-
 };
 
 bool Render(Terrain* t, World* w, float water, 		// scene
