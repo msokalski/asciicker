@@ -1,8 +1,11 @@
 // nvbug.cpp : Defines the entry point for the console application.
 //
 
+#define NOMINMAX // windows fix
+
 #include <wchar.h>
 #include <stdio.h>
+#include <algorithm>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
