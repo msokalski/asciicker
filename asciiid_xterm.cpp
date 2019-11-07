@@ -113,7 +113,14 @@ Sprite* player_sprite = 0;
 
 int main(int argc, char* argv[])
 {
-    int signals[]={SIGTERM,SIGHUP,SIGINT,0};
+    // consider configuring kbd
+    /*
+        gsettings set org.gnome.desktop.peripherals.keyboard repeat-interval 30
+        gsettings set org.gnome.desktop.peripherals.keyboard delay 250    
+    */
+
+
+    int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;
     new_action.sa_handler = exit_handler;
     sigemptyset (&new_action.sa_mask);
@@ -253,5 +260,6 @@ int main(int argc, char* argv[])
     SetScreen(false);
 
     write(STDOUT_FILENO,"see ya\r\n",8);
+    sleep(1);
 	return 0;
 }
