@@ -1,3 +1,5 @@
+#ifdef GAME
+
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -469,3 +471,5 @@ int main(int argc, char* argv[])
     printf("FPS: %f\n", frames * 1000000.0 / (end-begin));
 	return 0;
 }
+
+#endif // GAME
