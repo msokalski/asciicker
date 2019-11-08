@@ -1,12 +1,24 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include <malloc.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <assert.h>
 #include <signal.h>
-#include "asciiid_term.h"
-#include "asciiid_platform.h"
+#include <termios.h>
+#include <time.h>
+
+#include "asciiid_render.h"
+#include "sprite.h"
+#include "matrix.h"
+
+/*
+https://superuser.com/questions/1185824/configure-vga-colors-linux-ubuntu
+https://int10h.org/oldschool-pc-fonts/fontlist/
+https://www.zap.org.au/software/fonts/console-fonts-distributed/psftx-freebsd-11.1/index.html
+ftp://ftp.zap.org.au/pub/fonts/console-fonts-zap/console-fonts-zap-2.2.tar.xz
+*/
 
 template <uint16_t C> static int UTF8(char* buf)
 {
@@ -69,13 +81,141 @@ static int (* const CP437[256])(char*) =
 void SetScreen(bool alt)
 {
     static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l"; // +home, -wrap, -cursor
-    static const char* off_str = "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h"; // +wrap, +cursor
+    static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h"; // +def_fg/bg, +wrap, +cursor
     static int on_len = strlen(on_str);
     static int off_len = strlen(off_str);
+
+    struct termios t;
+    tcgetattr(STDIN_FILENO, &t);
+
 	if (alt)
+    {
+        t.c_lflag &= ~((tcflag_t) ECHO);
 		write(STDOUT_FILENO,on_str,on_len);
+    }
 	else
+    {
+        t.c_lflag |= ECHO;
 		write(STDOUT_FILENO,off_str,off_len);
+    }
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &t);
+}
+
+#define FLUSH() \
+    do \
+    { \
+        write(STDOUT_FILENO,out,out_pos); \
+        out_pos=0; \
+    } while(0)
+
+#define WRITE(...) \
+    do \
+    { \
+        out_pos += sprintf(out+out_pos,__VA_ARGS__); \
+        if (out_pos>=out_size-48) FLUSH(); \
+    } while(0)
+
+
+// it turns out we should use our own palette
+// it's quite different than xterm!!!!!
+const uint8_t pal_rgba[256][3]=
+{
+    {  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},
+    {  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},
+
+    {  0,  0,  0},{  0,  0, 51},{  0,  0,102},{  0,  0,153},{  0,  0,204},{  0,  0,255},
+    {  0, 51,  0},{  0, 51, 51},{  0, 51,102},{  0, 51,153},{  0, 51,204},{  0, 51,255},
+    {  0,102,  0},{  0,102, 51},{  0,102,102},{  0,102,153},{  0,102,204},{  0,102,255},
+    {  0,153,  0},{  0,153, 51},{  0,153,102},{  0,153,153},{  0,153,204},{  0,153,255},
+    {  0,204,  0},{  0,204, 51},{  0,204,102},{  0,204,153},{  0,204,204},{  0,204,255},
+    {  0,255,  0},{  0,255, 51},{  0,255,102},{  0,255,153},{  0,255,204},{  0,255,255},
+
+    { 51,  0,  0},{ 51,  0, 51},{ 51,  0,102},{ 51,  0,153},{ 51,  0,204},{ 51,  0,255},
+    { 51, 51,  0},{ 51, 51, 51},{ 51, 51,102},{ 51, 51,153},{ 51, 51,204},{ 51, 51,255},
+    { 51,102,  0},{ 51,102, 51},{ 51,102,102},{ 51,102,153},{ 51,102,204},{ 51,102,255},
+    { 51,153,  0},{ 51,153, 51},{ 51,153,102},{ 51,153,153},{ 51,153,204},{ 51,153,255},
+    { 51,204,  0},{ 51,204, 51},{ 51,204,102},{ 51,204,153},{ 51,204,204},{ 51,204,255},
+    { 51,255,  0},{ 51,255, 51},{ 51,255,102},{ 51,255,153},{ 51,255,204},{ 51,255,255},
+    
+    {102,  0,  0},{102,  0, 51},{102,  0,102},{102,  0,153},{102,  0,204},{102,  0,255},
+    {102, 51,  0},{102, 51, 51},{102, 51,102},{102, 51,153},{102, 51,204},{102, 51,255},
+    {102,102,  0},{102,102, 51},{102,102,102},{102,102,153},{102,102,204},{102,102,255},
+    {102,153,  0},{102,153, 51},{102,153,102},{102,153,153},{102,153,204},{102,153,255},
+    {102,204,  0},{102,204, 51},{102,204,102},{102,204,153},{102,204,204},{102,204,255},
+    {102,255,  0},{102,255, 51},{102,255,102},{102,255,153},{102,255,204},{102,255,255},
+    
+    {153,  0,  0},{153,  0, 51},{153,  0,102},{153,  0,153},{153,  0,204},{153,  0,255},
+    {153, 51,  0},{153, 51, 51},{153, 51,102},{153, 51,153},{153, 51,204},{153, 51,255},
+    {153,102,  0},{153,102, 51},{153,102,102},{153,102,153},{153,102,204},{153,102,255},
+    {153,153,  0},{153,153, 51},{153,153,102},{153,153,153},{153,153,204},{153,153,255},
+    {153,204,  0},{153,204, 51},{153,204,102},{153,204,153},{153,204,204},{153,204,255},
+    {153,255,  0},{153,255, 51},{153,255,102},{153,255,153},{153,255,204},{153,255,255},
+    
+    {204,  0,  0},{204,  0, 51},{204,  0,102},{204,  0,153},{204,  0,204},{204,  0,255},
+    {204, 51,  0},{204, 51, 51},{204, 51,102},{204, 51,153},{204, 51,204},{204, 51,255},
+    {204,102,  0},{204,102, 51},{204,102,102},{204,102,153},{204,102,204},{204,102,255},
+    {204,153,  0},{204,153, 51},{204,153,102},{204,153,153},{204,153,204},{204,153,255},
+    {204,204,  0},{204,204, 51},{204,204,102},{204,204,153},{204,204,204},{204,204,255},
+    {204,255,  0},{204,255, 51},{204,255,102},{204,255,153},{204,255,204},{204,255,255},
+
+    {255,  0,  0},{255,  0, 51},{255,  0,102},{255,  0,153},{255,  0,204},{255,  0,255},
+    {255, 51,  0},{255, 51, 51},{255, 51,102},{255, 51,153},{255, 51,204},{255, 51,255},
+    {255,102,  0},{255,102, 51},{255,102,102},{255,102,153},{255,102,204},{255,102,255},
+    {255,153,  0},{255,153, 51},{255,153,102},{255,153,153},{255,153,204},{255,153,255},
+    {255,204,  0},{255,204, 51},{255,204,102},{255,204,153},{255,204,204},{255,204,255},
+    {255,255,  0},{255,255, 51},{255,255,102},{255,255,153},{255,255,204},{255,255,255},        
+};
+
+void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
+{
+    // heading
+    // w x (fg,bg,3bytes)
+
+    int bk=-1,fg=-1;
+
+    // home
+
+    const int out_size = 4096;
+    char out[out_size];
+    int out_pos = 0;
+
+    WRITE("\x1B[H");
+
+    for (int y = h-1; y>=0; y--)
+    {
+        AnsiCell* ptr = buf + y*w;
+        for (int x=0; x<w; x++,ptr++)
+        {
+            //const char* chr = (x+y)&1 ? "X":"Y";
+            const char* chr = utf[ptr->gl];
+            if (ptr->fg != fg)
+            {
+                if (ptr->bk != bk)
+                    // WRITE("\x1B[38;5;%d;48;5;%dm%s",ptr->fg,ptr->bk,chr);
+                    WRITE("\x1B[38;2;%d;%d;%d;48;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
+                    //WRITE("\x1B[38;2;%d;%d;%dm\x1B[48;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
+                else
+                    // WRITE("\x1B[38;5;%dm%s",ptr->fg,chr);
+                    WRITE("\x1B[38;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], chr);
+            }
+            else
+            {
+                if (ptr->bk != bk)
+                    // WRITE("\x1B[48;5;%dm%s",ptr->bk,chr);
+                    WRITE("\x1B[48;2;%d;%d;%dm%s",pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
+                else
+                    WRITE("%s",chr);
+            }
+            bk=ptr->bk;
+            fg=ptr->fg;
+        }
+
+        if (y)
+            WRITE("\n");
+    }
+
+    FLUSH();
 }
 
 
@@ -84,9 +224,6 @@ void exit_handler(int signum)
 {
     running = false;
 }
-
-#include "asciiid_render.h"
-#include "sprite.h"
 
 Material mat[256];
 void* GetMaterialArr()
@@ -104,21 +241,28 @@ bool GetWH(int wh[2])
         return false;
     }
 	
-    wh[0] = size.ws_row;
-    wh[1] = size.ws_col;
+    wh[0] = size.ws_col;
+    wh[1] = size.ws_row;
     return true;
 }
+
+uint64_t GetTime()
+{
+	static timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
 
 Sprite* player_sprite = 0;
 
 int main(int argc, char* argv[])
 {
-    // consider configuring kbd
+    // consider configuring kbd, it solves only key up, not multiple keys down
     /*
         gsettings set org.gnome.desktop.peripherals.keyboard repeat-interval 30
         gsettings set org.gnome.desktop.peripherals.keyboard delay 250    
     */
-
 
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;
@@ -137,11 +281,23 @@ int main(int argc, char* argv[])
 
     SetScreen(true);
 
+    float water = 55;
+
+    float yaw = 45;
+    float pos[3] = {64,64,300};
+    float lt[4] = {1,0,1,.5};
+    float player_dir = 0;
+    int  player_stp = -1;    
+
     Terrain* terrain = 0;
     World* world = 0;
 
     AnsiCell* buf = 0;
     int wh[2] = {-1,-1};    
+
+    uint64_t begin = GetTime();
+    uint64_t stamp = begin;
+    uint64_t frames = 0;
 
    	player_sprite = LoadPlayer("./sprites/player.xp");
     if (!player_sprite)
@@ -208,14 +364,56 @@ int main(int argc, char* argv[])
     for (int i=0; i<256; i++)
         CP437_UTF8[i][CP437[i](CP437_UTF8[i])]=0;
 
+    // LIGHT
+    {
+        float lit_yaw = 45;
+        float lit_pitch = 30;//90;
+        float lit_time = 12.0f;
+        float ambience = 0.5;
+
+        double noon_yaw[2] =
+        {
+            // zero is behind viewer
+            -sin(-lit_yaw*M_PI / 180),
+            -cos(-lit_yaw*M_PI / 180),
+        };
+
+        double dusk_yaw[3] =
+        {
+            -noon_yaw[1],
+            noon_yaw[0],
+            0
+        };
+
+        double noon_pos[3] =
+        {
+            noon_yaw[0]*cos(lit_pitch*M_PI / 180),
+            noon_yaw[1]*cos(lit_pitch*M_PI / 180),
+            sin(lit_pitch*M_PI / 180)
+        };
+
+        double lit_axis[3];
+
+        CrossProduct(dusk_yaw, noon_pos, lit_axis);
+
+        double time_tm[16];
+        Rotation(lit_axis, (lit_time-12)*M_PI / 12, time_tm);
+
+        double lit_pos[4];
+        Product(time_tm, noon_pos, lit_pos);
+
+        lt[0] = (float)lit_pos[0];
+        lt[1] = (float)lit_pos[1];
+        lt[2] = (float)lit_pos[2];
+        lt[3] = ambience;    
+    }
+
     // get initial time stamp
-    // ...
+    begin = GetTime();
+    stamp = begin;
 
     while(running)
     {
-        sleep(1);
-        write(STDOUT_FILENO,".",1);
-
         // get current terminal w,h
         // if changed realloc renderer output
         int nwh[2] = {0,0};
@@ -228,22 +426,30 @@ int main(int argc, char* argv[])
         }
 
         // get time stamp
+        uint64_t now = GetTime();
+        int dt = now-stamp;
+        stamp = now;
+
         // check all pressed chars array, release if timed out
 
         // check number of chars awaiting in buffer
         // -> read them all, mark as pressed for 0.1 sec / if already pressed prolong
 
-        // animate()
-        // ...
+        // animate
+        // Animate();
 
-        // render()
-        // ...
+        // render
+        Render(terrain,world,water,1.0,yaw,pos,lt,wh[0],wh[1],buf,player_dir,player_stp);
+
+        yaw+=0.1;
 
         // write to stdout
-        // ...
+        Print(buf,wh[0],wh[1],CP437_UTF8);
+        frames++;
     }
 
     exit:
+    uint64_t end = GetTime();
 
     if (player_sprite)
 	    FreeSprite(player_sprite);
@@ -259,7 +465,7 @@ int main(int argc, char* argv[])
 
     SetScreen(false);
 
-    write(STDOUT_FILENO,"see ya\r\n",8);
-    sleep(1);
+    
+    printf("FPS: %f\n", frames * 1000000.0 / (end-begin));
 	return 0;
 }

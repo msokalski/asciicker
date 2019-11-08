@@ -1342,7 +1342,7 @@ void term_init(A3D_WND* wnd)
 				int g = p % 6;
 				p = (p - g) / 6;
 				
-				return vec3(r, g, p) * 0.2;
+				return vec3(p, g, r) * 0.2;
 			}
 
 			void main()

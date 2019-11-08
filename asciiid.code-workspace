@@ -5,9 +5,15 @@
 		}
 	],
 	"settings": {
+
+		"terminal.integrated.fontSize" : 16,
+		"terminal.integrated.lineHeight" : 1,
+		"terminal.integrated.fontWeight" : "100",
+		// "terminal.integrated.fontFamily" : "PxPlus IBM CGAthin",
+
 		"disasexpl.associations": {
-			"**/*.c": "${workspaceFolder}/.o/${relativeFileDir}/${fileBasenameNoExtension}.s",
-			"**/*.cpp": "${workspaceFolder}/.o/${relativeFileDir}/${fileBasenameNoExtension}.s"
+			"**/*.c": "${workspaceFolder}/.o_game/${relativeFileDir}/${fileBasenameNoExtension}.s",
+			"**/*.cpp": "${workspaceFolder}/.o_game/${relativeFileDir}/${fileBasenameNoExtension}.s"
 		}	
 	}
 }

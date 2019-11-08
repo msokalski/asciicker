@@ -414,14 +414,14 @@ static int create_auto_mat(uint8_t mat[])
 
 				if (shd < 6)
 				{
-					mat[idx + 0] = 16 + MCV_TO_5(R[best_lo & 1]) + 6 * MCV_TO_5(G[(best_lo & 2) >> 1]) + 36 * MCV_TO_5(B[(best_lo & 4) >> 2]);
-					mat[idx + 1] = 16 + MCV_TO_5(R[best_hi & 1]) + 6 * MCV_TO_5(G[(best_hi & 2) >> 1]) + 36 * MCV_TO_5(B[(best_hi & 4) >> 2]);
+					mat[idx + 0] = 16 + 36 * MCV_TO_5(R[best_lo & 1]) + 6 * MCV_TO_5(G[(best_lo & 2) >> 1]) + MCV_TO_5(B[(best_lo & 4) >> 2]);
+					mat[idx + 1] = 16 + 36 * MCV_TO_5(R[best_hi & 1]) + 6 * MCV_TO_5(G[(best_hi & 2) >> 1]) + MCV_TO_5(B[(best_hi & 4) >> 2]);
 					mat[idx + 2] = glyph[shd];
 				}
 				else
 				{
-					mat[idx + 0] = 16 + MCV_TO_5(R[best_hi & 1]) + 6 * MCV_TO_5(G[(best_hi & 2) >> 1]) + 36 * MCV_TO_5(B[(best_hi & 4) >> 2]);
-					mat[idx + 1] = 16 + MCV_TO_5(R[best_lo & 1]) + 6 * MCV_TO_5(G[(best_lo & 2) >> 1]) + 36 * MCV_TO_5(B[(best_lo & 4) >> 2]);
+					mat[idx + 0] = 16 + 36 * MCV_TO_5(R[best_hi & 1]) + 6 * MCV_TO_5(G[(best_hi & 2) >> 1]) + MCV_TO_5(B[(best_hi & 4) >> 2]);
+					mat[idx + 1] = 16 + 36 * MCV_TO_5(R[best_lo & 1]) + 6 * MCV_TO_5(G[(best_lo & 2) >> 1]) + MCV_TO_5(B[(best_lo & 4) >> 2]);
 					mat[idx + 2] = glyph[11-shd];
 				}
 			}
@@ -1853,8 +1853,8 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 				};
 
 				ptr->gl = gl;
-				ptr->bk = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
-				ptr->fg = 16 + (((fg[0] + 102) / 204) + (((fg[1] + 102) / 204) * 6) + (((fg[2] + 102) / 204) * 36));
+				ptr->bk = 16 + 36*bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2];
+				ptr->fg = 16 + (36*((fg[0] + 102) / 204) + (((fg[1] + 102) / 204) * 6) + ((fg[2] + 102) / 204));
 				ptr->spare = 0xFF;
 
 				// collect line bits
@@ -1882,7 +1882,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
 						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
 						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-						ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+						ptr->fg = 16 + 36*bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2];
 					}
 				}
 				else
@@ -1893,10 +1893,13 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[
 						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
 						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
 						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-						ptr->fg = 16 + bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2] * 36;
+						ptr->fg = 16 + 36*bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2];
 					}
 				}
 			}
+
+
+			// xterm conv
 
 			src += 2;
 

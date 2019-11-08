@@ -210,7 +210,7 @@ Sprite* LoadPlayer(const char* path)
 						int r = (c2->bk[0] * 5 + 128) / rgb_div;
 						int g = (c2->bk[1] * 5 + 128) / rgb_div;
 						int b = (c2->bk[2] * 5 + 128) / rgb_div;
-						c->bk = 16 + r + g*6 + b*36;
+						c->bk = 16 + 36*r + g*6 + b;
 					}
 
 					if (fg_transp)
@@ -220,7 +220,7 @@ Sprite* LoadPlayer(const char* path)
 						int r = (c2->fg[0] * 5 + 128) / rgb_div;
 						int g = (c2->fg[1] * 5 + 128) / rgb_div;
 						int b = (c2->fg[2] * 5 + 128) / rgb_div;
-						c->fg = 16 + r + g * 6 + b * 36;
+						c->fg = 16 + 36*r + g * 6 + b;
 					}
 				}
 			}
