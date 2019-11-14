@@ -1,10 +1,9 @@
-#ifdef GAME
-
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <malloc.h>
 #include <sys/ioctl.h>
+#include <sys/poll.h>
 #include <unistd.h>
 #include <assert.h>
 #include <signal.h>
@@ -12,6 +11,7 @@
 #include <time.h>
 
 #include "asciiid_render.h"
+#include "physics.h"
 #include "sprite.h"
 #include "matrix.h"
 
@@ -82,26 +82,32 @@ static int (* const CP437[256])(char*) =
 
 void SetScreen(bool alt)
 {
+    
     static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l"; // +home, -wrap, -cursor
     static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h"; // +def_fg/bg, +wrap, +cursor
     static int on_len = strlen(on_str);
     static int off_len = strlen(off_str);
 
-    struct termios t;
-    tcgetattr(STDIN_FILENO, &t);
+    static struct termios old;
 
 	if (alt)
     {
-        t.c_lflag &= ~((tcflag_t) ECHO);
+        tcgetattr(STDIN_FILENO, &old);
+        struct termios t = old;
+		t.c_lflag |=  ISIG;
+		t.c_iflag &= ~IGNBRK;
+		t.c_iflag |=  BRKINT;
+		t.c_lflag &= ~ICANON; /* disable buffered i/o */
+		t.c_lflag &= ~ECHO; /* disable echo mode */
+
+        tcsetattr(STDIN_FILENO, TCSANOW, &t);
 		write(STDOUT_FILENO,on_str,on_len);
     }
 	else
     {
-        t.c_lflag |= ECHO;
+        tcsetattr(STDIN_FILENO, TCSANOW, &old);
 		write(STDOUT_FILENO,off_str,off_len);
     }
-
-    tcsetattr(STDIN_FILENO, TCSANOW, &t);
 }
 
 #define FLUSH() \
@@ -286,11 +292,12 @@ int main(int argc, char* argv[])
     float water = 55;
 
     float yaw = 45;
-    float pos[3] = {64,64,300};
+    float pos[3] = {48,48,0};
     float lt[4] = {1,0,1,.5};
     float player_dir = 0;
     int  player_stp = -1;    
 
+    Physics* phys = 0;
     Terrain* terrain = 0;
     World* world = 0;
 
@@ -366,6 +373,9 @@ int main(int argc, char* argv[])
     for (int i=0; i<256; i++)
         CP437_UTF8[i][CP437[i](CP437_UTF8[i])]=0;
 
+    int kbd[256];
+    memset(kbd,0,sizeof(int)*256);
+
     // LIGHT
     {
         float lit_yaw = 45;
@@ -414,8 +424,61 @@ int main(int argc, char* argv[])
     begin = GetTime();
     stamp = begin;
 
+    phys = CreatePhysics(terrain,world,pos,player_dir,yaw,stamp);
+
     while(running)
     {
+        // get time stamp
+        uint64_t now = GetTime();
+        int dt = now-stamp;
+        stamp = now;      
+
+        for (int i=0; i<256; i++)
+        {
+            kbd[i] -= dt;
+            if (kbd[i]<0)
+                kbd[i]=0;
+        }
+
+        // prep for poll
+        struct pollfd pfds[1];
+        pfds[0].fd = STDIN_FILENO;
+        pfds[0].events = POLLIN; 
+        pfds[0].revents = 0;
+
+        poll(pfds, 1, 0); // no timeout
+
+        if (pfds[0].revents & POLLIN) 
+        {
+            char stream[256];
+            int bytes = read(STDIN_FILENO, stream, 256);
+
+            FILE* log = fopen("log.bin","a+t");
+            for (int i=0; i<bytes; i++)
+            {
+                fprintf(log,"%02X(%c) ",stream[i], stream[i]>=32 && stream[i]<127 ? stream[i] : ' ');
+                if (stream[i])
+                    kbd[stream[i]] = 20000; // 20ms - time it remains pressed in us 
+            }
+            if (bytes)
+                fprintf(log,"\n");
+            else
+                fprintf(log,"0\n");
+            fclose(log);
+        }
+
+        PhysicsIO io;
+        io.water = 55;
+        io.x_force = (kbd['d'] || kbd['D'] || kbd['9'] || kbd['3']) - (kbd['a'] || kbd['A']);
+        io.y_force = (kbd['w'] || kbd['W']) - (kbd['s'] || kbd['S']);
+        io.torque  = (kbd['q'] || kbd['Q']) - (kbd['e'] || kbd['E']);
+        io.jump = kbd[' '] || kbd['D'] || kbd['A'] || kbd['S'] || kbd['W'];
+
+        Animate(phys,stamp,&io);
+
+        if (!io.jump)
+            kbd[' '] = 0;
+
         // get current terminal w,h
         // if changed realloc renderer output
         int nwh[2] = {0,0};
@@ -427,23 +490,13 @@ int main(int argc, char* argv[])
             buf = (AnsiCell*)realloc(buf,wh[0]*wh[1]*sizeof(AnsiCell));
         }
 
-        // get time stamp
-        uint64_t now = GetTime();
-        int dt = now-stamp;
-        stamp = now;
-
         // check all pressed chars array, release if timed out
 
         // check number of chars awaiting in buffer
         // -> read them all, mark as pressed for 0.1 sec / if already pressed prolong
 
-        // animate
-        // Animate();
-
         // render
-        Render(terrain,world,water,1.0,yaw,pos,lt,wh[0],wh[1],buf,player_dir,player_stp);
-
-        yaw+=0.1;
+        Render(terrain,world,water,1.0,io.yaw,io.pos,lt,wh[0],wh[1],buf,io.player_dir,io.player_stp);
 
         // write to stdout
         Print(buf,wh[0],wh[1],CP437_UTF8);
@@ -471,5 +524,3 @@ int main(int argc, char* argv[])
     printf("FPS: %f\n", frames * 1000000.0 / (end-begin));
 	return 0;
 }
-
-#endif // GAME
