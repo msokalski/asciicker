@@ -1,4 +1,7 @@
+
+#define _USE_MATH_DEFINES
 #include <math.h>
+#include <malloc.h>
 #include "matrix.h"
 #include "physics.h"
 
@@ -485,418 +488,427 @@ struct Physics
 
 void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 {
-	uint64_t elaps = stamp - phys->stamp;
-	phys->stamp = stamp;
-	float dt = elaps * (60.0f / 1000000.0f);
-
-	float xy_speed = 0.13;
-
-	static const float radius_cells = 2; // in full x-cells
-	static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
-	static const float world_patch = VISUAL_CELLS; // patch size in world coords
-	static const float world_radius = radius_cells / patch_cells * world_patch;
-
-	static const float height_cells = 7.5;
-
-	// 2/3 = 1/(zoom*sin30)
-	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
-
-	// YAW
+	while (stamp - phys->stamp > 1000020 / 60) // it is time to make it more reliable
 	{
-		int da = 0;
-		if (io->torque < 0)
-			da--;
-		if (io->torque > 0)
-			da++;
+		uint64_t elaps = stamp - phys->stamp;
+		if (elaps > 1000020 / 60)
+			elaps = 1000020 / 60;
+		float dt = elaps * (60.0f / 1000020.0f);
+		phys->stamp += elaps;
 
-		phys->yaw_vel += dt * da;
+		// by having old and new water level we can (in future) keep player floating on top of waves 
+		phys->water = io->water;
 
-		if (phys->yaw_vel > 10)
-			phys->yaw_vel = 10;
-		else
-		if (phys->yaw_vel < -10)
-			phys->yaw_vel = -10;
+		float xy_speed = 0.13;
 
-		if (abs(phys->yaw_vel) < 1 && !da)
-			phys->yaw_vel = 0;
+		static const float radius_cells = 2; // in full x-cells
+		static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
+		static const float world_patch = VISUAL_CELLS; // patch size in world coords
+		static const float world_radius = radius_cells / patch_cells * world_patch;
 
-		phys->yaw += dt * 0.5f * phys->yaw_vel;
+		static const float height_cells = 7.5;
 
-		float vel_damp = powf(0.9f, dt);
-		phys->yaw_vel *= vel_damp;
-		phys->yaw_vel *= vel_damp;
-	}
+		// 2/3 = 1/(zoom*sin30)
+		static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
 
-	// VEL & ACC
-	int ix = 0, iy = 0; 
-	{
-		if (io->x_force<0)
-			ix--;
-		if (io->x_force>0)
-			ix++;
-		if (io->y_force>0)
-			iy++;
-		if (io->y_force<0)
-			iy--;
-
-		float dir[3][3] =
+		// YAW
 		{
-			{315,  0 , 45},
-			{270, -1 , 90},
-			{225, 180, 135},
-		};
+			int da = 0;
+			if (io->torque < 0)
+				da--;
+			if (io->torque > 0)
+				da++;
 
-		if (dir[iy + 1][ix + 1] >= 0)
-			phys->player_dir = dir[iy + 1][ix + 1] + phys->yaw;
+			phys->yaw_vel += dt * da;
 
-		if (ix || iy)
-		{
-			float cs = cosf(phys->slope);
-			float dn = 1.0 / sqrtf(ix * ix + iy * iy);
-			float dx = ix * dn * cs, dy = iy * dn * cs;
+			if (phys->yaw_vel > 10)
+				phys->yaw_vel = 10;
+			else
+				if (phys->yaw_vel < -10)
+					phys->yaw_vel = -10;
 
-			phys->vel[0] += (float)(dt * (dx * cos(phys->yaw * (M_PI / 180)) - dy * sin(phys->yaw * (M_PI / 180))));
-			phys->vel[1] += (float)(dt * (dx * sin(phys->yaw * (M_PI / 180)) + dy * cos(phys->yaw * (M_PI / 180))));
-		}
+			if (fabsf(phys->yaw_vel) < 1 && !da)
+				phys->yaw_vel = 0;
 
-		float sqr_vel_xy = phys->vel[0] * phys->vel[0] + phys->vel[1] * phys->vel[1];
-		if (sqr_vel_xy < 1 && !ix && !iy)
-		{
-			phys->vel[0] = 0;
-			phys->vel[1] = 0;
-			phys->player_stp = -1;
-		}
-		else
-		{
-			// speed limit is 27 for air / ground and 10 for full in water
-			float xy_limit = 27 - 17*(phys->water - phys->pos[2]) / world_height;
-			if (xy_limit > 27)
-				xy_limit = 27;
-			if (xy_limit < 10)
-				xy_limit = 10;
-
-			if (sqr_vel_xy > xy_limit)
-			{
-				float n = sqrt(xy_limit / sqr_vel_xy);
-				sqr_vel_xy = xy_limit;
-				phys->vel[0] *= n;
-				phys->vel[1] *= n;
-			}
-
-			if (phys->player_stp < 0)
-				phys->player_stp = 0;
-
-			// so 8 frame walk anim divides stp / 1024 to get frame num
-			phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * sqrt(sqr_vel_xy)));
+			phys->yaw += dt * 0.5f * phys->yaw_vel;
 
 			float vel_damp = powf(0.9f, dt);
-			phys->vel[0] *= vel_damp;
-			phys->vel[1] *= vel_damp;
+			phys->yaw_vel *= vel_damp;
+			phys->yaw_vel *= vel_damp;
 		}
 
-
-		// newton vs archimedes 
-		float cnt = 0.6;
-		float acc = (phys->water - (phys->pos[2] + cnt*world_height)) / (2*cnt*world_height);
-		if (acc < 0-cnt)
-			acc = 0-cnt;
-		if (acc > 1-cnt)
-			acc = 1-cnt;
-
-		phys->vel[2] += dt * acc;
-
-//		if (phys->vel[2] < -1)
-//			phys->vel[2] = -1;
-
-		// water resistance
-		float res = (phys->water - phys->pos[2]) / world_height;
-		if (res < 0)
-			res = 0;
-		if (res > 1)
-			res = 1;
-
-		float xy_res = powf(1.0 - 0.5 * res, dt);
-		float z_res = powf(1.0 - 0.1 * res, dt);
-
-		phys->vel[0] *= xy_res;
-		phys->vel[1] *= xy_res;
-		phys->vel[2] *= z_res;
-	}
-
-	// POS - troubles!
-	float contact_normal_z = 0;
-	{
-		////////////////////
-		float dx = dt * phys->vel[0];
-		float dy = dt * phys->vel[1];
-
-		double cx = phys->pos[0] + dx * 0.5;
-		double cy = phys->pos[1] + dy * 0.5;
-		double th = 0.1;
-
-		double qx = fabs(dx) * 0.5 + world_radius + th;
-		double qy = fabs(dy) * 0.5 + world_radius + th;
-
-		double clip_world[4][4] =
+		// VEL & ACC
+		int ix = 0, iy = 0;
 		{
-			{ 1, 0, 0, qx - cx },
-			{-1, 0, 0, qx + cx },
-			{ 0, 1, 0, qy - cy },
-			{ 0,-1, 0, qy + cy },
-		//	{ 0, 0, 1,            0 - phys->pos[2] },
-		//	{ 0, 0,-1, world_height + phys->pos[2] }
-		};
+			if (io->x_force < 0)
+				ix--;
+			if (io->x_force > 0)
+				ix++;
+			if (io->y_force > 0)
+				iy++;
+			if (io->y_force < 0)
+				iy--;
 
-		// create triangle soup of (SoupItem):
-		phys->soup_items = 0;
-		phys->collect_mul_xy = 1.0 / world_radius;
-		phys->collect_mul_z = 2.0 / world_height;
-		QueryWorld(phys->world, 4, clip_world, Physics::MeshCollect, phys);
-		QueryTerrain(phys->terrain, 4, clip_world, 0xAA, Physics::PatchCollect, phys);
-
-		// note: phys should keep soup allocation, resize it x2 if needed
-
-		// transform Z so our ellipsolid becomes a sphere
-		// just multiply: 
-		//   px,py, dx,dy, and all verts x,y coords by 1.0/horizontal_radius
-		//   pz, dz and all verts z coords by 1.0/(HEIGHT_SCALE*vertical_radius)
-
-		float sphere_pos[3] =  // set current sphere center
-		{
-			phys->pos[0] * phys->collect_mul_xy,
-			phys->pos[1] * phys->collect_mul_xy,
-			(phys->pos[2] + world_height*0.5) * phys->collect_mul_z,
-		};
-
-		float sphere_vel[3] = 
-		{
-			xy_speed * phys->vel[0] * dt * phys->collect_mul_xy,
-			xy_speed * phys->vel[1] * dt * phys->collect_mul_xy,
-			phys->vel[2] * dt * phys->collect_mul_z,
-		}; // set velocity (must include gravity impact)
-			
-		const float xy_thresh = 0.002f;
-		const float z_thresh = 0.001f;
-
-		int items = phys->soup_items;
-		int iters_left = 10;
-		bool ignore_roof = false;
-		retry_without_roof:
-		while (abs(sphere_vel[0])>xy_thresh || abs(sphere_vel[1]) > xy_thresh || abs(sphere_vel[2]) > z_thresh)
-		{
-			SoupItem* collision_item = 0;
-			float collision_time = 2.0f; // (greater than current velocity range)
-			float collision_pos[3];
-
-			for (int i=0; i<items; i++)
+			float dir[3][3] =
 			{
-				SoupItem* item = phys->soup + i;
-
-				float contact_pos[3];
-				float time = item->CheckCollision(sphere_pos, sphere_vel, contact_pos); // must return >=2 if no collision occurs
-
-				if (time < collision_time)
-				{
-					if (!ignore_roof || contact_pos[2] < sphere_pos[2] + 0.5)
-					{
-						collision_item = item;
-						collision_time = time;
-						collision_pos[0] = contact_pos[0];
-						collision_pos[1] = contact_pos[1];
-						collision_pos[2] = contact_pos[2];
-					}
-				}
-			}
-
-			if (!collision_item)
-			{
-				sphere_pos[0] += sphere_vel[0];
-				sphere_pos[1] += sphere_vel[1];
-				sphere_pos[2] += sphere_vel[2];
-				break;
-			}
-
-			// collision_time = max(0, collision_time - 0.001f); // fix to prevent intersections with current sliding triangle plane
-			collision_time -= 0.001f;
-					
-			sphere_pos[0] += sphere_vel[0] * collision_time;
-			sphere_pos[1] += sphere_vel[1] * collision_time;
-			sphere_pos[2] += sphere_vel[2] * collision_time;
-
-			float remain = 1.0f - collision_time;
-			sphere_vel[0] *= remain;
-			sphere_vel[1] *= remain;
-			sphere_vel[2] *= remain;
-
-			float slide_normal[3] =
-			{
-				sphere_pos[0] - collision_pos[0],
-				sphere_pos[1] - collision_pos[1],
-				sphere_pos[2] - collision_pos[2]
+				{315,  0 , 45},
+				{270, -1 , 90},
+				{225, 180, 135},
 			};
 
-			// move bit away from plane
+			if (dir[iy + 1][ix + 1] >= 0)
+				phys->player_dir = dir[iy + 1][ix + 1] + phys->yaw;
+
+			if (ix || iy)
+			{
+				float cs = cosf(phys->slope);
+				float dn = 1.0 / sqrtf(ix * ix + iy * iy);
+				float dx = ix * dn * cs, dy = iy * dn * cs;
+
+				phys->vel[0] += (float)(dt * (dx * cos(phys->yaw * (M_PI / 180)) - dy * sin(phys->yaw * (M_PI / 180))));
+				phys->vel[1] += (float)(dt * (dx * sin(phys->yaw * (M_PI / 180)) + dy * cos(phys->yaw * (M_PI / 180))));
+			}
+
+			float sqr_vel_xy = phys->vel[0] * phys->vel[0] + phys->vel[1] * phys->vel[1];
+			if (sqr_vel_xy < 1 && !ix && !iy)
+			{
+				phys->vel[0] = 0;
+				phys->vel[1] = 0;
+				phys->player_stp = -1;
+			}
+			else
+			{
+				// speed limit is 27 for air / ground and 10 for full in water
+				float xy_limit = 27 - 17 * (phys->water - phys->pos[2]) / world_height;
+				if (xy_limit > 27)
+					xy_limit = 27;
+				if (xy_limit < 10)
+					xy_limit = 10;
+
+				if (sqr_vel_xy > xy_limit)
+				{
+					float n = sqrt(xy_limit / sqr_vel_xy);
+					sqr_vel_xy = xy_limit;
+					phys->vel[0] *= n;
+					phys->vel[1] *= n;
+				}
+
+				if (phys->player_stp < 0)
+					phys->player_stp = 0;
+
+				// so 8 frame walk anim divides stp / 1024 to get frame num
+				phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * sqrt(sqr_vel_xy)));
+
+				float vel_damp = powf(0.9f, dt);
+				phys->vel[0] *= vel_damp;
+				phys->vel[1] *= vel_damp;
+			}
+
+
+			// newton vs archimedes 
+			float cnt = 0.6;
+			float acc = (phys->water - (phys->pos[2] + cnt * world_height)) / (2 * cnt*world_height);
+			if (acc < 0 - cnt)
+				acc = 0 - cnt;
+			if (acc > 1 - cnt)
+				acc = 1 - cnt;
+
+			phys->vel[2] += dt * acc;
+
+			//		if (phys->vel[2] < -1)
+			//			phys->vel[2] = -1;
+
+					// water resistance
+			float res = (phys->water - phys->pos[2]) / world_height;
+			if (res < 0)
+				res = 0;
+			if (res > 1)
+				res = 1;
+
+			float xy_res = powf(1.0 - 0.5 * res, dt);
+			float z_res = powf(1.0 - 0.1 * res, dt);
+
+			phys->vel[0] *= xy_res;
+			phys->vel[1] *= xy_res;
+			phys->vel[2] *= z_res;
+		}
+
+		// POS - troubles!
+		float contact_normal_z = 0;
+		{
+			////////////////////
+			float dx = dt * phys->vel[0];
+			float dy = dt * phys->vel[1];
+
+			double cx = phys->pos[0] + dx * 0.5;
+			double cy = phys->pos[1] + dy * 0.5;
+			double th = 0.1;
+
+			double qx = fabs(dx) * 0.5 + world_radius + th;
+			double qy = fabs(dy) * 0.5 + world_radius + th;
+
+			double clip_world[4][4] =
+			{
+				{ 1, 0, 0, qx - cx },
+				{-1, 0, 0, qx + cx },
+				{ 0, 1, 0, qy - cy },
+				{ 0,-1, 0, qy + cy },
+				//	{ 0, 0, 1,            0 - phys->pos[2] },
+				//	{ 0, 0,-1, world_height + phys->pos[2] }
+			};
+
+			// create triangle soup of (SoupItem):
+			phys->soup_items = 0;
+			phys->collect_mul_xy = 1.0 / world_radius;
+			phys->collect_mul_z = 2.0 / world_height;
+			QueryWorld(phys->world, 4, clip_world, Physics::MeshCollect, phys);
+			QueryTerrain(phys->terrain, 4, clip_world, 0xAA, Physics::PatchCollect, phys);
+
+			// note: phys should keep soup allocation, resize it x2 if needed
+
+			// transform Z so our ellipsolid becomes a sphere
+			// just multiply: 
+			//   px,py, dx,dy, and all verts x,y coords by 1.0/horizontal_radius
+			//   pz, dz and all verts z coords by 1.0/(HEIGHT_SCALE*vertical_radius)
+
+			float sphere_pos[3] =  // set current sphere center
+			{
+				phys->pos[0] * phys->collect_mul_xy,
+				phys->pos[1] * phys->collect_mul_xy,
+				(phys->pos[2] + world_height * 0.5) * phys->collect_mul_z,
+			};
+
+			float sphere_vel[3] =
+			{
+				xy_speed * phys->vel[0] * dt * phys->collect_mul_xy,
+				xy_speed * phys->vel[1] * dt * phys->collect_mul_xy,
+				phys->vel[2] * dt * phys->collect_mul_z,
+			}; // set velocity (must include gravity impact)
+
+			const float xy_thresh = 0.002f;
+			const float z_thresh = 0.001f;
+
+			int items = phys->soup_items;
+			int iters_left = 10;
+			bool ignore_roof = false;
+		retry_without_roof:
+			while (fabsf(sphere_vel[0]) > xy_thresh || fabsf(sphere_vel[1]) > xy_thresh || fabsf(sphere_vel[2]) > z_thresh)
+			{
+				SoupItem* collision_item = 0;
+				float collision_time = 2.0f; // (greater than current velocity range)
+				float collision_pos[3];
+
+				for (int i = 0; i < items; i++)
+				{
+					SoupItem* item = phys->soup + i;
+
+					float contact_pos[3];
+					float time = item->CheckCollision(sphere_pos, sphere_vel, contact_pos); // must return >=2 if no collision occurs
+
+					if (time < collision_time)
+					{
+						if (!ignore_roof || contact_pos[2] < sphere_pos[2] + 0.5)
+						{
+							collision_item = item;
+							collision_time = time;
+							collision_pos[0] = contact_pos[0];
+							collision_pos[1] = contact_pos[1];
+							collision_pos[2] = contact_pos[2];
+						}
+					}
+				}
+
+				if (!collision_item)
+				{
+					sphere_pos[0] += sphere_vel[0];
+					sphere_pos[1] += sphere_vel[1];
+					sphere_pos[2] += sphere_vel[2];
+					break;
+				}
+
+				// collision_time = max(0, collision_time - 0.001f); // fix to prevent intersections with current sliding triangle plane
+				collision_time -= 0.001f;
+
+				sphere_pos[0] += sphere_vel[0] * collision_time;
+				sphere_pos[1] += sphere_vel[1] * collision_time;
+				sphere_pos[2] += sphere_vel[2] * collision_time;
+
+				float remain = 1.0f - collision_time;
+				sphere_vel[0] *= remain;
+				sphere_vel[1] *= remain;
+				sphere_vel[2] *= remain;
+
+				float slide_normal[3] =
+				{
+					sphere_pos[0] - collision_pos[0],
+					sphere_pos[1] - collision_pos[1],
+					sphere_pos[2] - collision_pos[2]
+				};
+
+				// move bit away from plane
+				/*
+				sphere_pos[0] += slide_normal[0] * 0.001;
+				sphere_pos[1] += slide_normal[1] * 0.001;
+				sphere_pos[2] += slide_normal[2] * 0.001;
+				*/
+
+				float project = DotProduct(sphere_vel, slide_normal);
+				sphere_vel[0] -= slide_normal[0] * project;
+				sphere_vel[1] -= slide_normal[1] * project;
+				sphere_vel[2] -= slide_normal[2] * project;
+
+				contact_normal_z = fmaxf(contact_normal_z, slide_normal[2]);
+
+				if (!--iters_left)
+					break;
+			}
+
+			if (iters_left)
+				phys->collision_failure = false;
+			else
+				if (!phys->collision_failure && !ix && !iy && contact_normal_z > 0)
+				{
+					// something's wrong
+					// relax - ignore collisions from top
+					phys->collision_failure = true;
+					//printf("CRITICAL! move to resolve\n");
+				}
+
+			if (phys->collision_failure && !ignore_roof)
+			{
+				ignore_roof = true;
+				goto retry_without_roof;
+			}
+
+			//printf("iters_left:%d\n", iters_left);
+
+			// convert back to world coords
+			// just multiply: 
+			//   px,py by horizontal_radius
+			//   and pz by (HEIGHT_SCALE*vertical_radius)
+
+			// we are done, update 
+
+			float pos[3] =
+			{
+				sphere_pos[0] / phys->collect_mul_xy,
+				sphere_pos[1] / phys->collect_mul_xy,
+				sphere_pos[2] / phys->collect_mul_z - world_height * 0.5f
+			};
+
 			/*
-			sphere_pos[0] += slide_normal[0] * 0.001;
-			sphere_pos[1] += slide_normal[1] * 0.001;
-			sphere_pos[2] += slide_normal[2] * 0.001;
+
+			float vel[3] =
+			{
+				(pos[0] - phys->pos[0]) / dt,
+				(pos[1] - phys->pos[1]) / dt,
+				(pos[2] - phys->pos[2]) / (dt*HEIGHT_SCALE)
+			};
+
+			float org_vel[3] =
+			{
+				phys->vel[0],
+				phys->vel[1],
+				phys->vel[2]
+			};
+
+			phys->vel[0] *= xy_speed;
+			phys->vel[1] *= xy_speed;
+			phys->vel[2] /= HEIGHT_SCALE;
+			float vn = sqrtf(phys->vel[0] * phys->vel[0] + phys->vel[1] * phys->vel[1] + phys->vel[2] * phys->vel[2]);
+
+			if (vn > 0.001)
+			{
+
+
+				vn = 1.0 / vn;
+				// leave direction only
+				phys->vel[0] *= vn;
+				phys->vel[1] *= vn;
+				phys->vel[2] *= vn;
+
+				// project
+				vn = DotProduct(phys->vel, vel);
+
+				// apply magnitude from poisition offs
+				phys->vel[0] *= vn / xy_speed;
+				phys->vel[1] *= vn / xy_speed;
+				phys->vel[2] *= vn * HEIGHT_SCALE;
+
+				printf("iters_left:%d, in: %f,%f out: %f,%f\n", iters_left, org_vel[0], org_vel[1], phys->vel[0], phys->vel[1]);
+
+				// average org and new
+				phys->vel[0] = phys->vel[0] * 0.0 + org_vel[0] * 1.0;
+				phys->vel[1] = phys->vel[1] * 0.0 + org_vel[1] * 1.0;
+				phys->vel[2] = phys->vel[2] * 0.0 + org_vel[2] * 1.0;
+			}
+			else
+			{
+				phys->vel[0] = 0;
+				phys->vel[1] = 0;
+				phys->vel[2] = 0;
+			}
 			*/
 
-			float project = DotProduct(sphere_vel, slide_normal);
-			sphere_vel[0] -= slide_normal[0] * project;
-			sphere_vel[1] -= slide_normal[1] * project;
-			sphere_vel[2] -= slide_normal[2] * project;
+			float org_vel[3] =
+			{
+				phys->vel[0],
+				phys->vel[1],
+				phys->vel[2]
+			};
 
-			contact_normal_z = fmaxf(contact_normal_z, slide_normal[2]);
+			phys->vel[0] = (pos[0] - phys->pos[0]) / (xy_speed * dt);
+			phys->vel[1] = (pos[1] - phys->pos[1]) / (xy_speed * dt);
+			phys->vel[2] = (pos[2] - phys->pos[2]) / dt;
 
-			if (!--iters_left)
-				break;
+			float adz = fmaxf(0, phys->vel[2]) / HEIGHT_SCALE * 4;
+			float adxy = xy_speed * sqrtf(phys->vel[0] * phys->vel[0] + phys->vel[1] * phys->vel[1]);
+			phys->slope = atan2(adz, adxy);
+
+			// printf("iters_left:%d, in: %f,%f out: %f,%f\n", iters_left, org_vel[0], org_vel[1], phys->vel[0], phys->vel[1]);
+
+			// slippery threshold?
+			// use org (no-slippery) use new (full slippery)
+
+			phys->vel[0] = 1.0 * phys->vel[0] + org_vel[0] * 0.0;
+			phys->vel[1] = 1.0 * phys->vel[1] + org_vel[1] * 0.0;
+			phys->vel[2] = 1.0 * phys->vel[2] + org_vel[2] * 0.0;
+
+			// printf("contact_normal_z:%f, vel[0]: %f, vel[1]:%f, vel[2]:%f\n", contact_normal_z,fabsf(phys->vel[0]),fabsf(phys->vel[1]),fabsf(phys->vel[2]));
+
+			if (ix || iy || contact_normal_z <= 0.0 || fabsf(phys->vel[0]) > 0.1 || fabsf(phys->vel[1]) > 0.1 || fabsf(phys->vel[2]) > 0.1 * 16)
+			{
+				phys->pos[0] = pos[0];
+				phys->pos[1] = pos[1];
+				phys->pos[2] = pos[2];
+			}
+			else
+			{
+				phys->vel[0] = 0;
+				phys->vel[1] = 0;
+				phys->vel[2] = 0;
+			}
 		}
 
-		if (iters_left)
-			phys->collision_failure = false;
-		else
-		if (!phys->collision_failure && !ix && !iy && contact_normal_z>0)
+		// jump
+		if (contact_normal_z > 0.0)
 		{
-			// something's wrong
-			// relax - ignore collisions from top
-			phys->collision_failure = true;
-			//printf("CRITICAL! move to resolve\n");
+			if (io->jump)
+			{
+				phys->vel[2] += 10;
+				io->jump = false;
+			}
 		}
 
-		if (phys->collision_failure && !ignore_roof)
-		{
-			ignore_roof = true;
-			goto retry_without_roof;
-		}
+		io->pos[0] = phys->pos[0];
+		io->pos[1] = phys->pos[1];
+		io->pos[2] = phys->pos[2];
 
-		//printf("iters_left:%d\n", iters_left);
+		io->yaw = phys->yaw;
+		io->player_dir = phys->player_dir;
+		io->player_stp = phys->player_stp;
 
-		// convert back to world coords
-		// just multiply: 
-		//   px,py by horizontal_radius
-		//   and pz by (HEIGHT_SCALE*vertical_radius)
-
-		// we are done, update 
-
-		float pos[3] =
-		{
-			sphere_pos[0] / phys->collect_mul_xy,
-			sphere_pos[1] / phys->collect_mul_xy,
-			sphere_pos[2] / phys->collect_mul_z - world_height * 0.5f
-		};
-
-		/*
-
-		float vel[3] =
-		{
-			(pos[0] - phys->pos[0]) / dt,
-			(pos[1] - phys->pos[1]) / dt,
-			(pos[2] - phys->pos[2]) / (dt*HEIGHT_SCALE)
-		};
-
-		float org_vel[3] =
-		{
-			phys->vel[0],
-			phys->vel[1],
-			phys->vel[2]
-		};
-
-		phys->vel[0] *= xy_speed;
-		phys->vel[1] *= xy_speed;
-		phys->vel[2] /= HEIGHT_SCALE;
-		float vn = sqrtf(phys->vel[0] * phys->vel[0] + phys->vel[1] * phys->vel[1] + phys->vel[2] * phys->vel[2]);
-
-		if (vn > 0.001)
-		{
-
-
-			vn = 1.0 / vn;
-			// leave direction only
-			phys->vel[0] *= vn;
-			phys->vel[1] *= vn;
-			phys->vel[2] *= vn;
-
-			// project
-			vn = DotProduct(phys->vel, vel);
-
-			// apply magnitude from poisition offs
-			phys->vel[0] *= vn / xy_speed;
-			phys->vel[1] *= vn / xy_speed;
-			phys->vel[2] *= vn * HEIGHT_SCALE;
-
-			printf("iters_left:%d, in: %f,%f out: %f,%f\n", iters_left, org_vel[0], org_vel[1], phys->vel[0], phys->vel[1]);
-
-			// average org and new
-			phys->vel[0] = phys->vel[0] * 0.0 + org_vel[0] * 1.0;
-			phys->vel[1] = phys->vel[1] * 0.0 + org_vel[1] * 1.0;
-			phys->vel[2] = phys->vel[2] * 0.0 + org_vel[2] * 1.0;
-		}
-		else
-		{
-			phys->vel[0] = 0;
-			phys->vel[1] = 0;
-			phys->vel[2] = 0;
-		}
-		*/
-
-		float org_vel[3] =
-		{
-			phys->vel[0],
-			phys->vel[1],
-			phys->vel[2]
-		};
-
-		phys->vel[0] = (pos[0] - phys->pos[0]) / (xy_speed * dt);
-		phys->vel[1] = (pos[1] - phys->pos[1]) / (xy_speed * dt);
-		phys->vel[2] = (pos[2] - phys->pos[2]) / dt;
-
-		float adz = fmaxf(0,phys->vel[2]) / HEIGHT_SCALE * 4;
-		float adxy = xy_speed * sqrtf(phys->vel[0] * phys->vel[0] + phys->vel[1] * phys->vel[1]);
-		phys->slope = atan2(adz, adxy);
-
-		// printf("iters_left:%d, in: %f,%f out: %f,%f\n", iters_left, org_vel[0], org_vel[1], phys->vel[0], phys->vel[1]);
-
-		// slippery threshold?
-		// use org (no-slippery) use new (full slippery)
-
-		phys->vel[0] = 1.0 * phys->vel[0] + org_vel[0] * 0.0;
-		phys->vel[1] = 1.0 * phys->vel[1] + org_vel[1] * 0.0;
-		phys->vel[2] = 1.0 * phys->vel[2] + org_vel[2] * 0.0;
-
-		// printf("contact_normal_z:%f, vel[0]: %f, vel[1]:%f, vel[2]:%f\n", contact_normal_z,fabsf(phys->vel[0]),fabsf(phys->vel[1]),fabsf(phys->vel[2]));
-
-		if (ix || iy || contact_normal_z <= 0.0 || fabsf(phys->vel[0]) > 0.1 || fabsf(phys->vel[1]) > 0.1 || fabsf(phys->vel[2]) > 0.1*16)
-		{
-			phys->pos[0] = pos[0];
-			phys->pos[1] = pos[1];
-			phys->pos[2] = pos[2];
-		}
-		else
-		{
-			phys->vel[0] = 0;
-			phys->vel[1] = 0;
-			phys->vel[2] = 0;
-		}
-	}
-
-	// jump
-	if (contact_normal_z > 0.0)
-	{
-		if (io->jump)
-		{
-			phys->vel[2]+= 10;
-            io->jump = false;
-		}
-	} 
-
-    io->pos[0] = phys->pos[0];
-    io->pos[1] = phys->pos[1];
-    io->pos[2] = phys->pos[2];
-
-    io->yaw = phys->yaw;
-    io->player_dir = phys->player_dir;
-    io->player_stp = phys->player_stp;
+	}// while (stamp > phys->stamp);
 
 
 	// OLD POS
