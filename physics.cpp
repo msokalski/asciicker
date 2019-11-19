@@ -488,28 +488,28 @@ struct Physics
 
 void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 {
-	while (stamp - phys->stamp > 1000020 / 60) // it is time to make it more reliable
+	static const float xy_speed = 0.13;
+	static const float radius_cells = 2; // in full x-cells
+	static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
+	static const float world_patch = VISUAL_CELLS; // patch size in world coords
+	static const float world_radius = radius_cells / patch_cells * world_patch;
+	static const float height_cells = 7.5;
+
+	// 2/3 = 1/(zoom*sin30)
+	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
+
+	static const int interval = 15000; // update physics step in [us]
+
+	while (stamp - phys->stamp >= interval) // 5ms physics steps ( 200 steps/sec )
 	{
 		uint64_t elaps = stamp - phys->stamp;
-		if (elaps > 1000020 / 60)
-			elaps = 1000020 / 60;
-		float dt = elaps * (60.0f / 1000020.0f);
+		if (elaps > interval)
+			elaps = interval;
 		phys->stamp += elaps;
+		float dt = elaps * (60.0f / 1000000.0f);
 
 		// by having old and new water level we can (in future) keep player floating on top of waves 
 		phys->water = io->water;
-
-		float xy_speed = 0.13;
-
-		static const float radius_cells = 2; // in full x-cells
-		static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
-		static const float world_patch = VISUAL_CELLS; // patch size in world coords
-		static const float world_radius = radius_cells / patch_cells * world_patch;
-
-		static const float height_cells = 7.5;
-
-		// 2/3 = 1/(zoom*sin30)
-		static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
 
 		// YAW
 		{
@@ -899,17 +899,15 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 				io->jump = false;
 			}
 		}
+	}
 
-		io->pos[0] = phys->pos[0];
-		io->pos[1] = phys->pos[1];
-		io->pos[2] = phys->pos[2];
+	io->pos[0] = phys->pos[0];
+	io->pos[1] = phys->pos[1];
+	io->pos[2] = phys->pos[2];
 
-		io->yaw = phys->yaw;
-		io->player_dir = phys->player_dir;
-		io->player_stp = phys->player_stp;
-
-	}// while (stamp > phys->stamp);
-
+	io->yaw = phys->yaw;
+	io->player_dir = phys->player_dir;
+	io->player_stp = phys->player_stp;
 
 	// OLD POS
 	// after updating x,y,z by time and keyb bits

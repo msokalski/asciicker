@@ -80,9 +80,17 @@ static int (* const CP437[256])(char*) =
     UTF8<0x00B0>, UTF8<0x2219>, UTF8<0x00B7>, UTF8<0x221A>, UTF8<0x207F>, UTF8<0x00B2>, UTF8<0x25A0>, UTF8<0x0020>
 };
 
-
+bool xterm_kitty = false;
 void SetScreen(bool alt)
 {
+
+    // kitty kitty ...
+    const char* term = getenv("TERM");
+    if (term && strcmp(term,"xterm-kitty")==0)
+    {
+        xterm_kitty = alt;
+        write(STDOUT_FILENO, alt?"\x1B[?2017h":"\x1B[?2017l", 8);
+    }
     
     static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l"; // +home, -wrap, -cursor
     static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h"; // +def_fg/bg, +wrap, +cursor
@@ -185,7 +193,8 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
 
     // home
 
-    const int out_size = 4096;
+    // 2.3MB out buffer
+    const int out_size = 3/*header*/ + 40/*fg,bg,ch*/ * 320/*width*/ * 180/*height*/ + 180/*'\n'*/; // 4096;
     char out[out_size];
     int out_pos = 0;
 
@@ -201,17 +210,16 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
             if (ptr->fg != fg)
             {
                 if (ptr->bk != bk)
-                    // WRITE("\x1B[38;5;%d;48;5;%dm%s",ptr->fg,ptr->bk,chr);
+                    //WRITE("\x1B[38;5;%d;48;5;%dm%s",ptr->fg,ptr->bk,chr);
                     WRITE("\x1B[38;2;%d;%d;%d;48;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
-                    //WRITE("\x1B[38;2;%d;%d;%dm\x1B[48;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
                 else
-                    // WRITE("\x1B[38;5;%dm%s",ptr->fg,chr);
+                    //WRITE("\x1B[38;5;%dm%s",ptr->fg,chr);
                     WRITE("\x1B[38;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], chr);
             }
             else
             {
                 if (ptr->bk != bk)
-                    // WRITE("\x1B[48;5;%dm%s",ptr->bk,chr);
+                    //WRITE("\x1B[48;5;%dm%s",ptr->bk,chr);
                     WRITE("\x1B[48;2;%d;%d;%dm%s",pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
                 else
                     WRITE("%s",chr);
@@ -434,11 +442,14 @@ int main(int argc, char* argv[])
         int dt = now-stamp;
         stamp = now;      
 
-        for (int i=0; i<256; i++)
+        if (!xterm_kitty)
         {
-            kbd[i] -= dt;
-            if (kbd[i]<0)
-                kbd[i]=0;
+            for (int i=0; i<256; i++)
+            {
+                kbd[i] -= dt;
+                if (kbd[i]<0)
+                    kbd[i]=0;
+            }
         }
 
         // prep for poll
@@ -447,38 +458,115 @@ int main(int argc, char* argv[])
         pfds[0].events = POLLIN; 
         pfds[0].revents = 0;
 
-        poll(pfds, 1, 0); // no timeout
+        PhysicsIO io = {0};
+        io.water = 55;
+
+        poll(pfds, 1, 0); // 0 no timeout, -1 block
 
         if (pfds[0].revents & POLLIN) 
         {
             char stream[256];
             int bytes = read(STDIN_FILENO, stream, 256);
 
-            FILE* log = fopen("log.bin","a+t");
-            for (int i=0; i<bytes; i++)
+            if (xterm_kitty)
             {
-                fprintf(log,"%02X(%c) ",stream[i], stream[i]>=32 && stream[i]<127 ? stream[i] : ' ');
-                if (stream[i])
-                    kbd[stream[i]] = 20000; // 20ms - time it remains pressed in us 
+                for (int i=0; i<=bytes-8;)
+                {
+                    int type = -2, mods = -1;
+
+                    if (stream[i] == 0x1B && stream[i+1] == '_' && stream[i+2] == 'K' && stream[i+6]==0x1B && stream[i+7]=='\\')
+                    {
+                        switch (stream[i+3])
+                        {
+                            case 'p': type = +1; //press
+                                break;
+                            case 't': type =  0; //repeat
+                                break;
+                            case 'r': type = -1; //release
+                                break;
+                        }
+
+                        if (type!=-2)
+                        {
+                            if (stream[i+4]>='A' && stream[i+4]<='P')
+                            {
+                                mods = stream[i+4] -'A';
+
+                                switch (stream[i+5])
+                                {
+                                    case 'U': // C
+                                    case 'V': // D
+                                        if (type>0 && (mods & 4))
+                                        {
+                                            running = false;
+                                            break;
+                                        }
+
+                                    case '5': // LEFT
+                                    case '4': // RIGHT
+                                    case '7': // UP
+                                    case '6': // DOWN
+
+                                    case '2': // INSERT
+                                    case '.': // HOME
+                                    case '8': // PAGEUP
+
+                                        if (type>0)
+                                        {
+                                            kbd[ stream[i+5] ] = 1;
+                                        }
+
+                                        if (type<0)
+                                        {
+                                            kbd[ stream[i+5] ] = 0;
+                                        }
+                                        
+                                        break;
+                                }
+                            }
+                        }
+
+                        i+=8;
+                    }
+                    else
+                        i++;
+                }
+
             }
-            if (bytes)
-                fprintf(log,"\n");
             else
-                fprintf(log,"0\n");
-            fclose(log);
+            {
+                for (int i=0; i<bytes; i++)
+                {
+                    if (stream[i])
+                        kbd[stream[i]] = 20000; // 20ms - time it remains pressed in us 
+                }
+            }
         }
 
-        PhysicsIO io;
-        io.water = 55;
-        io.x_force = (kbd['d'] || kbd['D'] || kbd['9'] || kbd['3']) - (kbd['a'] || kbd['A']);
-        io.y_force = (kbd['w'] || kbd['W']) - (kbd['s'] || kbd['S']);
-        io.torque  = (kbd['q'] || kbd['Q']) - (kbd['e'] || kbd['E']);
-        io.jump = kbd[' '] || kbd['D'] || kbd['A'] || kbd['S'] || kbd['W'];
+        if (xterm_kitty)
+        {
+            io.x_force = (kbd['4'] - kbd['5']);
+            io.y_force = (kbd['7'] - kbd['6']);
+            io.torque  = (kbd['2'] - kbd['8']);
+            io.jump = kbd['.']!=0;
+        }
+        else
+        {
+            io.x_force = (kbd['d'] || kbd['D'] || kbd['9'] || kbd['3']) - (kbd['a'] || kbd['A']);
+            io.y_force = (kbd['w'] || kbd['W']) - (kbd['s'] || kbd['S']);
+            io.torque  = (kbd['q'] || kbd['Q']) - (kbd['e'] || kbd['E']);
+            io.jump = kbd[' '] || kbd['D'] || kbd['A'] || kbd['S'] || kbd['W'];
+        }
 
         Animate(phys,stamp,&io);
 
         if (!io.jump)
-            kbd[' '] = 0;
+        {
+            if (xterm_kitty)
+                kbd['.'] = 0;
+            else
+                kbd[' '] = 0;
+        }
 
         // get current terminal w,h
         // if changed realloc renderer output
