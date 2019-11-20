@@ -538,6 +538,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 		}
 
 		// VEL & ACC
+		float xy_len = sqrtf(io->x_force * io->x_force + io->y_force * io->y_force);
 		int ix = 0, iy = 0;
 		{
 			if (io->x_force < 0)
@@ -549,20 +550,44 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			if (io->y_force < 0)
 				iy--;
 
+			/*
 			float dir[3][3] =
 			{
 				{315,  0 , 45},
 				{270, -1 , 90},
 				{225, 180, 135},
 			};
+			*/
 
+			float dx,dy;
+			if (xy_len<0.01)
+			{
+				xy_len = 0;
+				ix = 0;
+				iy = 0;
+				dx=0;
+				dy=0;
+			}
+			else
+			{
+				dx = io->x_force / xy_len;
+				dy = io->y_force / xy_len;
+				if (xy_len>1)
+					xy_len = 1;
+
+				phys->player_dir = atan2(dy,dx) * 180 / M_PI + phys->yaw + 90;
+			}
+
+			/*
 			if (dir[iy + 1][ix + 1] >= 0)
 				phys->player_dir = dir[iy + 1][ix + 1] + phys->yaw;
+			*/
 
 			if (ix || iy)
 			{
 				float cs = cosf(phys->slope);
-				float dn = 1.0 / sqrtf(io->x_force * io->x_force + io->y_force * io->y_force);
+				// float dn = 1.0 / sqrtf(io->x_force * io->x_force + io->y_force * io->y_force);
+				float dn = 1.0;
 				float dx = io->x_force * dn * cs, dy = io->y_force * dn * cs;
 
 				phys->vel[0] += (float)(dt * (dx * cos(phys->yaw * (M_PI / 180)) - dy * sin(phys->yaw * (M_PI / 180))));
@@ -582,8 +607,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 				float xy_limit = 27 - 17 * (phys->water - phys->pos[2]) / world_height;
 
 				float lim = 27;
-				if (io->slow)
-					lim *= 0.125;
+				lim *= xy_len*xy_len*xy_len;
 
 				if (xy_limit < 10)
 					xy_limit = 10;

@@ -14,6 +14,9 @@
 		"disasexpl.associations": {
 			"**/*.c": "${workspaceFolder}/.o_game/${relativeFileDir}/${fileBasenameNoExtension}.s",
 			"**/*.cpp": "${workspaceFolder}/.o_game/${relativeFileDir}/${fileBasenameNoExtension}.s"
-		}	
+		},
+		"files.associations": {
+			"cmath": "cpp"
+		}
 	}
 }

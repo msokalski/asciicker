@@ -92,8 +92,8 @@ void SetScreen(bool alt)
         write(STDOUT_FILENO, alt?"\x1B[?2017h":"\x1B[?2017l", 8);
     }
     
-    static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l"; // +home, -wrap, -cursor
-    static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h"; // +def_fg/bg, +wrap, +cursor
+    static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l" "\x1B[?1002h"; // +home, -wrap, -cursor, +mouse
+    static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h" "\x1B[?1002l"; // +def_fg/bg, +wrap, +cursor, -mouse
     static int on_len = strlen(on_str);
     static int off_len = strlen(off_str);
 
@@ -310,7 +310,7 @@ int main(int argc, char* argv[])
     float water = 55;
 
     float yaw = 45;
-    float pos[3] = {20,20,0};
+    float pos[3] = {0,15,0};
     float lt[4] = {1,0,1,.5};
     float player_dir = 0;
     int  player_stp = -1;    
@@ -325,6 +325,10 @@ int main(int argc, char* argv[])
     uint64_t begin = GetTime();
     uint64_t stamp = begin;
     uint64_t frames = 0;
+
+    int mouse_b=0; // num of buttons down (we can't be sure which ones!)
+    int mouse_x;
+    int mouse_y;    
 
    	player_sprite = LoadPlayer("./sprites/player.xp");
     if (!player_sprite)
@@ -446,6 +450,8 @@ int main(int argc, char* argv[])
 
     while(running)
     {
+        bool mouse_j = false;
+
         // get time stamp
         uint64_t now = GetTime();
         int dt = now-stamp;
@@ -494,6 +500,7 @@ int main(int argc, char* argv[])
                 // 1. regular chars
                 // if (stream[i] >= 32 && stream[i] <= 127)
 
+                /*
                 if (!xterm_kitty)
                 {
                     FILE* log = fopen("log.bin","a+");
@@ -502,30 +509,53 @@ int main(int argc, char* argv[])
                     i++;
                     continue;
                 }
+                */
 
-                if (stream[i]!=0x1B)
+                // unescaped input can only jump
+                if (stream[i]>=' ' && stream[i]<=127)
                 {
-                    // unicode chars!!!
-                    FILE* log = fopen("log.bin","a+");
-                    fprintf(log,"0x%02X(%c)\n",stream[i],stream[i]);
-                    fclose(log);
-
-                    /*
-                    // LOOKS LIKE EVERYTHING IS LOGGED HERE AS WELL !!!
-                    // regular char down without mods (can be capital if capslock is on)
-
-                    // reset all mods
-                    memset( kbd + 128 + 'a', 0, sizeof(int) * ('h'-'a'+1));
-
-                    kbd[ stream[i] ] = 1;
-                    */
+                    switch (stream[i])
+                    {
+                        case ' ': mouse_j = true; break;
+                    }
+                    
                     i++;
-
                     continue;
                 }
 
-                // 2. appmode on/off esc keys
-                // ...
+                // mouse
+                if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'M')
+                {
+                    // code = (0=mb1_down,1=mb2_down,2=mb3_down,3=release) + higher bits for mods
+                    // x,y
+
+                    if (bytes-i < 6)
+                        break;
+
+                    if ((stream[i+3]&0x60) == 0x20) // ensure base without motion
+                    {
+                        if ((stream[i+3]&3) == 3)
+                        {
+                            if (mouse_b)
+                                mouse_b--;
+                        }
+                        else
+                        {
+                            mouse_b++;
+                            if (mouse_b>=2) // emu jump
+                                mouse_j = true;
+                        }
+                    }
+
+                    mouse_x = (uint8_t)stream[i+4] - 33;
+                    mouse_y = (uint8_t)stream[i+5] - 33;
+
+                    FILE* log = fopen("log.bin","a+");
+                    fprintf(log,"mouse b=%d, x=%d, y=%d, j=%d\n", mouse_b, mouse_x, mouse_y,(int)mouse_j);
+                    fclose(log);                    
+
+                    i+=6;
+                }
 
                 // 3. kitty keys
                 if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '_' && stream[i+2] == 'K')
@@ -619,12 +649,6 @@ int main(int argc, char* argv[])
                                 {
                                     kbd[ 128 + stream[i+6] ] = 0;
                                 }
-
-
-                                stream[i+7]=0;
-                                FILE* log = fopen("log.bin","a+");
-                                fprintf(log,"%s\n",stream+i+1);
-                                fclose(log);
 
                                 i+=9;
                                 break;
@@ -772,19 +796,40 @@ int main(int argc, char* argv[])
 
         if (xterm_kitty)
         {
-            io.slow = kbd[128 + 'a'] || kbd[128 + 'e']; // SHIFT (emulated from mods)
-            io.jump = kbd[128 + 'c'] || kbd[128 + 'g']; // ALT
-            io.x_force = (kbd['4'] - kbd['5']); // LEFT-RIGHT
-            io.y_force = (kbd['7'] - kbd['6']); // UP-DOWN
-            io.torque  = (kbd['2'] - kbd['8']); // 
+            float speed = 1.0;
+            if (kbd[128 + 'a'] || kbd[128 + 'e']) // SHIFT (emulated from mods)
+                speed *= 0.5;
+            io.jump = kbd[128 + 'c'] || kbd[128 + 'g'] || kbd['A'] || mouse_j; // ALT / space
+            io.x_force = (kbd['4'] - kbd['5'])*speed; // LEFT-RIGHT
+            io.y_force = (kbd['7'] - kbd['6'])*speed; // UP-DOWN
+
+            float len = sqrtf(io.x_force*io.x_force+io.y_force*io.y_force);
+            if (len>0)
+                speed /= len;
+            io.x_force *= speed;
+            io.y_force *= speed;
+
+
+            io.torque = (int)(kbd['3'] || kbd['8'] || kbd['/']) - // DEL,PGUP,F1
+                        (int)(kbd['2'] || kbd['9'] || kbd['*']);  // INS,PGDN,F2
         }
         else
         {
             // parse cursor keys + keypad + modifiers shift/alt
-            io.x_force = (kbd['d'] || kbd['D'] || kbd['9'] || kbd['6'] || kbd['3']) - (kbd['a'] || kbd['A'] || kbd['7'] || kbd['4'] || kbd['2']);
-            io.y_force = (kbd['w'] || kbd['W'] || kbd['7'] || kbd['8'] || kbd['9']) - (kbd['s'] || kbd['S'] || kbd['1'] || kbd['2'] || kbd['3']);
+            // io.slow = false; // check for last input was capital or with shift
+            float speed = 1.0 / sqrtf(2.0f);
+            io.jump = kbd[' '] || kbd['D'] || kbd['A'] || kbd['S'] || kbd['W'] || mouse_j;
+            io.x_force = ((kbd['d'] || kbd['D'] || kbd['9'] || kbd['6'] || kbd['3']) - (kbd['a'] || kbd['A'] || kbd['7'] || kbd['4'] || kbd['2']))*speed;
+            io.y_force = ((kbd['w'] || kbd['W'] || kbd['7'] || kbd['8'] || kbd['9']) - (kbd['s'] || kbd['S'] || kbd['1'] || kbd['2'] || kbd['3']))*speed;
             io.torque  = (kbd['q'] || kbd['Q']) - (kbd['e'] || kbd['E']);
-            io.jump = kbd[' '] || kbd['D'] || kbd['A'] || kbd['S'] || kbd['W'];
+        }
+
+        if (mouse_b)
+        {
+            // override keyb
+            //io.slow = false;
+            io.x_force = 2*(mouse_x*2 - wh[0]) / (float)wh[0];
+            io.y_force = 2*(wh[1] - mouse_y*2) / (float)wh[1];
         }
 
         Animate(phys,stamp,&io);
@@ -842,6 +887,6 @@ int main(int argc, char* argv[])
     SetScreen(false);
 
     
-    printf("FPS: %f\n", frames * 1000000.0 / (end-begin));
+    printf("FPS: %f (%dx%d)\n", frames * 1000000.0 / (end-begin), wh[0], wh[1]);
 	return 0;
 }

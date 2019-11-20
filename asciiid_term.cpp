@@ -60,12 +60,23 @@ void term_render(A3D_WND* wnd)
 
 	PhysicsIO io;
 
-	io.x_force = (int)term->IsKeyDown(A3D_RIGHT) - (int)term->IsKeyDown(A3D_LEFT);
-	io.y_force = (int)term->IsKeyDown(A3D_UP) - (int)term->IsKeyDown(A3D_DOWN);
-	io.torque = (int)term->IsKeyDown(A3D_Q) - (int)term->IsKeyDown(A3D_E);
+	float speed = 1;
+	if (term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT))
+		speed *= 0.5;
+	io.x_force = ((int)term->IsKeyDown(A3D_RIGHT) - (int)term->IsKeyDown(A3D_LEFT));
+	io.y_force = ((int)term->IsKeyDown(A3D_UP) - (int)term->IsKeyDown(A3D_DOWN));
+
+	float len = sqrtf(io.x_force*io.x_force+io.y_force*io.y_force);
+	if (len>0)
+		speed /= len;
+	io.x_force *= speed;
+	io.y_force *= speed;
+
+	io.torque = (int)(term->IsKeyDown(A3D_DELETE) || term->IsKeyDown(A3D_PAGEUP) || term->IsKeyDown(A3D_F1)) - 
+	            (int)(term->IsKeyDown(A3D_INSERT) || term->IsKeyDown(A3D_PAGEDOWN) || term->IsKeyDown(A3D_F2));
 	io.water = probe_z;
-	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT);
-	io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
+	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT) || term->IsKeyDown(A3D_SPACE);
+	//io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
 	uint64_t stamp = a3dGetTime();
 
 	Animate(term->phys, stamp, &io);
@@ -74,6 +85,7 @@ void term_render(A3D_WND* wnd)
 	{
 		term->keys[A3D_LALT/8] &= ~(1<<(A3D_LALT&7));
 		term->keys[A3D_RALT/8] &= ~(1<<(A3D_RALT&7));
+		term->keys[A3D_SPACE/8] &= ~(1<<(A3D_SPACE&7));
 	}
 
 	// FPS DUMPER
@@ -187,19 +199,6 @@ void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 {
 	if (mi == LEFT_DN)
 	{
-		// get heigth from frame
-		// get highest of 4 samples at mouse coord
-		float z = 0;
-
-		// transform screen_x, screen_y, z back to worldspace
-		
-		// store goto xy info handled by animate()
-		
-		// todo later:
-		// calc path at some resolution to avoid obstacles
-
-
-		// should be cleared on any WSAD key down
 
 	}
 }
