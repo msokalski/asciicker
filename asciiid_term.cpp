@@ -60,18 +60,19 @@ void term_render(A3D_WND* wnd)
 
 	PhysicsIO io;
 
-	io.x_force = (int)term->IsKeyDown(A3D_D) - (int)term->IsKeyDown(A3D_A);
-	io.y_force = (int)term->IsKeyDown(A3D_W) - (int)term->IsKeyDown(A3D_S);
+	io.x_force = (int)term->IsKeyDown(A3D_RIGHT) - (int)term->IsKeyDown(A3D_LEFT);
+	io.y_force = (int)term->IsKeyDown(A3D_UP) - (int)term->IsKeyDown(A3D_DOWN);
 	io.torque = (int)term->IsKeyDown(A3D_Q) - (int)term->IsKeyDown(A3D_E);
 	io.water = probe_z;
-	io.jump = term->IsKeyDown(A3D_SPACE);
+	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT);
 	uint64_t stamp = a3dGetTime();
 
 	Animate(term->phys, stamp, &io);
 
 	if (!io.jump)
 	{
-		term->keys[A3D_SPACE/8] &= ~(1<<(A3D_SPACE&7));
+		term->keys[A3D_LALT/8] &= ~(1<<(A3D_LALT&7));
+		term->keys[A3D_RALT/8] &= ~(1<<(A3D_RALT&7));
 	}
 
 	// FPS DUMPER

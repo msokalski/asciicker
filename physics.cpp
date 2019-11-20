@@ -519,7 +519,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			if (io->torque > 0)
 				da++;
 
-			phys->yaw_vel += dt * da;
+			phys->yaw_vel += dt * io->torque; //da;
 
 			if (phys->yaw_vel > 10)
 				phys->yaw_vel = 10;
@@ -562,8 +562,8 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			if (ix || iy)
 			{
 				float cs = cosf(phys->slope);
-				float dn = 1.0 / sqrtf(ix * ix + iy * iy);
-				float dx = ix * dn * cs, dy = iy * dn * cs;
+				float dn = 1.0 / sqrtf(io->x_force * io->x_force + io->y_force * io->y_force);
+				float dx = io->x_force * dn * cs, dy = io->y_force * dn * cs;
 
 				phys->vel[0] += (float)(dt * (dx * cos(phys->yaw * (M_PI / 180)) - dy * sin(phys->yaw * (M_PI / 180))));
 				phys->vel[1] += (float)(dt * (dx * sin(phys->yaw * (M_PI / 180)) + dy * cos(phys->yaw * (M_PI / 180))));
@@ -580,10 +580,15 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			{
 				// speed limit is 27 for air / ground and 10 for full in water
 				float xy_limit = 27 - 17 * (phys->water - phys->pos[2]) / world_height;
-				if (xy_limit > 27)
-					xy_limit = 27;
+
+				float lim = 27;
+				if (io->slow)
+					lim *= 0.125;
+
 				if (xy_limit < 10)
 					xy_limit = 10;
+				if (xy_limit > lim)
+					xy_limit = lim;
 
 				if (sqr_vel_xy > xy_limit)
 				{

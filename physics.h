@@ -12,6 +12,7 @@ struct PhysicsIO
     float y_force;
     float torque;
     float water;
+    bool slow;
 
     // IO:
     bool jump; // will be falsed by Animate() if jump was handled

@@ -298,10 +298,19 @@ int main(int argc, char* argv[])
 
     SetScreen(true);
 
+    /*
+    if (!xterm_kitty)
+    {
+        SetScreen(false);
+        printf("TERMINATING: this pre-update build requires kitty terminal to run\n");
+        return -1;
+    }
+    */
+
     float water = 55;
 
     float yaw = 45;
-    float pos[3] = {48,48,0};
+    float pos[3] = {20,20,0};
     float lt[4] = {1,0,1,.5};
     float player_dir = 0;
     int  player_stp = -1;    
@@ -465,95 +474,315 @@ int main(int argc, char* argv[])
 
         if (pfds[0].revents & POLLIN) 
         {
-            char stream[256];
-            int bytes = read(STDIN_FILENO, stream, 256);
+            static int stream_bytes = 0;
+            static char stream[256];
 
-            if (xterm_kitty)
+            char fresh[256];
+
+            int fresh_bytes = read(STDIN_FILENO, fresh, 256 - stream_bytes);
+            memcpy(stream + stream_bytes, fresh, fresh_bytes);
+
+            int bytes = stream_bytes + fresh_bytes;
+
+            int i = 0;
+            while (i<bytes)
             {
-                for (int i=0; i<=bytes-8;)
+                int j=i;
+
+                int type = 0, mods = 0;
+
+                // 1. regular chars
+                // if (stream[i] >= 32 && stream[i] <= 127)
+
+                if (!xterm_kitty)
                 {
-                    int type = -2, mods = -1;
-
-                    if (stream[i] == 0x1B && stream[i+1] == '_' && stream[i+2] == 'K' && stream[i+6]==0x1B && stream[i+7]=='\\')
-                    {
-                        switch (stream[i+3])
-                        {
-                            case 'p': type = +1; //press
-                                break;
-                            case 't': type =  0; //repeat
-                                break;
-                            case 'r': type = -1; //release
-                                break;
-                        }
-
-                        if (type!=-2)
-                        {
-                            if (stream[i+4]>='A' && stream[i+4]<='P')
-                            {
-                                mods = stream[i+4] -'A';
-
-                                switch (stream[i+5])
-                                {
-                                    case 'U': // C
-                                    case 'V': // D
-                                        if (type>0 && (mods & 4))
-                                        {
-                                            running = false;
-                                            break;
-                                        }
-
-                                    case '5': // LEFT
-                                    case '4': // RIGHT
-                                    case '7': // UP
-                                    case '6': // DOWN
-
-                                    case '2': // INSERT
-                                    case '.': // HOME
-                                    case '8': // PAGEUP
-
-                                        if (type>0)
-                                        {
-                                            kbd[ stream[i+5] ] = 1;
-                                        }
-
-                                        if (type<0)
-                                        {
-                                            kbd[ stream[i+5] ] = 0;
-                                        }
-                                        
-                                        break;
-                                }
-                            }
-                        }
-
-                        i+=8;
-                    }
-                    else
-                        i++;
+                    FILE* log = fopen("log.bin","a+");
+                    fprintf(log,"0x%02X(%c)\n",stream[i],stream[i]);
+                    fclose(log);
+                    i++;
+                    continue;
                 }
 
+                if (stream[i]!=0x1B)
+                {
+                    // unicode chars!!!
+                    FILE* log = fopen("log.bin","a+");
+                    fprintf(log,"0x%02X(%c)\n",stream[i],stream[i]);
+                    fclose(log);
+
+                    /*
+                    // LOOKS LIKE EVERYTHING IS LOGGED HERE AS WELL !!!
+                    // regular char down without mods (can be capital if capslock is on)
+
+                    // reset all mods
+                    memset( kbd + 128 + 'a', 0, sizeof(int) * ('h'-'a'+1));
+
+                    kbd[ stream[i] ] = 1;
+                    */
+                    i++;
+
+                    continue;
+                }
+
+                // 2. appmode on/off esc keys
+                // ...
+
+                // 3. kitty keys
+                if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '_' && stream[i+2] == 'K')
+                {
+                    if (bytes-i < 8)
+                        break;
+
+                    if (bytes-i == 8 && stream[i+6] != 0x1B)
+                        break;
+
+                    switch (stream[i+3])
+                    {
+                        case 'p': type = +1; //press
+                            break;
+                        case 't': type =  0; //repeat
+                            break;
+                        case 'r': type = -1; //release
+                            break;
+                    }
+
+                    if (stream[i+4]>='A' && stream[i+4]<='P')
+                    {
+                        mods = stream[i+4] -'A';
+                    }
+
+                    int codelen = 0;
+                    if (stream[i+6]==0x1B && stream[i+7]=='\\')
+                        codelen=1;
+                    else
+                    if (stream[i+7]==0x1B && stream[i+8]=='\\')
+                        codelen=2;
+
+                    if ((mods & 4) && stream[i+5]=='U' && codelen==1) // CTRL+C
+                    {
+                        memset(kbd,0,sizeof(int)*256);
+                        running = false;
+                        break;
+                    }
+
+                    // store shift 
+                    if ( (mods&1) && type>=0 )
+                        kbd[128+'a'] = 1;
+                    else
+                        kbd[128+'a'] = 0;
+
+                    if (codelen==2 && stream[i+5]=='B')
+                    {
+                        switch (stream[i+6])
+                        {
+                            case 'A': // F17
+                            case 'B': // F18
+                            case 'C': // F19
+                            case 'D': // F20
+                            case 'E': // F21
+                            case 'F': // F22
+                            case 'G': // F23
+                            case 'H': // F24
+                            case 'I': // F25
+                            case 'J': // KP0
+                            case 'K': // KP1
+                            case 'L': // KP2
+                            case 'M': // KP3
+                            case 'N': // KP4
+                            case 'O': // KP5
+                            case 'P': // KP6
+                            case 'Q': // KP7
+                            case 'R': // KP8
+                            case 'S': // KP9
+                            case 'T': // KP.
+                            case 'U': // KP/
+                            case 'V': // KP*
+                            case 'W': // KP-
+                            case 'X': // KP+
+                            case 'Y': // KP enter
+                            case 'Z': // KP=
+                            case 'a': // left shift
+                            case 'b': // left ctrl
+                            case 'c': // left alt
+                            case 'd': // left super (win?)
+                            case 'e': // right shift
+                            case 'f': // right ctrl
+                            case 'g': // right alt
+                            case 'h': // right super (win?)
+                            {
+                                if (type>0)
+                                {
+                                    kbd[ 128 + stream[i+6] ] = 1;
+                                }
+
+                                if (type<0)
+                                {
+                                    kbd[ 128 + stream[i+6] ] = 0;
+                                }
+
+
+                                stream[i+7]=0;
+                                FILE* log = fopen("log.bin","a+");
+                                fprintf(log,"%s\n",stream+i+1);
+                                fclose(log);
+
+                                i+=9;
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    if (codelen==1)
+                    {
+                        switch (stream[i+5])
+                        {
+                            case '0': // TAB
+                            case '1': // BACKSPACE
+                            case '2': // INSERT
+                            case '3': // DELETE
+                            case '4': // RIGHT
+                            case '5': // LEFT
+                            case '6': // DOWN
+                            case '7': // UP
+                            case '8': // PAGEUP
+                            case '9': // PAGEDN
+
+                            case 'A': // SPACE
+                            case 'B': // APOSTROPHE
+                            case 'C': // COMMA
+                            case 'D': // MINUS
+                            case 'E': // PERIOD
+                            case 'F': // SLASH
+
+                            case 'G': // 0
+                            case 'H': // 1
+                            case 'I': // 2
+                            case 'J': // 3
+                            case 'K': // 4
+                            case 'L': // 5
+                            case 'M': // 6
+                            case 'N': // 7
+                            case 'O': // 8
+                            case 'P': // 9
+                            case 'Q': // SEMICOLON
+                            case 'R': // EQUAL
+
+                            case 'S': // A
+                            case 'T': // B
+                            case 'U': // C
+                            case 'V': // D
+                            case 'W': // E
+                            case 'X': // F
+                            case 'Y': // G
+                            case 'Z': // H
+                            case 'a': // I
+                            case 'b': // J
+                            case 'c': // K
+                            case 'd': // L
+                            case 'e': // M
+                            case 'f': // N
+                            case 'g': // O
+                            case 'h': // P
+                            case 'i': // Q
+                            case 'j': // R
+                            case 'k': // S
+                            case 'l': // T
+                            case 'm': // U
+                            case 'n': // V
+                            case 'o': // W
+                            case 'p': // X
+                            case 'q': // Y
+                            case 'r': // Z
+
+                            case 's': // [
+                            case 't': // BACKSLASH
+                            case 'u': // ]
+
+                            case 'v': // ` GRAVE ACCENT
+                            case 'w': // WORLD-1
+                            case 'x': // WORLD-2
+                            case 'y': // ESCAPE
+                            case 'z': // ENTER
+
+                            case '.': // HOME
+                            case '-': // END
+
+                            case '^': // PRINT SCREEN
+                            case '+': // SCROLLOCK
+                            case '!': // PAUSE
+                            case '=': // NUMLOCK
+                            case ':': // CAPSLOCK
+
+                            case '/': // F1
+                            case '*': // F2
+                            case '?': // F3
+                            case '&': // F4
+                            case '<': // F5
+                            case '>': // F6
+                            case '(': // F7
+                            case ')': // F8
+                            case '[': // F9
+                            case ']': // F10
+                            case '{': // F11
+                            case '}': // F12
+                            case '@': // F13
+                            case '%': // F14
+                            case '$': // F15
+                            case '#': // F16
+                            {
+                                if (type>0)
+                                {
+                                    kbd[ stream[i+5] ] =  1;
+                                }
+
+                                if (type<0)
+                                {
+                                    kbd[ stream[i+5] ] = 0;
+                                }
+
+                                stream[i+6]=0;
+                                FILE* log = fopen("log.bin","a+");
+                                fprintf(log,"%s\n",stream+i+1);
+                                fclose(log);
+
+                                i+=8;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (j==i)
+                    break;
+            }
+
+            if (i)
+            {
+                // something parsed
+                stream_bytes = bytes - i;
+                memmove(stream, stream+i, stream_bytes);
             }
             else
             {
-                for (int i=0; i<bytes; i++)
-                {
-                    if (stream[i])
-                        kbd[stream[i]] = 20000; // 20ms - time it remains pressed in us 
-                }
+                // reset in hope of resync
+                memset(kbd,0,sizeof(int)*256);
+                stream_bytes = 0;
             }
         }
 
         if (xterm_kitty)
         {
-            io.x_force = (kbd['4'] - kbd['5']);
-            io.y_force = (kbd['7'] - kbd['6']);
-            io.torque  = (kbd['2'] - kbd['8']);
-            io.jump = kbd['.']!=0;
+            io.slow = kbd[128 + 'a'] || kbd[128 + 'e']; // SHIFT (emulated from mods)
+            io.jump = kbd[128 + 'c'] || kbd[128 + 'g']; // ALT
+            io.x_force = (kbd['4'] - kbd['5']); // LEFT-RIGHT
+            io.y_force = (kbd['7'] - kbd['6']); // UP-DOWN
+            io.torque  = (kbd['2'] - kbd['8']); // 
         }
         else
         {
-            io.x_force = (kbd['d'] || kbd['D'] || kbd['9'] || kbd['3']) - (kbd['a'] || kbd['A']);
-            io.y_force = (kbd['w'] || kbd['W']) - (kbd['s'] || kbd['S']);
+            // parse cursor keys + keypad + modifiers shift/alt
+            io.x_force = (kbd['d'] || kbd['D'] || kbd['9'] || kbd['6'] || kbd['3']) - (kbd['a'] || kbd['A'] || kbd['7'] || kbd['4'] || kbd['2']);
+            io.y_force = (kbd['w'] || kbd['W'] || kbd['7'] || kbd['8'] || kbd['9']) - (kbd['s'] || kbd['S'] || kbd['1'] || kbd['2'] || kbd['3']);
             io.torque  = (kbd['q'] || kbd['Q']) - (kbd['e'] || kbd['E']);
             io.jump = kbd[' '] || kbd['D'] || kbd['A'] || kbd['S'] || kbd['W'];
         }
@@ -563,7 +792,10 @@ int main(int argc, char* argv[])
         if (!io.jump)
         {
             if (xterm_kitty)
-                kbd['.'] = 0;
+            {
+                kbd[128 + 'c'] = 0;
+                kbd[128 + 'g'] = 0;
+            }
             else
                 kbd[' '] = 0;
         }
