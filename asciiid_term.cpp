@@ -65,6 +65,7 @@ void term_render(A3D_WND* wnd)
 	io.torque = (int)term->IsKeyDown(A3D_Q) - (int)term->IsKeyDown(A3D_E);
 	io.water = probe_z;
 	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT);
+	io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
 	uint64_t stamp = a3dGetTime();
 
 	Animate(term->phys, stamp, &io);
