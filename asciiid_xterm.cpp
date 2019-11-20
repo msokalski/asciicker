@@ -523,6 +523,16 @@ int main(int argc, char* argv[])
                     continue;
                 }
 
+                // MUST HAVE
+                // TODO: non-kitty just to rotate, should emu sticky down
+                // F1,F2,DEL,INS,PGUP,PGDN
+                // ...
+
+                // SHOULD HAVE
+                // TODO: non-kitty arrows (in case mouse in not available - YUCK!)
+                // scan for mods: +shift (slower) +alt (jump)
+                // ...
+
                 // mouse
                 if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'M')
                 {
