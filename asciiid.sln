@@ -5,10 +5,9 @@ VisualStudioVersion = 15.0.26430.12
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "asciiid", "asciiid.vcxproj", "{EDC758D2-2AE8-41BE-8859-8D6F70247DBE}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "game", "game.vcxproj", "{B7E885AC-A026-49F3-8145-08D3353FC1CE}"
+EndProject
 Global
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
@@ -24,12 +23,23 @@ Global
 		{EDC758D2-2AE8-41BE-8859-8D6F70247DBE}.Release|x64.Build.0 = Release|x64
 		{EDC758D2-2AE8-41BE-8859-8D6F70247DBE}.Release|x86.ActiveCfg = Release|Win32
 		{EDC758D2-2AE8-41BE-8859-8D6F70247DBE}.Release|x86.Build.0 = Release|Win32
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Debug|x64.ActiveCfg = Debug|x64
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Debug|x64.Build.0 = Debug|x64
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Debug|x86.ActiveCfg = Debug|Win32
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Debug|x86.Build.0 = Debug|Win32
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Release|x64.ActiveCfg = Release|x64
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Release|x64.Build.0 = Release|x64
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Release|x86.ActiveCfg = Release|Win32
+		{B7E885AC-A026-49F3-8145-08D3353FC1CE}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {80AC5F8C-4400-4E91-9A3C-EBABEEC54714}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true

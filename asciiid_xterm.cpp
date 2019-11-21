@@ -3,13 +3,17 @@
 #include <string.h>
 #include <math.h>
 #include <malloc.h>
+
+#ifdef __linux__
 #include <sys/ioctl.h>
 #include <sys/poll.h>
 #include <unistd.h>
-#include <assert.h>
 #include <signal.h>
 #include <termios.h>
 #include <time.h>
+#endif
+
+#include <assert.h>
 
 #include "asciiid_render.h"
 #include "physics.h"
@@ -22,6 +26,7 @@
 #include "rgba8.h"
 
 
+#ifdef __linux__
 /*
 https://superuser.com/questions/1185824/configure-vga-colors-linux-ubuntu
 https://int10h.org/oldschool-pc-fonts/fontlist/
@@ -248,25 +253,19 @@ void exit_handler(int signum)
     running = false;
 }
 
-Material mat[256];
-void* GetMaterialArr()
-{
-    return mat;
-}
-
 bool GetWH(int wh[2])
 {
 	struct winsize size;
-	if (ioctl( 0, TIOCGWINSZ, (char *) &size ))
-    {
-        wh[0] = 80;
-        wh[1] = 50;        
-        return false;
-    }
-	
-    wh[0] = size.ws_col;
-    wh[1] = size.ws_row;
-    return true;
+	if (ioctl(0, TIOCGWINSZ, (char *)&size))
+	{
+		wh[0] = 80;
+		wh[1] = 50;
+		return false;
+	}
+
+	wh[0] = size.ws_col;
+	wh[1] = size.ws_row;
+	return true;
 }
 
 uint64_t GetTime()
@@ -274,6 +273,18 @@ uint64_t GetTime()
 	static timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
+#else
+
+#define GetTime() a3dGetTime()
+
+#endif
+
+Material mat[256];
+void* GetMaterialArr()
+{
+    return mat;
 }
 
 void* GetFontArr();
@@ -478,7 +489,7 @@ int main(int argc, char* argv[])
         global_lt[3] = lt[3];
 
         {
-            FILE* f = fopen("a3d/cccc.a3d","rb");
+            FILE* f = fopen("a3d/game.a3d","rb");
 
             if (f)
             {
@@ -543,6 +554,9 @@ int main(int argc, char* argv[])
         return 0;
     }
 
+
+#ifdef __linux__
+
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;
     new_action.sa_handler = exit_handler;
@@ -595,7 +609,7 @@ int main(int argc, char* argv[])
         goto exit;
 
     {
-        FILE* f = fopen("a3d/cccc.a3d","rb");
+        FILE* f = fopen("a3d/game.a3d","rb");
 
         if (f)
         {
@@ -1295,5 +1309,8 @@ int main(int argc, char* argv[])
 
     
     printf("FPS: %f (%dx%d)\n", frames * 1000000.0 / (end-begin), wh[0], wh[1]);
+
+#endif
+
 	return 0;
 }

@@ -790,15 +790,26 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	{
 		PUSH()
 		{
-			dc = wglGetCurrentDC();
-			rc = wglGetCurrentContext();
+			if (wnd_head)
+			{
+				pop = true;
+				dc = wglGetCurrentDC();
+				rc = wglGetCurrentContext();
+			}
+			else
+			{
+				pop = false;
+			}
+
 		}
 
 		~PUSH()
 		{
-			wglMakeCurrent(dc, rc);
+			if (pop)
+				wglMakeCurrent(dc, rc);
 		}
 
+		bool pop;
 		HDC dc;
 		HGLRC rc;
 
