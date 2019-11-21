@@ -486,17 +486,21 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 			rc = 0;
 			if (dpy)
 			{
+				pop=true;
 				rc = glXGetCurrentContext();
 				dr = glXGetCurrentDrawable();
 			}
+			else
+				pop=false;
 		}
 
 		~PUSH()
 		{
-			if (dpy)
+			if (dpy && pop)
 				glXMakeCurrent(dpy, dr, rc);
 		}
 
+		bool pop;
 		GLXDrawable dr;
 		GLXContext rc;
 

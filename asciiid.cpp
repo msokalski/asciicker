@@ -609,7 +609,7 @@ int active_palette = 0;
 int active_material = 0;
 
 // used by Term
-int GetGLFont(int wh[2])
+int GetGLFont(int wh[2], const int wnd_wh[2])
 {
 	MyFont* f = font + active_font;
 	if (wh)

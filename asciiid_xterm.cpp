@@ -16,6 +16,12 @@
 #include "sprite.h"
 #include "matrix.h"
 
+// FOR GL 
+#include "asciiid_term.h"
+#include "gl.h"
+#include "rgba8.h"
+
+
 /*
 https://superuser.com/questions/1185824/configure-vga-colors-linux-ubuntu
 https://int10h.org/oldschool-pc-fonts/fontlist/
@@ -270,16 +276,272 @@ uint64_t GetTime()
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+void* GetFontArr();
+int fonts_loaded=0;
+struct MyFont
+{
+	static bool Scan(A3D_DirItem item, const char* name, void* cookie)
+	{
+		if (!(item&A3D_FILE))
+			return true;
+
+		char buf[4096];
+		snprintf(buf,4095,"%s/%s",(char*)cookie,name);
+		buf[4095]=0;
+
+		a3dLoadImage(buf, 0, MyFont::Load);
+		return true;
+	}
+
+	static int Sort(const void* a, const void* b)
+	{
+		MyFont* fa = (MyFont*)a;
+		MyFont* fb = (MyFont*)b;
+
+		int qa = fa->width*fa->height;
+		int qb = fb->width*fb->height;
+
+		return qa - qb;
+	}
+
+	static void Free()
+	{
+		MyFont* fnt = (MyFont*)GetFontArr();
+		for (int i=0; i<fonts_loaded; i++)
+		{
+			glDeleteTextures(1,&fnt[i].tex);
+		}
+	}
+
+	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
+	{
+		if (fonts_loaded==256)
+			return;
+			
+		MyFont* fnt = (MyFont*)GetFontArr() + fonts_loaded;
+
+		fnt->width = w;
+		fnt->height = h;
+
+		int ifmt = GL_RGBA8;
+		int fmt = GL_RGBA;
+		int type = GL_UNSIGNED_BYTE;
+
+		uint32_t* buf = (uint32_t*)malloc(w * h * sizeof(uint32_t));
+
+		uint8_t rgb[3] = { 0xff,0xff,0xff };
+		ConvertLuminance_UI32_LLZZYYXX(buf, rgb, f, w, h, data, palsize, palbuf);
+
+		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
+		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
+
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+		float white_transp[4] = { 1,1,1,0 };
+
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+		glTextureParameterfv(fnt->tex, GL_TEXTURE_BORDER_COLOR, white_transp);
+
+
+		/*
+		// if we want to filter font we'd have first to
+		// modify 3 things in font sampling by shader:
+		// - clamp uv to glyph boundary during sampling
+		// - fade result by distance normalized to 0.5 of texel 
+		//   between unclamped uv to clamping glyph boundary
+		// - use manual lod as log2(font_zoom)
+
+		int max_lod = 0;
+		while (!((w & 1) | (h & 1)))
+		{
+			max_lod++;
+			w >>= 1;
+			h >>= 1;
+		}
+		glGenerateTextureMipmap(fnt->tex);
+		glTextureParameteri(fnt->tex, GL_TEXTURE_MAX_LOD, max_lod);
+		*/
+
+		if (buf)
+			free(buf);
+
+		fonts_loaded++;
+
+		qsort(GetFontArr(), fonts_loaded, sizeof(MyFont), MyFont::Sort);
+	}
+
+	void SetTexel(int x, int y, uint8_t val)
+	{
+		uint8_t texel[4] = { 0xFF,0xFF,0xFF,val };
+		glTextureSubImage2D(tex, 0, x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
+	}
+
+	uint8_t GetTexel(int x, int y)
+	{
+		uint8_t texel[4];
+		glGetTextureSubImage(tex, 0, x, y, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 4, texel);
+		return texel[3];
+	}
+
+	int width;
+	int height;
+
+	GLuint tex;
+} font[256];
+
+void* GetFontArr()
+{
+	return font;
+}
+
 
 Sprite* player_sprite = 0;
 
+// make term happy
+float pos_x,pos_y,pos_z;
+float rot_yaw;
+int probe_z;
+float global_lt[4];
+World* world;
+Terrain* terrain;
+
+int GetGLFont(int wh[2], const int wnd_wh[2])
+{
+    int tex = 0;
+    float err = 0;
+
+    assert(wnd_wh);
+    float area = wnd_wh[0]*wnd_wh[1];
+
+    for (int i=0; i<fonts_loaded; i++)
+    {
+        MyFont* f = font + i;
+        float e = fabsf( 120.0f*75.0f - area / ((f->width>>4)*(f->height>>4)));
+
+        if (!i || e<err)
+        {
+            err = e;
+            tex = f->tex;
+
+            if (wh)
+            {
+                wh[0] = f->width;
+                wh[1] = f->height;
+            }
+        }
+    }
+
+	return tex;
+}
+
 int main(int argc, char* argv[])
 {
+    // if there is no '-term' arg given run A3D (GL) term
+    // ...
+
+    // otherwise continue with following crap
+    // ...
+
     // consider configuring kbd, it solves only key up, not multiple keys down
     /*
         gsettings set org.gnome.desktop.peripherals.keyboard repeat-interval 30
         gsettings set org.gnome.desktop.peripherals.keyboard delay 250    
     */
+
+
+    float water = 55;
+
+    float yaw = 45;
+    float pos[3] = {0,15,0};
+    float lt[4] = {1,0,1,.5};
+
+    player_sprite = LoadPlayer("./sprites/player.xp");
+
+    if (1)
+    {
+        probe_z = (int)water;
+
+        pos_x = pos[0];
+        pos_y = pos[1];
+        pos_z = pos[2];
+        rot_yaw = yaw;
+
+        global_lt[0] = lt[0];
+        global_lt[1] = lt[1];
+        global_lt[2] = lt[2];
+        global_lt[3] = lt[3];
+
+        {
+            FILE* f = fopen("a3d/cccc.a3d","rb");
+
+            if (f)
+            {
+                terrain = LoadTerrain(f);
+
+                if (terrain)
+                {
+                    for (int i=0; i<256; i++)
+                    {
+                        if ( fread(mat[i].shade,1,sizeof(MatCell)*4*16,f) != sizeof(MatCell)*4*16 )
+                            break;
+                    }
+
+                    world = LoadWorld(f);
+                    if (world)
+                    {
+                        // reload meshes too
+                        Mesh* m = GetFirstMesh(world);
+
+                        while (m)
+                        {
+                            char mesh_name[256];
+                            GetMeshName(m,mesh_name,256);
+                            char obj_path[4096];
+                            sprintf(obj_path,"%smeshes/%s","./"/*root_path*/,mesh_name);
+                            if (!UpdateMesh(m,obj_path))
+                            {
+                                // what now?
+                                // missing mesh file!
+                            }
+
+                            m = GetNextMesh(m);
+                        }
+                    }
+                }
+
+                fclose(f);
+            }
+
+            if (!terrain || !world)
+               return -1;
+
+            // add meshes from library that aren't present in scene file
+            char mesh_dirname[4096];
+            sprintf(mesh_dirname,"%smeshes","./"/*root_path*/);
+            //a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
+
+            // this is the only case when instances has no valid bboxes yet
+            // as meshes weren't present during their creation
+            // now meshes are loaded ...
+            // so we need to update instance boxes with (,true)
+            RebuildWorld(world, true);
+        }
+
+        TermOpen(0, yaw, pos);
+
+        char font_dirname[] = "./fonts";
+        fonts_loaded = 0;
+        a3dListDir(font_dirname, MyFont::Scan, font_dirname);
+
+        a3dLoop();
+        return 0;
+    }
 
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;
@@ -307,17 +569,14 @@ int main(int argc, char* argv[])
     }
     */
 
-    float water = 55;
-
-    float yaw = 45;
-    float pos[3] = {0,15,0};
-    float lt[4] = {1,0,1,.5};
     float player_dir = 0;
     int  player_stp = -1;    
 
     Physics* phys = 0;
-    Terrain* terrain = 0;
-    World* world = 0;
+    //Terrain* terrain = 0;
+    //World* world = 0;
+    terrain = 0;
+    world = 0;
 
     AnsiCell* buf = 0;
     int wh[2] = {-1,-1};    
@@ -326,11 +585,12 @@ int main(int argc, char* argv[])
     uint64_t stamp = begin;
     uint64_t frames = 0;
 
+    const int sticky_input = 30000;
+
     int mouse_b=0; // num of buttons down (we can't be sure which ones!)
     int mouse_x;
     int mouse_y;    
 
-   	player_sprite = LoadPlayer("./sprites/player.xp");
     if (!player_sprite)
         goto exit;
 
@@ -497,9 +757,6 @@ int main(int argc, char* argv[])
 
                 int type = 0, mods = 0;
 
-                // 1. regular chars
-                // if (stream[i] >= 32 && stream[i] <= 127)
-
                 /*
                 if (!xterm_kitty)
                 {
@@ -511,12 +768,13 @@ int main(int argc, char* argv[])
                 }
                 */
 
+
                 // unescaped input can only jump
                 if (stream[i]>=' ' && stream[i]<=127)
                 {
                     switch (stream[i])
                     {
-                        case ' ': mouse_j = true; break;
+                        case ' ': mouse_j = true; kbd['A']=sticky_input; break;
                     }
                     
                     i++;
@@ -528,10 +786,131 @@ int main(int argc, char* argv[])
                 // F1,F2,DEL,INS,PGUP,PGDN
                 // ...
 
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'P')
+                {
+                    // F1
+                    kbd['/']=sticky_input;
+                    i+=3;
+                }
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'Q')
+                {
+                    // F2
+                    kbd['*']=sticky_input;
+                    i+=3;
+                }
+
+                if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '3' && stream[i+3] == '~')
+                {
+                    // DEL
+                    kbd['3']=sticky_input;
+                    i+=4;
+                }
+                if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '2' && stream[i+3] == '~')
+                {
+                    // INS
+                    kbd['2']=sticky_input;
+                    i+=4;
+                }
+                if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '5' && stream[i+3] == '~')
+                {
+                    // PGUP
+                    kbd['8']=sticky_input;
+                    i+=4;
+                }
+                if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '6' && stream[i+3] == '~')
+                {
+                    // PGDN
+                    kbd['9']=sticky_input;
+                    i+=4;
+                }
+
+                
+
                 // SHOULD HAVE
                 // TODO: non-kitty arrows (in case mouse in not available - YUCK!)
                 // scan for mods: +shift (slower) +alt (jump)
                 // ...
+
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'D')
+                {
+                    // left
+                    kbd['5']=sticky_input;
+                    i+=3;
+                }
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'C')
+                {
+                    // right
+                    kbd['4']=sticky_input;
+                    i+=3;
+                }                
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'A')
+                {
+                    // up
+                    kbd['7']=sticky_input;
+                    i+=3;
+                }
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'B')
+                {
+                    // down
+                    kbd['6']=sticky_input;
+                    i+=3;
+                }    
+
+                if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '1' && stream[i+3] == ';')
+                {
+                    if (bytes-i < 6)
+                        break;
+
+                    int mods = stream[i+4] - 0x31;
+
+                    if (mods&1)
+                    {
+                        // shift
+                        kbd[128+'a'] = sticky_input;
+                    }
+                    if (mods&2)
+                    {
+                        // alt
+                        kbd[128+'c'] = sticky_input;
+                    }
+
+                    switch (stream[i+5])
+                    {
+                        case 'P': // f1
+                            kbd['/']=sticky_input;
+                            break;
+                        case 'Q': // f2
+                            kbd['*']=sticky_input;
+                            break;
+                        case '3': // del
+                            kbd['3']=sticky_input;
+                            break;
+                        case '2': // ins
+                            kbd['2']=sticky_input;
+                            break;
+                        case '5': // pgup
+                            kbd['8']=sticky_input;
+                            break;
+                        case '6': // pgdn
+                            kbd['9']=sticky_input;
+                            break;
+
+                        case 'A': // up
+                            kbd['7']=sticky_input;
+                            break;
+                        case 'B': // down
+                            kbd['6']=sticky_input;
+                            break;
+                        case 'C': // right
+                            kbd['4']=sticky_input;
+                            break;
+                        case 'D': // left
+                            kbd['5']=sticky_input;
+                            break;
+                    }
+
+                    i+=6;
+                }            
 
                 // mouse
                 if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'M')
@@ -827,19 +1206,29 @@ int main(int argc, char* argv[])
         {
             // parse cursor keys + keypad + modifiers shift/alt
             // io.slow = false; // check for last input was capital or with shift
-            float speed = 1.0 / sqrtf(2.0f);
-            io.jump = kbd[' '] || kbd['D'] || kbd['A'] || kbd['S'] || kbd['W'] || mouse_j;
-            io.x_force = ((kbd['d'] || kbd['D'] || kbd['9'] || kbd['6'] || kbd['3']) - (kbd['a'] || kbd['A'] || kbd['7'] || kbd['4'] || kbd['2']))*speed;
-            io.y_force = ((kbd['w'] || kbd['W'] || kbd['7'] || kbd['8'] || kbd['9']) - (kbd['s'] || kbd['S'] || kbd['1'] || kbd['2'] || kbd['3']))*speed;
-            io.torque  = (kbd['q'] || kbd['Q']) - (kbd['e'] || kbd['E']);
+            float speed = 1.0;
+            if (kbd[128 + 'a'] || kbd[128 + 'e']) // SHIFT (emulated from mods)
+                speed *= 0.5;
+            io.jump = kbd['A'] || kbd[128+'c'] || mouse_j;
+            io.x_force = (kbd['4'] - kbd['5'])*speed; // LEFT-RIGHT
+            io.y_force = (kbd['7'] - kbd['6'])*speed; // UP-DOWN
+
+            float len = sqrtf(io.x_force*io.x_force+io.y_force*io.y_force);
+            if (len>0)
+                speed /= len;
+            io.x_force *= speed;
+            io.y_force *= speed;
+
+            io.torque = (int)(kbd['3'] || kbd['8'] || kbd['/']) - // DEL,PGUP,F1
+                        (int)(kbd['2'] || kbd['9'] || kbd['*']);  // INS,PGDN,F2        
         }
 
         if (mouse_b)
         {
             // override keyb
-            //io.slow = false;
-            io.x_force = 2*(mouse_x*2 - wh[0]) / (float)wh[0];
-            io.y_force = 2*(wh[1] - mouse_y*2) / (float)wh[1];
+            float speed = 1.0;
+            io.x_force = speed*2*(mouse_x*2 - wh[0]) / (float)wh[0];
+            io.y_force = speed*2*(wh[1] - mouse_y*2) / (float)wh[1];
         }
 
         Animate(phys,stamp,&io);
@@ -863,6 +1252,14 @@ int main(int argc, char* argv[])
         {
             wh[0] = nwh[0];
             wh[1] = nwh[1];
+
+            if (wh[0]*wh[1]>160*90)
+            {
+                float scale = sqrtf(160*90 / (wh[0]*wh[1]));
+                wh[0] = floor(wh[0] * scale + 0.5f);
+                wh[1] = floor(wh[1] * scale + 0.5f);
+            }
+
             buf = (AnsiCell*)realloc(buf,wh[0]*wh[1]*sizeof(AnsiCell));
         }
 

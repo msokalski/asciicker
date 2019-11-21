@@ -25,14 +25,19 @@ struct TERM_LIST
 
 	Physics* phys;
 
+	int mouse_b;
+	int mouse_x;
+	int mouse_y;
+	bool mouse_j;
+
 	uint8_t keys[32];
 	bool IsKeyDown(int key)
 	{
 		return (keys[key >> 3] & (1 << (key & 0x7))) != 0;
 	}
 
-	static const int max_width = 320; // 160;
-	static const int max_height = 180; // 90;
+	static const int max_width = 160; // 160;
+	static const int max_height = 90; // 90;
 	AnsiCell buf[max_width*max_height];
 	GLuint tex;
 	GLuint prg;
@@ -43,7 +48,7 @@ struct TERM_LIST
 // HACK: get it from editor
 extern Terrain* terrain;
 extern World* world;
-int GetGLFont(int wh[2]);
+int GetGLFont(int wh[2], const int wnd_wh[2]);
 
 TERM_LIST* term_head = 0;
 TERM_LIST* term_tail = 0;
@@ -75,9 +80,39 @@ void term_render(A3D_WND* wnd)
 	io.torque = (int)(term->IsKeyDown(A3D_DELETE) || term->IsKeyDown(A3D_PAGEUP) || term->IsKeyDown(A3D_F1)) - 
 	            (int)(term->IsKeyDown(A3D_INSERT) || term->IsKeyDown(A3D_PAGEDOWN) || term->IsKeyDown(A3D_F2));
 	io.water = probe_z;
-	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT) || term->IsKeyDown(A3D_SPACE);
+	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT) || term->IsKeyDown(A3D_SPACE) || term->mouse_j;
 	//io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
+
+
+	int wnd_wh[2];
+
+	a3dGetRect(wnd, 0, wnd_wh);
+
+	int fnt_wh[2];
+	int fnt_tex = GetGLFont(fnt_wh, wnd_wh);
+
+	int width = wnd_wh[0] / (fnt_wh[0] >> 4);
+	int height = wnd_wh[1] / (fnt_wh[1] >> 4);
+
+	if (width > term->max_width)
+		width = term->max_width;
+	if (height > term->max_height)
+		height = term->max_height;
+
 	uint64_t stamp = a3dGetTime();
+
+	if (term->mouse_b)
+	{
+		float ox = (wnd_wh[0] - width*(fnt_wh[0]>>4)) *0.5f;
+		float oy = (wnd_wh[1] - height*(fnt_wh[1]>>4)) *0.5f;
+
+		float mx = (term->mouse_x - ox) / (fnt_wh[0]>>4);
+		float my = (term->mouse_y - oy) / (fnt_wh[1]>>4);
+
+		float speed = 1.0;
+		io.x_force = speed*2*(mx*2 - width) / (float)width;
+		io.y_force = speed*2*(height - my*2) / (float)height;
+	}
 
 	Animate(term->phys, stamp, &io);
 
@@ -86,7 +121,9 @@ void term_render(A3D_WND* wnd)
 		term->keys[A3D_LALT/8] &= ~(1<<(A3D_LALT&7));
 		term->keys[A3D_RALT/8] &= ~(1<<(A3D_RALT&7));
 		term->keys[A3D_SPACE/8] &= ~(1<<(A3D_SPACE&7));
+		term->mouse_j = false;
 	}
+
 
 	// FPS DUMPER
 	{
@@ -106,21 +143,6 @@ void term_render(A3D_WND* wnd)
 
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT);
-
-	int wnd_wh[2];
-
-	a3dGetRect(wnd, 0, wnd_wh);
-
-	int fnt_wh[2];
-	int fnt_tex = GetGLFont(fnt_wh);
-
-	int width = wnd_wh[0] / (fnt_wh[0] >> 4);
-	int height = wnd_wh[1] / (fnt_wh[1] >> 4);
-
-	if (width > term->max_width)
-		width = term->max_width;
-	if (height > term->max_height)
-		height = term->max_height;
 
 	char utf8[64];
 	sprintf(utf8, "ASCIIID Term %d x %d", width, height);
@@ -197,10 +219,23 @@ void term_render(A3D_WND* wnd)
 
 void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 {
-	if (mi == LEFT_DN)
-	{
+	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
+	if ((mi & 0xF) == LEFT_DN || (mi & 0xF) == RIGHT_DN)
+	{
+		term->mouse_b++;
+		if (term->mouse_b==2)
+			term->mouse_j = true;
 	}
+
+	if ((mi & 0xF) == LEFT_UP || (mi & 0xF) == RIGHT_UP)
+	{
+		if (term->mouse_b)
+			term->mouse_b--;
+	}
+
+	term->mouse_x = x;
+	term->mouse_y = y;
 }
 
 void term_resize(A3D_WND* wnd, int w, int h)
@@ -211,6 +246,12 @@ void term_init(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)malloc(sizeof(TERM_LIST));
 	term->wnd = wnd;
+
+	term->mouse_j = false;
+	term->mouse_b = 0;
+	term->mouse_x = 0;
+	term->mouse_y = 0;
+
 
 	uint64_t stamp = a3dGetTime();
 	float yaw = rot_yaw;
