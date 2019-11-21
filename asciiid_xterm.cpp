@@ -465,6 +465,13 @@ int main(int argc, char* argv[])
         gsettings set org.gnome.desktop.peripherals.keyboard delay 250    
     */
 
+    bool term = false;
+    for (int p=1; p<argc; p++)
+    {
+        if (strcmp(argv[p],"-term")==0)
+            term = true;
+    }
+
 
     float water = 55;
 
@@ -473,8 +480,10 @@ int main(int argc, char* argv[])
     float lt[4] = {1,0,1,.5};
 
     player_sprite = LoadPlayer("./sprites/player.xp");
+    if (!player_sprite)
+        return -1;
 
-    if (1)
+    if (!term)
     {
         probe_z = (int)water;
 
@@ -953,10 +962,6 @@ int main(int argc, char* argv[])
                     mouse_x = (uint8_t)stream[i+4] - 33;
                     mouse_y = (uint8_t)stream[i+5] - 33;
 
-                    FILE* log = fopen("log.bin","a+");
-                    fprintf(log,"mouse b=%d, x=%d, y=%d, j=%d\n", mouse_b, mouse_x, mouse_y,(int)mouse_j);
-                    fclose(log);                    
-
                     i+=6;
                 }
 
@@ -1167,11 +1172,6 @@ int main(int argc, char* argv[])
                                     kbd[ stream[i+5] ] = 0;
                                 }
 
-                                stream[i+6]=0;
-                                FILE* log = fopen("log.bin","a+");
-                                fprintf(log,"%s\n",stream+i+1);
-                                fclose(log);
-
                                 i+=8;
                                 break;
                             }
@@ -1309,6 +1309,10 @@ int main(int argc, char* argv[])
 
     
     printf("FPS: %f (%dx%d)\n", frames * 1000000.0 / (end-begin), wh[0], wh[1]);
+
+#else
+
+    printf("Currently -term parameter is unsupported on Windows\n");
 
 #endif
 
