@@ -264,7 +264,14 @@ void term_init(A3D_WND* wnd)
 	char logstr[1000] = "";
 	GLuint shader[2] = { 0,0 };
 
+	term->tex = 0;
 	glCreateTextures(GL_TEXTURE_2D, 1, &term->tex);
+	if (!term->tex)
+	{
+		printf("glCreateTextures failed\n");
+		exit(-1);
+	}
+	
 	glTextureStorage2D(term->tex, 1, GL_RGBA8, term->max_width, term->max_height);
 
 	const char* term_vs_src =
@@ -331,10 +338,21 @@ void term_init(A3D_WND* wnd)
 	GLenum term_st[3] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
 	const char* term_src[3] = { term_vs_src, term_fs_src };
 	GLuint term_prg = glCreateProgram();
+	if (!term_prg)
+	{
+		printf("glCreateProgram failed\n");
+		exit(-1);
+	}
 
 	for (int i = 0; i < 2; i++)
 	{
 		shader[i] = glCreateShader(term_st[i]);
+		if (!shader[i])
+		{
+			printf("glCreateShader failed\n");
+			exit(-1);
+		}
+
 		GLint len = (GLint)strlen(term_src[i]);
 		glShaderSource(shader[i], 1, &(term_src[i]), &len);
 		glCompileShader(shader[i]);
@@ -365,15 +383,27 @@ void term_init(A3D_WND* wnd)
 
 	float vbo_data[] = {0,0, 1,0, 1,1, 0,1};
 
-	GLuint term_vbo;
+	GLuint term_vbo = 0;
 	glCreateBuffers(1, &term_vbo);
+	if (!term_vbo)
+	{
+		printf("glCreateBuffers failed\n");
+		exit(-1);
+	}
+
 	glNamedBufferStorage(term_vbo, 4 * sizeof(float[2]), 0, GL_DYNAMIC_STORAGE_BIT);
 	glNamedBufferSubData(term_vbo, 0, 4 * sizeof(float[2]), vbo_data);
 
 	term->vbo = term_vbo;
 
-	GLuint term_vao;
+	GLuint term_vao = 0;
 	glCreateVertexArrays(1, &term_vao);
+	if (!term_vao)
+	{
+		printf("glCreateVertexArrays failed\n");
+		exit(-1);
+	}
+
 	glBindVertexArray(term_vao);
 	glBindBuffer(GL_ARRAY_BUFFER, term_vbo);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float[2]), (void*)0);
@@ -445,7 +475,7 @@ void term_close(A3D_WND* wnd)
 	free(term);
 }
 
-void TermOpen(A3D_WND* share, float yaw, float pos[3])
+bool TermOpen(A3D_WND* share, float yaw, float pos[3])
 {
 	PlatformInterface pi;
 	pi.close = term_close;
@@ -472,6 +502,9 @@ void TermOpen(A3D_WND* share, float yaw, float pos[3])
 
 	A3D_WND* wnd = a3dOpen(&pi, &gd, share);
 
+	if (!wnd)
+		return false;
+
 	//a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
 	//a3dSetVisible(share, false);
 
@@ -484,6 +517,8 @@ void TermOpen(A3D_WND* share, float yaw, float pos[3])
 	term->pos[2] = pos[2];
 	term->water = 0;
 	*/
+
+	return true;
 }
 
 void TermCloseAll()
@@ -492,8 +527,7 @@ void TermCloseAll()
 	while (term)
 	{
 		TERM_LIST* next = term->next;
-		a3dClose(term->wnd);
-		free(term);
+		term_close(term->wnd);
 		term = next;
 	}
 

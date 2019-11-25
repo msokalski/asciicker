@@ -538,8 +538,8 @@ int main(int argc, char* argv[])
                 fclose(f);
             }
 
-            if (!terrain || !world)
-               return -1;
+            // if (!terrain || !world)
+            //    return -1;
 
             // add meshes from library that aren't present in scene file
             char mesh_dirname[4096];
@@ -550,16 +550,28 @@ int main(int argc, char* argv[])
             // as meshes weren't present during their creation
             // now meshes are loaded ...
             // so we need to update instance boxes with (,true)
-            RebuildWorld(world, true);
+
+            if (world)
+                RebuildWorld(world, true);
         }
 
-        TermOpen(0, yaw, pos);
+        if (TermOpen(0, yaw, pos))
+        {
+            char font_dirname[] = "./fonts";
+            fonts_loaded = 0;
+            a3dListDir(font_dirname, MyFont::Scan, font_dirname);
+            a3dLoop();
+        }
 
-        char font_dirname[] = "./fonts";
-        fonts_loaded = 0;
-        a3dListDir(font_dirname, MyFont::Scan, font_dirname);
+        if (player_sprite)
+            FreeSprite(player_sprite);
 
-        a3dLoop();
+        if (terrain)
+            DeleteTerrain(terrain);
+
+        if (world)
+            DeleteWorld(world);
+
         return 0;
     }
 
@@ -702,11 +714,12 @@ int main(int argc, char* argv[])
             0
         };
 
-        double noon_pos[3] =
+        double noon_pos[4] =
         {
             noon_yaw[0]*cos(lit_pitch*M_PI / 180),
             noon_yaw[1]*cos(lit_pitch*M_PI / 180),
-            sin(lit_pitch*M_PI / 180)
+            sin(lit_pitch*M_PI / 180),
+            0
         };
 
         double lit_axis[3];
@@ -1304,6 +1317,9 @@ int main(int argc, char* argv[])
 
     if (buf)
         free(buf);
+
+    if (phys)
+        DeletePhysics(phys);
 
     SetScreen(false);
 

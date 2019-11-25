@@ -3397,11 +3397,12 @@ void my_render(A3D_WND* wnd)
 					0
 				};
 
-				double noon_pos[3] =
+				double noon_pos[4] =
 				{
 					noon_yaw[0] * cos(lit_pitch*M_PI / 180),
 					noon_yaw[1] * cos(lit_pitch*M_PI / 180),
-					sin(lit_pitch*M_PI / 180)
+					sin(lit_pitch*M_PI / 180),
+					0
 				};
 
 				double lit_axis[3];
@@ -5428,11 +5429,12 @@ void my_render(A3D_WND* wnd)
 		0
 	};
 
-	double noon_pos[3] =
+	double noon_pos[4] =
 	{
 		noon_yaw[0]*cos(lit_pitch*M_PI / 180),
 		noon_yaw[1]*cos(lit_pitch*M_PI / 180),
-		sin(lit_pitch*M_PI / 180)
+		sin(lit_pitch*M_PI / 180),
+		0
 	};
 
 	double lit_axis[3];
@@ -5906,8 +5908,8 @@ void my_init(A3D_WND* wnd)
 
 	//int rect[] = { 1920 * 2, 0, 1920,1080 };
 	//int rect[] = { 1920, 0, 1920,1080 };
-	int rect[] = { 0, 0, 1920,1080 };
-	a3dSetRect(wnd,rect, A3D_WND_NORMAL);
+	//int rect[] = { 0, 0, 1920,1080 };
+	//a3dSetRect(wnd,rect, A3D_WND_NORMAL);
 
 	// do the perf test
 	/*

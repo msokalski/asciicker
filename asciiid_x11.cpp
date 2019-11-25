@@ -43,6 +43,17 @@
 
 #include "asciiid_platform.h"
 
+/*
+Bool __glXMakeCurrent( Display *dpy, GLXDrawable drawable, GLXContext ctx, int line)
+{
+	printf("%d\n",line);
+	return glXMakeCurrent(dpy, drawable, ctx);
+}
+
+#define glXMakeCurrent(_dpy, _dr, _rc) __glXMakeCurrent(_dpy, _dr, _rc, __LINE__)
+*/
+
+
 Display* dpy=0;
 A3D_WND* wnd_head=0;
 A3D_WND* wnd_tail=0;
@@ -52,6 +63,7 @@ struct A3D_WND
 	A3D_WND* prev;
 	A3D_WND* next;
 
+	XIM im;
 	XIC ic;
 	Window win;
 	GLXContext rc;
@@ -593,8 +605,12 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	}
 	
 	Window win = XCreateWindow(dpy, /*share ? share->win :*/ root, wndrect[0]+wndrect[2]/2 - 400, wndrect[1]+wndrect[3]/2 - 300, 800, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
+
+	XFreeColormap(dpy, cmap); // swa (including cmap) is no longer used
+
 	if (!win)
 	{
+		XFree(vi);
 		XCloseDisplay(dpy);
 		return 0;
 	}
@@ -632,11 +648,22 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		GLX_CONTEXT_MINOR_VERSION_ARB, 5,
 		0};
 
+	if (!fbc)
+	{
+		XFree(vi);
+		printf("CANNOT CHOOSE FBCONFIG\n");
+		return 0;
+	}
+
 	glc = glXCreateContextAttribsARB(dpy, *fbc, share ? share->rc : 0, true, attribs);
  	//glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
 
+	XFree(fbc);
+	XFree(vi);
+
 	if (!glc)
 	{
+		printf("CANNOT CREATE GL CONTEXT\n");
 		XDestroyWindow(dpy, win);
 		XCloseDisplay(dpy);
 		return 0;
@@ -644,6 +671,19 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
  	if (!glXMakeCurrent(dpy, win, glc))
 	{
+		printf("CANNOT MAKE GL CONTEXT CURRENT\n");
+		glXDestroyContext(dpy, glc);
+		XDestroyWindow(dpy, win);
+		XCloseDisplay(dpy);
+		return 0;
+	}
+
+	char* ver = (char*)glGetString(GL_VERSION);
+	if (ver[0] < '4' || ver[0] > '9' || ver[1] != '.' || ver[0] == '4' && (ver[2] < '5' || ver[2] > '9'))
+	{
+		printf("GL_VERSION (4.5.x) requirement is not met by %s\n", ver);
+
+		glXMakeCurrent(dpy, 0, 0);
 		glXDestroyContext(dpy, glc);
 		XDestroyWindow(dpy, win);
 		XCloseDisplay(dpy);
@@ -654,15 +694,17 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	// we'd simply stick ascii codes 
 
 	XIC ic = 0;
-
+ 
 	if (im_ok)
 	{
 		im = XOpenIM(dpy, NULL, NULL, NULL);
 		if (im) 
 		{
-			char *failed_arg;
-			XIMStyles *styles;
+			char *failed_arg = 0;
+			XIMStyles *styles = 0;
 			failed_arg = XGetIMValues(im, XNQueryInputStyle, &styles, NULL);
+			if (styles)
+				XFree(styles);
 			if (!failed_arg)
 			{
 				ic = XCreateIC(im, XNInputStyle, XIMPreeditNothing | XIMStatusNothing, XNClientWindow, win, NULL);
@@ -670,22 +712,25 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 				{
 					XCloseIM(im);
 					im = 0;
+					im_ok = false;
+				}
+				else
+				{
+					XSetICFocus(ic);
 				}
 			}
 			else
 			{
+				XFree(failed_arg);
 				XCloseIM(im);
 				im = 0;
+				im_ok = false;
 			}
 		}
 	}
 
-	if (ic)
-		XSetICFocus(ic);
-	else
-		im_ok = false;
 
-	/*
+ 	/*
 	// HAS NO EFFECT, only going fullscreen on all monitors at once results in FLIP mode
 	// anything else uses BLIT mode even with this hint enabled :(
 	Atom bypass_wm_atom = XInternAtom(dpy,"_NET_WM_BYPASS_COMPOSITOR",False);
@@ -714,6 +759,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->win = win;
 	wnd->rc = glc;
 	wnd->ic = ic;
+	wnd->im = im;
 
 	wnd->mapped = false;
 	wnd->wndmode = gd->wnd_mode == A3D_WND_CURRENT ? A3D_WND_NORMAL : gd->wnd_mode;
@@ -739,6 +785,8 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	if (wnd->platform_api.init)
 		wnd->platform_api.init(wnd);
 
+	XSync(dpy,False);
+
 	// send initial notifications:
 	XGetWindowAttributes(dpy, win, &gwa);
 	wnd->gwa_width = gwa.width;
@@ -752,6 +800,8 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
 void a3dLoop()
 {
+	XSync(dpy,False);
+
 	Window win;
 	XEvent                  xev;
 
@@ -795,6 +845,10 @@ void a3dLoop()
 						wnd->platform_api.close(wnd);
 					else
 					{
+						if (wnd->ic)
+							XDestroyIC(wnd->ic);
+						if (wnd->im)
+							XCloseIM(wnd->im);
 						glXMakeCurrent(dpy, None, NULL);
 						glXDestroyContext(dpy, wnd->rc);
 						XDestroyWindow(dpy,win);
@@ -1132,6 +1186,8 @@ void a3dLoop()
 
 void a3dClose(A3D_WND* wnd)
 {
+	XSync(dpy,False);
+
 	struct PUSH
 	{
 		PUSH()
@@ -1156,6 +1212,17 @@ void a3dClose(A3D_WND* wnd)
 
 	} push;
 
+
+	if (push.rc == wnd->rc)	
+		push.rc = 0;
+	if (push.dr == wnd->win)
+		push.dr = 0;
+
+	if (wnd->ic)
+		XDestroyIC(wnd->ic);
+	if (wnd->im)
+		XCloseIM(wnd->im);
+
 	glXMakeCurrent(dpy, None, NULL);
 	glXDestroyContext(dpy, wnd->rc);
 	XDestroyWindow(dpy,wnd->win);
@@ -1171,6 +1238,8 @@ void a3dClose(A3D_WND* wnd)
 		wnd_tail = wnd->prev;
 
 	free(wnd);
+
+	XSync(dpy,False);
 }
 
 uint64_t a3dGetTime()
@@ -1204,6 +1273,8 @@ bool a3dGetKeyb(A3D_WND* wnd, KeyInfo ki)
 	if (!kc)
 		return false;
 
+	XSync(dpy,False);
+
 	char bits[32]={0};
 	XQueryKeymap(dpy, bits);
 
@@ -1223,10 +1294,14 @@ void a3dSetTitle(A3D_WND* wnd, const char* name)
 
 	rc = XChangeProperty(dpy, wnd->win, wm_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
 	rc = XChangeProperty(dpy, wnd->win, wm_icon_name_atom, utf8_string_atom, 8, PropModeReplace, (unsigned char*)name, len);
+
+	XSync(dpy,False);
 }
 
 int a3dGetTitle(A3D_WND* wnd, char* utf8_name, int size)
 {
+	XSync(dpy,False);
+
 	Atom wm_name_atom = XInternAtom(dpy,"_NET_WM_NAME", False);
 	Atom utf8_string_atom = XInternAtom(dpy,"UTF8_STRING", False);
 	Atom type;
@@ -1263,10 +1338,13 @@ void a3dSetVisible(A3D_WND* wnd, bool visible)
 	{
 		XUnmapWindow(dpy, wnd->win);
 	}
+
+	XSync(dpy,False);
 }
 
 bool a3dGetVisible(A3D_WND* wnd)
 {
+	XSync(dpy,False);
 	return wnd->mapped;
 }
 
@@ -1278,6 +1356,7 @@ bool a3dIsMaximized(A3D_WND* wnd)
 // resize
 WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh)
 {
+	XSync(dpy,False);
 	if (xywh || client_wh)
 	{
 		int lrtb[4] = {0,0,0,0};
@@ -1555,6 +1634,9 @@ bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode)
 				XMoveResizeWindow(dpy,wnd->win, xywh[0], xywh[1], xywh[2], xywh[3]);
 		}
 	}
+
+	XSync(dpy,False);
+	return true;
 }
 
 // mouse

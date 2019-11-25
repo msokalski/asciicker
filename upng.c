@@ -216,7 +216,7 @@ static void huffman_tree_init(huffman_tree* tree, unsigned* buffer, unsigned num
 static void huffman_tree_create_lengths(upng_t* upng, huffman_tree* tree, const unsigned *bitlen)
 {
 	unsigned tree1d[MAX_SYMBOLS];
-	unsigned blcount[MAX_BIT_LENGTH];
+	unsigned blcount[MAX_BIT_LENGTH+1]; // <- #MS incremented this one (sanitizer was complaining) 
 	unsigned nextcode[MAX_BIT_LENGTH+1];
 	unsigned bits, n, i;
 	unsigned nodefilled = 0;	/*up to which node it is filled */
