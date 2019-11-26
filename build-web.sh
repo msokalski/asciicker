@@ -20,10 +20,10 @@
 # now we can build, 
 # for the first time it will compile and cache libc
 
-rm index.html
-rm index.js
-rm index.wasm
-rm index.data
+rm .web/index.html
+rm .web/index.js
+rm .web/index.wasm
+rm .web/index.data
 
 emcc --emrun \
     asciiid_web.cpp \
@@ -34,6 +34,10 @@ emcc --emrun \
     asciiid_render.cpp \
     upng.c \
     -o .web/index.html -O3 \
+    --shell-file asciiid_web.html \
+    -s EXPORTED_FUNCTIONS='["_main","_AsciickerUpdate","_AsciickerRender"]' \
+    -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
+    -s ALLOW_MEMORY_GROWTH=1 \
     --preload-file a3d/game.a3d \
     --preload-file sprites/play.xp \
     --preload-file sprites/player.xp \
@@ -48,4 +52,4 @@ emcc --emrun \
     --preload-file meshes/tree-2.ply 
 
 # run in mini-server
-emrun --no_browser --port 8080 .
+emrun --no_browser --port 8080 .web/index.html

@@ -1207,7 +1207,7 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 	}
 }
 
-bool Render(Terrain* t, World* w, float water, float zoom, float yaw, float pos[3], float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp)
+bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp)
 {
 	AnsiCell* out_ptr = ptr;
 	static Renderer r;
