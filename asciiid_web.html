@@ -51,15 +51,23 @@
       var AsciickerUpdate = null;
       var AsciickerRender = null;
 
-      function AsciickerInit()
+      function AsciickerLoop(tm)
       {
-        var AsciickerUpdate = Module.cwrap('AsciickerUpdate', 'number', ['number','number','number','number']);
-        var AsciickerRender = Module.cwrap('AsciickerRender', 'number', ['number','number']);
-
-        // test
         AsciickerUpdate(0,0,0,0);
         var mem = AsciickerRender(128,75);
+        // gl.bindTesture(gl.TEXTURE_2D,tex);
         // gl.texSubImage2D(gl.TEXTURE_2D,0, 0,0, 128,75, gl.RGBA, gl.UNSIGNED_BYTE, new ByteArray(Module.HEAP8,mem,4*128*75) );
+        // draw textured quad
+
+        window.requestAnimationFrame(AsciickerLoop);
+      }
+
+      function AsciickerInit()
+      {
+        AsciickerUpdate = Module.cwrap('AsciickerUpdate', 'number', ['number','number','number','number']);
+        AsciickerRender = Module.cwrap('AsciickerRender', 'number', ['number','number']);
+
+        window.requestAnimationFrame(AsciickerLoop);
       }
     
     </script>

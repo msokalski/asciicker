@@ -157,7 +157,7 @@ extern "C"
 {
     bool AsciickerUpdate(float x_force, float y_force, float torque, bool jump)
     {
-        printf("In: AsciickerUpdate(%f,%f,%f,%s)\n", x_force, y_force, torque, jump?"true":"false");
+        //printf("In: AsciickerUpdate(%f,%f,%f,%s)\n", x_force, y_force, torque, jump?"true":"false");
         io.jump = jump;
         io.water = water;
         io.torque = torque;
@@ -172,7 +172,7 @@ extern "C"
 
     void* AsciickerRender(int width, int height)
     {
-        printf("In: AsciickerRender(%d,%d)\n", width, height);
+        //printf("In: AsciickerRender(%d,%d)\n", width, height);
         Render(terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp);
         return render_buf;
     }
