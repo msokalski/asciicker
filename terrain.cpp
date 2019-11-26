@@ -18,9 +18,22 @@
 
 #include "fast_rand.h"
 
+
+
+inline int my_abs(int i)
+{
+    if (i<0)
+	return -i;
+    return i;
+}
+
+
 #if 0
 #define TERRAIN_MATERIALS 64
 #define DETAIL_ANGLES 12
+
+
+
 
 struct Material
 {
@@ -416,7 +429,7 @@ struct Tap3x3
 					- Sample(x, y) * 2
 					- Sample(x + 1, y + 1) * 2;
 
-				SetDiag(x, y, abs(c0) > abs(c1));
+				SetDiag(x, y, my_abs(c0) > my_abs(c1));
 			}
 		}
 	}

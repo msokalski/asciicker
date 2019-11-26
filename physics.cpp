@@ -704,7 +704,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			{
 				phys->pos[0] * phys->collect_mul_xy,
 				phys->pos[1] * phys->collect_mul_xy,
-				(phys->pos[2] + world_height * 0.5) * phys->collect_mul_z,
+				(phys->pos[2] + world_height * 0.5f) * phys->collect_mul_z,
 			};
 
 			float sphere_vel[3] =
