@@ -25,7 +25,7 @@ rm .web/index.js
 rm .web/index.wasm
 rm .web/index.data
 
-emcc --emrun \
+emcc --emrun -O3 \
     asciiid_web.cpp \
     mesh.cpp \
     terrain.cpp \
@@ -33,7 +33,7 @@ emcc --emrun \
     physics.cpp \
     asciiid_render.cpp \
     upng.c \
-    -o .web/index.html -O3 \
+    -o .web/index.html \
     --shell-file asciiid_web.html \
     -s EXPORTED_FUNCTIONS='["_main","_AsciickerUpdate","_AsciickerRender"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \

@@ -9,8 +9,23 @@
       textarea.asciicker { font-family: monospace; width: 80%; }
       div.asciicker { text-align: center; }
       div.asciicker_border { border: 1px solid black; }
-      /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
-      canvas.asciicker { border: 0px none; background-color: black; }
+
+			canvas
+			{
+				position: absolute;
+			}
+			
+			html, body, canvas
+			{
+				width:100%;
+				height:100%;
+				border:0;
+				padding:0;
+				margin:0;
+        color:#FFF;
+				background-color:#000;
+				overflow:hidden;
+			}
 
       .spinner {
         height: 50px;
@@ -46,33 +61,575 @@
 
     </style>
 
+
+    <script id="vs" type="x-shader/x-vertex">
+    //<![CDATA[
+      attribute vec2 xy;
+      uniform float width;
+      uniform float height;
+      uniform float tex_width;
+      uniform float tex_height;
+      
+      varying vec2 tex_coord;
+      varying vec2 cell_coord;
+      
+      void main()
+      {
+        gl_Position = vec4(2.0*xy - vec2(1.0,1.0), 0.0,1.0);
+        cell_coord = xy * vec2(width,height);
+        tex_coord = cell_coord / vec2(tex_width,tex_height);
+      }
+    //]]>
+    </script>
+
+    <script id="fs" type="x-shader/x-fragment">
+    //<![CDATA[
+      precision highp float;
+
+      uniform sampler2D fnt;
+      uniform sampler2D tex;
+      
+      varying vec2 tex_coord;
+      varying vec2 cell_coord;
+
+			vec3 Pal(float p)
+			{
+        p = clamp(floor(p-16.0), 0.0, 215.0);
+
+        float blue = floor(p / 36.0); 
+        p-= 36.0*blue;
+        
+        float green = floor(p / 6.0); 
+        float red = p - 6.0*green;
+				
+				return vec3(blue, green, red) * 0.2;
+			}
+      
+      void main()
+      {
+        // sample cell buffer
+        vec4 cell = texture2D(tex, tex_coord);
+
+        // chracter code / 16
+        float code = cell.z * (255.00/16.0); // bb fix !
+        
+        vec2 glyph;
+        glyph.y = floor(code); // character y position (0..15)
+        glyph.x = (code-glyph.y)*16.0; // character x position (0..15)
+
+        vec2 raster = fract(cell_coord);
+        raster.y = 1.0-raster.y;
+
+        // normalized glyph texel position
+        glyph = (glyph + raster) / vec2(16.0,16.0);
+        float mask = texture2D(fnt, glyph).g;
+
+        vec3 fg = Pal(cell.x*255.00);
+        vec3 bg = Pal(cell.y*255.00);
+        
+        gl_FragColor = vec4(mix(bg,fg,mask),1.0);
+      }
+    //]]>
+    </script>
+
     <script>
 
       var AsciickerUpdate = null;
       var AsciickerRender = null;
 
+      var ak_canvas;
+      var ak_ctx;
+      var ak_vtx;
+      var ak_prg;
+      var ak_tex;
+
+      var ak_fonts;
+      var ak_font;
+
+      var ak_buf = null;
+      var ak_prev_arr = null;
+      var ak_prev_mem = null;
+
+      var ak_uni_width;
+      var ak_uni_height;
+      var ak_uni_tex_width;
+      var ak_uni_tex_height;
+
+      var ak_width=0;
+      var ak_height=0;
+
+      var ak_max_width = 160;
+      var ak_max_height = 90;
+
+      var ak_force_x = 0;
+      var ak_force_y = 0;
+      var ak_torque = 0;
+      var ak_jump = false;
+      var ak_drag = 0;
+
+
+      function Resize(e)
+      {
+        var ak_ratio = 1;
+				
+				if (window.screen.systemXDPI !== undefined && 
+				    window.screen.logicalXDPI !== undefined && 
+					  window.screen.systemXDPI > window.screen.logicalXDPI) 
+				{
+					// Only allow for values > 1
+					ak_ratio = window.screen.systemXDPI / window.screen.logicalXDPI;
+				}
+				else 
+				if (window.devicePixelRatio !== undefined) 
+				{
+					ak_ratio = window.devicePixelRatio;
+				}
+
+				var w = window.innerWidth;
+				var h = window.innerHeight;		
+				
+				ak_ctx.canvas.width = Math.floor(w * ak_ratio);
+        ak_ctx.canvas.height = Math.floor(h * ak_ratio);
+
+				var rw = ak_ctx.canvas.width*0.001;
+				var rh = ak_ctx.canvas.height*0.001;
+				var rs = 7.5*Math.sqrt(rw*rw+rh*rh) * ak_ratio;
+				for (var i=0; i<ak_fonts.length; i++)
+				{
+					if (Math.abs(ak_fonts[ak_font].size - rs) >
+					    Math.abs(ak_fonts[i].size - rs))
+					{
+            ak_font = i;
+					}
+        }
+
+        console.log("FONT="+ak_font);
+      }
+
       function AsciickerLoop(tm)
       {
-        AsciickerUpdate(0,0,0,0);
-        var mem = AsciickerRender(128,75);
-        // gl.bindTesture(gl.TEXTURE_2D,tex);
-        // gl.texSubImage2D(gl.TEXTURE_2D,0, 0,0, 128,75, gl.RGBA, gl.UNSIGNED_BYTE, new ByteArray(Module.HEAP8,mem,4*128*75) );
-        // draw textured quad
+        if (!AsciickerUpdate(ak_force_x,ak_force_y,ak_torque,ak_jump))
+        {
+          ak_jump = false;
+        }
+
+				var display_w = ak_ctx.drawingBufferWidth;// & ~1;
+        var display_h = ak_ctx.drawingBufferHeight;// & ~1;
+		
+				var render_w = Math.floor( display_w / (ak_fonts[ak_font].width >> 4) );
+				var render_h = Math.floor( display_h / (ak_fonts[ak_font].height >> 4) );
+				
+				if (render_w > ak_max_width)
+          render_w = ak_max_width;
+				if (render_h > ak_max_height)
+          render_h = ak_max_height;
+
+        var mem = AsciickerRender(render_w,render_h);
+        if (mem != ak_prev_mem || Module.HEAP8 != ak_prev_arr || render_w != ak_width || render_h != ak_height)
+        {
+          // realloc handler
+          ak_buf = new Uint8Array(Module.HEAP8.buffer,mem,render_w*render_h*4);
+          ak_prev_arr = Module.HEAP8;
+          ak_prev_mem = mem;
+          ak_width = render_w;
+          ak_height = render_h;
+        }
+
+				ak_ctx.activeTexture(ak_ctx.TEXTURE0);
+				ak_ctx.bindTexture(ak_ctx.TEXTURE_2D, ak_tex);
+				ak_ctx.texSubImage2D(ak_ctx.TEXTURE_2D, 0, 0, 0, render_w,render_h, ak_ctx.RGBA, ak_ctx.UNSIGNED_BYTE, ak_buf);
+
+				ak_ctx.viewport(0,0,display_w,display_h);
+				ak_ctx.clearColor(0,0,0,0);
+				ak_ctx.clear(ak_ctx.COLOR_BUFFER_BIT);	
+
+				var fnt = ak_fonts[ak_font];
+				ak_ctx.activeTexture(ak_ctx.TEXTURE1);
+				ak_ctx.bindTexture(ak_ctx.TEXTURE_2D, fnt.tex);
+				
+				// render quad
+				ak_ctx.useProgram(ak_prg);
+				ak_ctx.uniform1f(ak_uni_width, render_w);
+				ak_ctx.uniform1f(ak_uni_height, render_h);
+				ak_ctx.uniform1f(ak_uni_tex_width, ak_max_width);
+				ak_ctx.uniform1f(ak_uni_tex_height, ak_max_height);
+				
+				ak_ctx.bindBuffer(ak_ctx.ARRAY_BUFFER, ak_vtx);
+				ak_ctx.drawArrays(ak_ctx.TRIANGLE_FAN,0,4);        
 
         window.requestAnimationFrame(AsciickerLoop);
       }
-
-      function AsciickerInit()
+      
+      function setKeybHandlers()
       {
+        var left=0,right=0,up=0,down=0;
+        var cw=0,ccw=0,slow=0;
+
+        window.addEventListener("blur",
+        function(e)
+        {
+          slow=0;
+          left=0;
+          right=0;
+          up=0;
+          down=0;
+          cw=0;
+          ccw=0;
+          ak_drag=0;
+          ak_force_x=0;
+          ak_force_y=0;
+          ak_torque=0;
+          ak_jump=false;
+        },{});
+
+				window.addEventListener("keydown", 
+				function(e) 
+				{
+          if (!e.repeat)
+          {
+            var code = e.code;
+            if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
+              ak_jump = true;
+
+            if (code == "F1" || code == "Delete" || code == "PageUp")
+              ccw = 1;
+            if (code == "F2" || code == "Insert" || code == "PageDown")
+              cw = 1;
+
+            if (code=="ShiftLeft" || code=="ShiftRight")
+              slow = 1;
+
+            ak_torque = ccw - cw;
+
+            if (code == "ArrowLeft")
+              left=1;
+            if (code == "ArrowRight")
+              right=1;
+            if (code == "ArrowUp")
+              up=1;
+            if (code == "ArrowDown")
+              down=1;
+
+            if (ak_drag == 0)
+            {
+              var speed = slow ? 0.5 : 1.0;
+              ak_force_x = right-left;
+              ak_force_y = up-down;
+              var len = Math.sqrt(ak_force_x*ak_force_x+ak_force_y*ak_force_y);
+              if (len>0)
+                  speed /= len;
+              ak_force_x *= speed;
+              ak_force_y *= speed;
+            }
+          }
+          e.preventDefault();
+        },{ passive: false });
+
+				window.addEventListener("keyup", 
+				function(e) 
+				{
+          var code = e.code;
+
+          if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
+            ak_jump = false;
+
+          if (code == "F1" || code == "Delete" || code == "PageUp")
+            ccw = 0;
+          if (code == "F2" || code == "Insert" || code == "PageDown")
+            cw = 0;
+
+          if (code=="ShiftLeft" || code=="ShiftRight")
+            slow = 0;
+
+          ak_torque = ccw - cw;
+
+          if (code == "ArrowLeft")
+            left=0;
+          if (code == "ArrowRight")
+            right=0;
+          if (code == "ArrowUp")
+            up=0;
+          if (code == "ArrowDown")
+            down=0;
+
+          if (ak_drag == 0)
+          {
+            var speed = slow ? 0.5 : 1.0;
+            ak_force_x = right-left;
+            ak_force_y = up-down;
+            var len = Math.sqrt(ak_force_x*ak_force_x+ak_force_y*ak_force_y);
+            if (len>0)
+                speed /= len;
+            ak_force_x *= speed;
+            ak_force_y *= speed;
+          }
+
+          e.preventDefault();
+
+        },{ passive: false });
+      }
+
+			function setMouseHandlers()
+			{
+        var left = 0;
+        var right = 0;
+
+				function preventZoom(e)
+				{
+					console.log("zoom");
+					e.preventDefault();
+        }
+        
+        function preventMenu(e)
+        {
+					console.log("menu");
+					e.preventDefault();
+        }
+				
+				window.addEventListener("DOMMouseScroll", preventZoom, { passive: false });
+				window.addEventListener("mousewheel", preventZoom, { passive: false });
+				window.addEventListener("contextmenu", preventMenu, { passive: false });
+				
+				window.addEventListener("mousedown", 
+				function(e) 
+				{
+          if (e.which == 1)
+            left = 1;
+          if (e.which == 3)
+            right = 1;
+
+          if (left+right == 2)
+          {
+            ak_jump = true;
+          }
+
+          if (left!=0)
+          {
+            ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
+            ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
+          }
+          else
+          {
+            ak_force_x = 0;
+            ak_force_y = 0;
+          }
+
+          ak_drag = left + right;
+
+          e.preventDefault();
+				}, { passive: false });
+				
+				window.addEventListener("mousemove", 
+				function(e) 
+				{
+          if (left!=0)
+          {
+            ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
+            ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
+          }
+          else
+          {
+            ak_force_x = 0;
+            ak_force_y = 0;
+          }
+
+          ak_drag = left + right;
+
+          e.preventDefault();
+				}, { passive: false });			
+				
+				window.addEventListener("mouseup",
+				function(e) 
+				{
+          if (e.which == 1)
+            left = 0;
+          if (e.which == 3)
+            right = 0;
+
+          if (left!=0)
+          {
+            ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
+            ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
+          }
+          else
+          {
+            ak_force_x = 0;
+            ak_force_y = 0;
+          }
+
+          ak_drag = left + right;
+
+          e.preventDefault();
+				}, { passive: false });
+			}      
+
+      function AsciickerBoot()
+      {
+        var loaded = 0;
+				var failed = 0;
+				
+				// start with default size
+				var fonts = [10, 6,8,12,16,14,18,20];
+				
+				var required = fonts.length;
+				
+				var failCheck = function()
+				{
+					if (loaded+failed == required)
+						console.log("Can't boot"); 
+				};
+				
+				for (var f=0; f<fonts.length; f++)
+				{
+					var size = fonts[f];
+					var fnt = new Image();  
+					fonts[f] = fnt;
+					
+					fnt.onerror = function(id) {
+						return function() 
+						{
+							failed++;
+							console.log('Failed to load font: '+id); 
+							failCheck();
+						};
+					}(size);
+
+					fnt.onload = function() 
+					{ 
+						loaded++; 
+						if (loaded == required) 
+              AsciickerInit(fonts);
+						else
+							failCheck();
+					}
+					fnt.src = 'fonts/cp437_'+size+'x'+size+'.png';
+				}        
+      }
+
+      function AsciickerInit(fonts)
+      {
+        console.log('Loaded '+fonts.length+' fonts'); 
+
         AsciickerUpdate = Module.cwrap('AsciickerUpdate', 'number', ['number','number','number','number']);
         AsciickerRender = Module.cwrap('AsciickerRender', 'number', ['number','number']);
 
+
+        ak_canvas = document.getElementById('asciicker_canvas');
+        ak_canvas.hidden = false;
+
+				var webgl_opts = { alpha: false, depth: false, stencil: false, antialias: false };
+				
+				try 
+				{
+					ak_ctx = 
+						ak_canvas.getContext("webgl",webgl_opts) || 
+						ak_canvas.getContext("experimental-webgl",webgl_opts);
+				}
+				catch(e) 
+				{
+					ak_ctx = null;
+				}
+				
+				if (!ak_ctx)
+					return;
+					
+				ak_ctx.imageSmoothingEnabled = false;
+
+				ak_vtx = ak_ctx.createBuffer();
+				ak_ctx.bindBuffer(ak_ctx.ARRAY_BUFFER, ak_vtx);
+				ak_ctx.bufferData(ak_ctx.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 1,1, 0,1]), ak_ctx.STATIC_DRAW);
+					
+				var vs = ak_ctx.createShader(ak_ctx.VERTEX_SHADER);
+				ak_ctx.shaderSource( vs, document.getElementById('vs').innerHTML );
+				ak_ctx.compileShader(vs);
+				if (!ak_ctx.getShaderParameter(vs, ak_ctx.COMPILE_STATUS)) 
+					console.log(ak_ctx.getShaderInfoLog(vs));
+
+				var fs = ak_ctx.createShader(ak_ctx.FRAGMENT_SHADER);
+				ak_ctx.shaderSource( fs, document.getElementById('fs').innerHTML );
+				ak_ctx.compileShader(fs);
+				if (!ak_ctx.getShaderParameter(fs, ak_ctx.COMPILE_STATUS)) 
+					console.log(ak_ctx.getShaderInfoLog(fs));
+				
+				ak_prg = ak_ctx.createProgram();
+				ak_ctx.attachShader(ak_prg,vs);
+				ak_ctx.attachShader(ak_prg,fs);
+				ak_ctx.linkProgram(ak_prg);
+					
+				ak_ctx.deleteShader(vs);
+				ak_ctx.deleteShader(fs);
+				
+				ak_ctx.useProgram(ak_prg);
+
+				// attribs
+				var xy = ak_ctx.getAttribLocation(ak_prg, "xy");
+				ak_ctx.vertexAttribPointer(xy, 2, ak_ctx.FLOAT, false, 0, 0);
+				ak_ctx.enableVertexAttribArray(xy);
+
+				// uniforms
+				ak_ctx.uniform1i(ak_ctx.getUniformLocation(ak_prg, "tex"), 0);
+				ak_ctx.uniform1i(ak_ctx.getUniformLocation(ak_prg, "fnt"), 1);
+				
+				ak_uni_width = ak_ctx.getUniformLocation(ak_prg, "width");
+        ak_uni_height = ak_ctx.getUniformLocation(ak_prg, "height");				
+				ak_uni_tex_width = ak_ctx.getUniformLocation(ak_prg, "tex_width");
+				ak_uni_tex_height = ak_ctx.getUniformLocation(ak_prg, "tex_height");        
+				
+				ak_ctx.activeTexture(ak_ctx.TEXTURE0);
+				
+				ak_fonts = new Array();
+				
+				var def_font = fonts[0];
+				fonts.sort( function (a,b) { return a.naturalHeight-b.naturalHeight; } );
+				
+				for (var f=0; f<fonts.length; f++)
+				{
+					var fnt = 
+					{ 
+						tex:    ak_ctx.createTexture(), 
+						size:   fonts[f].naturalHeight >> 4,
+						width:  fonts[f].naturalWidth,
+						height:  fonts[f].naturalHeight,
+					};
+					
+					ak_fonts.push(fnt);
+					
+					ak_ctx.bindTexture(ak_ctx.TEXTURE_2D, fnt.tex);
+					ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_WRAP_S, ak_ctx.CLAMP_TO_EDGE); 
+					ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_WRAP_T, ak_ctx.CLAMP_TO_EDGE);
+					ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_MIN_FILTER, ak_ctx.NEAREST);
+					ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_MAG_FILTER, ak_ctx.NEAREST);
+					ak_ctx.texImage2D(ak_ctx.TEXTURE_2D, 0, ak_ctx.RGBA, ak_ctx.RGBA, ak_ctx.UNSIGNED_BYTE, fonts[f]);
+					
+					if (fonts[f] === def_font)
+						ak_font = f;
+        }
+
+        var clear = new Uint8Array(4*ak_max_width*ak_max_height);
+        
+				ak_tex = ak_ctx.createTexture();
+				ak_ctx.bindTexture(ak_ctx.TEXTURE_2D, ak_tex);
+				ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_WRAP_S, ak_ctx.CLAMP_TO_EDGE); 
+				ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_WRAP_T, ak_ctx.CLAMP_TO_EDGE);
+				ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_MIN_FILTER, ak_ctx.NEAREST);
+				ak_ctx.texParameteri(ak_ctx.TEXTURE_2D, ak_ctx.TEXTURE_MAG_FILTER, ak_ctx.NEAREST);
+				ak_ctx.texImage2D(ak_ctx.TEXTURE_2D, 0, ak_ctx.RGBA, ak_max_width,ak_max_height,0, ak_ctx.RGBA, ak_ctx.UNSIGNED_BYTE, clear);
+
+        console.log("ALL PASSED");
+
+        setMouseHandlers();
+        setKeybHandlers();
+
+        window.addEventListener("resize",Resize); 
+        Resize(null);
+
         window.requestAnimationFrame(AsciickerLoop);
       }
-    
     </script>
+
   </head>
   <body>
+    <canvas id="asciicker_canvas" width="800", height="500", hidden="true"></canvas>
     <figure style="overflow:visible;" id="spinner"><div class="spinner"></div><center style="margin-top:0.5em"><strong>ASCIICKER</strong></center></figure>
     <div class="asciicker" id="status">Downloading...</div>
     <div class="asciicker">
@@ -98,7 +655,7 @@
         noExitRuntime: true,
         noInitialRun: false,
         preRun: [ ],
-        postRun: [ AsciickerInit ],
+        postRun: [ AsciickerBoot ],
         print: (function() {
           var element = document.getElementById('output');
           if (element) element.value = ''; // clear browser cache
