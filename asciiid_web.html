@@ -94,7 +94,7 @@
 
 			vec3 Pal(float p)
 			{
-        p = clamp(floor(p-16.0), 0.0, 215.0);
+        p = clamp(floor(p-16.0+0.5), 0.0, 215.0);
 
         float blue = floor(p / 36.0); 
         p-= 36.0*blue;
@@ -111,7 +111,7 @@
         vec4 cell = texture2D(tex, tex_coord);
 
         // chracter code / 16
-        float code = cell.z * (255.00/16.0); // bb fix !
+        float code = floor(cell.z * 255.00 + 0.5)/16.0; // bb fix !
         
         vec2 glyph;
         glyph.y = floor(code); // character y position (0..15)
@@ -482,7 +482,7 @@
 				for (var f=0; f<fonts.length; f++)
 				{
 					var size = fonts[f];
-					var fnt = new Image();  
+          var fnt = new Image();  
 					fonts[f] = fnt;
 					
 					fnt.onerror = function(id) {
