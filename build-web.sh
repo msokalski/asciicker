@@ -49,7 +49,8 @@ emcc --emrun -O3 \
     --preload-file meshes/house-3.ply \
     --preload-file meshes/skull.ply \
     --preload-file meshes/tree-1.ply \
-    --preload-file meshes/tree-2.ply 
+    --preload-file meshes/tree-2.ply \
+    --preload-file meshes/ship-1.ply 
 
 # run in mini-server
 emrun --no_browser --port 8080 .web/index.html
