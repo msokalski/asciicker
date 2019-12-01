@@ -483,6 +483,7 @@ int main(int argc, char* argv[])
     if (!player_sprite)
         return -1;
 
+#if 0
     if (!term)
     {
         probe_z = (int)water;
@@ -574,7 +575,7 @@ int main(int argc, char* argv[])
 
         return 0;
     }
-
+#endif
 
 #ifdef __linux__
 

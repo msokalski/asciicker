@@ -1,9 +1,14 @@
 
+#include <stdint.h>
+
 #include "terrain.h"
 #include "physics.h"
 #include "sprite.h"
 #include "mesh.h"
 #include "asciiid_render.h"
+
+#include <math.h>
+#include "matrix.h"
 
 #include <time.h>
 uint64_t GetTime()
@@ -28,7 +33,6 @@ void* GetMaterialArr()
 
 static const float water = 55.0f;
 static const float zoom = 1.0;
-static const float lt[4] = {1,0,1,.5};
 static PhysicsIO io;
 
 int main()
@@ -172,6 +176,52 @@ extern "C"
 
     void* AsciickerRender(int width, int height)
     {
+        float lt[4];
+        // LIGHT
+        {
+            float lit_yaw = 45;
+            float lit_pitch = 30;//90;
+            float lit_time = 12.0f;
+            float ambience = 0.5;
+
+            double noon_yaw[2] =
+            {
+                // zero is behind viewer
+                -sin(-lit_yaw*M_PI / 180),
+                -cos(-lit_yaw*M_PI / 180),
+            };
+
+            double dusk_yaw[3] =
+            {
+                -noon_yaw[1],
+                noon_yaw[0],
+                0
+            };
+
+            double noon_pos[4] =
+            {
+                noon_yaw[0]*cos(lit_pitch*M_PI / 180),
+                noon_yaw[1]*cos(lit_pitch*M_PI / 180),
+                sin(lit_pitch*M_PI / 180),
+                0
+            };
+
+            double lit_axis[3];
+
+            CrossProduct(dusk_yaw, noon_pos, lit_axis);
+
+            double time_tm[16];
+            Rotation(lit_axis, (lit_time-12)*M_PI / 12, time_tm);
+
+            double lit_pos[4];
+            Product(time_tm, noon_pos, lit_pos);
+
+            lt[0] = (float)lit_pos[0];
+            lt[1] = (float)lit_pos[1];
+            lt[2] = (float)lit_pos[2];
+            lt[3] = ambience;    
+        }
+
         //printf("In: AsciickerRender(%d,%d)\n", width, height);
         Render(terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp);
         return render_buf;

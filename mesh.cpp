@@ -1935,6 +1935,7 @@ bool Mesh::Update(const char* path)
 	}
 
 	// faces
+    int polys=0;
 	while (fgets(buf, 1024, f))
 	{
 		int len = (int)strlen(buf);
@@ -1947,43 +1948,70 @@ bool Mesh::Update(const char* path)
 		if (strncmp(buf, "comment", 7) == 0 && (buf[7] == 0 || buf[7] == ' ' || buf[7] == '\t' || buf[7] == '\r' || buf[7] == '\n'))
 			continue;
 
-		int n, a, b, c;
+        int vv[4];
+		int n;
 
-		if (sscanf(buf, "%d %d %d %d %s", &n, &a, &b, &c, tail_str) != 4 || n != 3 ||
-			a < 0 || a >= num_verts || b < 0 || b >= num_verts || c < 0 || c >= num_verts ||
-			a == b || b == c || c == a)
+		if (sscanf(buf, "%d %d %d %d %d %s", &n, vv+0,  vv+1,  vv+2,  vv+3, tail_str) < 4 || n != 3 && n != 4)
 		{
-			free(index);
+ 			free(index);
 			fclose(f);
 			return false;
 		}
 
+
+        for (int v1=0; v1<n; v1++)
+        {
+            if (vv[v1]<0 || vv[v1]>=num_verts)
+            {
+                free(index);
+                fclose(f);
+                return false;            
+            }  
+
+            if (v1==n-1)
+                break;
+
+            for (int v2=v1+1; v2<n; v2++)
+            {
+                if (vv[v1]==vv[v2])
+                {
+                    free(index);
+                    fclose(f);
+                    return false;            
+                }            
+            }
+        }
+    
 		////////////////
-		Face* f = (Face*)malloc(sizeof(Face));
+        for (int t=0; t<n-2; t++)
+        {
+		    Face* f = (Face*)malloc(sizeof(Face));
 
-		int abc[3] = { a,b,c };
+            int abc[3] = { vv[0],vv[t+1],vv[t+2] };
 
-		f->visual = 0;
-		f->mesh = this;
+            f->visual = 0;
+            f->mesh = this;
 
-		f->next = 0;
-		f->prev = tail_face;
-		if (tail_face)
-			tail_face->next = f;
-		else
-			head_face = f;
-		tail_face = f;
+            f->next = 0;
+            f->prev = tail_face;
+            if (tail_face)
+                tail_face->next = f;
+            else
+                head_face = f;
+            tail_face = f;
 
-		for (int i = 0; i < 3; i++)
-		{
-			f->abc[i] = index[abc[i]];
-			f->share_next[i] = f->abc[i]->face_list;
-			f->abc[i]->face_list = f;
-		}
+            for (int i = 0; i < 3; i++)
+            {
+                f->abc[i] = index[abc[i]];
+                f->share_next[i] = f->abc[i]->face_list;
+                f->abc[i]->face_list = f;
+            }
 
-		faces++;
+		    faces++;
+        }
 
-		if (faces == num_faces)
+        polys++;
+        if (polys == num_faces)
 			break;
 	}
 
