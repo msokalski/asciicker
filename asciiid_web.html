@@ -458,9 +458,9 @@
             if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
               ak_jump = true;
 
-            if (code == "F1" || code == "Delete" || code == "PageUp")
+            if (code == "F1" || code == "Delete" || code == "PageUp" || code == "KeyQ")
               ccw = 1;
-            if (code == "F2" || code == "Insert" || code == "PageDown")
+            if (code == "F2" || code == "Insert" || code == "PageDown" || code == "KeyE")
               cw = 1;
 
             if (code=="ShiftLeft" || code=="ShiftRight")
@@ -468,13 +468,13 @@
 
             ak_torque = ccw - cw;
 
-            if (code == "ArrowLeft")
+            if (code == "ArrowLeft" || code == "KeyA")
               left=1;
-            if (code == "ArrowRight")
+            if (code == "ArrowRight" || code == "KeyD")
               right=1;
-            if (code == "ArrowUp")
+            if (code == "ArrowUp" || code == "KeyW")
               up=1;
-            if (code == "ArrowDown")
+            if (code == "ArrowDown" || code == "KeyS")
               down=1;
 
             if (ak_drag == 0)
@@ -500,9 +500,9 @@
           if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
             ak_jump = false;
 
-          if (code == "F1" || code == "Delete" || code == "PageUp")
+          if (code == "F1" || code == "Delete" || code == "PageUp" || code == "KeyQ")
             ccw = 0;
-          if (code == "F2" || code == "Insert" || code == "PageDown")
+          if (code == "F2" || code == "Insert" || code == "PageDown" || code == "KeyE")
             cw = 0;
 
           if (code=="ShiftLeft" || code=="ShiftRight")
@@ -510,13 +510,13 @@
 
           ak_torque = ccw - cw;
 
-          if (code == "ArrowLeft")
+          if (code == "ArrowLeft" || code == "KeyA")
             left=0;
-          if (code == "ArrowRight")
+          if (code == "ArrowRight" || code == "KeyD")
             right=0;
-          if (code == "ArrowUp")
+          if (code == "ArrowUp" || code == "KeyW")
             up=0;
-          if (code == "ArrowDown")
+          if (code == "ArrowDown" || code == "KeyS")
             down=0;
 
           if (ak_drag == 0)
@@ -589,18 +589,14 @@
 				window.addEventListener("mousemove", 
 				function(e) 
 				{
+          ak_drag = left + right;
+          
+          
           if (left!=0)
           {
             ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
             ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
           }
-          else
-          {
-            ak_force_x = 0;
-            ak_force_y = 0;
-          }
-
-          ak_drag = left + right;
 
           e.preventDefault();
 				}, { passive: false });			
