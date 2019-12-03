@@ -2,6 +2,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <malloc.h>
+#include <assert.h>
 #include "matrix.h"
 #include "physics.h"
 
@@ -9,6 +10,242 @@ struct SoupItem
 {
 	float tri[3][3];
 	float nrm[4]; // {nrm, w} is plane equ
+
+#if 0
+	float CheckCollision2(const float sphere_pos[3], const float sphere_vel[3], float contact_pos[3])
+	{
+		float col_time = 2;
+
+		float col[3] = // on sphere @ time 0.0
+		{
+			sphere_pos[0] - nrm[0],
+			sphere_pos[1] - nrm[1],
+			sphere_pos[2] - nrm[2]
+		};
+
+		float face = DotProduct(col, nrm) + nrm[3];
+		float closer = -DotProduct(sphere_vel, nrm);
+
+		// float contact_pos[3]; // collision point @ collision time
+
+		if (face <= 0)
+		{
+			// back: project collision point along plane normal
+			/*
+			(col[0] + nrm[0] * t) * nrm[0] +
+			(col[1] + nrm[1] * t) * nrm[1] +
+			(col[2] + nrm[2] * t) * nrm[2] + nrm[3] == 0
+			*/
+
+			// DotProduct(col,nrm) + t * DotProduct(nrm, nrm) + nrm[3] == 0
+			// DotProduct(col,nrm) + t + nrm[3] == 0
+
+			if (closer > 0)
+			{
+				/*
+				contact_pos[0] = col[0] - face * nrm[0];
+				contact_pos[1] = col[1] - face * nrm[1];
+				contact_pos[2] = col[2] - face * nrm[2];
+				*/
+				contact_pos[0] = col[0];
+				contact_pos[1] = col[1];
+				contact_pos[2] = col[2];
+				col_time = 0;
+			}
+			else
+			{
+				// allow to resolve
+				col_time = 2;
+			}
+		}
+		else
+		{
+			if (closer > 0)
+			{
+				// front: project collision point along velocity
+				/*
+				(col[0] + sphere_vel[0] * t) * nrm[0] +
+				(col[1] + sphere_vel[1] * t) * nrm[1] +
+				(col[2] + sphere_vel[2] * t) * nrm[2] + nrm[3] == 0
+				*/
+
+				// DotProduct(col,nrm) + t * DotProduct(sphere_vel, nrm) + nrm[3] == 0
+
+				col_time = face / closer;
+
+				contact_pos[0] = col[0] + col_time * sphere_vel[0];
+				contact_pos[1] = col[1] + col_time * sphere_vel[1];
+				contact_pos[2] = col[2] + col_time * sphere_vel[2];
+			}
+			else
+			{
+				// no hit in the past
+				col_time = 2;
+			}
+		}
+
+		if (col_time > 1)
+			return col_time;
+
+		// if contact_pos is in not inside triangle
+		// change it to be nearest point on triangle
+
+		float edge[3][3] =
+		{
+			{tri[1][0] - tri[0][0], tri[1][1] - tri[0][1], tri[1][2] - tri[0][2]},
+			{tri[2][0] - tri[1][0], tri[2][1] - tri[1][1], tri[2][2] - tri[1][2]},
+			{tri[0][0] - tri[2][0], tri[0][1] - tri[2][1], tri[0][2] - tri[2][2]}
+		};
+
+		// collision point relative to given edge 
+		float vect[3][3] =
+		{
+			{ contact_pos[0] - tri[0][0], contact_pos[1] - tri[0][1], contact_pos[2] - tri[0][2]},
+			{ contact_pos[0] - tri[1][0], contact_pos[1] - tri[1][1], contact_pos[2] - tri[1][2]},
+			{ contact_pos[0] - tri[2][0], contact_pos[1] - tri[2][1], contact_pos[2] - tri[2][2]},
+		};
+
+		float cross[3][3];
+		float dot[3];
+
+		CrossProduct(edge[0], vect[0], cross[0]);
+		dot[0] = DotProduct(cross[0], nrm);
+
+		CrossProduct(edge[1], vect[1], cross[1]);
+		dot[1] = DotProduct(cross[1], nrm);
+
+		CrossProduct(edge[2], vect[2], cross[2]);
+		dot[2] = DotProduct(cross[2], nrm);
+
+		if (dot[0] >= 0 && dot[1] >= 0 && dot[2] >= 0)
+		{
+			// at the moment it can happen (no safe distance is maintained)
+			//assert(col_time > 0);
+			return col_time;
+		}
+
+		//return 2;
+
+		// find closest point on edges (clamped to vertices)
+		float closest[3];
+		float closest_sd = 1.e+20f;
+
+		for (int e = 0; e < 3; e++)
+		{
+			float sqr_len = edge[e][0] * edge[e][0] + edge[e][1] * edge[e][1] + edge[e][2] * edge[e][2];
+
+			float line = DotProduct(vect[e], edge[e]);
+			if (line <= 0)
+			{
+				float d[3] = 
+				{
+					contact_pos[0] - tri[e][0],
+					contact_pos[1] - tri[e][1],
+					contact_pos[2] - tri[e][2],
+				};
+
+				float sd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+				if (sd < closest_sd)
+				{
+					closest_sd = sd;
+					closest[0] = tri[e][0];
+					closest[1] = tri[e][1];
+					closest[2] = tri[e][2];
+				}
+			}
+			else
+			if (line >= sqr_len)
+			{
+				int f = e==2 ? 0 : e + 1;
+
+				float d[3] =
+				{
+					contact_pos[0] - tri[f][0],
+					contact_pos[1] - tri[f][1],
+					contact_pos[2] - tri[f][2],
+				};
+
+				float sd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+				if (sd < closest_sd)
+				{
+					closest_sd = sd;
+					closest[0] = tri[f][0];
+					closest[1] = tri[f][1];
+					closest[2] = tri[f][2];
+				}
+			}
+			else
+			{
+				line /= sqr_len;
+				float p[3] =
+				{
+					tri[e][0] + line * edge[e][0],
+					tri[e][1] + line * edge[e][1],
+					tri[e][2] + line * edge[e][2]
+				};
+
+				float d[3] =
+				{
+					contact_pos[0] - p[0],
+					contact_pos[1] - p[1],
+					contact_pos[2] - p[2],
+				};
+
+				float sd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+				if (sd < closest_sd)
+				{
+					closest_sd = sd;
+					closest[0] = p[0];
+					closest[1] = p[1];
+					closest[2] = p[2];
+				}
+			}
+		}
+
+		assert(closest_sd < 1.e+19f);
+
+		contact_pos[0] = closest[0];
+		contact_pos[1] = closest[1];
+		contact_pos[2] = closest[2];
+
+		// reproject contact pos onto sphere in -vel direction
+
+		/*
+			( p+v*t - ps )^2 = r^2
+
+			( p-ps + v*t )^2 = r^2
+			(p-ps)^2 + t*2*(p-ps)*v + t^2*v^2 = r^2
+
+			A := v^2
+			B := 2*dot(p-ps,v)
+			C := (p-ps)^2 - r^2
+		*/
+
+		float p_ps[3] =
+		{
+			contact_pos[0] - sphere_pos[0],
+			contact_pos[1] - sphere_pos[1],
+			contact_pos[2] - sphere_pos[2],
+		};
+
+		float A = sphere_vel[0] * sphere_vel[0] + sphere_vel[1] * sphere_vel[1] + sphere_vel[2] * sphere_vel[2];
+		float B = -2 * DotProduct(p_ps, sphere_vel); // negative as we project in -vel dir
+		float C = DotProduct(p_ps, p_ps) - 1.0f;
+
+		float D = B * B - 4 * A*C;
+
+		if (D < 0)
+			col_time = 2;
+		else
+		{
+			col_time = (-B - sqrtf(D)) / (2 * A);
+			if (col_time < 0)
+				col_time = 2;
+		}
+
+		return col_time;
+	}
+#endif
 
 	float CheckCollision(const float sphere_pos[3], const float sphere_vel[3], float contact_pos[3])
 	{
@@ -238,7 +475,7 @@ struct Physics
 	float collect_mul_xy;
 	float collect_mul_z;
 
-    bool collision_failure;
+    //bool collision_failure;
 
     float slope;
     float water;
@@ -377,10 +614,14 @@ struct Physics
 						float e1[3] = { v[0][0] - v[2][0],v[0][1] - v[2][1],v[0][2] - v[2][2] };
 						float e2[3] = { v[1][0] - v[2][0],v[1][1] - v[2][1],v[1][2] - v[2][2] };
 						CrossProduct(e1, e2, item->nrm);
+
+						assert(fabsf(item->nrm[0]) + fabsf(item->nrm[1]) + fabsf(item->nrm[2]) > 0.001);
+
 						float nrm = 1.0f / sqrtf(
 							item->nrm[0] * item->nrm[0] + 
 							item->nrm[1] * item->nrm[1] + 
 							item->nrm[2] * item->nrm[2]);
+
 						item->nrm[0] *= nrm;
 						item->nrm[1] *= nrm;
 						item->nrm[2] *= nrm;
@@ -704,7 +945,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			{
 				phys->pos[0] * phys->collect_mul_xy,
 				phys->pos[1] * phys->collect_mul_xy,
-				(phys->pos[2] + world_height * 0.5f) * phys->collect_mul_z,
+				(phys->pos[2] + world_height * 0.5) * phys->collect_mul_z,
 			};
 
 			float sphere_vel[3] =
@@ -719,8 +960,10 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 
 			int items = phys->soup_items;
 			int iters_left = 10;
-			bool ignore_roof = false;
-		retry_without_roof:
+			// bool ignore_roof = false;
+		
+			// retry_without_roof:
+		
 			while (fabsf(sphere_vel[0]) > xy_thresh || fabsf(sphere_vel[1]) > xy_thresh || fabsf(sphere_vel[2]) > z_thresh)
 			{
 				SoupItem* collision_item = 0;
@@ -734,9 +977,27 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 					float contact_pos[3];
 					float time = item->CheckCollision(sphere_pos, sphere_vel, contact_pos); // must return >=2 if no collision occurs
 
+					assert(time >= 0);
+
 					if (time < collision_time)
 					{
-						if (!ignore_roof || contact_pos[2] < sphere_pos[2] + 0.5)
+						float check[3] =
+						{
+							sphere_pos[0] + sphere_vel[0] * time - contact_pos[0],
+							sphere_pos[1] + sphere_vel[1] * time - contact_pos[1],
+							sphere_pos[2] + sphere_vel[2] * time - contact_pos[2],
+						};
+
+						float sqr_dist = DotProduct(check, check);
+
+						if (fabsf(sqr_dist) - 1.0f > 0.001)
+						{
+							assert(0);
+							// recheck
+							// time = item->CheckCollision2(sphere_pos, sphere_vel, contact_pos); // must return >=2 if no collision occurs
+						}
+
+						// if (!ignore_roof || contact_pos[2] < sphere_pos[2] + 0.5)
 						{
 							collision_item = item;
 							collision_time = time;
@@ -755,24 +1016,36 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 					break;
 				}
 
-				// collision_time = max(0, collision_time - 0.001f); // fix to prevent intersections with current sliding triangle plane
-				collision_time -= 0.001f;
-
-				sphere_pos[0] += sphere_vel[0] * collision_time;
-				sphere_pos[1] += sphere_vel[1] * collision_time;
-				sphere_pos[2] += sphere_vel[2] * collision_time;
-
-				float remain = 1.0f - collision_time;
-				sphere_vel[0] *= remain;
-				sphere_vel[1] *= remain;
-				sphere_vel[2] *= remain;
+				float full_step[3] =
+				{
+					sphere_vel[0] * collision_time,
+					sphere_vel[1] * collision_time,
+					sphere_vel[2] * collision_time
+				};
 
 				float slide_normal[3] =
 				{
-					sphere_pos[0] - collision_pos[0],
-					sphere_pos[1] - collision_pos[1],
-					sphere_pos[2] - collision_pos[2]
+					sphere_pos[0] + full_step[0] - collision_pos[0],
+					sphere_pos[1] + full_step[1] - collision_pos[1],
+					sphere_pos[2] + full_step[2] - collision_pos[2]
 				};
+
+				float full_len = sqrt(full_step[0] * full_step[0] + full_step[1] * full_step[1] + full_step[2] * full_step[2]);
+				float ratio = 0.0;
+				if (full_len > 0.01)
+					ratio = (full_len - 0.01) / full_len;
+
+				sphere_pos[0] += full_step[0] * ratio;
+				sphere_pos[1] += full_step[1] * ratio;
+				sphere_pos[2] += full_step[2] * ratio;
+
+				float remain = 1.0f - collision_time;
+				if (remain >= 0.99f)
+					remain = 0.99f;
+
+				sphere_vel[0] *= remain;
+				sphere_vel[1] *= remain;
+				sphere_vel[2] *= remain;
 
 				// move bit away from plane
 				/*
@@ -792,6 +1065,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 					break;
 			}
 
+			/*
 			if (iters_left)
 				phys->collision_failure = false;
 			else
@@ -808,6 +1082,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 				ignore_roof = true;
 				goto retry_without_roof;
 			}
+			*/
 
 			//printf("iters_left:%d\n", iters_left);
 
@@ -1030,7 +1305,7 @@ Physics* CreatePhysics(Terrain* t, World* w, float pos[3], float dir, float yaw,
     phys->terrain = t;
     phys->world = w;
 
-	phys->collision_failure = false;
+	// phys->collision_failure = false;
 
 	phys->soup = 0;
 	phys->soup_alloc = 0;

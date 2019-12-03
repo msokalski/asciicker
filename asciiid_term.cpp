@@ -298,6 +298,7 @@ void term_init(A3D_WND* wnd)
 			layout(location = 3) uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
 			in vec2 cell_coord;
 
+			/*
 			vec3 XTermPal(int p)
 			{
 				p -= 16;
@@ -310,6 +311,20 @@ void term_init(A3D_WND* wnd)
 				p = (p - g) / 6;
 				
 				return vec3(p, g, r) * 0.2;
+			}
+			*/
+
+			vec3 Pal(float p)
+			{
+				p = clamp(floor(p - 16.0 + 0.5), 0.0, 215.0);
+
+				float blue = floor(p / 36.0);
+				p -= 36.0*blue;
+
+				float green = floor(p / 6.0);
+				float red = p - 6.0*green;
+
+				return vec3(blue, green, red) * 0.2;
 			}
 
 			void main()
@@ -328,8 +343,13 @@ void term_init(A3D_WND* wnd)
 				vec2 glyph_coord = ( vec2(glyph_idx & 0xF, glyph_idx >> 4) + frac_cell ) / vec2(16.0);
 				float glyph_alpha = texture(font, glyph_coord).a;
 
+				/*
 				vec3 fg_color = XTermPal(int(round(cell.r * 255.0)));
 				vec3 bg_color = XTermPal(int(round(cell.g * 255.0)));
+				*/
+
+				vec3 fg_color = Pal(cell.x*255.00);
+				vec3 bg_color = Pal(cell.y*255.00);
 
 				color = vec4(mix(bg_color, fg_color, glyph_alpha), 1.0);
 			}
