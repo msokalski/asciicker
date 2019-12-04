@@ -12,6 +12,8 @@
 #include "fast_rand.h"
 // #include "sprite.h"
 
+#include "PerlinNoise.hpp"
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <float.h>
@@ -1296,6 +1298,9 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 	// memset(r.sample_buffer.ptr, 0x00, dw*dh * sizeof(Sample));
 	memcpy(r.sample_buffer.ptr, r.sample_buffer.ptr + dw * dh, dw*dh * sizeof(Sample));
 
+	// for every cell we need to know world's xy coord where z is at the water level
+
+
 	static const double sin30 = sin(M_PI*30.0/180.0); 
 	static const double cos30 = cos(M_PI*30.0/180.0);
 
@@ -1407,7 +1412,6 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 
 
 	// player shadow
-
 	double inv_tm[16];
 	Invert(tm, inv_tm);
 
@@ -1530,6 +1534,11 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
 	global_refl_mode = false;
+
+	// anim water
+	static siv::PerlinNoise pn;
+	static double pn_time = 0.0;
+	pn_time += 0.02;
 
 	Sample* src = r.sample_buffer.ptr + 2 + 2 * dw;
 	for (int y = 0; y < height; y++)
@@ -1898,6 +1907,71 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 				}
 			}
 
+			if (src[0].height < water && src[1].height < water && src[dw].height < water && src[dw+1].height < water)
+			{
+				double s[4] = { 2*x,2*y,water,1 };
+				double w[4];
+				Product(inv_tm, s, w); // convert from screen to world
+
+				w[0] = round(w[0]);
+				w[1] = round(w[1]);
+
+				double d = pn.octaveNoise0_1(w[0] * 0.05, w[1] * 0.05, pn_time, 4);
+
+				int id = (int)(d * 5) - 2;
+
+				if (id < -1)
+					id = 2;
+				if (id > 1)
+					id = -2;
+				//ptr->fg += id;
+				//ptr->bk += id;
+
+				if (id > 0)
+				{
+					if (ptr->fg <= 16 + 215 - 36)
+						ptr->fg += 36;
+					if (ptr->fg <= 16 + 215 - 6)
+						ptr->fg += 6;
+					if (ptr->fg <= 16 + 215 -1)
+						ptr->fg += 1;
+					/*
+					if (ptr->bk <= 16 + 215 - 36)
+						ptr->bk += 36;
+					if (ptr->bk <= 16 + 215 - 6)
+						ptr->bk += 6;
+					if (ptr->bk <= 16 + 215 - 1)
+						ptr->bk += 1;
+					*/
+				}
+				else
+				if (id < 0)
+				{
+					if (ptr->fg >= 16 + 36)
+						ptr->fg -= 36;
+					if (ptr->fg >= 16 + 6)
+						ptr->fg -= 6;
+					if (ptr->fg >= 16 + 1)
+						ptr->fg -= 1;
+
+					/*
+					if (ptr->bk >= 16 + 36)
+						ptr->bk -= 36;
+					if (ptr->bk >= 16 + 6)
+						ptr->bk -= 6;
+					if (ptr->bk >= 16 + 1)
+						ptr->bk -= 1;
+					*/
+				}
+
+				/*
+				if (id > 0)
+					*ptr = ptr[-width];
+				else
+				if (id < 0)
+					*ptr = ptr[+width];
+				*/
+			}
 
 			// xterm conv
 
