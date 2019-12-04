@@ -1909,7 +1909,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 
 			if (src[0].height < water && src[1].height < water && src[dw].height < water && src[dw+1].height < water)
 			{
-				double s[4] = { 2*x,2*y,water,1 };
+				double s[4] = { 2.0*x,2.0*y,water,1.0 };
 				double w[4];
 				Product(inv_tm, s, w); // convert from screen to world
 

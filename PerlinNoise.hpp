@@ -33,6 +33,8 @@
 # include <iterator>
 # include <type_traits>
 
+// #define is_arithmetic_v is_arithmetic
+
 namespace siv
 {
 	class PerlinNoise
@@ -66,11 +68,13 @@ namespace siv
 			reseed(seed);
 		}
 
+		/*
 		template <class URNG, std::enable_if_t<!std::is_arithmetic_v<URNG>>* = nullptr>
 		explicit PerlinNoise(URNG& urng)
 		{
 			reseed(urng);
 		}
+		*/
 
 		void reseed(std::uint32_t seed)
 		{
@@ -87,6 +91,7 @@ namespace siv
 			}
 		}
 
+		/*
 		template <class URNG, std::enable_if_t<!std::is_arithmetic_v<URNG>>* = nullptr>
 		void reseed(URNG& urng)
 		{
@@ -102,6 +107,7 @@ namespace siv
 				p[256 + i] = p[i];
 			}
 		}
+		*/
 
 		double noise(double x) const
 		{
