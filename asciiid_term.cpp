@@ -188,7 +188,7 @@ void term_render(A3D_WND* wnd)
 	lt[2] *= ln;
 	*/
 
-	Render(terrain, world, io.water, zoom, io.yaw, io.pos, lt, width, height, term->buf, io.player_dir, io.player_stp);
+	Render(terrain, world, io.water, zoom, io.yaw, io.pos, lt, width, height, term->buf, io.player_dir, io.player_stp, io.dt, io.xyz);
 
 	// copy term->buf to some texture
 	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
@@ -457,7 +457,13 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 		return;
 
 	if (down)
+	{
+		if (ki == A3D_F10)
+			a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
+		if (ki == A3D_F9)
+			a3dSetRect(wnd, 0, A3D_WND_NORMAL);
 		term->keys[ki >> 3] |= 1 << (ki & 0x7);
+	}
 	else
 		term->keys[ki >> 3] &= ~(1 << (ki & 0x7));
 }

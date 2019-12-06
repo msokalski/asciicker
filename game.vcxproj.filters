@@ -66,6 +66,9 @@
     <ClInclude Include="sprite.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="physics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gl.c">

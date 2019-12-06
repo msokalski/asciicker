@@ -160,14 +160,26 @@ Sprite* LoadPlayer(const char* path)
 			if (2 * fr_x < fr_num_x)
 			{
 				// proj:
+
+				// PLAYER
 				frame->ref[1] = 2; // in half blocks!
 				frame->ref[2] = -1; // foot cell (spare=1) gets z = 0.5*dz/dy (half cell above reference)
+
+				// WOLFIE
+				frame->ref[1] = 3;
+				frame->ref[2] = -2;
 			}
 			else
 			{
 				// refl
-				frame->ref[1] = (fr_height - 1) * 2; // in half blocks!
+
+				// PLAYER
+				frame->ref[1] = 2*fr_height -2; // in half blocks!
 				frame->ref[2] = -15; // foot cell (spare=7) gets z = -0.5*dz/dy (half cell below reference)
+
+				// WOLFIE
+				frame->ref[1] = 2*fr_height -1;
+				frame->ref[2] = -17;
 
 				rgb_div = 400;
 			}

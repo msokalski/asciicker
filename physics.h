@@ -22,6 +22,9 @@ struct PhysicsIO
     float yaw;
     float player_dir;
     int player_stp;
+	int dt;
+
+	float xyz[64][3];
 };
 
 struct Physics;

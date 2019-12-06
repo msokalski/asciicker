@@ -1209,10 +1209,19 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 	}
 }
 
-bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp)
+bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp, int dt, float hist[][3])
 {
 	AnsiCell* out_ptr = ptr;
 	static Renderer r;
+
+	static siv::PerlinNoise pn;
+	static double pn_time = 0.0;
+
+
+	pn_time += 0.02 * dt / 16666.0; // dt is in microsecs
+	if (pn_time >= 1000000000000.0)
+		pn_time = 0.0;
+
 
 #ifdef DBL
 	float scale = 3.0;
@@ -1535,10 +1544,21 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
 	global_refl_mode = false;
 
-	// anim water
-	static siv::PerlinNoise pn;
-	static double pn_time = 0.0;
-	pn_time += 0.02;
+
+	// clear and write new water ripples from player history position
+	// do not emit wave if given z is greater than water level!
+	memset(out_ptr, 0, sizeof(AnsiCell)*width*height);
+
+	/*
+	for (int h = 0; h < 64; h++)
+	{
+		float* xyz = hist[h];
+		if (xyz[2] < water)
+		{
+			// draw ellipse
+		}
+	}
+	*/
 
 	Sample* src = r.sample_buffer.ptr + 2 + 2 * dw;
 	for (int y = 0; y < height; y++)
@@ -1910,7 +1930,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 			if (src[0].height < water && src[1].height < water && src[dw].height < water && src[dw+1].height < water)
 			{
 				double s[4] = { 2.0*x,2.0*y,water,1.0 };
-				double w[4];
+				double w[4]; 
 				Product(inv_tm, s, w); // convert from screen to world
 
 				w[0] = round(w[0]);
@@ -1924,53 +1944,42 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 					id = 2;
 				if (id > 1)
 					id = -2;
-				//ptr->fg += id;
-				//ptr->bk += id;
 
 				if (id > 0)
 				{
-					if (ptr->fg <= 16 + 215 - 36)
-						ptr->fg += 36;
-					if (ptr->fg <= 16 + 215 - 6)
-						ptr->fg += 6;
-					if (ptr->fg <= 16 + 215 -1)
-						ptr->fg += 1;
-					/*
-					if (ptr->bk <= 16 + 215 - 36)
-						ptr->bk += 36;
-					if (ptr->bk <= 16 + 215 - 6)
-						ptr->bk += 6;
-					if (ptr->bk <= 16 + 215 - 1)
-						ptr->bk += 1;
-					*/
+					int c = ptr->fg - 16;
+					int cr = c / 36;
+					c -= cr * 36;
+					int cg = c / 6;
+					c -= cr * 6;
+					int cb = c;
+
+					if (cr < 5 && cg < 5 /*&& cb < 5*/)
+					{
+						if (cb < 5)
+							ptr->fg += 1 + 6 + 36;
+						else
+							ptr->fg += 6 + 36;
+					}
 				}
 				else
 				if (id < 0)
 				{
-					if (ptr->fg >= 16 + 36)
-						ptr->fg -= 36;
-					if (ptr->fg >= 16 + 6)
-						ptr->fg -= 6;
-					if (ptr->fg >= 16 + 1)
-						ptr->fg -= 1;
+					int c = ptr->fg - 16;
+					int cr = c / 36;
+					c -= cr * 36;
+					int cg = c / 6;
+					c -= cr * 6;
+					int cb = c;
 
-					/*
-					if (ptr->bk >= 16 + 36)
-						ptr->bk -= 36;
-					if (ptr->bk >= 16 + 6)
-						ptr->bk -= 6;
-					if (ptr->bk >= 16 + 1)
-						ptr->bk -= 1;
-					*/
+					if (cr > 0 && cg > 0 /*&& cb > 0*/)
+					{
+						if (cb > 0)
+							ptr->fg -= 1 + 6 + 36;
+						else
+							ptr->fg -= 6 + 36;
+					}
 				}
-
-				/*
-				if (id > 0)
-					*ptr = ptr[-width];
-				else
-				if (id < 0)
-					*ptr = ptr[+width];
-				*/
 			}
 
 			// xterm conv
@@ -2035,7 +2044,12 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 
 
 	int anim = 1;
+	
+	// PLAYER
 	int fr = player_stp/1024 % player_sprite->anim[anim].length;
+
+	// WOLFIE
+	fr = player_stp/512 % player_sprite->anim[anim].length;
 
 	if (player_stp < 0)
 	{

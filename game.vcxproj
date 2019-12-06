@@ -183,6 +183,7 @@
     <ClInclude Include="imgui_impl_opengl3.h" />
     <ClInclude Include="matrix.h" />
     <ClInclude Include="mesh.h" />
+    <ClInclude Include="physics.h" />
     <ClInclude Include="rgba8.h" />
     <ClInclude Include="sprite.h" />
     <ClInclude Include="stdafx.h" />

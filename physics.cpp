@@ -734,12 +734,14 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 	static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
 	static const float world_patch = VISUAL_CELLS; // patch size in world coords
 	static const float world_radius = radius_cells / patch_cells * world_patch;
-	static const float height_cells = 7.5;
+	static const float height_cells = 7.0; // 7.5; decreased (hair are soft)
 
 	// 2/3 = 1/(zoom*sin30)
 	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
 
 	static const int interval = 15000; // update physics step in [us]
+
+	io->dt = stamp - phys->stamp;
 
 	while (stamp - phys->stamp >= interval) // 5ms physics steps ( 200 steps/sec )
 	{
@@ -800,23 +802,23 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			};
 			*/
 
-			float dx,dy;
-			if (xy_len<0.01)
+			float dx, dy;
+			if (xy_len < 0.01)
 			{
 				xy_len = 0;
 				ix = 0;
 				iy = 0;
-				dx=0;
-				dy=0;
+				dx = 0;
+				dy = 0;
 			}
 			else
 			{
 				dx = io->x_force / xy_len;
 				dy = io->y_force / xy_len;
-				if (xy_len>1)
+				if (xy_len > 1)
 					xy_len = 1;
 
-				phys->player_dir = atan2(dy,dx) * 180 / M_PI + phys->yaw + 90;
+				phys->player_dir = atan2(dy, dx) * 180 / M_PI + phys->yaw + 90;
 			}
 
 			/*
@@ -848,7 +850,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 				float xy_limit = 27 - 17 * (phys->water - phys->pos[2]) / world_height;
 
 				float lim = 27;
-				lim *= xy_len*xy_len*xy_len;
+				lim *= xy_len * xy_len*xy_len;
 
 				if (xy_limit < 10)
 					xy_limit = 10;
@@ -876,7 +878,12 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 
 
 			// newton vs archimedes 
-			float cnt = 0.6;
+			float wave = 2 * (int)((phys->stamp >> 10) & 0x7FF) * (float)M_PI / 0x800;
+			float ampl = 0.05;
+			if (ix || iy)
+				ampl = 0.1;
+
+			float cnt = 0.78 + ampl * sinf(wave);
 			float acc = (phys->water - (phys->pos[2] + cnt * world_height)) / (2 * cnt*world_height);
 			if (acc < 0 - cnt)
 				acc = 0 - cnt;
@@ -961,9 +968,9 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			int items = phys->soup_items;
 			int iters_left = 10;
 			// bool ignore_roof = false;
-		
+
 			// retry_without_roof:
-		
+
 			while (fabsf(sphere_vel[0]) > xy_thresh || fabsf(sphere_vel[1]) > xy_thresh || fabsf(sphere_vel[2]) > z_thresh)
 			{
 				SoupItem* collision_item = 0;
@@ -1203,6 +1210,17 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 				io->jump = false;
 			}
 		}
+
+		for (int h = 63; h > 0; h--)
+		{
+			io->xyz[h][0] = io->xyz[h - 1][0];
+			io->xyz[h][1] = io->xyz[h - 1][1];
+			io->xyz[h][2] = io->xyz[h - 1][2];
+		}
+
+		io->xyz[0][0] = phys->pos[0];
+		io->xyz[0][1] = phys->pos[1];
+		io->xyz[0][2] = phys->pos[2];
 	}
 
 	io->pos[0] = phys->pos[0];

@@ -223,7 +223,7 @@ extern "C"
         }
 
         //printf("In: AsciickerRender(%d,%d)\n", width, height);
-        Render(terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp);
+        Render(terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp, io.dt, io.xyz);
         return render_buf;
     }
 }

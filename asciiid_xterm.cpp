@@ -479,7 +479,8 @@ int main(int argc, char* argv[])
     float pos[3] = {0,15,0};
     float lt[4] = {1,0,1,.5};
 
-    player_sprite = LoadPlayer("./sprites/player.xp");
+    // player_sprite = LoadPlayer("./sprites/player.xp");
+	player_sprite = LoadPlayer("./sprites/wolfie.xp");
     if (!player_sprite)
         return -1;
 
@@ -1295,7 +1296,7 @@ int main(int argc, char* argv[])
         // -> read them all, mark as pressed for 0.1 sec / if already pressed prolong
 
         // render
-        Render(terrain,world,water,1.0,io.yaw,io.pos,lt,wh[0],wh[1],buf,io.player_dir,io.player_stp);
+        Render(terrain,world,water,1.0,io.yaw,io.pos,lt,wh[0],wh[1],buf,io.player_dir,io.player_stp,io.dt,io.xyz);
 
         // write to stdout
         Print(buf,wh[0],wh[1],CP437_UTF8);
