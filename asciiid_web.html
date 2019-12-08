@@ -185,10 +185,14 @@
 				if (window.devicePixelRatio !== undefined) 
 				{
 					ak_ratio = window.devicePixelRatio;
-				}
+        }
+        
+        //ak_ratio = 1;
 
 				var w = window.innerWidth;
-				var h = window.innerHeight;		
+        var h = window.innerHeight;	
+        
+        console.log("WxH = " + w + "x" + h );
 				
 				ak_ctx.canvas.width = Math.floor(w * ak_ratio);
         ak_ctx.canvas.height = Math.floor(h * ak_ratio);
@@ -273,6 +277,7 @@
         window.addEventListener("touchstart",
         function(e)
         {
+          e.preventDefault();
           var data = event.changedTouches;
           for (var i=0; i<data.length; i++)
           {
@@ -302,7 +307,7 @@
                 {
                   ak_force_x = 0;
                   ak_force_y = 0;
-                  torque = -1;
+                  torque = +1;
                   ak_torque = torque;
                 }
                 else
@@ -310,7 +315,7 @@
                 {
                   ak_force_x = 0;
                   ak_force_y = 0;
-                  torque = +1;
+                  torque = -1;
                   ak_torque = torque;
                 }
                 else
@@ -334,6 +339,7 @@
         window.addEventListener("touchmove",
         function(e)
         {
+          e.preventDefault();
           var data = event.changedTouches;
           for (var i=0; i<data.length; i++)
           {
@@ -367,6 +373,7 @@
         window.addEventListener("touchend",
         function(e)
         {
+          e.preventDefault();
           var data = event.changedTouches;
           for (var i=0; i<data.length; i++)
           {
@@ -398,6 +405,7 @@
         window.addEventListener("touchcancel",
         function(e)
         {
+          e.preventDefault();
           var data = event.changedTouches;
           for (var i=0; i<data.length; i++)
           {
