@@ -749,7 +749,7 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 		if (elaps > interval)
 			elaps = interval;
 		phys->stamp += elaps;
-		float dt = elaps * (60.0f / 1000000.0f);
+		float dt = elaps * (60.0f / 1000000.0f); 
 
 		// by having old and new water level we can (in future) keep player floating on top of waves 
 		phys->water = io->water;

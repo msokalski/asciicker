@@ -479,8 +479,12 @@ int main(int argc, char* argv[])
     float pos[3] = {0,15,0};
     float lt[4] = {1,0,1,.5};
 
-    // player_sprite = LoadPlayer("./sprites/player.xp");
-	player_sprite = LoadPlayer("./sprites/wolfie.xp");
+	// PLAYER
+    player_sprite = LoadPlayer("./sprites/player.xp");
+
+	// WOLFIE
+	// player_sprite = LoadPlayer("./sprites/wolfie.xp");
+
     if (!player_sprite)
         return -1;
 

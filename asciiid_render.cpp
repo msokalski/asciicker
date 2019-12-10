@@ -722,7 +722,11 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 						else
 						*/
 						{
-							s->visual = map[v * VISUAL_CELLS + u];
+							uint16_t m = map[v * VISUAL_CELLS + u];
+							if (m & 0x8000)
+								s->height += HEIGHT_SCALE/2;
+
+							s->visual = m;
 							s->diffuse = diffuse;
 							s->spare = (s->spare & ~(0x8|0x3|0x4)) | parity; // clear refl, mesh and line, then add parity
 						}
@@ -1591,7 +1595,25 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 			// every material must have 16x16 map and uses visual shade to select Y and lighting to select X
 			// animated materials additionaly pre shifts and wraps visual shade by current time scaled by material's 'speed'
 
-			int elv = 0; // (src[0].visual >> 15) & 0x0001;
+			int e_lo = (src[-dw].visual >> 15) + (src[-dw + 1].visual >> 15);
+			int e_mi = (src[0].visual >> 15) + (src[1].visual >> 15);
+			int e_hi = (src[dw].visual >> 15) + (src[dw + 1].visual >> 15);
+
+			int elv;
+			if (e_lo <= 1)
+			{
+				if (e_hi <= 1)
+					elv = 3; // lo
+				else
+					elv = 2; // raise
+			}
+			else
+			{
+				if (e_hi <= 1)
+					elv = 0; // lower
+				else
+					elv = 1; // hi
+			}
 
 			/*
 			int shd = 0; // (src[0].visual >> 8) & 0x007F;
@@ -1611,7 +1633,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 			*/
 
 			int shd = (dif[0] + dif[1] + dif[2] + dif[3] + 17 * 2) / (17 * 4); // 17: FF->F, 4: avr
-			int gl = matlib[mat[0]].shade[1][shd].gl;
+			int gl = matlib[mat[0]].shade[elv][shd].gl;
 
 			int bg[3] = { 0,0,0 }; // 4
 			int fg[3] = { 0,0,0 };
@@ -1731,9 +1753,9 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 						}
 						else
 						{
-							int r = matlib[mat[i]].shade[1][shd].bg[0];
-							int g = matlib[mat[i]].shade[1][shd].bg[1];
-							int b = matlib[mat[i]].shade[1][shd].bg[2];
+							int r = matlib[mat[i]].shade[elv][shd].bg[0];
+							int g = matlib[mat[i]].shade[elv][shd].bg[1];
+							int b = matlib[mat[i]].shade[elv][shd].bg[2];
 
 							if ((spr[i] & 0x3) == 3)
 							{
@@ -1812,15 +1834,15 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 
 								if ((spr[i] & 0x3) == 0x3)
 								{
-									fg[0] += matlib[mat[i]].shade[1][shd].fg[0] * 255 / 400;
-									fg[1] += matlib[mat[i]].shade[1][shd].fg[1] * 255 / 400;
-									fg[2] += matlib[mat[i]].shade[1][shd].fg[2] * 255 / 400;
+									fg[0] += matlib[mat[i]].shade[elv][shd].fg[0] * 255 / 400;
+									fg[1] += matlib[mat[i]].shade[elv][shd].fg[1] * 255 / 400;
+									fg[2] += matlib[mat[i]].shade[elv][shd].fg[2] * 255 / 400;
 								}
 								else
 								{
-									fg[0] += matlib[mat[i]].shade[1][shd].fg[0];
-									fg[1] += matlib[mat[i]].shade[1][shd].fg[1];
-									fg[2] += matlib[mat[i]].shade[1][shd].fg[2];
+									fg[0] += matlib[mat[i]].shade[elv][shd].fg[0];
+									fg[1] += matlib[mat[i]].shade[elv][shd].fg[1];
+									fg[2] += matlib[mat[i]].shade[elv][shd].fg[2];
 								}
 							}
 						}
@@ -1887,42 +1909,48 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 				ptr->spare = 0xFF;
 
 				// collect line bits
-				int linecase = ((src[0].spare & 0x4) >> 2) | ((src[1].spare & 0x4) >> 1) | (src[dw].spare & 0x4) | ((src[dw + 1].spare & 0x4) << 1);
 
-				static const int linecase_glyph[] = { 0, ',', ',', ',', '`', ';', ';', ';', '`', ';', ';', ';', '`', ';', ';', ';' };
-				if (linecase)
-					ptr->gl = linecase_glyph[linecase];
-
-				// silhouette repetitoire:  _-/\| (should not be used by materials?)
-				float z_hi = src[dw].height + src[dw + 1].height;
-				float z_lo = src[0].height + src[1].height;
-				float z_pr = src[-dw].height + src[1 - dw].height;
-
-				float minus = z_lo - z_hi;
-				float under = z_pr - z_lo;
-
-				static const float thresh = 1 * HEIGHT_SCALE;
-
-				if (minus > under)
+				if (elv == 3) // only low elevation
 				{
-					if (minus > thresh)
-					{
-						ptr->gl = 0xC4; // '-'
-						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
-						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
-						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-						ptr->fg = 16 + 36*bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2];
-					}
+					int linecase = ((src[0].spare & 0x4) >> 2) | ((src[1].spare & 0x4) >> 1) | (src[dw].spare & 0x4) | ((src[dw + 1].spare & 0x4) << 1);
+					static const int linecase_glyph[] = { 0, ',', ',', ',', '`', ';', ';', ';', '`', ';', ';', ';', '`', ';', ';', ';' };
+					if (linecase)
+						ptr->gl = linecase_glyph[linecase];
 				}
-				else
+
+				if (elv == 1 || elv == 3) // no elev change
 				{
-					if (under > thresh)
+					// silhouette repetitoire:  _-/\| (should not be used by materials?)
+					float z_hi = src[dw].height + src[dw + 1].height;
+					float z_lo = src[0].height + src[1].height;
+					float z_pr = src[-dw].height + src[1 - dw].height;
+
+					float minus = z_lo - z_hi;
+					float under = z_pr - z_lo;
+
+					static const float thresh = 1 * HEIGHT_SCALE;
+
+					if (minus > under)
 					{
-						ptr->gl = 0x5F; // '_'
-						bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
-						bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
-						bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
-						ptr->fg = 16 + 36*bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2];
+						if (minus > thresh)
+						{
+							ptr->gl = 0xC4; // '-'
+							bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+							bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+							bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+							ptr->fg = 16 + 36 * bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2];
+						}
+					}
+					else
+					{
+						if (under > thresh)
+						{
+							ptr->gl = 0x5F; // '_'
+							bk_rgb[0] = std::max(0, bk_rgb[0] - 1);
+							bk_rgb[1] = std::max(0, bk_rgb[1] - 1);
+							bk_rgb[2] = std::max(0, bk_rgb[2] - 1);
+							ptr->fg = 16 + 36 * bk_rgb[0] + bk_rgb[1] * 6 + bk_rgb[2];
+						}
 					}
 				}
 			}
@@ -2049,7 +2077,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 	int fr = player_stp/1024 % player_sprite->anim[anim].length;
 
 	// WOLFIE
-	fr = player_stp/512 % player_sprite->anim[anim].length;
+	// fr = player_stp/512 % player_sprite->anim[anim].length;
 
 	if (player_stp < 0)
 	{

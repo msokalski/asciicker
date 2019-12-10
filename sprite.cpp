@@ -166,8 +166,8 @@ Sprite* LoadPlayer(const char* path)
 				frame->ref[2] = -1; // foot cell (spare=1) gets z = 0.5*dz/dy (half cell above reference)
 
 				// WOLFIE
-				frame->ref[1] = 3;
-				frame->ref[2] = -2;
+				//frame->ref[1] = 3;
+				//frame->ref[2] = -2;
 			}
 			else
 			{
@@ -178,8 +178,8 @@ Sprite* LoadPlayer(const char* path)
 				frame->ref[2] = -15; // foot cell (spare=7) gets z = -0.5*dz/dy (half cell below reference)
 
 				// WOLFIE
-				frame->ref[1] = 2*fr_height -1;
-				frame->ref[2] = -17;
+				//frame->ref[1] = 2*fr_height -1;
+				//frame->ref[2] = -17;
 
 				rgb_div = 400;
 			}

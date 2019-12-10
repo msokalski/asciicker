@@ -305,11 +305,11 @@ struct MyMaterial : Material
 	{
 		MyMaterial* m = (MyMaterial*)GetMaterialArr();
 
-		uint8_t g[3] = {'`',' ',','};
-		uint8_t f[3] = {0xFF,0,0};
+		uint8_t g[4] = {',',' ','!',' '};
+		uint8_t f[4] = {0xFF,0xA0,0x64,0x00};
 		for (int s=0; s<16; s++)
 		{
-			for (int r=0; r<3; r++)
+			for (int r=0; r<4; r++)
 			{
 				m[0].shade[r][s].fg[0]=f[r];
 				m[0].shade[r][s].fg[1]=f[r];
@@ -327,7 +327,7 @@ struct MyMaterial : Material
 
 		for (int i = 1; i < 256; i++)
 		{
-			for (int r = 0; r < 3; r++)
+			for (int r = 0; r < 4; r++)
 			{
 				for (int s = 0; s < 16; s++)
 				{
@@ -607,6 +607,7 @@ int active_font = 0;
 int active_glyph = 0x40; //@
 int active_palette = 0;
 int active_material = 0;
+int active_elev = 0;
 
 // used by Term
 int GetGLFont(int wh[2], const int wnd_wh[2])
@@ -1230,6 +1231,8 @@ struct RenderContext
 				vec3 light_pos = normalize(lt.xyz);
 				float light = max(0.0, 0.5*lt.w + (1.0-0.5*lt.w)*dot(light_pos, normalize(normal)));
 
+				bool elevated = false;
+
 				{
 					uint matid = visual & 0xFF;
 					uint shade = (visual >> 8) & 0x7F;
@@ -1248,7 +1251,12 @@ struct RenderContext
 
 					// if we're painting matid
 					// replace matid if we're inside the brush
-					if (br.w > 1.0)
+
+					if (br.w == 4.0) // mat-elev paint
+					{
+					}
+					else
+					if (br.w == 2.0) // mat-id paint
 					{
 						// flat (no-alpha) matid brush
 						float abs_r = abs(br.z);
@@ -1279,6 +1287,8 @@ struct RenderContext
 						- 2: multiply shade map by lighting   >-- for game
 						- 3: screen shade map with lighting  /
 					*/
+
+					elevated = elev != 0;
 
 					// convert elev to 0,1,2 material row of shades
 					elev = uint(1);
@@ -1322,7 +1332,12 @@ struct RenderContext
 
 				if (qd.z>0)
 				{
-					if (qd.z>1.5)
+					if (qd.z > 3.0)
+					{
+						color.rgb = mix(color.rgb, vec3(0, 1, 1), 0.25);
+					}
+					else
+					if (qd.z > 1.5)
 					{
 						// matid probe
 						vec2 pos = floor(world_xyuv.xy);
@@ -1389,10 +1404,28 @@ struct RenderContext
 				grid = min(grid, Grid(d*1.00, uvh.xy, float(VISUAL_CELLS) / float(HEIGHT_CELLS)));
 
 				// color.rgb *= grid;
-				color.rgb = mix(vec3(0, 0, 1), color.rgb, grid);
+
+				vec3 grid_color = elevated ? vec3(0,1,1) : vec3(0, 0, 1);
+				color.rgb = mix(grid_color, color.rgb, grid);
 
 				// brush preview
-				if (br.w > 1.0)
+				if (br.w == 4.0)
+				{
+					// flat (no-alpha) matid brush
+					float abs_r = abs(br.z);
+					float len = length(world_xyuv.xy - br.xy);
+					float alf = (abs_r - len) / abs_r;
+
+					float dalf = fwidth(alf) * 2.0; // 2x thicker
+
+					float lo = smoothstep(-dalf, 0, alf);
+					float hi = smoothstep(+dalf, 0, alf);
+					float silh = lo * hi;
+
+					color.rgb *= 1.0 - 0.5*silh; // bit stronger (was .25)
+				}
+				else
+				if (br.w == 2.0)
 				{
 					// flat (no-alpha) matid brush
 					float abs_r = abs(br.z);
@@ -2172,28 +2205,58 @@ struct MatIDStamp
 				double dy = v + y - hit[1];
 				if (dx*dx + dy * dy < r2)
 				{
-					int old = visual[i] & 0xFF;
-					if (old != active_material)
+					if (painting == 2)
 					{
-						if (t->z_lim > 0)
+						int old = visual[i] & 0xFF;
+						if (old != active_material)
 						{
-							if (HitTerrain(p, (u + 0.5) / VISUAL_CELLS, (v + 0.5) / VISUAL_CELLS) < t->z)
-								continue;
-						}
-						else
+							if (t->z_lim > 0)
+							{
+								if (HitTerrain(p, (u + 0.5) / VISUAL_CELLS, (v + 0.5) / VISUAL_CELLS) < t->z)
+									continue;
+							}
+							else
 							if (t->z_lim < 0)
 							{
 								if (HitTerrain(p, (u + 0.5) / VISUAL_CELLS, (v + 0.5) / VISUAL_CELLS) >= t->z)
 									continue;
 							}
 
-						if (!diff)
-						{
-							URDO_Patch(p, true);
-							diff = true;
-						}
+							if (!diff)
+							{
+								URDO_Patch(p, true);
+								diff = true;
+							}
 
-						visual[i] = (visual[i] & ~0xFF) | active_material;
+							visual[i] = (visual[i] & ~0x00FF) | active_material;
+						}
+					}
+					else
+					if (painting == 3)
+					{
+						int old = (visual[i] >> 15) & 1;
+						if (old != active_elev)
+						{
+							if (t->z_lim > 0)
+							{
+								if (HitTerrain(p, (u + 0.5) / VISUAL_CELLS, (v + 0.5) / VISUAL_CELLS) < t->z)
+									continue;
+							}
+							else
+							if (t->z_lim < 0)
+							{
+								if (HitTerrain(p, (u + 0.5) / VISUAL_CELLS, (v + 0.5) / VISUAL_CELLS) >= t->z)
+									continue;
+							}
+
+							if (!diff)
+							{
+								URDO_Patch(p, true);
+								diff = true;
+							}
+
+							visual[i] = (visual[i] & ~0x8000) | (active_elev << 15);
+						}
 					}
 				}
 			}
@@ -4095,6 +4158,76 @@ void my_render(A3D_WND* wnd)
 					ImGui::PopStyleVar();
 				}
 
+
+				if (edit_mode != 3)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				}
+				if (ImGui::BeginTabItem("MAT-elev"))
+				{
+					edit_mode = 3;
+					ImGui::Text("Material elevation selects which ramp to use (1 of 4)\ndepending on vertical elevation change:\n(0/1:top,1/1:upper,1/0:lower,0/0:bottom)");
+
+					const char* mode = "";
+
+					// painting with shift (and enabled z-limit)
+					// could reverse painting above with below ....
+
+					if (!painting && io.KeyCtrl && io.KeyShift)
+					{
+						mode = "HEIGHT PROBE";
+					}
+					else
+						if (!painting && io.KeyCtrl)
+							mode = "MAT-elev PROBE";
+						else
+						{
+							if (br_limit)
+							{
+								if (io.KeyShift)
+									mode = "PAINT BELOW";
+								else
+									mode = "PAINT ABOVE";
+							}
+							else
+								mode = "PAINT";
+						}
+
+					ImGui::Text("MODE (shift/ctrl): %s", mode);
+					ImGui::SliderFloat("BRUSH DIAMETER", &br_radius, 1.f, 100.f);
+
+					bool elev = active_elev != 0;
+
+					ImGui::Checkbox("ELEVATED", &elev);
+					ImGui::SameLine();
+					ImGui::Text("%s", "ctrl to probe");
+
+					active_elev = elev ? 1 : 0;
+
+					ImGui::Checkbox("BRUSH HEIGHT LIMIT", &br_limit);
+					ImGui::SameLine();
+
+					// Arrow buttons with Repeater
+					float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+					ImGui::PushButtonRepeat(true);
+					if (ImGui::ArrowButton("##probe_left", ImGuiDir_Left)) { if (probe_z > 0) probe_z -= 1; }
+					ImGui::SameLine(0.0f, spacing);
+					if (ImGui::ArrowButton("##probe_right", ImGuiDir_Right)) { if (probe_z < 0xffff) probe_z += 1; }
+					ImGui::PopButtonRepeat();
+					ImGui::SameLine();
+					ImGui::Text("%d", probe_z);
+					ImGui::Text("%s", "ctrl+shift to probe");
+					ImGui::Text("%s", "press shift to paint below limit");
+
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
 				static bool add_verts = false;
 				static bool build_poly = false;
 
@@ -4404,7 +4537,7 @@ void my_render(A3D_WND* wnd)
 			if (ImGui::ArrowButton("##mat_right", ImGuiDir_Right)) { if (active_material < 0xff) active_material++; }
 			ImGui::PopButtonRepeat();
 			ImGui::SameLine();
-			ImGui::Text("0x%02X (%d)", active_material, active_material);
+			ImGui::Text("0x%02X (%d) Elevation ramps", active_material, active_material);
 
 			static bool paint_mat_glyph = true;
 			static bool paint_mat_foreground = true;
@@ -4415,7 +4548,7 @@ void my_render(A3D_WND* wnd)
 
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
-			for (int y = 0; y < 3; y++)
+			for (int y = 0; y < 4; y++)
 			{
 				for (int x = 0; x < 16; x++)
 				{
@@ -4897,6 +5030,43 @@ void my_render(A3D_WND* wnd)
 						URDO_Close();
 					}
 				}
+				else
+				if (painting == 3)
+				{
+					double mdx = painting_x - round(io.MousePos.x);
+					double mdy = -(painting_y - round(io.MousePos.y)) / sin(pitch);
+
+					if (mdx || mdy)
+					{
+						double dx = -(mdx*cos(yaw) - mdy * sin(yaw)) / font_size;
+						double dy = -(mdx*sin(yaw) + mdy * cos(yaw)) / font_size;
+						double x = painting_dx + dx;
+						double y = painting_dy + dy;
+
+						double hit[2] = { x,y };
+						MatIDStamp stamp;
+						stamp.r = br_radius * 0.5;
+						stamp.hit = hit;
+						stamp.z = br_probe[0];
+						stamp.z_lim = br_limit ? (io.KeyShift ? -1 : 1) : 0;
+
+						URDO_Open();
+						QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
+						URDO_Close();
+
+						painting_dx = x;
+						painting_dy = y;
+						painting_x = (int)round(io.MousePos.x);
+						painting_y = (int)round(io.MousePos.y);
+					}
+
+					if (!io.MouseDown[0])
+					{
+						// DROP
+						painting = 0;
+						URDO_Close();
+					}
+				}
 			}
 		}
 		else
@@ -5137,7 +5307,7 @@ void my_render(A3D_WND* wnd)
 						br_xyra[0] = (float)hit[0];
 						br_xyra[1] = (float)hit[1];
 						br_xyra[2] = (float)br_radius * 0.5f;
-						br_xyra[3] = 2; // alpha>1 -> painting matid
+						br_xyra[3] = 2; // 2 -> painting matid
 
 						if (br_limit)
 						{
@@ -5154,6 +5324,101 @@ void my_render(A3D_WND* wnd)
 							//BEGIN
 							URDO_Open();
 							painting = 2;
+
+							MatIDStamp stamp;
+							stamp.r = br_radius * 0.5;
+							stamp.hit = hit;
+							stamp.z = br_probe[0];
+							stamp.z_lim = br_limit ? (io.KeyShift ? -1 : 1) : 0;
+
+							URDO_Open();
+							QueryTerrain(terrain, hit[0], hit[1], br_radius * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
+							URDO_Close();
+
+							painting_x = (int)roundf(io.MousePos.x);
+							painting_y = (int)roundf(io.MousePos.y);
+
+							painting_dx = hit[0];
+							painting_dy = hit[1];
+							paint_dist = 0.0;
+						}
+					}
+				}
+				else
+				if (edit_mode == 3)
+				{
+					if (io.KeyCtrl)
+					{
+						if (io.KeyShift)
+						{
+							// add here probe preview
+							if (io.MouseDown[0])
+							{
+								// height-probe
+								probe_z = (int)round(hit[2]);
+								br_probe[0] = (float)probe_z;
+								br_probe[1] = 0.5f;
+							}
+							else
+							{
+								// preview
+								br_probe[0] = (float)round(hit[2]);
+								br_probe[1] = 0.5f;
+							}
+						}
+						else
+						{
+							// add here quad preview of matid probe
+							double qx = floor(hit[0]);
+							double qy = floor(hit[1]);
+							br_quad[0] = (float)qx;
+							br_quad[1] = (float)qy;
+							br_quad[2] = 2.0f; // indicates quad on visual map (elev)
+
+							if (io.MouseDown[0])
+							{
+								struct mod_floor
+								{
+									mod_floor(int d) : y(d) {}
+									int mod(int x)
+									{
+										int r = x % y;
+										if (/*(r != 0) && ((r < 0) != (y < 0))*/ r && (r^y) < 0)
+											r += y;
+										return r;
+									}
+									int y;
+								} mf(VISUAL_CELLS);
+
+								// sample elev
+								int uv[2] = { mf.mod((int)qx), mf.mod((int)qy) };
+								uint16_t* visual = GetTerrainVisualMap(p);
+								active_elev = ((visual[uv[0] + uv[1] * VISUAL_CELLS]) >> 15) & 0x1;
+							}
+						}
+					}
+					else
+					{
+						br_xyra[0] = (float)hit[0];
+						br_xyra[1] = (float)hit[1];
+						br_xyra[2] = (float)br_radius * 0.5f;
+						br_xyra[3] = 4; // 4 -> painting mat-elev
+
+						if (br_limit)
+						{
+							if (io.KeyShift)
+								br_probe[2] = -1.0;
+							else
+								br_probe[2] = 1.0;
+						}
+						else
+							br_probe[2] = 0;
+
+						if (io.MouseDown[0])
+						{
+							//BEGIN
+							URDO_Open();
+							painting = 3;
 
 							MatIDStamp stamp;
 							stamp.r = br_radius * 0.5;
@@ -5328,11 +5593,6 @@ void my_render(A3D_WND* wnd)
 							}
 						}
 					}
-				}
-				else
-				if (edit_mode == 3)
-				{
-					
 				}
 				else
 				if (edit_mode == 4)
