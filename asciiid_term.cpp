@@ -68,8 +68,8 @@ void term_render(A3D_WND* wnd)
 	float speed = 1;
 	if (term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT))
 		speed *= 0.5;
-	io.x_force = ((int)term->IsKeyDown(A3D_RIGHT) - (int)term->IsKeyDown(A3D_LEFT));
-	io.y_force = ((int)term->IsKeyDown(A3D_UP) - (int)term->IsKeyDown(A3D_DOWN));
+	io.x_force = (int)(term->IsKeyDown(A3D_RIGHT) || term->IsKeyDown(A3D_D)) - (int)(term->IsKeyDown(A3D_LEFT) || term->IsKeyDown(A3D_A));
+	io.y_force = (int)(term->IsKeyDown(A3D_UP) || term->IsKeyDown(A3D_W)) - (int)(term->IsKeyDown(A3D_DOWN) || term->IsKeyDown(A3D_S));
 
 	float len = sqrtf(io.x_force*io.x_force+io.y_force*io.y_force);
 	if (len>0)
@@ -77,8 +77,8 @@ void term_render(A3D_WND* wnd)
 	io.x_force *= speed;
 	io.y_force *= speed;
 
-	io.torque = (int)(term->IsKeyDown(A3D_DELETE) || term->IsKeyDown(A3D_PAGEUP) || term->IsKeyDown(A3D_F1)) - 
-	            (int)(term->IsKeyDown(A3D_INSERT) || term->IsKeyDown(A3D_PAGEDOWN) || term->IsKeyDown(A3D_F2));
+	io.torque = (int)(term->IsKeyDown(A3D_DELETE) || term->IsKeyDown(A3D_PAGEUP) || term->IsKeyDown(A3D_F1) || term->IsKeyDown(A3D_Q)) -
+	            (int)(term->IsKeyDown(A3D_INSERT) || term->IsKeyDown(A3D_PAGEDOWN) || term->IsKeyDown(A3D_F2) || term->IsKeyDown(A3D_E));
 	io.water = probe_z;
 	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT) || term->IsKeyDown(A3D_SPACE) || term->mouse_j;
 	//io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
@@ -458,10 +458,13 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 
 	if (down)
 	{
-		if (ki == A3D_F10)
-			a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
-		if (ki == A3D_F9)
-			a3dSetRect(wnd, 0, A3D_WND_NORMAL);
+		if (ki == A3D_F11)
+		{
+			if (a3dGetRect(wnd,0,0) != A3D_WND_FULLSCREEN)
+				a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
+			else
+				a3dSetRect(wnd, 0, A3D_WND_NORMAL);
+		}
 		term->keys[ki >> 3] |= 1 << (ki & 0x7);
 	}
 	else

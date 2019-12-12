@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
@@ -457,33 +457,58 @@
           ak_jump=false;
         },{});
 
-				window.addEventListener("keydown", 
-				function(e) 
-				{
+		window.addEventListener("keydown", 
+		function(e) 
+		{
+		  var handled = false;
           if (!e.repeat)
           {
             var code = e.code;
             if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
-              ak_jump = true;
+            {
+                ak_jump = true;
+                handled = true;
+            }
 
             if (code == "F1" || code == "Delete" || code == "PageUp" || code == "KeyQ")
-              ccw = 1;
+            {
+                ccw = 1;
+                handled = true;
+            }
             if (code == "F2" || code == "Insert" || code == "PageDown" || code == "KeyE")
-              cw = 1;
+            {
+                cw = 1;
+                handled = true;
+            }
 
-            if (code=="ShiftLeft" || code=="ShiftRight")
-              slow = 1;
+            if (code == "ShiftLeft" || code == "ShiftRight")
+            {
+                slow = 1;
+                handled = true;
+            }
 
             ak_torque = ccw - cw;
 
             if (code == "ArrowLeft" || code == "KeyA")
-              left=1;
+            {
+                left = 1;
+                handled = true;
+            }
             if (code == "ArrowRight" || code == "KeyD")
-              right=1;
-            if (code == "ArrowUp" || code == "KeyW")
-              up=1;
+            {
+                right = 1;
+                handled = true;
+            }
+		    if (code == "ArrowUp" || code == "KeyW")
+		    {
+		        up=1;
+                handled = true;
+            }
             if (code == "ArrowDown" || code == "KeyS")
-              down=1;
+            {
+                down=1;
+                handled = true;
+            }
 
             if (ak_drag == 0)
             {
@@ -497,12 +522,15 @@
               ak_force_y *= speed;
             }
           }
-          e.preventDefault();
+            
+          if (handled)
+              e.preventDefault();
+
         },{ passive: false });
 
-				window.addEventListener("keyup", 
-				function(e) 
-				{
+		window.addEventListener("keyup", 
+		function(e) 
+		{
           var code = e.code;
 
           if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
@@ -544,15 +572,15 @@
         },{ passive: false });
       }
 
-			function setMouseHandlers()
-			{
+	  function setMouseHandlers()
+	  {
         var left = 0;
         var right = 0;
 
-				function preventZoom(e)
-				{
-					console.log("zoom");
-					e.preventDefault();
+		function preventZoom(e)
+		{
+			console.log("zoom");
+			e.preventDefault();
         }
         
         function preventMenu(e)
@@ -561,13 +589,13 @@
 					e.preventDefault();
         }
 				
-				window.addEventListener("DOMMouseScroll", preventZoom, { passive: false });
-				window.addEventListener("mousewheel", preventZoom, { passive: false });
-				window.addEventListener("contextmenu", preventMenu, { passive: false });
+		window.addEventListener("DOMMouseScroll", preventZoom, { passive: false });
+		window.addEventListener("mousewheel", preventZoom, { passive: false });
+		window.addEventListener("contextmenu", preventMenu, { passive: false });
 				
-				window.addEventListener("mousedown", 
-				function(e) 
-				{
+		window.addEventListener("mousedown", 
+		function(e) 
+		{
           if (e.which == 1)
             left = 1;
           if (e.which == 3)
@@ -592,11 +620,11 @@
           ak_drag = left + right;
 
           e.preventDefault();
-				}, { passive: false });
+		}, { passive: false });
 				
-				window.addEventListener("mousemove", 
-				function(e) 
-				{
+		window.addEventListener("mousemove", 
+		function(e) 
+		{
           ak_drag = left + right;
           
           
@@ -607,11 +635,11 @@
           }
 
           e.preventDefault();
-				}, { passive: false });			
+		}, { passive: false });			
 				
-				window.addEventListener("mouseup",
-				function(e) 
-				{
+		window.addEventListener("mouseup",
+		function(e) 
+		{
           if (e.which == 1)
             left = 0;
           if (e.which == 3)
@@ -631,8 +659,8 @@
           ak_drag = left + right;
 
           e.preventDefault();
-				}, { passive: false });
-			}      
+	    }, { passive: false });
+	  }      
 
       function AsciickerBoot()
       {
