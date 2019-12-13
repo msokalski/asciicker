@@ -159,7 +159,7 @@ int main()
 
 extern "C"
 {
-    bool AsciickerUpdate(float x_force, float y_force, float torque, bool jump)
+    bool AsciickerUpdate(float x_force, float y_force, float torque, bool jump, float yaw)
     {
         //printf("In: AsciickerUpdate(%f,%f,%f,%s)\n", x_force, y_force, torque, jump?"true":"false");
         io.jump = jump;
@@ -167,6 +167,7 @@ extern "C"
         io.torque = torque;
         io.x_force = x_force;
         io.y_force = y_force;
+        io.yaw = yaw;
 
         // return jump status
         uint64_t stamp = GetTime();
@@ -225,5 +226,10 @@ extern "C"
         //printf("In: AsciickerRender(%d,%d)\n", width, height);
         Render(terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp, io.dt, io.xyz);
         return render_buf;
+    }
+
+    float AsciickerGetYaw()
+    {
+        return io.yaw;
     }
 }

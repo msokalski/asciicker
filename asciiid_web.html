@@ -169,6 +169,7 @@
       var ak_jump = false;
       var ak_drag = 0;
 
+      var ak_yaw = 45;
 
       function Resize(e)
       {
@@ -214,10 +215,12 @@
 
       function AsciickerLoop(tm)
       {
-        if (!AsciickerUpdate(ak_force_x,ak_force_y,ak_torque,ak_jump))
+        if (!AsciickerUpdate(ak_force_x,ak_force_y,ak_torque,ak_jump,ak_yaw))
         {
           ak_jump = false;
         }
+
+        ak_yaw = AsciickerGetYaw();
 
 				var display_w = ak_ctx.drawingBufferWidth;// & ~1;
         var display_h = ak_ctx.drawingBufferHeight;// & ~1;
@@ -487,7 +490,8 @@
                 handled = true;
             }
 
-            ak_torque = ccw - cw;
+            if (ak_torque<1000000)
+              ak_torque = ccw - cw;
 
             if (code == "ArrowLeft" || code == "KeyA")
             {
@@ -499,10 +503,10 @@
                 right = 1;
                 handled = true;
             }
-		    if (code == "ArrowUp" || code == "KeyW")
-		    {
-		        up=1;
-                handled = true;
+		        if (code == "ArrowUp" || code == "KeyW")
+		        {
+		          up=1;
+              handled = true;
             }
             if (code == "ArrowDown" || code == "KeyS")
             {
@@ -510,7 +514,7 @@
                 handled = true;
             }
 
-            if (ak_drag == 0)
+            if (ak_drag == 0 || ak_torque>=1000000)
             {
               var speed = slow ? 0.5 : 1.0;
               ak_force_x = right-left;
@@ -544,7 +548,8 @@
           if (code=="ShiftLeft" || code=="ShiftRight")
             slow = 0;
 
-          ak_torque = ccw - cw;
+            if (ak_torque<1000000)
+              ak_torque = ccw - cw;
 
           if (code == "ArrowLeft" || code == "KeyA")
             left=0;
@@ -555,7 +560,7 @@
           if (code == "ArrowDown" || code == "KeyS")
             down=0;
 
-          if (ak_drag == 0)
+          if (ak_drag == 0 || ak_torque>=1000000)
           {
             var speed = slow ? 0.5 : 1.0;
             ak_force_x = right-left;
@@ -576,6 +581,9 @@
 	  {
         var left = 0;
         var right = 0;
+        var mouse_rot_x = 0;
+        var mouse_rot_yaw = 0;
+        var mouse_rot = false;
 
 		function preventZoom(e)
 		{
@@ -599,22 +607,35 @@
           if (e.which == 1)
             left = 1;
           if (e.which == 3)
+          {
+            if (!left)
+            {
+              mouse_rot = true;
+              mouse_rot_yaw = ak_yaw;
+              mouse_rot_x = e.pageX;
+              ak_torque = 1000000;
+
+            }
             right = 1;
+          }
 
           if (left+right == 2)
           {
             ak_jump = true;
           }
 
-          if (left!=0)
+          if (!mouse_rot)
           {
-            ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
-            ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
-          }
-          else
-          {
-            ak_force_x = 0;
-            ak_force_y = 0;
+            if (left!=0)
+            {
+              ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
+              ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
+            }
+            else
+            {
+              ak_force_x = 0;
+              ak_force_y = 0;
+            }
           }
 
           ak_drag = left + right;
@@ -627,7 +648,14 @@
 		{
           ak_drag = left + right;
           
-          
+          if (mouse_rot)
+          {
+            var sensitivity = 200.0 / window.innerWidth;
+            var yaw = mouse_rot_yaw - sensitivity * (e.pageX - mouse_rot_x);
+            ak_torque = 1000000;
+            ak_yaw = yaw;
+          }
+          else
           if (left!=0)
           {
             ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
@@ -643,17 +671,25 @@
           if (e.which == 1)
             left = 0;
           if (e.which == 3)
+          {
+            ak_torque = 0;
+            mouse_rot = false;
             right = 0;
-
-          if (left!=0)
-          {
-            ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
-            ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
           }
-          else
+
+          if (!mouse_rot)
           {
-            ak_force_x = 0;
-            ak_force_y = 0;
+            if (left!=0)
+            {
+              ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
+              ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
+            }
+            else
+            if (e.which != 3)
+            {
+              ak_force_x = 0;
+              ak_force_y = 0;
+            }
           }
 
           ak_drag = left + right;
@@ -709,8 +745,9 @@
       {
         console.log('Loaded '+fonts.length+' fonts'); 
 
-        AsciickerUpdate = Module.cwrap('AsciickerUpdate', 'number', ['number','number','number','number']);
+        AsciickerUpdate = Module.cwrap('AsciickerUpdate', 'number', ['number','number','number','number','number']);
         AsciickerRender = Module.cwrap('AsciickerRender', 'number', ['number','number']);
+        AsciickerGetYaw = Module.cwrap('AsciickerGetYaw', 'number', []);
 
 
         ak_canvas = document.getElementById('asciicker_canvas');

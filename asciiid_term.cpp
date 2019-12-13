@@ -114,7 +114,7 @@ void term_render(A3D_WND* wnd)
 		io.torque = -2 * (mx * 2 - width) / (float)width;
 		*/
 
-		float sensitivity = 100.0f / wnd_wh[0];
+		float sensitivity = 200.0f / wnd_wh[0];
 		float yaw = term->mouse_rot_yaw - sensitivity * (term->mouse_x - term->mouse_rot_x);
 		io.torque = 1000000;
 		io.yaw = yaw;

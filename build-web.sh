@@ -35,7 +35,7 @@ emcc --emrun -O3 \
     upng.c \
     -o .web/index.html \
     --shell-file asciiid_web.html \
-    -s EXPORTED_FUNCTIONS='["_main","_AsciickerUpdate","_AsciickerRender"]' \
+    -s EXPORTED_FUNCTIONS='["_main","_AsciickerUpdate","_AsciickerRender","_AsciickerGetYaw"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --preload-file a3d/game.a3d \

@@ -980,7 +980,7 @@ int main(int argc, char* argv[])
 							{
 								mouse_rot = true;
 								mouse_rot_yaw = last_yaw;
-								mouse_rot_x = x;
+								mouse_rot_x = (uint8_t)stream[i+4] - 33;
 							}
 
                             mouse_b++;
@@ -1271,7 +1271,7 @@ int main(int argc, char* argv[])
 		{
 			// io.torque = -2 * (mouse_x * 2 - wh[0]) / (float)wh[0];
 
-			float sensitivity = 100.0f / wh[0];
+			float sensitivity = 200.0f / wh[0];
 			float yaw = mouse_rot_yaw - sensitivity * (mouse_x - mouse_rot_x);
 			io.torque = 1000000;
 			io.yaw = yaw;
