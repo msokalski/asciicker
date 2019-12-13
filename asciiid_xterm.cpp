@@ -479,6 +479,8 @@ int main(int argc, char* argv[])
     float pos[3] = {0,15,0};
     float lt[4] = {1,0,1,.5};
 
+	float last_yaw = yaw;
+
 	// PLAYER
     player_sprite = LoadPlayer("./sprites/player.xp");
 
@@ -626,6 +628,9 @@ int main(int argc, char* argv[])
 
     const int sticky_input = 30000;
 
+	float mouse_rot_x = 0;
+	float mouse_rot_yaw = 0;
+	bool mouse_rot = false;
     int mouse_b=0; // num of buttons down (we can't be sure which ones!)
     int mouse_x;
     int mouse_y;    
@@ -967,9 +972,17 @@ int main(int argc, char* argv[])
                         {
                             if (mouse_b)
                                 mouse_b--;
-                        }
+							mouse_rot = false;
+						}
                         else
                         {
+							if (mouse_b == 0 && (stream[i + 3] & 3) == 2)
+							{
+								mouse_rot = true;
+								mouse_rot_yaw = last_yaw;
+								mouse_rot_x = x;
+							}
+
                             mouse_b++;
                             if (mouse_b>=2) // emu jump
                                 mouse_j = true;
@@ -1254,6 +1267,16 @@ int main(int argc, char* argv[])
                         (int)(kbd['2'] || kbd['9'] || kbd['*']);  // INS,PGDN,F2        
         }
 
+		if (mouse_rot)
+		{
+			// io.torque = -2 * (mouse_x * 2 - wh[0]) / (float)wh[0];
+
+			float sensitivity = 100.0f / wh[0];
+			float yaw = mouse_rot_yaw - sensitivity * (mouse_x - mouse_rot_x);
+			io.torque = 1000000;
+			io.yaw = yaw;
+		}
+		else
         if (mouse_b)
         {
             // override keyb
@@ -1263,6 +1286,7 @@ int main(int argc, char* argv[])
         }
 
         Animate(phys,stamp,&io);
+		last_yaw = io.yaw;
 
         if (!io.jump)
         {

@@ -759,28 +759,37 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 
 		// YAW
 		{
-			int da = 0;
-			if (io->torque < 0)
-				da--;
-			if (io->torque > 0)
-				da++;
-
-			phys->yaw_vel += dt * io->torque; //da;
-
-			if (phys->yaw_vel > 10)
-				phys->yaw_vel = 10;
-			else
-				if (phys->yaw_vel < -10)
-					phys->yaw_vel = -10;
-
-			if (fabsf(phys->yaw_vel) < 1 && !da)
+			if (io->torque >= 1000000)
+			{
+				phys->yaw = io->yaw;
 				phys->yaw_vel = 0;
+				phys->yaw_vel = 0;
+			}
+			else
+			{
+				int da = 0;
+				if (io->torque < 0)
+					da--;
+				if (io->torque > 0)
+					da++;
 
-			phys->yaw += dt * 0.5f * phys->yaw_vel;
+				phys->yaw_vel += dt * io->torque; //da;
 
-			float vel_damp = powf(0.9f, dt);
-			phys->yaw_vel *= vel_damp;
-			phys->yaw_vel *= vel_damp;
+				if (phys->yaw_vel > 10)
+					phys->yaw_vel = 10;
+				else
+					if (phys->yaw_vel < -10)
+						phys->yaw_vel = -10;
+
+				if (fabsf(phys->yaw_vel) < 1 && !da)
+					phys->yaw_vel = 0;
+
+				phys->yaw += dt * 0.5f * phys->yaw_vel;
+
+				float vel_damp = powf(0.9f, dt);
+				phys->yaw_vel *= vel_damp;
+				phys->yaw_vel *= vel_damp;
+			}
 		}
 
 		// VEL & ACC

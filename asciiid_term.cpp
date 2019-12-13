@@ -29,6 +29,11 @@ struct TERM_LIST
 	int mouse_x;
 	int mouse_y;
 	bool mouse_j;
+	bool mouse_rot;
+	float mouse_rot_x;
+	float mouse_rot_yaw;
+
+	float yaw;
 
 	uint8_t keys[32];
 	bool IsKeyDown(int key)
@@ -71,14 +76,14 @@ void term_render(A3D_WND* wnd)
 	io.x_force = (int)(term->IsKeyDown(A3D_RIGHT) || term->IsKeyDown(A3D_D)) - (int)(term->IsKeyDown(A3D_LEFT) || term->IsKeyDown(A3D_A));
 	io.y_force = (int)(term->IsKeyDown(A3D_UP) || term->IsKeyDown(A3D_W)) - (int)(term->IsKeyDown(A3D_DOWN) || term->IsKeyDown(A3D_S));
 
-	float len = sqrtf(io.x_force*io.x_force+io.y_force*io.y_force);
-	if (len>0)
+	float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
+	if (len > 0)
 		speed /= len;
 	io.x_force *= speed;
 	io.y_force *= speed;
 
 	io.torque = (int)(term->IsKeyDown(A3D_DELETE) || term->IsKeyDown(A3D_PAGEUP) || term->IsKeyDown(A3D_F1) || term->IsKeyDown(A3D_Q)) -
-	            (int)(term->IsKeyDown(A3D_INSERT) || term->IsKeyDown(A3D_PAGEDOWN) || term->IsKeyDown(A3D_F2) || term->IsKeyDown(A3D_E));
+		(int)(term->IsKeyDown(A3D_INSERT) || term->IsKeyDown(A3D_PAGEDOWN) || term->IsKeyDown(A3D_F2) || term->IsKeyDown(A3D_E));
 	io.water = probe_z;
 	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT) || term->IsKeyDown(A3D_SPACE) || term->mouse_j;
 	//io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
@@ -101,6 +106,20 @@ void term_render(A3D_WND* wnd)
 
 	uint64_t stamp = a3dGetTime();
 
+	if (term->mouse_rot)
+	{
+		/*
+		float ox = (wnd_wh[0] - width * (fnt_wh[0] >> 4)) *0.5f;
+		float mx = (term->mouse_x - ox) / (fnt_wh[0] >> 4);
+		io.torque = -2 * (mx * 2 - width) / (float)width;
+		*/
+
+		float sensitivity = 100.0f / wnd_wh[0];
+		float yaw = term->mouse_rot_yaw - sensitivity * (term->mouse_x - term->mouse_rot_x);
+		io.torque = 1000000;
+		io.yaw = yaw;
+	}
+	else
 	if (term->mouse_b)
 	{
 		float ox = (wnd_wh[0] - width*(fnt_wh[0]>>4)) *0.5f;
@@ -115,6 +134,8 @@ void term_render(A3D_WND* wnd)
 	}
 
 	Animate(term->phys, stamp, &io);
+
+	term->yaw = io.yaw;
 
 	if (!io.jump)
 	{
@@ -221,6 +242,16 @@ void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
+	if ((mi & 0xF) == RIGHT_DN && term->mouse_b == 0)
+	{
+		term->mouse_rot = true;
+		term->mouse_rot_x = x;
+		term->mouse_rot_yaw = term->yaw;
+	}
+	else
+	if ((mi & 0xF) == RIGHT_UP)
+		term->mouse_rot = false;
+
 	if ((mi & 0xF) == LEFT_DN || (mi & 0xF) == RIGHT_DN)
 	{
 		term->mouse_b++;
@@ -247,6 +278,7 @@ void term_init(A3D_WND* wnd)
 	TERM_LIST* term = (TERM_LIST*)malloc(sizeof(TERM_LIST));
 	term->wnd = wnd;
 
+	term->mouse_rot = false;
 	term->mouse_j = false;
 	term->mouse_b = 0;
 	term->mouse_x = 0;
