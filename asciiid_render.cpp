@@ -1431,7 +1431,8 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
 
-	int sh_x = (dw/2 + 1) & ~1;
+	int sh_x = width+1;// & ~1;
+	
 	for (int y = 0; y < dh; y++)
 	{
 		for (int x = sh_x-5; x <= sh_x+5; x++)
@@ -1439,7 +1440,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 			Sample* s = r.sample_buffer.ptr + x + y * dw;
 			if (abs(s->height - pos[2]) <= 64)
 			{
-				double screen_space[] = { (double)x,(double)y,(double)s->height,1.0 };
+				double screen_space[] = { (double)x,(double)y,s->height,1.0 };
 				double world_space[4];
 
 				Product(inv_tm, screen_space, world_space);

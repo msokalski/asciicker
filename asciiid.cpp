@@ -821,6 +821,7 @@ struct RenderContext
 				void main()
 				{
 					color = tint;
+					color.a=1.0;
 
 					vec3 light_pos = normalize(lt.xyz);
 					float light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(light_pos, normalize(nrm)));
