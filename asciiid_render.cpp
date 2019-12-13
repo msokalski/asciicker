@@ -724,7 +724,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 						{
 							uint16_t m = map[v * VISUAL_CELLS + u];
 							if (m & 0x8000)
-								s->height += HEIGHT_SCALE/2;
+								s->height += HEIGHT_SCALE;
 
 							s->visual = m;
 							s->diffuse = diffuse;
@@ -1434,22 +1434,29 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 	int sh_x = (dw/2 + 1) & ~1;
 	for (int y = 0; y < dh; y++)
 	{
-		for (int x = sh_x-10; x <= sh_x+10; x++)
+		for (int x = sh_x-5; x <= sh_x+5; x++)
 		{
 			Sample* s = r.sample_buffer.ptr + x + y * dw;
 			if (abs(s->height - pos[2]) <= 64)
 			{
-				double screen_space[] = { x+.5,y+.5,s->height,1.0 };
+				double screen_space[] = { (double)x,(double)y,(double)s->height,1.0 };
 				double world_space[4];
 
 				Product(inv_tm, screen_space, world_space);
 				double dx = world_space[0]/HEIGHT_CELLS - pos[0];
 				double dy = world_space[1]/HEIGHT_CELLS - pos[1];
-				if (dx*dx + dy*dy <= 2.00)
+				double sq_xy = dx*dx + dy*dy;
+				if (sq_xy <= 2.00)
 				{
+					int dz = (int)(2*(pos[2] - s->height) + 2*sq_xy);
+					if (dz<180)
+						dz=180;
+					if (dz>180)
+						dz=255;
+
 					if (s->spare & 0x8)
 					{
-						s->diffuse = s->diffuse * 200 / 255;
+						s->diffuse = s->diffuse * dz / 255;
 					}
 					else
 					{
@@ -1465,7 +1472,7 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 						// s->visual = ;
 						s->spare |= 0x8;
 						s->spare &= ~4;
-						s->diffuse = 230;
+						s->diffuse = dz;
 					}
 				}
 			}
