@@ -4,6 +4,7 @@
 struct World;
 struct Mesh;
 struct Inst;
+struct Sprite;
 
 World* CreateWorld();
 void DeleteWorld(World* w);
@@ -29,12 +30,13 @@ void GetMeshBBox(Mesh* m, float bbox[6]);
 int GetMeshFaces(Mesh* m);
 void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie), void* cookie);
 
+Inst* CreateInst(Sprite* s, int flags, float pos[3], float yaw, int anim, float frame, float speed, const char* name = 0);
 Inst* CreateInst(Mesh* m, int flags, const double tm[16] = 0, const char* name = 0);
 void DeleteInst(Inst* i);
 
 Mesh* GetInstMesh(Inst* i);
 int GetInstFlags(Inst* i);
-void GetInstTM(Inst* i, double tm[16]);
+bool GetInstTM(Inst* i, double tm[16]);
 void GetInstBBox(Inst* i, double bbox[6]);
 
 enum INST_FLAGS
@@ -42,6 +44,9 @@ enum INST_FLAGS
     INST_VISIBLE = 0x1,
     INST_USE_TREE = 0x2,
 };
+
+// new
+// void QueryWorld(World* w, int planes, double plane[][4], void(*cb)(Sprite* s, float pos[3], float yaw, int anim, float frame, void* cookie), void* cookie);
 
 void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie);
 void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie);

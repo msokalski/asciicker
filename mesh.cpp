@@ -6,6 +6,7 @@
 #include <math.h>
 #include <assert.h>
 
+#include "sprite.h"
 #include "mesh.h"
 #include "matrix.h"
 
@@ -70,6 +71,8 @@ struct Line
 
 struct Inst;
 struct World;
+struct MeshInst;
+
 struct Mesh
 {
     World* world;
@@ -103,7 +106,7 @@ struct Mesh
     // untransformed bbox
     float bbox[6];
 
-    Inst* share_list;
+    MeshInst* share_list;
 
     bool Update(const char* path);
 };
@@ -115,7 +118,7 @@ struct BSP
         BSP_TYPE_NODE,
         BSP_TYPE_NODE_SHARE,
         BSP_TYPE_LEAF,
-        BSP_TYPE_INST
+        BSP_TYPE_INST // mesh or sprite inst
     };
 
     TYPE type;    
@@ -144,17 +147,28 @@ struct BSP_Leaf : BSP
 
 struct Inst : BSP
 {
+	enum INST_TYPE
+	{
+		MESH = 1,
+		SPRITE = 2
+	};
+
+	INST_TYPE inst_type;
+	char* name;
+
     // in BSP_Leaf::inst / BSP_NodeShare::inst
 	Inst* next;
 	Inst* prev;    
 
-    Mesh* mesh;
-    double tm[16]; // absoulte! mesh->world
-
-    Inst* share_next; // next instance sharing same mesh
-
     int /*FLAGS*/ flags; 
-    char* name;
+};
+
+struct MeshInst : Inst
+{
+	Mesh* mesh;
+	double tm[16]; // absoulte! mesh->world
+
+	MeshInst* share_next; // next instance sharing same mesh
 
 	void UpdateBox()
 	{
@@ -186,26 +200,26 @@ struct Inst : BSP
 		}
 	}
 
-    bool HitFace(double ray[6], double ret[3], double nrm[3], bool positive_only)
-    {
-        if (!mesh)
-            return false;
+	bool HitFace(double ray[6], double ret[3], double nrm[3], bool positive_only)
+	{
+		if (!mesh)
+			return false;
 
-        bool flag = false;
+		bool flag = false;
 
-        Face* f = mesh->head_face; 
-        while (f)
-        {
-            double v0[4], v1[4], v2[4];
-            Product(tm,f->abc[0]->xyzw,v0);
-            Product(tm,f->abc[1]->xyzw,v1);
-            Product(tm,f->abc[2]->xyzw,v2);
+		Face* f = mesh->head_face;
+		while (f)
+		{
+			double v0[4], v1[4], v2[4];
+			Product(tm, f->abc[0]->xyzw, v0);
+			Product(tm, f->abc[1]->xyzw, v1);
+			Product(tm, f->abc[2]->xyzw, v2);
 
-            double hit[3];
-            if (RayIntersectsTriangle(ray,v0,v1,v2,hit, positive_only))
-            {
-                if (hit[2] > ret[2])
-                {
+			double hit[3];
+			if (RayIntersectsTriangle(ray, v0, v1, v2, hit, positive_only))
+			{
+				if (hit[2] > ret[2])
+				{
 					ret[0] = hit[0];
 					ret[1] = hit[1];
 					ret[2] = hit[2];
@@ -217,15 +231,26 @@ struct Inst : BSP
 						CrossProduct(d1, d2, nrm);
 					}
 
-                    flag = true;
-                }
-            }
+					flag = true;
+				}
+			}
 
-            f=f->next;
-        }
+			f = f->next;
+		}
 
-        return flag;
-    }
+		return flag;
+	}
+};
+
+struct SpriteInst : Inst
+{
+	World* w;
+	Sprite* sprite;
+	int anim;
+	float speed;
+	float frame;
+	float yaw;
+	float pos[3];
 };
 
 int bsp_tests=0;
@@ -338,12 +363,54 @@ struct World
     Inst* head_inst; 
     Inst* tail_inst;
 
+	Inst* AddInst(Sprite* s, int flags, float pos[3], float yaw, int anim, float frame, float speed, const char* name)
+	{
+		SpriteInst* i = (SpriteInst*)malloc(sizeof(SpriteInst));
+		i->inst_type = Inst::INST_TYPE::SPRITE;
+		i->w = this;
+
+		i->bbox[0] = s->proj_bbox[0] + pos[0];
+		i->bbox[1] = s->proj_bbox[1] + pos[0];
+		i->bbox[2] = s->proj_bbox[2] + pos[1];
+		i->bbox[3] = s->proj_bbox[3] + pos[1];
+		i->bbox[4] = s->proj_bbox[4] + pos[2];
+		i->bbox[5] = s->proj_bbox[5] + pos[2];
+
+		i->pos[0] = pos[0];
+		i->pos[1] = pos[1];
+		i->pos[2] = pos[2];
+
+		i->yaw = yaw;
+		i->anim = anim;
+		i->frame = frame;
+		i->speed = speed;
+
+		i->name = name ? strdup(name) : 0;
+
+		i->type = BSP::BSP_TYPE_INST;
+		i->flags = flags;
+		i->bsp_parent = 0;
+
+		i->next = 0;
+		i->prev = tail_inst;
+		if (tail_inst)
+			tail_inst->next = i;
+		else
+			head_inst = i;
+		tail_inst = i;
+
+		insts++;
+		return i;
+	}
+
     Inst* AddInst(Mesh* m, int flags, const double tm[16], const char* name)
     {
         if (!m || m->world != this)
             return 0;
 
-        Inst* i = (Inst*)malloc(sizeof(Inst));
+		MeshInst* i = (MeshInst*)malloc(sizeof(MeshInst));
+
+		i->inst_type = Inst::INST_TYPE::MESH;
 
 		if (tm)
 		{
@@ -391,14 +458,25 @@ struct World
         return i;
     }
 
-    bool DelInst(Inst* i)
-    {
+	bool DelInst(Inst* i)
+	{
+		if (!i)
+			return false;
+		if (i->inst_type == Inst::INST_TYPE::MESH)
+			return DelInst((MeshInst*)i);
+		if (i->inst_type == Inst::INST_TYPE::SPRITE)
+			return DelInst((SpriteInst*)i);
+		return false;
+	}
+
+	bool DelInst(MeshInst* i)
+	{
         if (!i || !i->mesh || i->mesh->world != this)
             return false;
 
         if (i->mesh)
         {
-            Inst** s = &i->mesh->share_list;
+            MeshInst** s = &i->mesh->share_list;
             while (*s != i)
                 s = &(*s)->share_next;
             *s = (*s)->share_next;
@@ -503,6 +581,111 @@ struct World
 
         return true;
     }
+
+	bool DelInst(SpriteInst* i)
+	{
+		if (!i)
+			return false;
+
+		if (!i->bsp_parent)
+		{
+			if (i->prev)
+				i->prev->next = i->next;
+			else
+				head_inst = i->next;
+
+			if (i->next)
+				i->next->prev = i->prev;
+			else
+				tail_inst = i->prev;
+		}
+		else
+		{
+			if (i->bsp_parent->type == BSP::BSP_TYPE_LEAF)
+			{
+				BSP_Leaf* leaf = (BSP_Leaf*)i->bsp_parent;
+
+				if (i->prev)
+					i->prev->next = i->next;
+				else
+					leaf->head = i->next;
+
+				if (i->next)
+					i->next->prev = i->prev;
+				else
+					leaf->tail = i->prev;
+
+				if (leaf->head == 0)
+				{
+					// do ancestors cleanup
+					// ...
+				}
+			}
+			else
+				if (i->bsp_parent->type == BSP::BSP_TYPE_NODE_SHARE)
+				{
+					BSP_NodeShare* share = (BSP_NodeShare*)i->bsp_parent;
+
+					if (share->bsp_child[0] == i)
+						share->bsp_child[0] = 0;
+					else
+						if (share->bsp_child[1] == i)
+							share->bsp_child[1] = 0;
+						else
+						{
+							if (i->prev)
+								i->prev->next = i->next;
+							else
+								share->head = i->next;
+
+							if (i->next)
+								i->next->prev = i->prev;
+							else
+								share->tail = i->prev;
+						}
+
+					if (share->head == 0 && share->bsp_child[0] == 0 && share->bsp_child[1] == 0)
+					{
+						// do ancestors cleanup
+						// ...
+					}
+				}
+				else
+					if (i->bsp_parent->type == BSP::BSP_TYPE_NODE)
+					{
+						BSP_Node* node = (BSP_Node*)i->bsp_parent;
+						if (node->bsp_child[0] == i)
+							node->bsp_child[0] = 0;
+						else
+							if (node->bsp_child[1] == i)
+								node->bsp_child[1] = 0;
+
+						if (node->bsp_child[0] == 0 && node->bsp_child[1] == 0)
+						{
+							// do ancestors cleanup
+							// ...
+						}
+					}
+					else
+					{
+						assert(0);
+					}
+		}
+
+		if (i->name)
+			free(i->name);
+
+		if (editable == i)
+			editable = 0;
+
+		if (root == i)
+			root = 0;
+
+		insts--;
+		free(i);
+
+		return true;
+	}
 
     // currently selected instance (its mesh) for editting
     // overrides visibility?
@@ -960,7 +1143,8 @@ struct World
 			// update inst bbox
 			if (boxes)
 			{
-				inst->UpdateBox();
+				if (inst->inst_type == Inst::INST_TYPE::MESH)
+					((MeshInst*)inst)->UpdateBox();
 			}
 
             Inst* next = inst->next;
@@ -1032,8 +1216,13 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm, positive_only))
-				return inst;
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+					return inst;
+				else
+					return 0;
+			}
 			else
 				return 0;
 		}
@@ -1058,8 +1247,11 @@ struct World
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
                 j=j->next;
             }
             return i;
@@ -1073,8 +1265,11 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
                 j=j->next;
             }
             return i;
@@ -1108,8 +1303,13 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm, positive_only))
-				return inst;
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+					return inst;
+				else
+					return 0;
+			}
 			else
 				return 0;
 		}
@@ -1134,9 +1334,12 @@ struct World
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
-                j=j->next;
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
+				j = j->next;
             }
             return i;
         }
@@ -1149,8 +1352,11 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
                 j=j->next;
             }
             return i;
@@ -1184,8 +1390,13 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm, positive_only))
-				return inst;
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+					return inst;
+				else
+					return 0;
+			}
 			else
 				return 0;
 		}
@@ -1210,10 +1421,13 @@ struct World
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
-                j=j->next;
-            }
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
+				j = j->next;
+			}
             return i;
         }
         else
@@ -1225,9 +1439,12 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
-                j=j->next;
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
+				j = j->next;
             }
             return i;
         }
@@ -1260,8 +1477,13 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
-			if (inst->HitFace(ray, ret, nrm, positive_only))
-				return inst;
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+					return inst;
+				else
+					return 0;
+			}
 			else
 				return 0;
 		}
@@ -1286,9 +1508,12 @@ struct World
             j = s->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
-                j=j->next;
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
+				j = j->next;
             }
             return i;
         }
@@ -1301,9 +1526,12 @@ struct World
             Inst* j = l->head;
             while (j)
             {
-                if (j->HitFace(ray, ret, nrm, positive_only))
-                    i=j;
-                j=j->next;
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+						i = j;
+				}
+				j = j->next;
             }
             return i;
         }
@@ -1428,7 +1656,8 @@ struct World
         {
             bsp_insts++;
             Inst* i = (Inst*)bsp;
-            cb(i->mesh, i->tm, cookie);
+			if (i->inst_type == Inst::INST_TYPE::MESH)
+				cb(((MeshInst*)i)->mesh, ((MeshInst*)i)->tm, cookie);
         }
         else
         if (bsp->type == BSP::BSP_TYPE_NODE)
@@ -1519,8 +1748,9 @@ struct World
         {
             bsp_insts++;
             Inst* i = (Inst*)bsp;
-            cb(i->mesh, i->tm, cookie);
-        }
+			if (i->inst_type == Inst::INST_TYPE::MESH)
+				cb(((MeshInst*)i)->mesh, ((MeshInst*)i)->tm, cookie);
+		}
         else
         if (bsp->type == BSP::BSP_TYPE_NODE)        
         {
@@ -2389,11 +2619,21 @@ Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name)
     return m->world->AddInst(m,flags,tm,name);
 }
 
+Inst* CreateInst(Sprite* s, int flags, float pos[3], float yaw, int anim, float frame, float speed, const char* name)
+{
+	if (!s)
+		return 0;
+}
+
 void DeleteInst(Inst* i)
 {
     if (!i)
         return;
-    i->mesh->world->DelInst(i);
+	if (i->inst_type == Inst::INST_TYPE::MESH)
+		((MeshInst*)i)->mesh->world->DelInst(i);
+	else
+	if (i->inst_type == Inst::INST_TYPE::SPRITE)
+		((SpriteInst*)i)->w->DelInst(i);
 }
 
 void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
@@ -2534,22 +2774,53 @@ void RebuildWorld(World* w, bool boxes)
         w->Rebuild(boxes);
 }
 
-static void SaveInst(Inst* i, FILE* f)
+
+
+static void SaveInst(Inst* inst, FILE* f)
 {
-    int mesh_id_len = i->mesh && i->mesh->name ? (int)strlen(i->mesh->name) : 0;
+	if (inst->inst_type == Inst::INST_TYPE::MESH)
+	{
+		MeshInst* i = (MeshInst*)inst;
 
-    fwrite(&mesh_id_len, 1,4, f);
-    if (mesh_id_len)
-        fwrite(i->mesh->name, 1,mesh_id_len, f);
+		int mesh_id_len = i->mesh && i->mesh->name ? (int)strlen(i->mesh->name) : 0;
 
-    int inst_name_len = i->name ? (int)strlen(i->name) : 0;
+		fwrite(&mesh_id_len, 1, 4, f);
+		if (mesh_id_len)
+			fwrite(i->mesh->name, 1, mesh_id_len, f);
 
-    fwrite(&inst_name_len, 1,4, f);
-    if (inst_name_len)
-        fwrite(i->name, 1,inst_name_len, f);
+		int inst_name_len = i->name ? (int)strlen(i->name) : 0;
 
-    fwrite(i->tm, 1,16*8, f);
-    fwrite(&i->flags, 1,4, f);
+		fwrite(&inst_name_len, 1, 4, f);
+		if (inst_name_len)
+			fwrite(i->name, 1, inst_name_len, f);
+
+		fwrite(i->tm, 1, 16 * 8, f);
+		fwrite(&i->flags, 1, 4, f);
+	}
+	else
+	if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+	{
+		SpriteInst* i = (SpriteInst*)inst;
+
+		int mesh_id_len = -1; // identify sprite
+		fwrite(&mesh_id_len, 1, 4, f);
+
+		// sprite id ???
+		// ...
+
+		int inst_name_len = i->name ? (int)strlen(i->name) : 0;
+
+		fwrite(&inst_name_len, 1, 4, f);
+		if (inst_name_len)
+			fwrite(i->name, 1, inst_name_len, f);
+
+		fwrite(i->pos, 1, sizeof(float[3]), f);
+		fwrite(&i->yaw, 1, sizeof(float), f);
+		fwrite(&i->anim, 1, sizeof(int), f);
+		fwrite(&i->frame, 1, sizeof(float), f);
+		fwrite(&i->speed, 1, sizeof(float), f);
+		fwrite(&i->flags, 1, 4, f);
+	}
 }
 
 static void SaveQueryBSP(BSP* bsp, FILE* f) 
@@ -2719,7 +2990,9 @@ Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3],
 
 Mesh* GetInstMesh(Inst* i)
 {
-	return i->mesh;
+	if (i->inst_type == Inst::INST_TYPE::MESH)
+		return ((MeshInst*)i)->mesh;
+	return 0;
 }
 
 int GetInstFlags(Inst* i)
@@ -2727,12 +3000,29 @@ int GetInstFlags(Inst* i)
 	return i->flags;
 }
 
-void GetInstTM(Inst* i, double tm[16])
+bool GetInstTM(Inst* i, double tm[16])
 {
-	memcpy(tm, i->tm, sizeof(double[16]));
+	if (i->inst_type == Inst::INST_TYPE::MESH)
+	{
+		memcpy(tm, ((MeshInst*)i)->tm, sizeof(double[16]));
+		return true;
+	}
+
+	return false;
 }
 
 int GetMeshFaces(Mesh* m)
 {
 	return m->faces;
 }
+
+void GetInstBBox(Inst* i, double bbox[6])
+{
+	bbox[0] = i->bbox[0];
+	bbox[1] = i->bbox[1];
+	bbox[2] = i->bbox[2];
+	bbox[3] = i->bbox[3];
+	bbox[4] = i->bbox[4];
+	bbox[5] = i->bbox[5];
+}
+

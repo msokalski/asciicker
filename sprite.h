@@ -26,8 +26,18 @@ struct Sprite
 		int* frame_idx; // [angles * 2]
 	};
 
+	Sprite* next;
+	Sprite* prev;
+	char* name;
+
 	Anim anim[1];
 };
+
+Sprite* LoadSprite(const char* path, const char* name);
+Sprite* GetFirstSprite();
+Sprite* GetPrevSprite(Sprite* s);
+Sprite* GetNextSprite(Sprite* s);
+int GetSpriteName(Sprite* s, char* buf, int size);
 
 Sprite* LoadPlayer(const char* path);
 void FreeSprite(Sprite* spr);

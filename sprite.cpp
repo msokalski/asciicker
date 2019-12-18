@@ -7,6 +7,9 @@
 #include "sprite.h"
 #include "upng.h"
 
+static Sprite* sprite_head = 0;
+static Sprite* sprite_tail = 0;
+
 struct SpriteInst
 {
 	Sprite* sprite;
@@ -276,6 +279,10 @@ Sprite* LoadPlayer(const char* path)
 	/////////////////////////////////
 	u_inflate_free(out);
 
+	sprite->next = 0;
+	sprite->prev = 0;
+	sprite->name = 0;
+
 	return sprite;
 
 	// let's begin from something trivial...
@@ -303,6 +310,18 @@ Sprite* LoadPlayer(const char* path)
 
 void FreeSprite(Sprite* spr)
 {
+	if (spr->prev)
+		spr->prev->next = spr->next;
+	else
+	if (spr == sprite_head) // ensure it is not detached sprite from sprite list
+		sprite_head = spr->next;
+
+	if (spr->next)
+		spr->next->prev = spr->prev;
+	else
+	if (spr == sprite_tail) // ensure it is not detached sprite from sprite list
+		sprite_tail = spr->prev;
+
 	for (int f = 0; f < spr->frames; f++)
 		free(spr->atlas[f].cell);
 
@@ -311,5 +330,48 @@ void FreeSprite(Sprite* spr)
 	for (int a = 0; a < spr->anims; a++)
 		free(spr->anim[a].frame_idx);
 
+	if (spr->name)
+		free(spr->name);
+
 	free(spr);
 }
+
+Sprite* GetFirstSprite()
+{
+	return sprite_head;
+}
+
+Sprite* GetPrevSprite(Sprite* s)
+{
+	return s->prev;
+}
+
+Sprite* GetNextSprite(Sprite* s)
+{
+	return s->next;
+}
+
+Sprite* LoadSprite(const char* path, const char* name)
+{
+	// load and add to list!
+	// ...
+	return 0;
+}
+
+int GetSpriteName(Sprite* s, char* buf, int size)
+{
+	if (!s)
+	{
+		if (buf && size > 0)
+			*buf = 0;
+		return 0;
+	}
+
+	int len = (int)strlen(s->name);
+
+	if (buf && size > 0)
+		strncpy(buf, s->name, size);
+
+	return len + 1;
+}
+

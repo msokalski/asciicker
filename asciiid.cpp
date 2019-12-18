@@ -31,6 +31,7 @@
 #include "texheap.h"
 #include "terrain.h"
 #include "mesh.h"
+#include "sprite.h"
 
 #include "asciiid_urdo.h"
 
@@ -73,7 +74,8 @@ char root_path[4096];
 
 Terrain* terrain = 0;
 World* world = 0;
-Mesh* active_mesh;
+Mesh* active_mesh = 0;
+Sprite* active_sprite = 0;
 
 struct MeshPrefs
 {
@@ -3294,6 +3296,44 @@ void my_render(A3D_WND* wnd)
 		//ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(0,0),Dock::Size,0);
 //		ImGui::PopStyleVar();
 
+		struct SpriteWidget
+		{
+			static void draw_cb(const ImDrawList* parent_list, const ImDrawCmd* cmd)
+			{
+				SpriteWidget* sw = (SpriteWidget*)cmd->UserCallbackData;
+				if (!sw)
+					return;
+
+				// ...
+			}
+
+			bool Widget(const char* label, const ImVec2& size)
+			{
+				ImGuiWindow* window = ImGui::GetCurrentWindow();
+				if (window->SkipItems)
+					return false;
+
+				ImGuiContext& g = *GImGui;
+				const ImGuiStyle& style = g.Style;
+				const ImGuiID id = window->GetID(label);
+
+				ImVec2 pos = window->DC.CursorPos;
+				ImVec2 adv(pos.x + size.x, pos.y + size.y);
+
+				const ImRect bb(pos, adv);
+				rect = bb;
+
+				ImGui::ItemSize(size, style.FramePadding.y);
+				if (!ImGui::ItemAdd(bb, id))
+					return false;
+
+				ImGui::GetWindowDrawList()->AddCallback(draw_cb, this);
+				return true;
+			}
+
+			ImRect rect;
+		};
+
 		struct MeshWidget
 		{
 			static void draw_cb(const ImDrawList* parent_list, const ImDrawCmd* cmd)
@@ -3576,6 +3616,39 @@ void my_render(A3D_WND* wnd)
 			ImRect rect;
 		};
 
+		ImGui::Begin("SPRITE", 0, ImGuiWindowFlags_AlwaysAutoResize);
+		{
+			static SpriteWidget sw;
+
+			// Arrow buttons with Repeater
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			ImGui::PushButtonRepeat(true);
+			if (ImGui::ArrowButton("##sprite_prev", ImGuiDir_Left))
+			{
+				Sprite* prev = GetPrevSprite(active_sprite);
+				if (prev)
+					active_sprite = prev;
+			}
+
+			ImGui::SameLine(0.0f, spacing);
+
+			if (ImGui::ArrowButton("##sprite_next", ImGuiDir_Right))
+			{
+				Sprite* next = GetNextSprite(active_sprite);
+				if (next)
+					active_sprite = next;
+			}
+			ImGui::PopButtonRepeat();
+			ImGui::SameLine();
+
+			char name[256];
+			GetSpriteName(active_sprite, name, 256);
+			ImGui::Text("%s", name);
+
+			sw.Widget("sprite_zonk", ImVec2(320, 320));
+		}
+		ImGui::End();
+
 		ImGui::Begin("MESH", 0, ImGuiWindowFlags_AlwaysAutoResize);
 		{
 			static MeshWidget mw;
@@ -3606,7 +3679,7 @@ void my_render(A3D_WND* wnd)
 			GetMeshName(active_mesh,name,256);
 			ImGui::Text("%s",name);
 
-			mw.Widget("zonk", ImVec2(320,320));
+			mw.Widget("mesh_zonk", ImVec2(320,320));
 		}
 		ImGui::End();
 
