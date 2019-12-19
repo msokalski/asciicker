@@ -77,6 +77,15 @@ World* world = 0;
 Mesh* active_mesh = 0;
 Sprite* active_sprite = 0;
 
+struct SpritePrefs
+{
+	float yaw;
+	int anim;
+	float speed;
+	float frame;
+	float height; //?
+};
+
 struct MeshPrefs
 {
 	// float pre_trans[3];
@@ -2824,6 +2833,41 @@ int AllocDir(DirItem*** dir, DirItem** list = 0)
 	*dir = arr;
 
 	return head.num;
+}
+
+static bool SpriteScan(A3D_DirItem item, const char* name, void* cookie)
+{
+	if (!(item&A3D_FILE))
+		return true;
+
+	char buf[4096];
+	snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
+	buf[4095] = 0;
+
+	Sprite* s = GetFirstSprite(/*world*/);
+	while (s)
+	{
+		char sprite_name[256];
+		GetSpriteName(s, sprite_name, 256);
+
+		if (strcmp(name, sprite_name) == 0)
+			break;
+
+		s = GetNextSprite(s);
+	}
+
+	if (!s)
+	{
+		s = LoadSprite(/*world,*/ buf, name);
+		if (s)
+		{
+			SpritePrefs* sp = (SpritePrefs*)malloc(sizeof(SpritePrefs));
+			memset(sp, 0, sizeof(SpritePrefs));
+			SetSpriteCookie(s, sp);
+		}
+	}
+
+	return true;
 }
 
 static bool MeshScan(A3D_DirItem item, const char* name, void* cookie)
@@ -6103,8 +6147,11 @@ void my_init(A3D_WND* wnd)
 
 	char mesh_dirname[] = "./meshes";
 	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
-
 	active_mesh = GetFirstMesh(world);
+
+	char sprite_dirname[] = "./sprites";
+	a3dListDir(sprite_dirname, SpriteScan, sprite_dirname);
+	active_sprite = GetFirstSprite(/*world*/);
 
 	/*
 	for (int i=0; i<100000; i++)
@@ -6586,7 +6633,7 @@ Sprite* player_sprite = 0;
 
 int main(int argc, char *argv[]) 
 {
-	player_sprite = LoadPlayer("./sprites/player.xp");
+	player_sprite = LoadPlayer("./sprites/player-3.xp");
 
 	/*
 	FILE* act = fopen("d:/xterm.act", "wb");

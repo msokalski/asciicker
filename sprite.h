@@ -29,6 +29,7 @@ struct Sprite
 	Sprite* next;
 	Sprite* prev;
 	char* name;
+	void* cookie;
 
 	Anim anim[1];
 };
@@ -38,6 +39,9 @@ Sprite* GetFirstSprite();
 Sprite* GetPrevSprite(Sprite* s);
 Sprite* GetNextSprite(Sprite* s);
 int GetSpriteName(Sprite* s, char* buf, int size);
+
+void SetSpriteCookie(Sprite* s, void* cookie);
+void* GetSpriteCookie(Sprite* s);
 
 Sprite* LoadPlayer(const char* path);
 void FreeSprite(Sprite* spr);

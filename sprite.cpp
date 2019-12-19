@@ -32,6 +32,108 @@ Sprite* LoadWolfPlayerSwordShield(const char* path);
 
 Sprite* LoadPlayer(const char* path)
 {
+	Sprite* s = LoadSprite(path, "player");
+
+	if (s)
+	{
+		// detach from sprite list
+
+		if (s->prev)
+			s->prev->next = s->next;
+		else
+			sprite_head = s->next;
+
+		if (s->next)
+			s->next->prev = s->prev;
+		else
+			sprite_tail = s->prev;
+
+		s->prev = 0;
+		s->next = 0;
+	}
+
+	return s;
+}
+
+void FreeSprite(Sprite* spr)
+{
+	if (spr->prev)
+		spr->prev->next = spr->next;
+	else
+	if (spr == sprite_head) // ensure it is not detached sprite from sprite list
+		sprite_head = spr->next;
+
+	if (spr->next)
+		spr->next->prev = spr->prev;
+	else
+	if (spr == sprite_tail) // ensure it is not detached sprite from sprite list
+		sprite_tail = spr->prev;
+
+	for (int f = 0; f < spr->frames; f++)
+		free(spr->atlas[f].cell);
+
+	free(spr->atlas);
+
+	for (int a = 0; a < spr->anims; a++)
+		free(spr->anim[a].frame_idx);
+
+	if (spr->name)
+		free(spr->name);
+
+	free(spr);
+}
+
+Sprite* GetFirstSprite()
+{
+	return sprite_head;
+}
+
+Sprite* GetPrevSprite(Sprite* s)
+{
+	if (!s)
+		return 0;
+	return s->prev;
+}
+
+Sprite* GetNextSprite(Sprite* s)
+{
+	if (!s)
+		return 0;
+	return s->next;
+}
+
+int GetSpriteName(Sprite* s, char* buf, int size)
+{
+	if (!s)
+	{
+		if (buf && size > 0)
+			*buf = 0;
+		return 0;
+	}
+
+	int len = (int)strlen(s->name);
+
+	if (buf && size > 0)
+		strncpy(buf, s->name, size);
+
+	return len + 1;
+}
+
+void SetSpriteCookie(Sprite* s, void* cookie)
+{
+	if (s)
+		s->cookie = cookie;
+}
+
+void* GetSpriteCookie(Sprite* s)
+{
+	if (!s)
+		return 0;
+	return s->cookie;
+}
+
+Sprite* LoadSprite(const char* path, const char* name)
+{
 	FILE* f = fopen(path, "rb");
 	if (!f)
 		return 0;
@@ -54,7 +156,7 @@ Sprite* LoadPlayer(const char* path)
 
 	if (gz.flg & (1 << 2/*FEXTRA*/))
 	{
-		int hi,lo;
+		int hi, lo;
 		fread(&hi, 1, 1, f);
 		fread(&lo, 1, 1, f);
 
@@ -121,21 +223,64 @@ Sprite* LoadPlayer(const char* path)
 	int width = *((int*)out + 2);
 	int height = *((int*)out + 3);
 
-	#pragma pack(push,1)
+	if (layers < 3 || width < 1 || height < 1)
+	{
+		u_inflate_free(out);
+		return 0;
+	}
+
+#pragma pack(push,1)
 	struct XPCell
 	{
 		uint32_t glyph;
 		uint8_t fg[3];
 		uint8_t bk[3];
+
+		int GetDigit() const
+		{
+			int digit = -1;
+			if (glyph >= '0' && glyph <= '9')
+				digit = glyph - '0';
+			else
+			if (glyph >= 'A' && glyph <= 'Z')
+				digit = glyph + 0xA - 'A';
+			else
+			if (glyph >= 'a' && glyph <= 'z')
+				digit = glyph + 0xa - 'a';
+
+			return digit;
+		}
 	};
-	#pragma pack(pop)
+#pragma pack(pop)
 
 	XPCell* layer0 = (XPCell*)((int*)out + 4); // bg specifies color key
 	XPCell* layer1 = (XPCell*)((int*)(layer0 + width * height) + 2); // glyph specifies height + '0'
 	XPCell* layer2 = (XPCell*)((int*)(layer1 + width * height) + 2); // image map
 
-	int fr_num_x = (2/*refl*/ * (1/*idle*/ + 8/*walk*/));
-	int fr_num_y = 8/*angl*/;
+	const int max_anims = 16;
+	int projs = 2; // proj and refl
+	int anims = 1;
+	int anim_len[max_anims] = { 1 };
+	int anim_sum = 1;
+	int angles = layer0[0].GetDigit();
+	if (angles > 0)
+	{
+		for (int a = 1; a < width; a++)
+		{
+			int len = layer0[height*a].GetDigit();
+			if (len > 0)
+			{
+				anim_sum += len;
+				anim_len[anims] = len;
+				anims++;
+			}
+		}
+	}
+	else
+		angles = 1;
+
+	int fr_num_x = (projs * anim_sum);
+	int fr_num_y = angles;
 
 	int frames = fr_num_y * fr_num_x;
 	Sprite::Frame* atlas = (Sprite::Frame*)malloc(sizeof(Sprite::Frame)*frames);
@@ -143,7 +288,33 @@ Sprite* LoadPlayer(const char* path)
 	int fr_width = width / fr_num_x;
 	int fr_height = height / fr_num_y;
 
-	for (int fr_y=0; fr_y < fr_num_y; fr_y++)
+	int ref[2][3] =
+	{
+		{ fr_width,0,0 },
+		{ fr_width,2*fr_height,0 },
+	};
+
+	if (height >= 2)
+	{
+		int y_proj = layer0[1+0].GetDigit();
+		int y_refl = layer0[1+height].GetDigit();
+		if (y_proj >= 0 && y_proj <= 2 * fr_height)
+			ref[0][1] = y_proj;
+		if (y_refl >= 0 && y_refl <= 2 * fr_height)
+			ref[1][1] = 2 * fr_height - y_refl;
+	}
+
+	if (height >= 3)
+	{
+		int z_proj = layer0[2 + 0].GetDigit();
+		int z_refl = layer0[2 + height].GetDigit();
+		if (z_proj >= 0)
+			ref[0][2] = -z_proj;
+		if (z_refl >= 0)
+			ref[1][2] = -z_refl;
+	}
+
+	for (int fr_y = 0; fr_y < fr_num_y; fr_y++)
 	{
 		for (int fr_x = 0; fr_x < fr_num_x; fr_x++)
 		{
@@ -155,41 +326,50 @@ Sprite* LoadPlayer(const char* path)
 
 			AnsiCell* c = (AnsiCell*)malloc(sizeof(AnsiCell)*fr_width*fr_height);
 			frame->cell = c;
-			
+
 			frame->ref[0] = fr_width; // in half blocks! (means x-middle)
 
-			int rgb_div = 255;
+			int rgb_div;
 
 			if (2 * fr_x < fr_num_x)
 			{
 				// proj:
 
 				// PLAYER
-				frame->ref[1] = 2; // in half blocks!
-				frame->ref[2] = -1; // foot cell (spare=1) gets z = 0.5*dz/dy (half cell above reference)
+				// frame->ref[1] = 2; // in half blocks!
+				// frame->ref[2] = -1; // foot cell (spare=1) gets z = 0.5*dz/dy (half cell above reference)
 
 				// WOLFIE
 				//frame->ref[1] = 3;
 				//frame->ref[2] = -2;
+
+				frame->ref[0] = ref[0][0];
+				frame->ref[1] = ref[0][1];
+				frame->ref[2] = ref[0][2];
+				rgb_div = 255;
+
 			}
 			else
 			{
 				// refl
 
 				// PLAYER
-				frame->ref[1] = 2*fr_height -2; // in half blocks!
-				frame->ref[2] = -15; // foot cell (spare=7) gets z = -0.5*dz/dy (half cell below reference)
+				// frame->ref[1] = 2 * fr_height - 2; // in half blocks!
+				// frame->ref[2] = -15; // foot cell (spare=7) gets z = -0.5*dz/dy (half cell below reference)
 
 				// WOLFIE
 				//frame->ref[1] = 2*fr_height -1;
 				//frame->ref[2] = -17;
 
+				frame->ref[0] = ref[1][0];
+				frame->ref[1] = ref[1][1];
+				frame->ref[2] = ref[1][2];
 				rgb_div = 400;
 			}
 
 			int x0 = fr_x * fr_width, x1 = x0 + fr_width;
 			int y0 = fr_y * fr_height, y1 = y0 + fr_height;
-			for (int y = y1-1; y >= y0; y--)
+			for (int y = y1 - 1; y >= y0; y--)
 			{
 				for (int x = x0; x < x1; x++, c++)
 				{
@@ -213,10 +393,10 @@ Sprite* LoadPlayer(const char* path)
 					if (c1->glyph >= '0' && c1->glyph <= '9')
 						c->spare = c1->glyph - '0';
 					else
-					if (c1->glyph >= 'A' && c1->glyph <= 'Z')
-						c->spare = 10 + c1->glyph - 'A';
-					else
-						c->spare = 0xFF; // undefined
+						if (c1->glyph >= 'A' && c1->glyph <= 'Z')
+							c->spare = 10 + c1->glyph - 'A';
+						else
+							c->spare = 0xFF; // undefined
 
 					if (bk_transp)
 						c->bk = 255;
@@ -225,7 +405,7 @@ Sprite* LoadPlayer(const char* path)
 						int r = (c2->bk[0] * 5 + 128) / rgb_div;
 						int g = (c2->bk[1] * 5 + 128) / rgb_div;
 						int b = (c2->bk[2] * 5 + 128) / rgb_div;
-						c->bk = 16 + 36*r + g*6 + b;
+						c->bk = 16 + 36 * r + g * 6 + b;
 					}
 
 					if (fg_transp)
@@ -235,7 +415,7 @@ Sprite* LoadPlayer(const char* path)
 						int r = (c2->fg[0] * 5 + 128) / rgb_div;
 						int g = (c2->fg[1] * 5 + 128) / rgb_div;
 						int b = (c2->fg[2] * 5 + 128) / rgb_div;
-						c->fg = 16 + 36*r + g * 6 + b;
+						c->fg = 16 + 36 * r + g * 6 + b;
 					}
 				}
 			}
@@ -244,6 +424,7 @@ Sprite* LoadPlayer(const char* path)
 
 	Sprite* sprite = (Sprite*)malloc(sizeof(Sprite) + sizeof(Sprite::Anim));
 
+	sprite->cookie = 0;
 	sprite->angles = 8;
 	sprite->anims = 2;
 	sprite->atlas = atlas;
@@ -252,7 +433,7 @@ Sprite* LoadPlayer(const char* path)
 	sprite->anim[0].length = 1;
 	sprite->anim[1].length = 8;
 
-	for (int anim=0; anim<sprite->anims; anim++)
+	for (int anim = 0; anim < sprite->anims; anim++)
 		sprite->anim[anim].frame_idx = (int*)malloc(sizeof(int) * 2/*proj,refl*/ * sprite->angles * sprite->anim[anim].length);
 
 	for (int refl = 0; refl < 2; refl++)
@@ -279,99 +460,18 @@ Sprite* LoadPlayer(const char* path)
 	/////////////////////////////////
 	u_inflate_free(out);
 
+	sprite->prev = sprite_tail;
+	if (sprite_tail)
+		sprite_tail->next = sprite;
+	else
+		sprite_head = sprite;
 	sprite->next = 0;
-	sprite->prev = 0;
-	sprite->name = 0;
+	sprite_tail = sprite;
+
+	if (name)
+		sprite->name = strdup(name);
+	else
+		sprite->name = 0;
 
 	return sprite;
-
-	// let's begin from something trivial...
-	// just load player.xp (in known layout)
-	
-	// layer0: defines colorkey
-	// layer1: height map
-	// layer2: image map
-
-	// 8 rows, each 9 cells (vertically) - 8 angles CCW starting from front view
-	// image have left (projection) and right (reflection) halfs
-	// each half has 9 frames, each 5 cells (horizontally)
-	// first frame is just still idle
-	// next 8 frames are walk animation
-
-	// some example layout def grammar:
-	// X:[R2][F1,F8]  // [R2] split width into 2 halfs, [F1+F8] two animations, first has 1 frame, second has 8 frames
-	// Y:[A8]         // [A8] 8 angles
-
-	// wolf comes in another (assuming every mount is just 1 frame animation):
-
-	// X:[A8]
-	// Y:[R2][F1,F1,F1,F1,F1]
 }
-
-void FreeSprite(Sprite* spr)
-{
-	if (spr->prev)
-		spr->prev->next = spr->next;
-	else
-	if (spr == sprite_head) // ensure it is not detached sprite from sprite list
-		sprite_head = spr->next;
-
-	if (spr->next)
-		spr->next->prev = spr->prev;
-	else
-	if (spr == sprite_tail) // ensure it is not detached sprite from sprite list
-		sprite_tail = spr->prev;
-
-	for (int f = 0; f < spr->frames; f++)
-		free(spr->atlas[f].cell);
-
-	free(spr->atlas);
-
-	for (int a = 0; a < spr->anims; a++)
-		free(spr->anim[a].frame_idx);
-
-	if (spr->name)
-		free(spr->name);
-
-	free(spr);
-}
-
-Sprite* GetFirstSprite()
-{
-	return sprite_head;
-}
-
-Sprite* GetPrevSprite(Sprite* s)
-{
-	return s->prev;
-}
-
-Sprite* GetNextSprite(Sprite* s)
-{
-	return s->next;
-}
-
-Sprite* LoadSprite(const char* path, const char* name)
-{
-	// load and add to list!
-	// ...
-	return 0;
-}
-
-int GetSpriteName(Sprite* s, char* buf, int size)
-{
-	if (!s)
-	{
-		if (buf && size > 0)
-			*buf = 0;
-		return 0;
-	}
-
-	int len = (int)strlen(s->name);
-
-	if (buf && size > 0)
-		strncpy(buf, s->name, size);
-
-	return len + 1;
-}
-
