@@ -253,9 +253,20 @@ Sprite* LoadSprite(const char* path, const char* name)
 	};
 #pragma pack(pop)
 
+	int cells = width * height;
 	XPCell* layer0 = (XPCell*)((int*)out + 4); // bg specifies color key
-	XPCell* layer1 = (XPCell*)((int*)(layer0 + width * height) + 2); // glyph specifies height + '0'
-	XPCell* layer2 = (XPCell*)((int*)(layer1 + width * height) + 2); // image map
+	XPCell* layer1 = (XPCell*)((int*)(layer0 + cells) + 2); // glyph specifies height + '0'
+	XPCell* layer2 = (XPCell*)((int*)(layer1 + cells) + 2); // image map
+
+	// merge layers above 2
+	XPCell* merge = layer2;
+	for (int m = 3; m < layers; m++)
+	{
+		merge = (XPCell*)((int*)(merge + cells) + 2);
+		for (int c = 0; c < cells; c++)
+			if (merge[c].bk[0] != 0xFF || merge[c].bk[1] != 0x00 || merge[c].bk[2] != 0xFF)
+				layer2[c] = merge[c];
+	}
 
 	const int max_anims = 16;
 	int projs = 2; // proj and refl

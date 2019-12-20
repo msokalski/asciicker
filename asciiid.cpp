@@ -6633,7 +6633,7 @@ Sprite* player_sprite = 0;
 
 int main(int argc, char *argv[]) 
 {
-	player_sprite = LoadPlayer("./sprites/player-3.xp");
+	player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
 
 	/*
 	FILE* act = fopen("d:/xterm.act", "wb");
