@@ -114,4 +114,8 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="makefile_game" />
+    <None Include="build-web.sh" />
+  </ItemGroup>
 </Project>

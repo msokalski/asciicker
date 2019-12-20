@@ -482,7 +482,7 @@ int main(int argc, char* argv[])
 	float last_yaw = yaw;
 
 	// PLAYER
-    player_sprite = LoadPlayer("./sprites/player.xp");
+    player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
 
 	// WOLFIE
 	// player_sprite = LoadPlayer("./sprites/wolfie.xp");
