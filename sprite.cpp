@@ -4,6 +4,8 @@
 // - one or more frames, each containing:
 //   - one or more direction views, each with reflection image
 
+#include "string.h"
+
 #include "sprite.h"
 #include "upng.h"
 
