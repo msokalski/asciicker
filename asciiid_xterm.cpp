@@ -413,6 +413,7 @@ void* GetFontArr()
 
 
 Sprite* player_sprite = 0;
+Sprite* inventory_sprite = 0;
 
 // make term happy
 float pos_x,pos_y,pos_z;

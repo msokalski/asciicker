@@ -132,7 +132,7 @@ void* GetSpriteCookie(Sprite* s)
 	return s->cookie;
 }
 
-Sprite* LoadSprite(const char* path, const char* name)
+Sprite* LoadSprite(const char* path, const char* name, bool has_refl)
 {
 	FILE* f = fopen(path, "rb");
 	if (!f)
@@ -269,7 +269,7 @@ Sprite* LoadSprite(const char* path, const char* name)
 	}
 
 	const int max_anims = 16;
-	int projs = 2; // proj and refl
+	int projs = has_refl ? 2:1; // proj and refl
 	int anims = 1;
 	int anim_len[max_anims] = { 1 };
 	int anim_sum = 1;

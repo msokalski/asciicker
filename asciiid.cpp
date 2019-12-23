@@ -6630,10 +6630,19 @@ void my_ptydata(A3D_PTY* pty)
 
 #include "sprite.h"
 Sprite* player_sprite = 0;
+Sprite* inventory_sprite = 0;
 
 int main(int argc, char *argv[]) 
 {
-	player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
+	// player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
+	player_sprite = LoadPlayer("./sprites/player-F.xp");
+	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", false);
+	for (int f = 0; f < inventory_sprite->frames; f++)
+	{
+		inventory_sprite->atlas[f].ref[0] = 0;
+		inventory_sprite->atlas[f].ref[1] = 0;
+		inventory_sprite->atlas[f].ref[2] = 0x10000;
+	}
 
 	/*
 	FILE* act = fopen("d:/xterm.act", "wb");

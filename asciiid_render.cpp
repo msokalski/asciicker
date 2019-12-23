@@ -23,6 +23,7 @@
 
 static bool global_refl_mode = false;
 extern Sprite* player_sprite;
+extern Sprite* inventory_sprite;
 
 template <typename Sample>
 inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
@@ -2112,7 +2113,9 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 
 	r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
 
-
+	int invpos[3] = { 1,1,0 };
+	if (inventory_sprite)
+		r.RenderSprite(out_ptr, width, height, inventory_sprite, false, 0, 0, 0, invpos);
 
 	return true;
 }
