@@ -153,8 +153,16 @@ Sprite* LoadSprite(const char* path, const char* name, bool has_refl)
 	GZ gz;
 	fread(&gz, 10, 1, f);
 
+	/*
 	assert(gz.id1 == 31 && gz.id2 == 139 && "gz identity");
 	assert(gz.cm == 8 && "deflate method");
+	*/
+
+	if (gz.id1 != 31 || gz.id2 != 139 || gz.cm != 8)
+	{
+		fclose(f);
+		return 0;
+	}
 
 	if (gz.flg & (1 << 2/*FEXTRA*/))
 	{

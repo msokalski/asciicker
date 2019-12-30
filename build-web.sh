@@ -39,7 +39,8 @@ emcc --emrun -O3 \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --preload-file a3d/game.a3d \
-    --preload-file sprites/wolfie-0.xp \
+    --preload-file sprites/player-1111.xp \
+	--preload-file sprites/inventory.xp \
     --preload-file meshes/bridge-1.ply \
     --preload-file meshes/fence.ply \
     --preload-file meshes/rock-1.ply \

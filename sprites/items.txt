@@ -1,0 +1,62 @@
+player-AHSW
+wolfie-AHSW
+
+A: armor
+ 0-none
+ 1-grey_armor
+
+H: helmet
+ 0-none
+ 1-grey_helmet
+
+S: shield
+ 0-none
+ 1-grey_shield
+
+W: weapon
+ 0-none
+ 1-sword
+
+armor_desc:
+{
+  inventory_name: ""
+  use_index: (1: grey, 0: unusable)
+  protection: 0-60%
+  weight: 0-100kg
+  sprite_3d: "item_name_3d.xp"
+  sprite_2d: "item_name_2d.xp"
+}
+
+helmet_desc:
+{
+  inventory_name: ""
+  use_index: (1: grey, 0: unusable)
+  weight: 0-10kg
+  protection: 0-10%
+  sprite_3d: "item_name_3d.xp"
+  sprite_2d: "item_name_2d.xp"
+}
+
+shield_desc:
+{
+  inventory_name: ""
+  use_index: (1: grey, 0: unusable)
+  min_strength: 0-inf
+  weight: 0-50kg
+  protection: 0-20%
+  sprite_3d: "item_name_3d.xp"
+  sprite_2d: "item_name_2d.xp"
+}
+
+weapon_desc:
+{
+  inventory_name: ""
+  use_index: (1: sword, 0: unusable)
+  sprite_3d: "item_name_3d.xp"
+  sprite_2d: "item_name_2d.xp"
+}
+
+
+
+
+
