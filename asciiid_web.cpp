@@ -23,6 +23,7 @@ Physics* phys = 0;
 Terrain* terrain = 0;
 World* world = 0;
 Sprite* player_sprite = 0;
+Sprite* inventory_sprite = 0;
 AnsiCell* render_buf = 0;
 
 Material mat[256];
@@ -44,12 +45,20 @@ int main()
     float pos[3] = {0,15,0};
     uint64_t stamp;
 
-    player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
+    player_sprite = LoadPlayer("./sprites/player-1111.xp");
     if (!player_sprite)
     {
         printf("failed to load player.xp\n");
         return -1;
     }
+
+	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", false);
+	for (int f = 0; f < inventory_sprite->frames; f++)
+	{
+		inventory_sprite->atlas[f].ref[0] = 0;
+		inventory_sprite->atlas[f].ref[1] = 0;
+		inventory_sprite->atlas[f].ref[2] = 0x10000;
+	}    
 
     {
         FILE* f = fopen("a3d/game.a3d","rb");
