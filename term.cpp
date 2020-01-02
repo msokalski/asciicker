@@ -4,9 +4,9 @@
 #include <string.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include "asciiid_term.h"
-#include "asciiid_platform.h"
-#include "asciiid_render.h"
+#include "term.h"
+#include "platform.h"
+#include "render.h"
 #include "fast_rand.h"
 #include "matrix.h"
 #include "gl.h"

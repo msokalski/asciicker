@@ -36,13 +36,7 @@
     <ClInclude Include="matrix.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="asciiid_platform.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="texheap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="asciiid_urdo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fast_rand.h">
@@ -57,16 +51,19 @@
     <ClInclude Include="mesh.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="asciiid_term.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="asciiid_render.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="sprite.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="physics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="platform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="term.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -75,9 +72,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="terrain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="asciiid_mswin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="upng.c">
@@ -89,19 +83,7 @@
     <ClCompile Include="water.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="asciiid_x11.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="mesh.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="asciiid_term.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="asciiid_vt.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="asciiid_render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="sprite.cpp">
@@ -110,7 +92,22 @@
     <ClCompile Include="physics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="asciiid_xterm.cpp">
+    <ClCompile Include="input.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mswin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="render.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="term.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="x11.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="xterm.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

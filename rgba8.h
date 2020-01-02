@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "asciiid_platform.h"
+#include "platform.h"
 
 void Convert_UI32_AABBGGRR(uint32_t* buf, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf);
 void Convert_UI32_AARRGGBB(uint32_t* buf, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "asciiid_render.h"
+#include "render.h"
 
 struct Sprite
 {

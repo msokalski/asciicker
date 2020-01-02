@@ -1,6 +1,6 @@
 
 // this is CPU scene renderer into ANSI framebuffer
-#include "asciiid_render.h"
+#include "render.h"
 #include "sprite.h"
 
 #include <stdint.h>

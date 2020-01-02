@@ -174,32 +174,31 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="asciiid_platform.h" />
-    <ClInclude Include="asciiid_render.h" />
-    <ClInclude Include="asciiid_term.h" />
-    <ClInclude Include="asciiid_urdo.h" />
     <ClInclude Include="fast_rand.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
     <ClInclude Include="matrix.h" />
     <ClInclude Include="mesh.h" />
     <ClInclude Include="physics.h" />
+    <ClInclude Include="platform.h" />
+    <ClInclude Include="render.h" />
     <ClInclude Include="rgba8.h" />
     <ClInclude Include="sprite.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="term.h" />
     <ClInclude Include="terrain.h" />
     <ClInclude Include="texheap.h" />
     <ClInclude Include="upng.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="asciiid_render.cpp" />
-    <ClCompile Include="asciiid_term.cpp" />
-    <ClCompile Include="asciiid_mswin.cpp" />
-    <ClCompile Include="asciiid_vt.cpp" />
-    <ClCompile Include="asciiid_x11.cpp" />
-    <ClCompile Include="asciiid_xterm.cpp" />
+    <ClCompile Include="render.cpp" />
+    <ClCompile Include="term.cpp" />
+    <ClCompile Include="mswin.cpp" />
+    <ClCompile Include="x11.cpp" />
+    <ClCompile Include="xterm.cpp" />
     <ClCompile Include="gl.c" />
+    <ClCompile Include="input.cpp" />
     <ClCompile Include="mesh.cpp" />
     <ClCompile Include="physics.cpp" />
     <ClCompile Include="rgba8.cpp" />

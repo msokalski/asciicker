@@ -5,7 +5,7 @@
 #include "physics.h"
 #include "sprite.h"
 #include "mesh.h"
-#include "asciiid_render.h"
+#include "render.h"
 
 #include <math.h>
 #include "matrix.h"

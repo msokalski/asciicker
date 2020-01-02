@@ -26,15 +26,15 @@ rm .web/index.wasm
 rm .web/index.data
 
 emcc --emrun -O3 \
-    asciiid_web.cpp \
+    game_web.cpp \
     mesh.cpp \
     terrain.cpp \
     sprite.cpp \
     physics.cpp \
-    asciiid_render.cpp \
+    render.cpp \
     upng.c \
     -o .web/index.html \
-    --shell-file asciiid_web.html \
+    --shell-file game_web.html \
     -s EXPORTED_FUNCTIONS='["_main","_AsciickerUpdate","_AsciickerRender","_AsciickerGetYaw"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \

@@ -5,28 +5,26 @@
 BIN := .run/game
 
 # source files
-# SRCS :=	asciiid_xterm.cpp \
-# 		asciiid_render.cpp \
+# SRCS :=	xterm.cpp \
+# 		render.cpp \
 # 		terrain.cpp \
 # 		mesh.cpp \
 # 		physics.cpp \
 # 		sprite.cpp \
-# 		water.cpp \
 # 		upng.c \
 # 		rgba8.cpp \
 
 # LDLIBS := -lutil
 
 SRCS :=	gl.c \
-		asciiid_x11.cpp \
-        asciiid_term.cpp \
-		asciiid_xterm.cpp \
-		asciiid_render.cpp \
+		x11.cpp \
+        term.cpp \
+		xterm.cpp \
+		render.cpp \
 		terrain.cpp \
 		mesh.cpp \
 		physics.cpp \
 		sprite.cpp \
-		water.cpp \
 		upng.c \
 		rgba8.cpp \
 

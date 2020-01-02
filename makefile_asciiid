@@ -6,16 +6,14 @@ BIN := .run/asciiid
 
 # source files
 SRCS :=	asciiid.cpp \
-		asciiid_vt.cpp \
-		asciiid_term.cpp \
-		asciiid_x11.cpp \
-		asciiid_urdo.cpp \
-		asciiid_render.cpp \
+		term.cpp \
+		x11.cpp \
+		urdo.cpp \
+		render.cpp \
 		terrain.cpp \
 		mesh.cpp \
 		physics.cpp \
 		sprite.cpp \
-		water.cpp \
 		texheap.cpp \
 		rgba8.cpp \
 		upng.c \

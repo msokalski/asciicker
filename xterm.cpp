@@ -15,13 +15,13 @@
 
 #include <assert.h>
 
-#include "asciiid_render.h"
+#include "render.h"
 #include "physics.h"
 #include "sprite.h"
 #include "matrix.h"
 
 // FOR GL 
-#include "asciiid_term.h"
+#include "term.h"
 #include "gl.h"
 #include "rgba8.h"
 

@@ -24,24 +24,24 @@
 
 #include "imgui_impl_opengl3.h"
 
-#include "asciiid_platform.h"
+#include "platform.h"
 
-// #include "asciiid_term.h"
+// #include "term.h"
 
 #include "texheap.h"
 #include "terrain.h"
 #include "mesh.h"
 #include "sprite.h"
 
-#include "asciiid_urdo.h"
+#include "urdo.h"
 
 #include "matrix.h"
 
 #include "fast_rand.h"
 
-#include "asciiid_term.h"
+#include "term.h"
 
-#include "asciiid_render.h"
+#include "render.h"
 
 // A3D_WND* wnd = 0;
 

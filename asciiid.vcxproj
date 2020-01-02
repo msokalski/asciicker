@@ -174,10 +174,10 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="asciiid_platform.h" />
-    <ClInclude Include="asciiid_render.h" />
-    <ClInclude Include="asciiid_term.h" />
-    <ClInclude Include="asciiid_urdo.h" />
+    <ClInclude Include="platform.h" />
+    <ClInclude Include="render.h" />
+    <ClInclude Include="term.h" />
+    <ClInclude Include="urdo.h" />
     <ClInclude Include="fast_rand.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="imgui\imconfig.h" />
@@ -199,12 +199,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp" />
-    <ClCompile Include="asciiid_render.cpp" />
-    <ClCompile Include="asciiid_term.cpp" />
-    <ClCompile Include="asciiid_urdo.cpp" />
-    <ClCompile Include="asciiid_mswin.cpp" />
-    <ClCompile Include="asciiid_vt.cpp" />
-    <ClCompile Include="asciiid_x11.cpp" />
+    <ClCompile Include="mswin.cpp" />
+    <ClCompile Include="render.cpp" />
+    <ClCompile Include="term.cpp" />
+    <ClCompile Include="urdo.cpp" />
     <ClCompile Include="gl.c" />
     <ClCompile Include="mesh.cpp" />
     <ClCompile Include="physics.cpp" />
@@ -219,6 +217,7 @@
     <ClCompile Include="texheap.cpp" />
     <ClCompile Include="upng.c" />
     <ClCompile Include="water.cpp" />
+    <ClCompile Include="x11.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
