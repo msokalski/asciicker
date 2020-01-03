@@ -193,6 +193,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="render.cpp" />
+    <ClCompile Include="screen.cpp" />
     <ClCompile Include="term.cpp" />
     <ClCompile Include="mswin.cpp" />
     <ClCompile Include="x11.cpp" />
