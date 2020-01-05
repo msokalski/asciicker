@@ -23,6 +23,7 @@
 
 static bool global_refl_mode = false;
 extern Sprite* player_sprite;
+extern Sprite* attack_sprite;
 extern Sprite* inventory_sprite;
 
 template <typename Sample>
@@ -2103,15 +2104,48 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 		(int)floor(pos[2]+0.5) + HEIGHT_SCALE / 4
 	};
 
-	r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr, ang, player_pos);
+	if (anim == 0)
+	{
+		static int attack_frm = 0;
+		attack_frm++;
 
-	// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
-	player_pos[1] = height / 2 - (int)floor(2*(pos[2]-r.water)*dy_dz + 0.5);
+		int sub_frm = (attack_frm % 40) / 2;
+		if (sub_frm >= 10)
+			sub_frm = 0;
 
-	// player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5);
-	player_pos[2] = (int)floor(2* r.water - pos[2] + 0.5) - HEIGHT_SCALE/4;
+		anim = 1;
 
-	r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
+		if (sub_frm > 4)
+			sub_frm = 9 - sub_frm;
+		if (!sub_frm)
+			anim = 0;
+		else
+			sub_frm--;
+
+		fr = sub_frm;
+
+		r.RenderSprite(out_ptr, width, height, attack_sprite, false, anim, fr, ang, player_pos);
+
+		// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
+		player_pos[1] = height / 2 - (int)floor(2 * (pos[2] - r.water)*dy_dz + 0.5);
+
+		// player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5);
+		player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5) - HEIGHT_SCALE / 4;
+
+		r.RenderSprite(out_ptr, width, height, attack_sprite, true, anim, fr, ang, player_pos);
+	}
+	else
+	{
+		r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr, ang, player_pos);
+
+		// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
+		player_pos[1] = height / 2 - (int)floor(2 * (pos[2] - r.water)*dy_dz + 0.5);
+
+		// player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5);
+		player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5) - HEIGHT_SCALE / 4;
+
+		r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
+	}
 
 	int invpos[3] = { 1,1,0 };
 	if (inventory_sprite)

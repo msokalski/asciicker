@@ -413,6 +413,7 @@ void* GetFontArr()
 
 
 Sprite* player_sprite = 0;
+Sprite* attack_sprite = 0;
 Sprite* inventory_sprite = 0;
 
 // make term happy
@@ -484,6 +485,7 @@ int main(int argc, char* argv[])
 
 	// PLAYER
     player_sprite = LoadPlayer("./sprites/player-1111.xp");
+	attack_sprite = LoadPlayer("./sprites/attack-1111.xp");
 	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", false);
 	for (int f = 0; f < inventory_sprite->frames; f++)
 	{

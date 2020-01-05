@@ -8,6 +8,8 @@
 
 #include "render.h"
 
+#if 0
+
 struct ScreenCB
 {
 	void(*touch)();
@@ -68,3 +70,4 @@ Screen* HitTest(Screen* root, int x, int y)
 	// 2. traverse down until non transparent bg or fg is found
 }
 
+#endif

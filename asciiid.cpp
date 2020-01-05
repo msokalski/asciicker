@@ -6630,12 +6630,14 @@ void my_ptydata(A3D_PTY* pty)
 
 #include "sprite.h"
 Sprite* player_sprite = 0;
+Sprite* attack_sprite = 0;
 Sprite* inventory_sprite = 0;
 
 int main(int argc, char *argv[]) 
 {
 	// player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
 	player_sprite = LoadPlayer("./sprites/player-1111.xp");
+	attack_sprite = LoadPlayer("./sprites/attack-1111.xp");
 	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", false);
 	for (int f = 0; f < inventory_sprite->frames; f++)
 	{
@@ -6691,6 +6693,8 @@ int main(int argc, char *argv[])
 	a3dLoop();
 
 	FreeSprite(player_sprite);
+	FreeSprite(attack_sprite);
+	FreeSprite(inventory_sprite);
 
 	return 0;
 }
