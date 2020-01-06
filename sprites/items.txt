@@ -1,4 +1,5 @@
 player-AHSW
+attack-AHSW
 wolfie-AHSW
 
 A: armor
