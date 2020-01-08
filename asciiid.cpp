@@ -6636,8 +6636,8 @@ Sprite* inventory_sprite = 0;
 int main(int argc, char *argv[]) 
 {
 	// player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
-	player_sprite = LoadPlayer("./sprites/player-0001.xp");
-	attack_sprite = LoadPlayer("./sprites/attack-0001.xp");
+	player_sprite = LoadPlayer("./sprites/player-0011.xp");
+	attack_sprite = LoadPlayer("./sprites/attack-0011.xp");
 	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", false);
 	for (int f = 0; f < inventory_sprite->frames; f++)
 	{
