@@ -23,6 +23,7 @@ Physics* phys = 0;
 Terrain* terrain = 0;
 World* world = 0;
 Sprite* player_sprite = 0;
+Sprite* attack_sprite = 0;
 Sprite* inventory_sprite = 0;
 AnsiCell* render_buf = 0;
 
@@ -46,7 +47,8 @@ int main()
     float pos[3] = {0,15,0};
     uint64_t stamp;
 
-    player_sprite = LoadPlayer("./sprites/player-1111.xp");
+    player_sprite = LoadPlayer("./sprites/player-0001.xp");
+	attack_sprite = LoadPlayer("./sprites/attack-0001.xp");
     if (!player_sprite)
     {
         printf("failed to load player.xp\n");
