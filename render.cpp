@@ -2104,10 +2104,11 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		(int)floor(pos[2]+0.5) + HEIGHT_SCALE / 4
 	};
 
+	static uint64_t attack_tim = stamp;
+	static int attack_frm = 18;	
+
 	if (anim == 0)
 	{
-		static uint64_t attack_tim = stamp;
-		static int attack_frm = 0;
 		int attack_ofs = (stamp - attack_tim) / 16667; // scale by microsec to 60 fps
 		attack_frm += attack_ofs;
 		attack_tim += (uint64_t)attack_ofs * 16667;
@@ -2147,6 +2148,10 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	}
 	else
 	{
+		// rewind
+		attack_tim = stamp;
+		attack_frm = 18;	
+
 		r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr, ang, player_pos);
 
 		// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
