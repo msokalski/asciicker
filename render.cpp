@@ -1215,7 +1215,7 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 	}
 }
 
-bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp, int dt, float hist[][3])
+bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp, int dt, float hist[][3])
 {
 	AnsiCell* out_ptr = ptr;
 	static Renderer r;
@@ -2106,21 +2106,32 @@ bool Render(Terrain* t, World* w, float water, float zoom, float yaw, const floa
 
 	if (anim == 0)
 	{
+		static uint64_t attack_tim = stamp;
 		static int attack_frm = 0;
-		attack_frm++;
+		int attack_ofs = (stamp - attack_tim) / 16667; // scale by microsec to 60 fps
+		attack_frm += attack_ofs;
+		attack_tim += (uint64_t)attack_ofs * 16667;
 
-		int sub_frm = (attack_frm % 40) / 2;
-		if (sub_frm >= 10)
+		int sub_frm = (attack_frm % 70);
+
+		static int attack_anim[40] =
+		{
+			0,0, 1,1, 2,2, 3,3, 4,4,
+			4,4,4,4, 3,3,3,3, 2,2,2,2, 1,1,1,1, 0,0,0,0
+		};
+
+		if (sub_frm >= 30)
 			sub_frm = 0;
+		else
+			sub_frm = attack_anim[sub_frm];
 
-		anim = 1;
-
-		if (sub_frm > 4)
-			sub_frm = 9 - sub_frm;
-		if (!sub_frm)
+		if (sub_frm == 0)
 			anim = 0;
 		else
+		{
+			anim = 1;
 			sub_frm--;
+		}
 
 		fr = sub_frm;
 

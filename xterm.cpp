@@ -1337,7 +1337,7 @@ int main(int argc, char* argv[])
         // -> read them all, mark as pressed for 0.1 sec / if already pressed prolong
 
         // render
-        Render(terrain,world,water,1.0,io.yaw,io.pos,lt,wh[0],wh[1],buf,io.player_dir,io.player_stp,io.dt,io.xyz);
+        Render(stamp,terrain,world,water,1.0,io.yaw,io.pos,lt,wh[0],wh[1],buf,io.player_dir,io.player_stp,io.dt,io.xyz);
 
         // write to stdout
         Print(buf,wh[0],wh[1],CP437_UTF8);

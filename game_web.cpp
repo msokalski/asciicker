@@ -35,6 +35,7 @@ void* GetMaterialArr()
 static const float water = 55.0f;
 static const float zoom = 1.0;
 static PhysicsIO io;
+static uint64_t last_stamp;
 
 int main()
 {
@@ -180,6 +181,7 @@ extern "C"
 
         // return jump status
         uint64_t stamp = GetTime();
+		last_stamp = stamp;
         Animate(phys, stamp, &io);
         return io.jump;
     }
@@ -233,7 +235,7 @@ extern "C"
         }
 
         //printf("In: AsciickerRender(%d,%d)\n", width, height);
-        Render(terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp, io.dt, io.xyz);
+        Render(last_stamp,terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp, io.dt, io.xyz);
         return render_buf;
     }
 

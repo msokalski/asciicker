@@ -38,7 +38,7 @@ struct Material
 	MatCell shade[4][16];
 };
 
-bool Render(Terrain* t, World* w, float water, 		// scene
+bool Render(uint64_t stamp, Terrain* t, World* w, float water, 		// scene
 			float zoom, float yaw, const float pos[3], const float lt[4],	// view
 			int width, int height, AnsiCell* ptr,  // target
 			float player_dir, int player_stp, int dt, float hist[][3]);	// player
