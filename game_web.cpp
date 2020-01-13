@@ -47,9 +47,9 @@ int main()
     float pos[3] = {0,15,0};
     uint64_t stamp;
 
-    player_sprite = LoadPlayer("./sprites/player-0011.xp");
-	attack_sprite = LoadPlayer("./sprites/attack-0011.xp");
-    if (!player_sprite)
+	player_sprite = LoadPlayer("./sprites/player-0000.xp");
+	attack_sprite = LoadPlayer("./sprites/plydie-0000.xp");
+	if (!player_sprite)
     {
         printf("failed to load player.xp\n");
         return -1;

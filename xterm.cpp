@@ -485,8 +485,8 @@ int main(int argc, char* argv[])
 
 	// PLAYER
 	
-	player_sprite = LoadPlayer("./sprites/wolfie-0011.xp");
-	attack_sprite = LoadPlayer("./sprites/wolack-0011.xp");
+	player_sprite = LoadPlayer("./sprites/player-0000.xp");
+	attack_sprite = LoadPlayer("./sprites/plydie-0000.xp");
 	//player_sprite = LoadPlayer("./sprites/wolfie-0001.xp");
 	//attack_sprite = LoadPlayer("./sprites/wolack-0001.xp");
     //player_sprite = LoadPlayer("./sprites/player-0011.xp");

@@ -2113,15 +2113,25 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		attack_frm += attack_ofs;
 		attack_tim += (uint64_t)attack_ofs * 16667;
 
-		int sub_frm = (attack_frm % 70);
+		int sub_frm = (attack_frm % 80);
 
-		static int attack_anim[40] =
+		/*
+		static int attack_anim[30] =
 		{
 			0,0, 1,1, 2,2, 3,3, 4,4,
 			4,4,4,4, 3,3,3,3, 2,2,2,2, 1,1,1,1, 0,0,0,0
 		};
+		*/
 
-		if (sub_frm >= 30)
+		// sleep/wake
+		static int attack_anim[80] =
+		{
+			0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3, 4,4,4,4, 4,4,4,4, 4,4,4,4, 4,4,4,4, 4,4,4,4, 4,4,4,4,
+			4,4,4,4, 3,3,3,3, 2,2,2,2, 1,1,1,1, 0,0,0,0,
+		};
+
+
+		if (sub_frm >= sizeof(attack_anim)/sizeof(int))
 			sub_frm = 0;
 		else
 			sub_frm = attack_anim[sub_frm];
