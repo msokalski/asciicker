@@ -34,7 +34,7 @@ struct Sprite
 	Anim anim[1];
 };
 
-Sprite* LoadSprite(const char* path, const char* name, bool has_refl = true);
+Sprite* LoadSprite(const char* path, const char* name, bool has_refl = true, const uint8_t* recolor = 0);
 Sprite* GetFirstSprite();
 Sprite* GetPrevSprite(Sprite* s);
 Sprite* GetNextSprite(Sprite* s);

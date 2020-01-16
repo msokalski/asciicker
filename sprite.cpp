@@ -34,7 +34,12 @@ Sprite* LoadWolfPlayerSwordShield(const char* path);
 
 Sprite* LoadPlayer(const char* path)
 {
-	Sprite* s = LoadSprite(path, "player");
+	uint8_t recolor[] = 
+	{
+		1, // num of colors 
+		170,0,170, 170,0,0, // purple->red shirt
+	};
+	Sprite* s = LoadSprite(path, "player", true, recolor);
 
 	if (s)
 	{
@@ -134,7 +139,7 @@ void* GetSpriteCookie(Sprite* s)
 	return s->cookie;
 }
 
-Sprite* LoadSprite(const char* path, const char* name, bool has_refl)
+Sprite* LoadSprite(const char* path, const char* name, bool has_refl, const uint8_t* recolor)
 {
 	FILE* f = fopen(path, "rb");
 	if (!f)
@@ -423,9 +428,29 @@ Sprite* LoadSprite(const char* path, const char* name, bool has_refl)
 						c->bk = 255;
 					else
 					{
+						if (recolor)
+						{
+							for (int i = 0; i < recolor[0]; i++)
+							{
+								int j = 1 + 6 * i;
+								const uint8_t* re_src = recolor + j;
+								const uint8_t* re_dst = re_src + 3;
+
+								if (c2->bk[0] == re_src[0] &&
+									c2->bk[1] == re_src[1] &&
+									c2->bk[2] == re_src[2])
+								{
+									c2->bk[0] = re_dst[0];
+									c2->bk[1] = re_dst[1];
+									c2->bk[2] = re_dst[2];
+								}
+							}
+						}
+
 						int r = (c2->bk[0] * 5 + 128) / rgb_div;
 						int g = (c2->bk[1] * 5 + 128) / rgb_div;
 						int b = (c2->bk[2] * 5 + 128) / rgb_div;
+
 						c->bk = 16 + 36 * r + g * 6 + b;
 					}
 
@@ -433,6 +458,25 @@ Sprite* LoadSprite(const char* path, const char* name, bool has_refl)
 						c->fg = 255;
 					else
 					{
+						if (recolor)
+						{
+							for (int i = 0; i < recolor[0]; i++)
+							{
+								int j = 1 + 6 * i;
+								const uint8_t* re_src = recolor + j;
+								const uint8_t* re_dst = re_src + 3;
+
+								if (c2->fg[0] == re_src[0] &&
+									c2->fg[1] == re_src[1] &&
+									c2->fg[2] == re_src[2])
+								{
+									c2->fg[0] = re_dst[0];
+									c2->fg[1] = re_dst[1];
+									c2->fg[2] = re_dst[2];
+								}
+							}
+						}
+
 						int r = (c2->fg[0] * 5 + 128) / rgb_div;
 						int g = (c2->fg[1] * 5 + 128) / rgb_div;
 						int b = (c2->fg[2] * 5 + 128) / rgb_div;

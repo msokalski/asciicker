@@ -1383,6 +1383,8 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		r.add[1] = (double)y;
 	}
 
+	double proj_tm[] = { r.mul[0], r.mul[1], r.mul[2], r.mul[3], r.mul[4], r.mul[5], r.add[0], r.add[1], r.add[2] };
+
 	int planes = 5;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
@@ -1522,6 +1524,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		r.add[1] = (double)y;
 	}
 
+	double refl_tm[] = { r.mul[0], r.mul[1], r.mul[2], r.mul[3], r.mul[4], r.mul[5], r.add[0], r.add[1], r.add[2] };
 
 	clip_water[2] = -1; // was +1
 	clip_water[3] = +((r.water+1)*-2.0 / 0xffff + 1.0); // was -((r.water-1)*2.0/0xffff - 1.0)
@@ -2146,7 +2149,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 
 		fr = sub_frm;
 
-		r.RenderSprite(out_ptr, width, height, attack_sprite, false, anim, fr, ang, player_pos);
+		int pos_push[3] = { player_pos[0] , player_pos[1] , player_pos[2] };
 
 		// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
 		player_pos[1] = height / 2 - (int)floor(2 * (pos[2] - r.water)*dy_dz + 0.5);
@@ -2155,6 +2158,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5) - HEIGHT_SCALE / 4;
 
 		r.RenderSprite(out_ptr, width, height, attack_sprite, true, anim, fr, ang, player_pos);
+		r.RenderSprite(out_ptr, width, height, attack_sprite, false, anim, fr, ang, pos_push);
 	}
 	else
 	{
@@ -2172,6 +2176,51 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 
 		r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
 	}
+
+
+	// lets check drawing sprites in world space
+	{
+		for (int y= 0; y<=0; y++)
+			for (int x = -0; x <= 0; x++)
+			{
+				// IT IS PERFECTLY STICKED TO WORLD!
+				// it may not perectly stick to character but its fine! (its kinda character is not perfectly positioned)
+				float w_pos[3] = { (pos[0] + x*1.23) * HEIGHT_CELLS, (pos[1] + y * 1.23) * HEIGHT_CELLS, pos[2] };
+				int s_pos[3];
+
+				if (r.int_flag)
+				{
+					int tx = (int)floor(proj_tm[0] * w_pos[0] + proj_tm[2] * w_pos[1] + 0.5 + proj_tm[6+0]);
+					int ty = (int)floor(proj_tm[1] * w_pos[0] + proj_tm[3] * w_pos[1] + proj_tm[5] * w_pos[2] + 0.5 + proj_tm[6+1]);
+
+					// convert from samples to cells
+					s_pos[0] = (tx - 1) >> 1;
+					s_pos[1] = (ty - 1) >> 1;
+					s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
+				}
+				else
+				{
+					int tx = (int)floor(proj_tm[0] * w_pos[0] + proj_tm[2] * w_pos[1] + 0.5) + proj_tm[6+0];
+					int ty = (int)floor(proj_tm[1] * w_pos[0] + proj_tm[3] * w_pos[1] + proj_tm[5] * w_pos[2] + 0.5) + proj_tm[6+1];
+
+					// convert from samples to cells
+					s_pos[0] = (tx-1) >> 1;
+					s_pos[1] = (ty-2) >> 1;
+					s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
+				}
+
+				// r.RenderSprite(out_ptr, width, height, player_sprite, false, 0, 0, 0, s_pos);
+				if (s_pos[0] >= 0 && s_pos[0] < width && s_pos[1] >= 0 && s_pos[1] < height)
+				{
+					AnsiCell* c = out_ptr + s_pos[0] + s_pos[1] * width;
+					c->bk = 16 + 0;
+					c->fg = 16 + 6 * 6 * 6 - 1;
+					c->gl = '+';
+					c->spare = 0;
+				}
+			}
+	}
+
 
 	int invpos[3] = { 1,1,0 };
 	if (inventory_sprite)
