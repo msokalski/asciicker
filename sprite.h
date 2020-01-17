@@ -15,6 +15,7 @@ struct Sprite
 	// from all frames angles anims and projections
 	float proj_bbox[6];
 
+	int projs;
 	int anims;  // must be 0 for 'still' Sprite
 	int frames; // must be 1 for 'still' Sprite
 	int angles;
@@ -34,7 +35,7 @@ struct Sprite
 	Anim anim[1];
 };
 
-Sprite* LoadSprite(const char* path, const char* name, bool has_refl = true, const uint8_t* recolor = 0);
+Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl = true,*/ const uint8_t* recolor = 0, bool detached = false);
 Sprite* GetFirstSprite();
 Sprite* GetPrevSprite(Sprite* s);
 Sprite* GetNextSprite(Sprite* s);

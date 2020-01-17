@@ -81,9 +81,11 @@ struct SpritePrefs
 {
 	float yaw;
 	int anim;
-	float speed;
-	float frame;
-	float height; //?
+	int frame; // use only if all t[] are 0
+
+	int t[4]; // rep_first, rep_every_forward, rep_last, rep_every_backward
+	float height; // used to offset instance's above terrain when inserting (we should have similar thing for meshes)
+
 };
 
 struct MeshPrefs
@@ -694,12 +696,166 @@ uint64_t g_Time; // in microsecs
 
 #define QUOT(a) #a
 #define DEFN(a) "#define " #a " " QUOT(a) "\n"
+#define DEFN2(a,s) "#define " #a #s "\n"
 #define CODE(...) #__VA_ARGS__
 
 struct RenderContext
 {
 	void Create()
 	{
+		GLsizei loglen = 999;
+		char logstr[1000];
+		GLuint shader[3];
+
+		// sprite AnsiCell buffer, texture and shader
+		const char* term_vs_src =
+			CODE(#version 450\n)
+			CODE(
+				layout(location = 0) uniform ivec2 ansi_vp;  // viewport size in cells
+				layout(location = 0) in vec2 uv; // normalized to viewport size
+				out vec2 cell_coord;
+				void main()
+				{
+					gl_Position = vec4(2.0*uv - vec2(1.0), 0.0, 1.0);
+					cell_coord = uv * ansi_vp;
+				}
+			);
+
+		const char* term_fs_src =
+			CODE(#version 450\n)
+			DEFN2(P(r, g, b), vec3(r / 6., g / 7., b / 6.))
+			CODE(
+				layout(location = 0) out vec4 color;
+				layout(location = 1) uniform sampler2D ansi;
+				layout(location = 2) uniform sampler2D font;
+				layout(location = 3) uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
+				in vec2 cell_coord;
+
+				/*
+				vec3 XTermPal(int p)
+				{
+					p -= 16;
+					if (p < 0 || p >= 216)
+						return vec3(0, 0, 0);
+
+					int r = p % 6;
+					p = (p - r) / 6;
+					int g = p % 6;
+					p = (p - g) / 6;
+
+					return vec3(p, g, r) * 0.2;
+				}
+				*/
+
+				vec3 Pal(float p)
+				{
+					p = clamp(floor(p - 16.0 + 0.5), 0.0, 215.0);
+
+					float blue = floor(p / 36.0);
+					p -= 36.0*blue;
+
+					float green = floor(p / 6.0);
+					float red = p - 6.0*green;
+
+					return vec3(blue, green, red) * 0.2;
+				}
+
+				void main()
+				{
+					// sample ansi buffer
+					vec2 quot_cell = floor(cell_coord);
+					vec2 frac_cell = fract(cell_coord);
+
+					vec2 ansi_coord = (quot_cell + vec2(0.5)) / ansi_wh;
+
+					vec4 cell = texture(ansi, ansi_coord);
+
+					int glyph_idx = int(round(cell.b * 255.0));
+
+					frac_cell.y = 1.0 - frac_cell.y;
+					vec2 glyph_coord = (vec2(glyph_idx & 0xF, glyph_idx >> 4) + frac_cell) / vec2(16.0);
+					float glyph_alpha = texture(font, glyph_coord).a;
+
+					/*
+					vec3 fg_color = XTermPal(int(round(cell.r * 255.0)));
+					vec3 bg_color = XTermPal(int(round(cell.g * 255.0)));
+					*/
+
+					vec4 fg_color = vec4( Pal(cell.x*255.00), 1.0 );
+					vec4 bg_color = vec4( Pal(cell.y*255.00), 1.0 );
+
+					if (cell.x == 1.0)
+						fg_color = vec4(0.0);
+					if (cell.y == 1.0)
+						bg_color = vec4(0.0);
+
+					color = mix(bg_color, fg_color, glyph_alpha);
+				}
+			);
+
+		GLenum ansi_st[2] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
+		const char* ansi_src[2] = { term_vs_src, term_fs_src };
+		ansi_prg = glCreateProgram();
+
+		for (int i = 0; i < 2; i++)
+		{
+			shader[i] = glCreateShader(ansi_st[i]);
+			if (!shader[i])
+			{
+				printf("glCreateShader failed\n");
+				exit(-1);
+			}
+
+			GLint len = (GLint)strlen(ansi_src[i]);
+			glShaderSource(shader[i], 1, &(ansi_src[i]), &len);
+			glCompileShader(shader[i]);
+
+			loglen = 999;
+			glGetShaderInfoLog(shader[i], loglen, &loglen, logstr);
+			logstr[loglen] = 0;
+
+			if (loglen)
+				printf("%s", logstr);
+
+			glAttachShader(ansi_prg, shader[i]);
+		}
+
+		glLinkProgram(ansi_prg);
+
+		for (int i = 0; i < 2; i++)
+			glDeleteShader(shader[i]);
+
+		loglen = 999;
+		glGetProgramInfoLog(ansi_prg, loglen, &loglen, logstr);
+		logstr[loglen] = 0;
+
+		if (loglen)
+			printf("%s", logstr);
+
+
+		ansi_buf_size[0] = 32;
+		ansi_buf_size[1] = 32;
+
+		ansi_buf = (AnsiCell*)malloc(sizeof(AnsiCell)*ansi_buf_size[0]* ansi_buf_size[1]);
+		glCreateTextures(GL_TEXTURE_2D, 1, &ansi_tex);
+		glTextureStorage2D(ansi_tex, 1, GL_RGBA8, ansi_buf_size[0], ansi_buf_size[1]);
+		glTextureParameteri(ansi_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(ansi_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(ansi_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTextureParameteri(ansi_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		glCreateBuffers(1, &ansi_vbo);
+		float vbo_data[] = { 0,0, 1,0, 1,1, 0,1 };
+		glNamedBufferStorage(ansi_vbo, 4 * sizeof(float[2]), 0, GL_DYNAMIC_STORAGE_BIT);
+		glNamedBufferSubData(ansi_vbo, 0, 4 * sizeof(float[2]), vbo_data);
+
+		glCreateVertexArrays(1, &ansi_vao);
+		glBindVertexArray(ansi_vao);
+		glBindBuffer(GL_ARRAY_BUFFER, ansi_vao);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float[2]), (void*)0);
+		glEnableVertexAttribArray(0);
+		glBindVertexArray(0);
+
 		// meshes & bsp
 		glCreateBuffers(1, &mesh_vbo);
 		int mesh_face_size = 3*sizeof(float[3]) + 3*sizeof(uint8_t[4]) + sizeof(uint32_t); // 3*pos_xyz, visual, rgba
@@ -1474,11 +1630,7 @@ struct RenderContext
 			}
 		);
 
-		GLsizei loglen = 999;
-		char logstr[1000];
-		GLuint shader[3];
-
-
+		loglen = 999;
 
 		GLenum bsp_st[3] = { GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER };
 		const char* bsp_src[3] = { bsp_vs_src, bsp_gs_src, bsp_fs_src };
@@ -2131,6 +2283,16 @@ struct RenderContext
 	}; // * mesh_map;
 	
 	Face mesh_map[1024];
+
+	// sprite widget
+	int ansi_buf_size[2];
+	AnsiCell* ansi_buf;
+	GLuint ansi_tex;
+	GLuint ansi_prg;
+	GLuint ansi_vao;
+	GLuint ansi_vbo;
+
+	 
 
 	TexPage* page_tex;
 	TexPage* head;
@@ -2863,6 +3025,16 @@ static bool SpriteScan(A3D_DirItem item, const char* name, void* cookie)
 		{
 			SpritePrefs* sp = (SpritePrefs*)malloc(sizeof(SpritePrefs));
 			memset(sp, 0, sizeof(SpritePrefs));
+
+			sp->anim = 1;
+			sp->frame = 0;
+			sp->yaw = 0;
+
+			sp->t[0] = 20; // duplicate first frame
+			sp->t[1] = 4; // duplicate every frame during fwd play
+			sp->t[2] = 20; // duplicate last frame
+			sp->t[3] = 4; // duplicate every frame during rev play
+
 			SetSpriteCookie(s, sp);
 		}
 	}
@@ -3348,7 +3520,190 @@ void my_render(A3D_WND* wnd)
 				if (!sw)
 					return;
 
-				// ...
+				int vp[4];
+				glGetIntegerv(GL_VIEWPORT, vp);
+
+				int sc[4];
+				glGetIntegerv(GL_SCISSOR_BOX, sc);
+
+				int vao;
+				glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &vao);
+
+				int vbo;
+				glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vbo);
+
+				int prg;
+				glGetIntegerv(GL_CURRENT_PROGRAM, &prg);
+
+				bool cull_face;
+				cull_face = glIsEnabled(GL_CULL_FACE);
+
+				int cull_mode;
+				glGetIntegerv(GL_CULL_FACE_MODE, &cull_mode);
+
+				int depth_func;
+				glGetIntegerv(GL_DEPTH_FUNC, &depth_func);
+
+				bool depth_test;
+				depth_test = glIsEnabled(GL_DEPTH_TEST);
+
+				RenderContext* rc = &render_context;
+
+				int n = rc->ansi_buf_size[0] * rc->ansi_buf_size[1];
+				for (int i = 0; i < n; i++)
+				{
+					AnsiCell* c = rc->ansi_buf + i;
+					c->bk = 0xFF;//fast_rand() & 0xFF;
+					c->fg = 0xFF;//fast_rand() & 0xFF;
+					c->gl = 0xFF;//fast_rand() & 0xFF;
+					c->spare = 0xFF;
+				}
+
+				// RenderSprite()
+				Sprite* s = active_sprite;
+
+
+				SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(s);
+
+				int anim = sp->anim;
+				if (anim < 0 || anim >= s->anims)
+					anim = 0;
+
+				static int time = 0;
+
+				int len = sp->t[0] + sp->t[1] * s->anim[anim].length + sp->t[2] + sp->t[3] * s->anim[anim].length;
+
+				int frame = 0;
+
+				if (len <= 0)
+					frame = sp->frame % s->anim[anim].length;
+				else
+				{
+					time = time % len;
+
+					if (time < sp->t[0])
+						frame = 0;
+					else
+					if (time < sp->t[0] + sp->t[1] * s->anim[anim].length)
+						frame = (time - sp->t[0]) / sp->t[1];
+					else
+					if (time < sp->t[0] + sp->t[1] * s->anim[anim].length + sp->t[2])
+						frame = s->anim[anim].length - 1;
+					else
+						frame = s->anim[anim].length - 1 - (time - sp->t[0] - sp->t[1] * s->anim[anim].length - sp->t[2]) / sp->t[3];
+
+					time++;
+				}
+
+				assert(frame >= 0 && frame < s->anim[anim].length);
+
+				int proj = 0;
+
+				float angle = sp->yaw;
+				int ang = (int)floor( (angle - rot_yaw) * s->angles / 360.0f + 0.5f);
+				ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
+
+				int i = frame + ang * s->anim[anim].length;
+				if (proj && s->projs>1)
+					i += s->anim[anim].length * s->angles;
+				Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
+
+				int cpy_w = f->width < rc->ansi_buf_size[0] ? f->width : rc->ansi_buf_size[0];
+				int cpy_h = f->height < rc->ansi_buf_size[1] ? f->height : rc->ansi_buf_size[1];
+
+				int dst_x = (rc->ansi_buf_size[0] - f->width) / 2;
+				int dst_y = (rc->ansi_buf_size[1] - f->height) / 2;
+
+				if (dst_x < 0)
+					dst_x = 0;
+				if (dst_y < 0)
+					dst_y = 0;
+
+				int src_x = (f->width - rc->ansi_buf_size[0]) / 2;
+				int src_y = (f->height - rc->ansi_buf_size[1]) / 2;
+
+				if (src_x < 0)
+					src_x = 0;
+				if (src_y < 0)
+					src_y = 0;
+
+				for (int y = 0; y < cpy_h; y++)
+				{
+					for (int x = 0; x < cpy_w; x++)
+					{
+						AnsiCell* dst = rc->ansi_buf + (x + dst_x) + (y + dst_y) * rc->ansi_buf_size[0];
+						AnsiCell* src = f->cell + (x + src_x) + (y + src_y) * f->width;
+						*dst = *src;
+					}
+				}
+
+				glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, rc->ansi_buf_size[0], rc->ansi_buf_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
+
+				glViewport(
+					(int)sw->rect.Min.x,
+					vp[3] - (int)sw->rect.Max.y,
+					(int)(sw->rect.Max.x - sw->rect.Min.x),
+					(int)(sw->rect.Max.y - sw->rect.Min.y));
+
+				glScissor(
+					(int)sw->rect.Min.x,
+					vp[3] - (int)sw->rect.Max.y,
+					(int)(sw->rect.Max.x - sw->rect.Min.x),
+					(int)(sw->rect.Max.y - sw->rect.Min.y));
+
+				glUseProgram(rc->ansi_prg);
+				glUniform2i(0, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
+
+				glUniform1i(1, 0);
+
+				int font_size[2];
+				int font_tex = GetGLFont(font_size, 0);
+
+				glBindTextureUnit(0, rc->ansi_tex);
+
+				glUniform1i(2, 1);
+				glBindTextureUnit(1, font_tex);
+
+				glUniform2i(3, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
+
+				glBindVertexArray(rc->ansi_vao);
+				//glEnable(GL_BLEND);
+
+				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+				glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+				glUseProgram(0);
+				glBindVertexArray(0);
+
+				//glDisable(GL_BLEND);
+
+
+				glBindTextureUnit(0, 0);
+				glBindTextureUnit(1, 0);
+
+				// we should restore !!!!
+
+				glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+				glBindTextureUnit(2, 0);
+				glBindTextureUnit(3, 0);
+				glBindTextureUnit(4, 0);
+
+				glBindVertexArray(vao);
+				glUseProgram(prg);
+
+				glViewport(vp[0], vp[1], vp[2], vp[3]);
+				glScissor(sc[0], sc[1], sc[2], sc[3]);
+
+				if (!cull_face)
+					glDisable(GL_CULL_FACE);
+
+				glCullFace(cull_mode);
+
+				if (!depth_test)
+					glDisable(GL_DEPTH_TEST);
+
+				glDepthFunc(depth_func);
 			}
 
 			bool Widget(const char* label, const ImVec2& size)
@@ -4410,6 +4765,62 @@ void my_render(A3D_WND* wnd)
 					pushed = false;
 					ImGui::PopStyleVar();
 				}
+
+				if (active_sprite && edit_mode != 4)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
+					add_verts = false;
+					build_poly = false;
+				}
+				if (active_mesh && ImGui::BeginTabItem("SPRITE"))
+				{
+					edit_mode = 4;
+
+					// when putting new instance we do:
+					// 1. pretranslate (to have 0 in rot/scale center)
+					// 2. scale by constant_xyz * random_xyz 
+					// 2. rotate around z by given angle + random_z
+					// 3. rotate by given world's xy axis + random_xy (length is angle)
+					// 4. rotate toward terrain normal by given weight
+					// 5. post translate by constant xyz + random xyz
+
+					extern int bsp_insts, bsp_nodes, bsp_tests;
+					ImGui::Text("INSTS:%d, NODES:%d, TESTS:%d \n ", bsp_insts, bsp_nodes, bsp_tests);
+
+					const char* mode = "";
+
+					if (io.KeyAlt)
+						mode = "ADD/REMOVE TILES";
+					else
+						if (io.KeyCtrl)
+							mode = "DELETE SPRITE";
+						else
+							mode = "INSERT SPRITE";
+
+					ImGui::Text("MODE (ctrl): %s", mode);
+
+
+					SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
+
+					ImGui::SliderInt("Animation", &sp->anim, 0, active_sprite->anims-1);
+					ImGui::SliderFloat("Rotate", &sp->yaw, 0, 360);
+					ImGui::SliderInt("Still Frame", &sp->frame, 0, active_sprite->anim[sp->anim].length-1);
+					ImGui::Separator();
+					ImGui::SliderInt("RepFirst", sp->t+0, 0, 50);
+					ImGui::SliderInt("RepForward", sp->t+1, 0, 50);
+					ImGui::SliderInt("RepLast", sp->t+2, 0, 50);
+					ImGui::SliderInt("RepBackward", sp->t+3, 0, 50);
+
+					ImGui::EndTabItem();
+				}
+				if (active_sprite && pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
 
 				/*
 				if (edit_mode != 2)
@@ -6638,7 +7049,7 @@ int main(int argc, char *argv[])
 	// player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
 	player_sprite = LoadPlayer("./sprites/player-0000.xp");
 	attack_sprite = LoadPlayer("./sprites/plydie-0000.xp");
-	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", false);
+	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", /*false,*/ 0, true);
 	for (int f = 0; f < inventory_sprite->frames; f++)
 	{
 		inventory_sprite->atlas[f].ref[0] = 0;

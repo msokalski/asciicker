@@ -43,3 +43,4 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, 		// scene
 			int width, int height, AnsiCell* ptr,  // target
 			float player_dir, int player_stp, int dt, float hist[][3]);	// player
 
+

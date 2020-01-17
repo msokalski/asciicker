@@ -4,7 +4,10 @@
 // - one or more frames, each containing:
 //   - one or more direction views, each with reflection image
 
-#include "string.h"
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+#include <string.h>
 
 #include "sprite.h"
 #include "upng.h"
@@ -39,8 +42,9 @@ Sprite* LoadPlayer(const char* path)
 		1, // num of colors 
 		170,0,170, 170,0,0, // purple->red shirt
 	};
-	Sprite* s = LoadSprite(path, "player", true, recolor);
+	Sprite* s = LoadSprite(path, "player", /*true,*/ recolor, true);
 
+	/*
 	if (s)
 	{
 		// detach from sprite list
@@ -58,6 +62,7 @@ Sprite* LoadPlayer(const char* path)
 		s->prev = 0;
 		s->next = 0;
 	}
+	*/
 
 	return s;
 }
@@ -139,7 +144,7 @@ void* GetSpriteCookie(Sprite* s)
 	return s->cookie;
 }
 
-Sprite* LoadSprite(const char* path, const char* name, bool has_refl, const uint8_t* recolor)
+Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const uint8_t* recolor, bool detached)
 {
 	FILE* f = fopen(path, "rb");
 	if (!f)
@@ -283,14 +288,17 @@ Sprite* LoadSprite(const char* path, const char* name, bool has_refl, const uint
 				layer2[c] = merge[c];
 	}
 
+	// if there is no marks on layer0 treat it as single image
+
 	const int max_anims = 16;
-	int projs = has_refl ? 2:1; // proj and refl
+	int projs = 1;
 	int anims = 1;
 	int anim_len[max_anims] = { 1 };
 	int anim_sum = 1;
 	int angles = layer0[0].GetDigit();
 	if (angles > 0)
 	{
+		projs = 2;
 		for (int a = 1; a < width; a++)
 		{
 			int len = layer0[height*a].GetDigit();
@@ -303,7 +311,9 @@ Sprite* LoadSprite(const char* path, const char* name, bool has_refl, const uint
 		}
 	}
 	else
+	{
 		angles = 1;
+	}
 
 	int fr_num_x = (projs * anim_sum);
 	int fr_num_y = angles;
@@ -490,13 +500,15 @@ Sprite* LoadSprite(const char* path, const char* name, bool has_refl, const uint
 	Sprite* sprite = (Sprite*)malloc(sizeof(Sprite) + sizeof(Sprite::Anim));
 
 	sprite->cookie = 0;
-	sprite->angles = 8;
-	sprite->anims = 2;
+	sprite->projs = projs;
+	sprite->angles = angles;
+	sprite->anims = anims;
 	sprite->atlas = atlas;
 	sprite->frames = frames;
 
 	sprite->anim[0].length = 1;
-	sprite->anim[1].length = 8;
+	for (int i=1; i<anims; i++)
+		sprite->anim[i].length = anim_len[i];
 
 	for (int anim = 0; anim < sprite->anims; anim++)
 		sprite->anim[anim].frame_idx = (int*)malloc(sizeof(int) * 2/*proj,refl*/ * sprite->angles * sprite->anim[anim].length);
@@ -520,18 +532,35 @@ Sprite* LoadSprite(const char* path, const char* name, bool has_refl, const uint
 		}
 	}
 
-	sprite->proj_bbox;
+	float cos60 = cosf(60 * (M_PI / 180));
+	float z = fr_height / cos60 * HEIGHT_SCALE;
+	float dz = ref[0][1] / cos60 * HEIGHT_SCALE;
+
+	sprite->proj_bbox[0] = -fr_width/2;
+	sprite->proj_bbox[1] = +fr_width / 2;
+	sprite->proj_bbox[2] = -fr_width / 2;
+	sprite->proj_bbox[3] = +fr_width / 2;
+	sprite->proj_bbox[4] = -dz;
+	sprite->proj_bbox[5] = z-dz;
 
 	/////////////////////////////////
 	u_inflate_free(out);
 
-	sprite->prev = sprite_tail;
-	if (sprite_tail)
-		sprite_tail->next = sprite;
+	if (detached)
+	{
+		sprite->prev = 0;
+		sprite->next = 0;
+	}
 	else
-		sprite_head = sprite;
-	sprite->next = 0;
-	sprite_tail = sprite;
+	{
+		sprite->prev = sprite_tail;
+		if (sprite_tail)
+			sprite_tail->next = sprite;
+		else
+			sprite_head = sprite;
+		sprite->next = 0;
+		sprite_tail = sprite;
+	}
 
 	if (name)
 		sprite->name = strdup(name);

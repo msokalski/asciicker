@@ -55,7 +55,7 @@ int main()
         return -1;
     }
 
-	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory", false);
+	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory"/*, false*/);
 	for (int f = 0; f < inventory_sprite->frames; f++)
 	{
 		inventory_sprite->atlas[f].ref[0] = 0;
