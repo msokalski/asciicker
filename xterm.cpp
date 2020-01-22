@@ -483,6 +483,9 @@ int main(int argc, char* argv[])
 
 	float last_yaw = yaw;
 
+	// load sprites accessible inside world maps
+	LoadSprite("./sprites/plydie-0011.xp", "plydie-0011.xp");
+
 	// PLAYER
 	
 	player_sprite = LoadPlayer("./sprites/player-0011.xp");
@@ -523,7 +526,7 @@ int main(int argc, char* argv[])
         global_lt[3] = lt[3];
 
         {
-            FILE* f = fopen("a3d/game.a3d","rb");
+            FILE* f = fopen("a3d/game_sprites.a3d","rb");
 
             if (f)
             {

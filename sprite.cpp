@@ -532,14 +532,14 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 		}
 	}
 
-	float cos60 = cosf(60 * (M_PI / 180));
-	float z = fr_height / cos60 * HEIGHT_SCALE;
-	float dz = ref[0][1] / cos60 * HEIGHT_SCALE;
+	float cos30 = cosf(30 * (M_PI / 180));
+	float z = fr_height / cos30 * HEIGHT_SCALE;
+	float dz = ref[0][1] / cos30 * HEIGHT_SCALE;
 
-	sprite->proj_bbox[0] = -fr_width/2;
-	sprite->proj_bbox[1] = +fr_width / 2;
-	sprite->proj_bbox[2] = -fr_width / 2;
-	sprite->proj_bbox[3] = +fr_width / 2;
+	sprite->proj_bbox[0] = -fr_width * .5f;
+	sprite->proj_bbox[1] = +fr_width * .5f;
+	sprite->proj_bbox[2] = -fr_width * .5f;
+	sprite->proj_bbox[3] = +fr_width * .5f;
 	sprite->proj_bbox[4] = -dz;
 	sprite->proj_bbox[5] = z-dz;
 

@@ -167,13 +167,34 @@ struct URDO_PatchDiag : URDO
 
 struct URDO_InstCreate : URDO
 {
-	Mesh* mesh;
+	int mode;
+
 	int flags;
-	double tm[16];
 	Inst* inst;
+
+	union
+	{
+		struct
+		{
+			Mesh* mesh;
+			double tm[16];
+		};
+
+		struct
+		{
+			World* w;
+			Sprite* s;
+			float pos[3];
+			float yaw;
+			int anim;
+			int frame;
+			int reps[4];
+		};
+	};
 
 	static void Delete(Inst* i);
 	static Inst* Create(Mesh* m, int flags, double tm[16]);
+	static Inst* Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4]);
 
 	void Do(bool un);
 };
@@ -515,6 +536,14 @@ Inst* URDO_Create(Mesh* m, int flags, double tm[16])
 	return URDO_InstCreate::Create(m,flags,tm);
 }
 
+Inst* URDO_Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4])
+{
+	assert(group_open < 64);
+
+	return URDO_InstCreate::Create(w,s,flags,pos,yaw,anim,frame,reps);
+}
+
+
 void URDO_Delete(Inst* i)
 {
 	assert(group_open < 64);
@@ -746,6 +775,7 @@ Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16])
 
 	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
 
+	urdo->mode = 0; // mesh
 	urdo->mesh = 0;
 	urdo->flags = 0;
 	memset(urdo->tm, 0, sizeof(double[16]));
@@ -754,20 +784,55 @@ Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16])
 	return urdo->inst;
 }
 
+Inst* URDO_InstCreate::Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4])
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
+
+	urdo->mode = 1; // sprite
+	urdo->w = w;
+	urdo->flags = 0;
+	urdo->inst = CreateInst(w,s,flags,pos,yaw,anim,frame,reps,0);
+
+	return urdo->inst;
+}
+
+
 void URDO_InstCreate::Do(bool un)
 {
-	if (!inst)
+	if (mode == 0)
 	{
-		inst = CreateInst(mesh, flags, tm);
+		if (!inst)
+		{
+			inst = CreateInst(mesh, flags, tm);
+		}
+		else
+		{
+			mesh = GetInstMesh(inst);
+			flags = GetInstFlags(inst);
+			GetInstTM(inst, tm);
+			DeleteInst(inst);
+			inst = 0;
+		}
+
+		RebuildWorld(GetMeshWorld(mesh));
 	}
 	else
 	{
-		mesh = GetInstMesh(inst);
-		flags = GetInstFlags(inst);
-		GetInstTM(inst, tm);
-		DeleteInst(inst);
-		inst = 0;
-	}
+		if (!inst)
+		{
+			inst = CreateInst(w,s,flags, pos,yaw,anim,frame,reps,0);
+		}
+		else
+		{
+			s = GetInstSprite(inst, pos,&yaw,&anim,&frame,reps);
+			flags = GetInstFlags(inst);
+			DeleteInst(inst);
+			inst = 0;
+		}
 
-	RebuildWorld( GetMeshWorld(mesh) );
+		RebuildWorld(w);
+	}
 }

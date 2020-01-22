@@ -261,6 +261,17 @@ struct SampleBuffer
 	Sample* ptr;
 };
 
+struct SpriteRenderBuf
+{
+	Sprite* sprite;
+	int s_pos[3];
+	int angle;
+	int anim;
+	int frame;
+	int reps[4];
+	bool refl;
+};
+
 struct Renderer
 {
 	Renderer()
@@ -272,14 +283,21 @@ struct Renderer
 	{
 		if (sample_buffer.ptr)
 			free(sample_buffer.ptr);
+		if (sprites_alloc)
+			free(sprites_alloc);
 	}
 
 	SampleBuffer sample_buffer; // render surface
+
+	int sprites_alloc_size;
+	int sprites;
+	SpriteRenderBuf* sprites_alloc;
 
 	uint8_t* buffer;
 	int buffer_size; // ansi_buffer allocation size in cells (minimize reallocs)
 
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie /*Renderer*/);
+	static void RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/);
 	static void RenderMesh(Mesh* m, double* tm, void* cookie /*Renderer*/);
 	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie /*Renderer*/);
 	
@@ -633,6 +651,87 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		shader.rgb[2] = colors + 8;
 		Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
 	}
+}
+
+void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/)
+{
+	if (global_refl_mode && s->projs == 1)
+		return;
+
+	Renderer* r = (Renderer*)cookie;
+
+	// transform and append to sprite render list
+	if (r->sprites == r->sprites_alloc_size)
+	{
+		r->sprites_alloc_size += 16;
+		r->sprites_alloc = (SpriteRenderBuf*)realloc(r->sprites_alloc, sizeof(SpriteRenderBuf) * r->sprites_alloc_size);
+	}
+
+	SpriteRenderBuf* buf = r->sprites_alloc + r->sprites;
+
+	float w_pos[3] = { pos[0] * HEIGHT_CELLS, pos[1] * HEIGHT_CELLS, pos[2] };
+
+	if (global_refl_mode)
+	{
+		if (r->int_flag)
+		{
+			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
+			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
+
+			// convert from samples to cells
+			buf->s_pos[0] = (tx - 1) >> 1;
+			buf->s_pos[1] = (ty - 1) >> 1;
+			buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
+		}
+		else
+		{
+			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
+			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5) + r->add[1];
+
+			// convert from samples to cells
+			buf->s_pos[0] = (tx - 1) >> 1;
+			buf->s_pos[1] = (ty - 2) >> 1;
+			buf->s_pos[2] = (int)2 * r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
+		}
+	}
+	else
+	{
+		if (r->int_flag)
+		{
+			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
+			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
+
+			// convert from samples to cells
+			buf->s_pos[0] = (tx - 1) >> 1;
+			buf->s_pos[1] = (ty - 1) >> 1;
+			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
+		}
+		else
+		{
+			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
+			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5) + r->add[1];
+
+			// convert from samples to cells
+			buf->s_pos[0] = (tx - 1) >> 1;
+			buf->s_pos[1] = (ty - 2) >> 1;
+			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
+		}
+	}
+
+	int ang = (int)floor((yaw - r->yaw) * s->angles / 360.0f + 0.5f);
+	ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
+	
+	buf->sprite = s;
+	buf->angle = ang;
+	buf->anim = anim;
+	buf->frame = frame;
+	buf->reps[0] = reps[0];
+	buf->reps[1] = reps[1];
+	buf->reps[2] = reps[2];
+	buf->reps[3] = reps[3];
+	buf->refl = global_refl_mode;
+
+	r->sprites++;
 }
 
 void Renderer::RenderMesh(Mesh* m, double* tm, void* cookie)
@@ -1424,9 +1523,13 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
 
+	r.sprites = 0;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
-	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
+	QueryWorldCB cb = { Renderer::RenderMesh , Renderer::RenderSprite };
+	QueryWorld(w, planes, clip_world, &cb, &r);
 
+	// HANDLE drawing sprites
+	// ...
 
 	// player shadow
 	double inv_tm[16];
@@ -1558,9 +1661,9 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 
 	global_refl_mode = true;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
-	QueryWorld(w, planes, clip_world, Renderer::RenderMesh, &r);
-	global_refl_mode = false;
+	QueryWorld(w, planes, clip_world, &cb, &r);
 
+	global_refl_mode = false;
 
 	// clear and write new water ripples from player history position
 	// do not emit wave if given z is greater than water level!
@@ -2179,46 +2282,17 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 
 
 	// lets check drawing sprites in world space
+	for (int s=0; s<r.sprites; s++)
 	{
-		for (int y= 0; y<=0; y++)
-			for (int x = -0; x <= 0; x++)
-			{
-				// IT IS PERFECTLY STICKED TO WORLD!
-				// it may not perectly stick to character but its fine! (its kinda character is not perfectly positioned)
-				float w_pos[3] = { (pos[0] + x*1.23) * HEIGHT_CELLS, (pos[1] + y * 1.23) * HEIGHT_CELLS, pos[2] };
-				int s_pos[3];
+		SpriteRenderBuf* buf = r.sprites_alloc + s;
 
-				if (r.int_flag)
-				{
-					int tx = (int)floor(proj_tm[0] * w_pos[0] + proj_tm[2] * w_pos[1] + 0.5 + proj_tm[6+0]);
-					int ty = (int)floor(proj_tm[1] * w_pos[0] + proj_tm[3] * w_pos[1] + proj_tm[5] * w_pos[2] + 0.5 + proj_tm[6+1]);
+		// IT IS PERFECTLY STICKED TO WORLD!
+		// it may not perectly stick to character but its fine! (its kinda character is not perfectly positioned)
 
-					// convert from samples to cells
-					s_pos[0] = (tx - 1) >> 1;
-					s_pos[1] = (ty - 1) >> 1;
-					s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
-				}
-				else
-				{
-					int tx = (int)floor(proj_tm[0] * w_pos[0] + proj_tm[2] * w_pos[1] + 0.5) + proj_tm[6+0];
-					int ty = (int)floor(proj_tm[1] * w_pos[0] + proj_tm[3] * w_pos[1] + proj_tm[5] * w_pos[2] + 0.5) + proj_tm[6+1];
 
-					// convert from samples to cells
-					s_pos[0] = (tx-1) >> 1;
-					s_pos[1] = (ty-2) >> 1;
-					s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
-				}
-
-				// r.RenderSprite(out_ptr, width, height, player_sprite, false, 0, 0, 0, s_pos);
-				if (s_pos[0] >= 0 && s_pos[0] < width && s_pos[1] >= 0 && s_pos[1] < height)
-				{
-					AnsiCell* c = out_ptr + s_pos[0] + s_pos[1] * width;
-					c->bk = 16 + 0;
-					c->fg = 16 + 6 * 6 * 6 - 1;
-					c->gl = '+';
-					c->spare = 0;
-				}
-			}
+		int frame = 0;
+		int anim = 0;
+		r.RenderSprite(out_ptr, width, height, buf->sprite, buf->refl, anim, frame, buf->angle, buf->s_pos);
 	}
 
 

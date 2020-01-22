@@ -28,6 +28,7 @@ void URDO_Diag(Patch* p); // call before flipping diag
 
 // meshes
 
+Inst* URDO_Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4]); // replacement for CreateInst
 Inst* URDO_Create(Mesh* m, int flags, double tm[16]); // replacement for CreateInst
 void URDO_Delete(Inst* i); // replacement for DeleteInst
 

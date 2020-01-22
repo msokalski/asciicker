@@ -546,6 +546,11 @@ struct Physics
 		phys->soup_items ++;
 	}
 
+	static void SpriteCollect(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+	{
+		// no collisions with sprites at the moment
+	}
+
 	static void MeshCollect(Mesh* m, double tm[16], void* cookie)
 	{
 		Physics* phys = (Physics*)cookie;
@@ -950,7 +955,9 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 			phys->soup_items = 0;
 			phys->collect_mul_xy = 1.0 / world_radius;
 			phys->collect_mul_z = 2.0 / world_height;
-			QueryWorld(phys->world, 4, clip_world, Physics::MeshCollect, phys);
+
+			QueryWorldCB cb = { Physics::MeshCollect , Physics::SpriteCollect };
+			QueryWorld(phys->world, 4, clip_world, &cb, phys);
 			QueryTerrain(phys->terrain, 4, clip_world, 0xAA, Physics::PatchCollect, phys);
 
 			// note: phys should keep soup allocation, resize it x2 if needed

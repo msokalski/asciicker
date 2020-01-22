@@ -247,8 +247,8 @@ struct SpriteInst : Inst
 	World* w;
 	Sprite* sprite;
 	int anim;
-	float speed;
-	float frame;
+	int frame;
+	int reps[4];
 	float yaw;
 	float pos[3];
 };
@@ -363,11 +363,12 @@ struct World
     Inst* head_inst; 
     Inst* tail_inst;
 
-	Inst* AddInst(Sprite* s, int flags, float pos[3], float yaw, int anim, float frame, float speed, const char* name)
+	Inst* AddInst(Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name)
 	{
 		SpriteInst* i = (SpriteInst*)malloc(sizeof(SpriteInst));
 		i->inst_type = Inst::INST_TYPE::SPRITE;
 		i->w = this;
+		i->sprite = s;
 
 		i->bbox[0] = s->proj_bbox[0] + pos[0];
 		i->bbox[1] = s->proj_bbox[1] + pos[0];
@@ -383,7 +384,10 @@ struct World
 		i->yaw = yaw;
 		i->anim = anim;
 		i->frame = frame;
-		i->speed = speed;
+		i->reps[0] = reps[0];
+		i->reps[1] = reps[1];
+		i->reps[2] = reps[2];
+		i->reps[3] = reps[3];
 
 		i->name = name ? strdup(name) : 0;
 
@@ -1639,7 +1643,7 @@ struct World
     // MESHES IN HULL
 
     // recursive no clipping
-    static void Query(BSP* bsp, void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
+    static void Query(BSP* bsp, QueryWorldCB* cb, void* cookie)
     {
         if (bsp->type == BSP::BSP_TYPE_LEAF)
         {
@@ -1657,7 +1661,13 @@ struct World
             bsp_insts++;
             Inst* i = (Inst*)bsp;
 			if (i->inst_type == Inst::INST_TYPE::MESH)
-				cb(((MeshInst*)i)->mesh, ((MeshInst*)i)->tm, cookie);
+				cb->mesh_cb(((MeshInst*)i)->mesh, ((MeshInst*)i)->tm, cookie);
+			else
+			if (i->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				SpriteInst* si = (SpriteInst*)i;
+				cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
+			}
         }
         else
         if (bsp->type == BSP::BSP_TYPE_NODE)
@@ -1693,7 +1703,7 @@ struct World
     }
 
     // recursive
-    static void Query(BSP* bsp, int planes, double* plane[], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
+    static void Query(BSP* bsp, int planes, double* plane[], QueryWorldCB* cb, void* cookie)
     {
         float c[4] = { bsp->bbox[0], bsp->bbox[2], bsp->bbox[4], 1 }; // 0,0,0
 
@@ -1749,7 +1759,13 @@ struct World
             bsp_insts++;
             Inst* i = (Inst*)bsp;
 			if (i->inst_type == Inst::INST_TYPE::MESH)
-				cb(((MeshInst*)i)->mesh, ((MeshInst*)i)->tm, cookie);
+				cb->mesh_cb(((MeshInst*)i)->mesh, ((MeshInst*)i)->tm, cookie);
+			else
+			if (i->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				SpriteInst* si = (SpriteInst*)i;
+				cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
+			}
 		}
         else
         if (bsp->type == BSP::BSP_TYPE_NODE)        
@@ -1836,7 +1852,7 @@ struct World
     }
 
     // main
-    void Query(int planes, double plane[][4], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
+    void Query(int planes, double plane[][4], QueryWorldCB* cb, void* cookie)
     {
         bsp_tests=0;
         bsp_insts=0;
@@ -2619,10 +2635,11 @@ Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name)
     return m->world->AddInst(m,flags,tm,name);
 }
 
-Inst* CreateInst(Sprite* s, int flags, float pos[3], float yaw, int anim, float frame, float speed, const char* name)
+Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name)
 {
 	if (!s)
 		return 0;
+	return w->AddInst(s, flags, pos, yaw, anim, frame, reps, name);
 }
 
 void DeleteInst(Inst* i)
@@ -2636,7 +2653,7 @@ void DeleteInst(Inst* i)
 		((SpriteInst*)i)->w->DelInst(i);
 }
 
-void QueryWorld(World* w, int planes, double plane[][4], void (*cb)(Mesh* m, double tm[16], void* cookie), void* cookie)
+void QueryWorld(World* w, int planes, double plane[][4], QueryWorldCB* cb, void* cookie)
 {
     if (!w)
         return;
@@ -2808,17 +2825,17 @@ static void SaveInst(Inst* inst, FILE* f)
 		// sprite id ???
 		// ...
 
-		int inst_name_len = i->name ? (int)strlen(i->name) : 0;
+		int inst_name_len = i->sprite->name ? (int)strlen(i->sprite->name) : 0;
 
 		fwrite(&inst_name_len, 1, 4, f);
 		if (inst_name_len)
-			fwrite(i->name, 1, inst_name_len, f);
+			fwrite(i->sprite->name, 1, inst_name_len, f);
 
 		fwrite(i->pos, 1, sizeof(float[3]), f);
 		fwrite(&i->yaw, 1, sizeof(float), f);
 		fwrite(&i->anim, 1, sizeof(int), f);
-		fwrite(&i->frame, 1, sizeof(float), f);
-		fwrite(&i->speed, 1, sizeof(float), f);
+		fwrite(&i->frame, 1, sizeof(int), f);
+		fwrite(&i->reps, 1, sizeof(int[4]), f);
 		fwrite(&i->flags, 1, 4, f);
 	}
 }
@@ -2929,54 +2946,100 @@ World* LoadWorld(FILE* f)
             return 0;
         }
 
-        char mesh_id[256]="";
-        if (mesh_id_len)
-            if (1!=fread(mesh_id, mesh_id_len,1, f))
-            {
-                DeleteWorld(w);
-                return 0;
-            }
-        mesh_id[mesh_id_len] = 0;
+		if (mesh_id_len >= 0)
+		{
+			char mesh_id[256] = "";
+			if (mesh_id_len)
+				if (1 != fread(mesh_id, mesh_id_len, 1, f))
+				{
+					DeleteWorld(w);
+					return 0;
+				}
+			mesh_id[mesh_id_len] = 0;
 
-        int inst_name_len = 0;
-        if (1!=fread(&inst_name_len, 4,1, f))
-        {
-            DeleteWorld(w);
-            return 0;
-        }
+			int inst_name_len = 0;
+			if (1 != fread(&inst_name_len, 4, 1, f))
+			{
+				DeleteWorld(w);
+				return 0;
+			}
 
-        char inst_name[256]="";
-        if (inst_name_len)
-            if (1!=fread(inst_name, inst_name_len,1, f))
-            {
-                DeleteWorld(w);
-                return 0;
-            }
-        inst_name[inst_name_len] = 0;
+			char inst_name[256] = "";
+			if (inst_name_len)
+				if (1 != fread(inst_name, inst_name_len, 1, f))
+				{
+					DeleteWorld(w);
+					return 0;
+				}
+			inst_name[inst_name_len] = 0;
 
-        double tm[16] = {0};
-        if (1!=fread(tm, 16*8,1, f))
-        {
-            DeleteWorld(w);
-            return 0;
-        }
+			double tm[16] = { 0 };
+			if (1 != fread(tm, 16 * 8, 1, f))
+			{
+				DeleteWorld(w);
+				return 0;
+			}
 
-        int flags = 0;
-        if (1!=fread(&flags, 4,1, f))
-        {
-            DeleteWorld(w);
-            return 0;
-        }
+			int flags = 0;
+			if (1 != fread(&flags, 4, 1, f))
+			{
+				DeleteWorld(w);
+				return 0;
+			}
 
-        // mesh id lookup
-        Mesh* m = w->head_mesh;
-        while (m && strcmp(m->name,mesh_id))
-            m = m->next;
+			// mesh id lookup
+			Mesh* m = w->head_mesh;
+			while (m && strcmp(m->name, mesh_id))
+				m = m->next;
 
-        if (!m)
-            m = w->AddMesh(mesh_id);
+			if (!m)
+				m = w->AddMesh(mesh_id);
 
-        Inst* inst = CreateInst(m,flags,tm,inst_name);
+			Inst* inst = CreateInst(m, flags, tm, inst_name);
+		}
+		else
+		{
+			int inst_name_len = 0;
+			if (1 != fread(&inst_name_len, 4, 1, f))
+			{
+				DeleteWorld(w);
+				return 0;
+			}
+
+			char inst_name[256] = "";
+			if (inst_name_len)
+				if (1 != fread(inst_name, inst_name_len, 1, f))
+				{
+					DeleteWorld(w);
+					return 0;
+				}
+			inst_name[inst_name_len] = 0;
+
+			float pos[3];
+			float yaw;
+			int anim;
+			int frame;
+			int reps[4];
+			int flags;
+			fread(pos, 1, sizeof(float[3]), f);
+			fread(&yaw, 1, sizeof(float), f);
+			fread(&anim, 1, sizeof(int), f);
+			fread(&frame, 1, sizeof(int), f);
+			fread(reps, 1, sizeof(int[4]), f);
+			fread(&flags, 1, 4, f);
+
+			Sprite* s = GetFirstSprite();
+			while (s)
+			{
+				if (strcmp(inst_name, s->name) == 0)
+				{
+					CreateInst(w, s, flags, pos, yaw, anim, frame, reps, 0);
+					break;
+				}
+
+				s = s->next;
+			}
+		}
     }
 
     return w;
@@ -3026,3 +3089,28 @@ void GetInstBBox(Inst* i, double bbox[6])
 	bbox[5] = i->bbox[5];
 }
 
+Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, int reps[4])
+{
+	SpriteInst* si = (SpriteInst*)i;
+	if (pos)
+	{
+		pos[0] = si->pos[0];
+		pos[1] = si->pos[1];
+		pos[2] = si->pos[2];
+	}
+	if (yaw)
+		*yaw = si->yaw;
+	if (anim)
+		*anim = si->anim;
+	if (frame)
+		*frame = si->frame;
+	if (reps)
+	{
+		reps[0] = si->reps[0];
+		reps[1] = si->reps[1];
+		reps[2] = si->reps[2];
+		reps[3] = si->reps[3];
+	}
+	
+	return si->sprite;
+}

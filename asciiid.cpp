@@ -155,7 +155,12 @@ struct Merge
 		}
 	}
 
-	static void CommitInst(Mesh* m, double tm[16], void* cookie)
+	static void CommitSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+	{
+		assert(0);
+	}
+
+	static void CommitMesh(Mesh* m, double tm[16], void* cookie)
 	{
 		Merge* mrg = (Merge*)cookie;
 
@@ -287,7 +292,8 @@ void MergeCommit()
 
 	if (merge._world)
 	{
-		QueryWorld(merge._world, 0, 0, Merge::CommitInst, &merge);
+		QueryWorldCB cb = { Merge::CommitMesh, Merge::CommitSprite };
+		QueryWorld(merge._world, 0, 0, &cb, &merge);
 		RebuildWorld(world, false);
 	}
 
@@ -2003,6 +2009,84 @@ struct RenderContext
 		}
 	}
 
+	static void RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+	{
+
+		RenderContext* rc = (RenderContext*)cookie;
+
+		if (rc->mesh_faces)
+		{
+			// flush
+			glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
+			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
+			rc->mesh_faces = 0;
+		}
+
+		float ftm[16] = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+		glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, ftm);
+
+		/*
+		if (GetMeshWorld(m) == merge._world)
+		{
+			ftm[12] += merge.dx * VISUAL_CELLS;
+			ftm[13] += merge.dy * VISUAL_CELLS;
+		}
+		*/
+
+
+		// draw temporarily a black billboard 
+		float angle = yaw;
+		int ang = (int)floor((angle - rot_yaw) * s->angles / 360.0f + 0.5f);
+		ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
+
+		int i = frame + ang * s->anim[anim].length;
+		//if (proj && s->projs > 1)
+		//	i += s->anim[anim].length * s->angles;
+		Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
+
+		float cos30 = cosf(30 * M_PI / 180);
+		float dwx = f->width * 0.5f * cos(rot_yaw*M_PI / 180);
+		float dwy = f->width * 0.5f * sin(rot_yaw*M_PI / 180);
+		float dlz = -f->ref[1] / cos30 * HEIGHT_SCALE;
+		float dhz = (f->height - f->ref[1]) / cos30 * HEIGHT_SCALE;
+
+		float coords[2][9]; // [2 triangles] x [3 verts x {xyz}]
+
+		coords[0][0] = pos[0] - dwx;
+		coords[0][1] = pos[1] - dwy;
+		coords[0][2] = pos[2] + dlz;
+
+		coords[0][3] = pos[0] + dwx;
+		coords[0][4] = pos[1] + dwy;
+		coords[0][5] = pos[2] + dlz;
+
+		coords[0][6] = pos[0] + dwx;
+		coords[0][7] = pos[1] + dwy;
+		coords[0][8] = pos[2] + dhz;
+
+		//
+
+		coords[1][0] = pos[0] + dwx;
+		coords[1][1] = pos[1] + dwy;
+		coords[1][2] = pos[2] + dhz;
+
+		coords[1][3] = pos[0] - dwx;
+		coords[1][4] = pos[1] - dwy;
+		coords[1][5] = pos[2] + dhz;
+
+		coords[1][6] = pos[0] - dwx;
+		coords[1][7] = pos[1] - dwy;
+		coords[1][8] = pos[2] + dlz;
+
+		for (int face = 0; face < 2; face++)
+		{
+			memcpy(rc->mesh_map[rc->mesh_faces].abc, (float*)coords + 9*face, sizeof(float[9]));
+			memset(rc->mesh_map[rc->mesh_faces].clr, 0, sizeof(uint8_t[12]));
+			rc->mesh_map[rc->mesh_faces].visual = 0;
+			rc->mesh_faces++;
+		}
+	}
+
 	static void RenderMesh(Mesh* m, double tm[16], void* cookie)
 	{
 		RenderContext* rc = (RenderContext*)cookie;
@@ -3026,7 +3110,7 @@ static bool SpriteScan(A3D_DirItem item, const char* name, void* cookie)
 			SpritePrefs* sp = (SpritePrefs*)malloc(sizeof(SpritePrefs));
 			memset(sp, 0, sizeof(SpritePrefs));
 
-			sp->anim = 1;
+			sp->anim = s->anims > 1 ? 1:0;
 			sp->frame = 0;
 			sp->yaw = 0;
 
@@ -3296,7 +3380,12 @@ void TranslateMap(int delta_z, bool water_limit)
 			UpdateTerrainHeightMap(p);
 		}
 
-		static void QueryInst(Mesh* m, double* tm, void* cookie)
+		static void QuerySprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+		{
+			assert(0);
+		}
+
+		static void QueryMesh(Mesh* m, double* tm, void* cookie)
 		{
 			Translate* t = (Translate*)cookie;
 			tm[14] += t->delta_z;
@@ -3313,7 +3402,9 @@ void TranslateMap(int delta_z, bool water_limit)
 	t.water_limit = water_limit;
 
 	QueryTerrain(terrain, 0, 0, 0xAA, Translate::QueryPatch, &t);
-	QueryWorld(world, 0, 0, Translate::QueryInst, &t);
+
+	QueryWorldCB cb = { Translate::QueryMesh, Translate::QuerySprite };
+	QueryWorld(world, 0, 0, &cb, &t);
 
 	RebuildWorld(world, true);
 }
@@ -6126,7 +6217,76 @@ void my_render(A3D_WND* wnd)
 				else
 				if (edit_mode == 4)
 				{
-					
+					if (!inst_added || !io.MouseDown[0])
+					{
+						Inst* inst = 0;
+						if (io.KeyCtrl || io.KeyShift)
+						{
+							// HITTEST!
+							inst = HitWorld(world, ray_p, ray_v, hit, hit_nrm);
+
+							if (inst)
+								printf("HIT !!!\n");
+							else
+								printf("miss\n");
+
+							// and set this inst for hover hilight
+							hover_inst = inst;
+						}
+
+						if (io.KeyShift)
+						{
+							// pick, works also with CTRL (delete)
+							inst_preview = 0;
+
+							if (inst && !inst_added && io.MouseDown[0])
+							{
+								active_mesh = GetInstMesh(inst);
+								inst_added = true;
+							}
+						}
+						else
+						if (!io.KeyCtrl)
+						{
+							SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
+
+							if (!inst_added && io.MouseDown[0])
+							{
+								int flags = INST_USE_TREE | INST_VISIBLE;
+								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
+
+								float pos[3] = { hit[0], hit[1], hit[2] };
+								inst = URDO_Create(world, active_sprite, flags, pos, sp->yaw, sp->anim, sp->frame, sp->t);
+
+								inst_added = true;
+								RebuildWorld(world);
+							}
+							else
+							{
+								// we'll need to paint active_mesh with inst_tm
+								inst_preview = active_mesh;
+							}
+						}
+
+						if (io.KeyCtrl)
+						{
+							inst_preview = 0;
+
+							if (inst)
+							{
+								if (!inst_added && io.MouseDown[0])
+								{
+									// delete this inst (clear hilight too)
+									hover_inst = 0;
+
+									//DeleteInst(inst);
+									URDO_Delete(inst);
+
+									inst_added = true;
+								}
+							}
+						}
+					}
 				}
 			}
 			else
@@ -6273,22 +6433,26 @@ void my_render(A3D_WND* wnd)
 
 
 	rc->BeginMeshes(tm, lt);
-	QueryWorld(world, planes, clip_world, RenderContext::RenderMesh, rc);
+
+	QueryWorldCB cb = { RenderContext::RenderMesh , RenderContext::RenderSprite };
+	QueryWorld(world, planes, clip_world, &cb, rc);
 
 	if (merge._world)
-		QueryWorld(merge._world, 0,0/*planes, clip_world*/, RenderContext::RenderMesh, rc);
+		QueryWorld(merge._world, 0,0/*planes, clip_world*/, &cb, rc);
 
 	if (inst_preview)
 		RenderContext::RenderMesh(inst_preview, inst_tm, rc);
+
+//	if (sprite_preview)
+//		RenderContext::RenderSprite(sprite_preview, ..., rc);
+
 	rc->EndMeshes();
 
 
 	// bsp hierarchy boxes
-	/*
 	rc->BeginBSP(tm);
 	QueryWorldBSP(world, planes, clip_world, RenderContext::RenderBSP, rc);
 	rc->EndBSP();
-	*/
 
 	// overlay patch creation
 	// slihouette of newly created patch 
