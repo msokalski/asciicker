@@ -202,6 +202,7 @@
     <ClCompile Include="mswin.cpp" />
     <ClCompile Include="render.cpp" />
     <ClCompile Include="term.cpp" />
+    <ClCompile Include="tinfl.c" />
     <ClCompile Include="urdo.cpp" />
     <ClCompile Include="gl.c" />
     <ClCompile Include="mesh.cpp" />

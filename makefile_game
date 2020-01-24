@@ -12,6 +12,7 @@ BIN := .run/game
 # 		physics.cpp \
 # 		sprite.cpp \
 # 		upng.c \
+#		tinfl.c \
 # 		rgba8.cpp \
 
 # LDLIBS := -lutil
@@ -26,6 +27,7 @@ SRCS :=	gl.c \
 		physics.cpp \
 		sprite.cpp \
 		upng.c \
+		tinfl.c \
 		rgba8.cpp \
 
 LDLIBS := -lutil -lGL -lX11 -lXinerama

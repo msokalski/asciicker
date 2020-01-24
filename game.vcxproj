@@ -196,6 +196,7 @@
     <ClCompile Include="screen.cpp" />
     <ClCompile Include="term.cpp" />
     <ClCompile Include="mswin.cpp" />
+    <ClCompile Include="tinfl.c" />
     <ClCompile Include="x11.cpp" />
     <ClCompile Include="xterm.cpp" />
     <ClCompile Include="gl.c" />

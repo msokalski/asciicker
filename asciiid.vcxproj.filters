@@ -155,5 +155,8 @@
     <ClCompile Include="x11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="tinfl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

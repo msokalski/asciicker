@@ -64,6 +64,14 @@ Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3],
 void SaveWorld(World* w, FILE* f);
 World* LoadWorld(FILE* f);
 
+
+/*
+int AddInstDataProvider(World* w, void (*on_newinst)(Inst* i), void (*on_delinst)(Inst* i));
+void DelInstDataProvider(World* w, int provider);
+void SetInstData(World* w, Inst* i, int provider, void* data);
+void* GetInstData(World* w, Inst* i, int provider);
+*/
+
 // during save:
 // save those meshes that have instances only (with file names)
 

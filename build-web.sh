@@ -33,6 +33,7 @@ emcc --emrun -O3 \
     physics.cpp \
     render.cpp \
     upng.c \
+    tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
     -s EXPORTED_FUNCTIONS='["_main","_AsciickerUpdate","_AsciickerRender","_AsciickerGetYaw"]' \

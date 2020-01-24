@@ -86,6 +86,9 @@ struct SpritePrefs
 	int t[4]; // rep_first, rep_every_forward, rep_last, rep_every_backward
 	float height; // used to offset instance's above terrain when inserting (we should have similar thing for meshes)
 
+	bool rand_anim;
+	bool rand_frame;
+	bool rand_yaw;
 };
 
 struct MeshPrefs
@@ -796,6 +799,9 @@ struct RenderContext
 						bg_color = vec4(0.0);
 
 					color = mix(bg_color, fg_color, glyph_alpha);
+
+					if (color.a == 0.0)
+						discard;
 				}
 			);
 
@@ -839,8 +845,8 @@ struct RenderContext
 			printf("%s", logstr);
 
 
-		ansi_buf_size[0] = 32;
-		ansi_buf_size[1] = 32;
+		ansi_buf_size[0] = 64;
+		ansi_buf_size[1] = 64;
 
 		ansi_buf = (AnsiCell*)malloc(sizeof(AnsiCell)*ansi_buf_size[0]* ansi_buf_size[1]);
 		glCreateTextures(GL_TEXTURE_2D, 1, &ansi_tex);
@@ -974,13 +980,17 @@ struct RenderContext
 		const char* mesh_fs_src =
 			CODE(#version 450\n)
 			CODE(
-				uniform usampler2D m_tex;
+				uniform sampler2D a_tex;
 				uniform sampler2D f_tex;
 				uniform sampler3D p_tex;
 				uniform vec4 lt;
 
 				uniform vec4 lt_dif_clr;
 				uniform vec4 lt_amb_clr;
+
+				//uniform int ansi_depth_ofs;
+				uniform ivec2 sprite_wh;
+				uniform ivec2 ansi_wh;
 
 				layout(location = 0) out vec4 color;
 
@@ -990,17 +1000,72 @@ struct RenderContext
 				in float shade;
 				in float elev;
 				in vec4 tint;
+
+				vec3 Pal(float p)
+				{
+					p = clamp(floor(p - 16.0 + 0.5), 0.0, 215.0);
+
+					float blue = floor(p / 36.0);
+					p -= 36.0*blue;
+
+					float green = floor(p / 6.0);
+					float red = p - 6.0*green;
+
+					return vec3(blue, green, red) * 0.2;
+				}
 				
 				void main()
 				{
-					color = tint;
-					color.a=1.0;
+					if (matid != 0)
+					{
+						vec2 cell_coord = tint.rg * sprite_wh;
 
-					vec3 light_pos = normalize(lt.xyz);
-					float light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(light_pos, normalize(nrm)));
+						// sample ansi buffer
+						vec2 quot_cell = floor(cell_coord);
+						vec2 frac_cell = fract(cell_coord);
 
-					color.rgb *= light * lt_dif_clr.rgb;
-					color.rgb += lt_amb_clr.rgb;
+						vec2 ansi_coord = (quot_cell + vec2(0.5)) / ansi_wh;
+
+						vec4 cell = texture(a_tex, ansi_coord);
+
+						//float ds = 2.0 * (/*zoom*/ 1.0 * /*scale*/ 3.0) / 8/*VISUAL_CELLS*/ * 0.5 /*we're not dbl_wh*/;
+						//float dz_dy = 16/*HEIGHT_SCALE*/ / (cos(30 * 3.141592/*M_PI*/ / 180) * 4/*HEIGHT_CELLS*/ * ds);
+						//gl_FragDepth = gl_FragCoord.z + (2.0*cell.w*255.0 + ansi_depth_ofs) * 0.5 * dz_dy * 2.0 / 0xFFFF;
+
+						int glyph_idx = int(round(cell.z * 255.0));
+
+						frac_cell.y = 1.0 - frac_cell.y;
+						vec2 glyph_coord = (vec2(glyph_idx & 0xF, glyph_idx >> 4) + frac_cell) / vec2(16.0);
+						float glyph_alpha = texture(f_tex, glyph_coord).a;
+
+						vec4 fg_color = vec4(Pal(cell.x*255.00), 1.0);
+						vec4 bg_color = vec4(Pal(cell.y*255.00), 1.0);
+
+						if (cell.x == 1.0)
+							fg_color = vec4(0.0);
+						if (cell.y == 1.0)
+							bg_color = vec4(0.0);
+
+						color = mix(bg_color, fg_color, glyph_alpha);
+
+						//color = vec4(frac_cell, 0.5, 1);
+
+						if (color.a == 0.0)
+							discard;
+					}
+					else
+					{
+						//gl_FragDepth = gl_FragCoord.z;
+
+						color = tint;
+						color.a = 1.0;
+
+						vec3 light_pos = normalize(lt.xyz);
+						float light = max(0.0, 0.5*lt.w + (1.0 - 0.5*lt.w)*dot(light_pos, normalize(nrm)));
+
+						color.rgb *= light * lt_dif_clr.rgb;
+						color.rgb += lt_amb_clr.rgb;
+					}
 
 					// palettize
 					color.rgb = texture(p_tex, color.xyz).rgb;
@@ -1710,9 +1775,13 @@ struct RenderContext
 		mesh_inst_tm_loc = glGetUniformLocation(mesh_prg, "inst_tm");
 		mesh_tm_loc = glGetUniformLocation(mesh_prg, "tm");
 		mesh_lt_loc = glGetUniformLocation(mesh_prg, "lt");
-		mesh_m_tex_loc = glGetUniformLocation(mesh_prg, "m_tex");
+		mesh_a_tex_loc = glGetUniformLocation(mesh_prg, "a_tex");
 		mesh_f_tex_loc = glGetUniformLocation(mesh_prg, "f_tex");
 		mesh_p_tex_loc = glGetUniformLocation(mesh_prg, "p_tex");
+
+		mesh_ansi_wh_loc = glGetUniformLocation(mesh_prg, "ansi_wh");
+		mesh_sprite_wh_loc = glGetUniformLocation(mesh_prg, "sprite_wh");
+		//mesh_ansi_depth_ofs_loc = glGetUniformLocation(mesh_prg, "ansi_depth_ofs");
 
 		mesh_lt_dif_clr = glGetUniformLocation(mesh_prg, "lt_dif_clr");
 		mesh_lt_amb_clr = glGetUniformLocation(mesh_prg, "lt_amb_clr");
@@ -1964,7 +2033,7 @@ struct RenderContext
 
 		glUniformMatrix4fv(mesh_tm_loc, 1, GL_FALSE, ftm);
 		glUniform4fv(mesh_lt_loc, 1, lt);
-		glUniform1i(mesh_m_tex_loc, 2);
+		glUniform1i(mesh_a_tex_loc, 2);
 		glUniform1i(mesh_f_tex_loc, 3);
 		glUniform1i(mesh_p_tex_loc, 4);
 
@@ -1976,7 +2045,7 @@ struct RenderContext
 
 		glBindVertexArray(mesh_vao);
 
-		glBindTextureUnit(2, MyMaterial::tex);
+		glBindTextureUnit(2, ansi_tex);
 		glBindTextureUnit(3, font[active_font].tex);
 		glBindTextureUnit(4, pal_tex);
 
@@ -2022,6 +2091,9 @@ struct RenderContext
 			rc->mesh_faces = 0;
 		}
 
+		// flushed, safe to change uniforms
+
+
 		float ftm[16] = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
 		glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, ftm);
 
@@ -2044,47 +2116,104 @@ struct RenderContext
 		//	i += s->anim[anim].length * s->angles;
 		Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
 
+		float zoom = 2.0 / 3.0;
 		float cos30 = cosf(30 * M_PI / 180);
-		float dwx = f->width * 0.5f * cos(rot_yaw*M_PI / 180);
-		float dwy = f->width * 0.5f * sin(rot_yaw*M_PI / 180);
-		float dlz = -f->ref[1] / cos30 * HEIGHT_SCALE;
-		float dhz = (f->height - f->ref[1]) / cos30 * HEIGHT_SCALE;
+		float dwx = zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180);
+		float dwy = zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180);
+		float dlz = zoom * -f->ref[1] * 0.5f / cos30 * HEIGHT_SCALE;
+		float dhz = zoom * (f->height - f->ref[1] * 0.5f) / cos30 * HEIGHT_SCALE;
 
 		float coords[2][9]; // [2 triangles] x [3 verts x {xyz}]
+		uint8_t colors[2][12];
 
 		coords[0][0] = pos[0] - dwx;
 		coords[0][1] = pos[1] - dwy;
 		coords[0][2] = pos[2] + dlz;
+		colors[0][0] = 0;
+		colors[0][1] = 0;
+		colors[0][2] = 0;
+		colors[0][3] = 0;
 
 		coords[0][3] = pos[0] + dwx;
 		coords[0][4] = pos[1] + dwy;
 		coords[0][5] = pos[2] + dlz;
+		colors[0][4] = 255;
+		colors[0][5] = 0;
+		colors[0][6] = 0;
+		colors[0][7] = 0;
 
 		coords[0][6] = pos[0] + dwx;
 		coords[0][7] = pos[1] + dwy;
 		coords[0][8] = pos[2] + dhz;
+		colors[0][8] = 255;
+		colors[0][9] = 255;
+		colors[0][10] = 0;
+		colors[0][11] = 0;
 
 		//
 
 		coords[1][0] = pos[0] + dwx;
 		coords[1][1] = pos[1] + dwy;
 		coords[1][2] = pos[2] + dhz;
+		colors[1][0] = 255;
+		colors[1][1] = 255;
+		colors[1][2] = 0;
+		colors[1][3] = 0;
 
 		coords[1][3] = pos[0] - dwx;
 		coords[1][4] = pos[1] - dwy;
 		coords[1][5] = pos[2] + dhz;
+		colors[1][4] = 0;
+		colors[1][5] = 255;
+		colors[1][6] = 0;
+		colors[1][7] = 0;
 
 		coords[1][6] = pos[0] - dwx;
 		coords[1][7] = pos[1] - dwy;
 		coords[1][8] = pos[2] + dlz;
+		colors[1][8] = 0;
+		colors[1][9] = 0;
+		colors[1][10] = 0;
+		colors[1][11] = 0;
+
+		glUniform2i(rc->mesh_sprite_wh_loc, f->width, f->height);
+		glUniform2i(rc->mesh_ansi_wh_loc, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
+		//glUniform1i(rc->mesh_ansi_depth_ofs_loc, f->ref[2] + 2*(HEIGHT_SCALE/4));
 
 		for (int face = 0; face < 2; face++)
 		{
 			memcpy(rc->mesh_map[rc->mesh_faces].abc, (float*)coords + 9*face, sizeof(float[9]));
-			memset(rc->mesh_map[rc->mesh_faces].clr, 0, sizeof(uint8_t[12]));
-			rc->mesh_map[rc->mesh_faces].visual = 0;
+			memcpy(rc->mesh_map[rc->mesh_faces].clr, (uint8_t*)colors + 12*face, sizeof(uint8_t[12]));
+			rc->mesh_map[rc->mesh_faces].visual = 1; // MatID!=0 -> sprite
 			rc->mesh_faces++;
 		}
+
+		if (f->width > rc->ansi_buf_size[0])
+		{
+			int cpy_w = f->width < rc->ansi_buf_size[0] ? f->width : rc->ansi_buf_size[0];
+			int cpy_h = f->height < rc->ansi_buf_size[1] ? f->height : rc->ansi_buf_size[1];
+
+			for (int y = 0; y < cpy_h; y++)
+			{
+				for (int x = 0; x < cpy_w; x++)
+				{
+					AnsiCell* dst = rc->ansi_buf + x + y * rc->ansi_buf_size[0];
+					AnsiCell* src = f->cell + x + y * f->width;
+					*dst = *src;
+				}
+			}
+			glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, rc->ansi_buf_size[0], cpy_h, GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
+		}
+		else
+		{
+			int cpy_h = f->height < rc->ansi_buf_size[1] ? f->height : rc->ansi_buf_size[1];
+			glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, f->width, cpy_h, GL_RGBA, GL_UNSIGNED_BYTE, f->cell);
+		}
+
+		// flush
+		glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
+		glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
+		rc->mesh_faces = 0;
 	}
 
 	static void RenderMesh(Mesh* m, double tm[16], void* cookie)
@@ -2349,11 +2478,14 @@ struct RenderContext
 	GLint mesh_inst_tm_loc;
 	GLint mesh_tm_loc;
 	GLint mesh_lt_loc;
-	GLint mesh_m_tex_loc;
+	GLint mesh_a_tex_loc;
 	GLint mesh_f_tex_loc;
 	GLint mesh_p_tex_loc;
 	GLint mesh_lt_dif_clr;
 	GLint mesh_lt_amb_clr;
+	GLint mesh_ansi_wh_loc;
+	GLint mesh_sprite_wh_loc;
+	//GLint mesh_ansi_depth_ofs_loc;
 
 	GLuint bsp_prg;
 	GLint bsp_tm_loc;
@@ -3114,10 +3246,26 @@ static bool SpriteScan(A3D_DirItem item, const char* name, void* cookie)
 			sp->frame = 0;
 			sp->yaw = 0;
 
-			sp->t[0] = 20; // duplicate first frame
-			sp->t[1] = 4; // duplicate every frame during fwd play
-			sp->t[2] = 20; // duplicate last frame
-			sp->t[3] = 4; // duplicate every frame during rev play
+			if (sp->anim)
+			{
+				// loops
+				sp->t[0] = 0; // duplicate first frame
+				sp->t[1] = 4; // duplicate every frame during fwd play
+				sp->t[2] = 0; // duplicate last frame
+				sp->t[3] = 0; // duplicate every frame during rev play
+			}
+			else
+			{
+				// ping pong
+				sp->t[0] = 20; // duplicate first frame
+				sp->t[1] = 2; // duplicate every frame during fwd play
+				sp->t[2] = 10; // duplicate last frame
+				sp->t[3] = 4; // duplicate every frame during rev play
+			}
+
+			sp->rand_anim = false;
+			sp->rand_frame = false;
+			sp->rand_yaw = false;
 
 			SetSpriteCookie(s, sp);
 		}
@@ -3640,15 +3788,7 @@ void my_render(A3D_WND* wnd)
 
 				RenderContext* rc = &render_context;
 
-				int n = rc->ansi_buf_size[0] * rc->ansi_buf_size[1];
-				for (int i = 0; i < n; i++)
-				{
-					AnsiCell* c = rc->ansi_buf + i;
-					c->bk = 0xFF;//fast_rand() & 0xFF;
-					c->fg = 0xFF;//fast_rand() & 0xFF;
-					c->gl = 0xFF;//fast_rand() & 0xFF;
-					c->spare = 0xFF;
-				}
+
 
 				// RenderSprite()
 				Sprite* s = active_sprite;
@@ -3699,19 +3839,35 @@ void my_render(A3D_WND* wnd)
 					i += s->anim[anim].length * s->angles;
 				Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
 
-				int cpy_w = f->width < rc->ansi_buf_size[0] ? f->width : rc->ansi_buf_size[0];
-				int cpy_h = f->height < rc->ansi_buf_size[1] ? f->height : rc->ansi_buf_size[1];
+				int view_size[2] = { 16,16 };
+				if (view_size[0] > rc->ansi_buf_size[0])
+					view_size[0] = rc->ansi_buf_size[0];
+				if (view_size[1] > rc->ansi_buf_size[1])
+					view_size[1] = rc->ansi_buf_size[1];
 
-				int dst_x = (rc->ansi_buf_size[0] - f->width) / 2;
-				int dst_y = (rc->ansi_buf_size[1] - f->height) / 2;
+				int n = view_size[0] * view_size[1];
+				for (int i = 0; i < n; i++)
+				{
+					AnsiCell* c = rc->ansi_buf + i;
+					c->bk = 0xFF;//fast_rand() & 0xFF;
+					c->fg = 0xFF;//fast_rand() & 0xFF;
+					c->gl = 0xFF;//fast_rand() & 0xFF;
+					c->spare = 0xFF;
+				}
+
+				int cpy_w = f->width < view_size[0] ? f->width : view_size[0];
+				int cpy_h = f->height < view_size[1] ? f->height : view_size[1];
+
+				int dst_x = (view_size[0] - f->width) / 2;
+				int dst_y = (view_size[1] - f->height) / 2;
 
 				if (dst_x < 0)
 					dst_x = 0;
 				if (dst_y < 0)
 					dst_y = 0;
 
-				int src_x = (f->width - rc->ansi_buf_size[0]) / 2;
-				int src_y = (f->height - rc->ansi_buf_size[1]) / 2;
+				int src_x = (f->width - view_size[0]) / 2;
+				int src_y = (f->height - view_size[1]) / 2;
 
 				if (src_x < 0)
 					src_x = 0;
@@ -3722,13 +3878,13 @@ void my_render(A3D_WND* wnd)
 				{
 					for (int x = 0; x < cpy_w; x++)
 					{
-						AnsiCell* dst = rc->ansi_buf + (x + dst_x) + (y + dst_y) * rc->ansi_buf_size[0];
+						AnsiCell* dst = rc->ansi_buf + (x + dst_x) + (y + dst_y) * view_size[0];
 						AnsiCell* src = f->cell + (x + src_x) + (y + src_y) * f->width;
 						*dst = *src;
 					}
 				}
 
-				glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, rc->ansi_buf_size[0], rc->ansi_buf_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
+				glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, view_size[0], view_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
 
 				glViewport(
 					(int)sw->rect.Min.x,
@@ -3743,7 +3899,7 @@ void my_render(A3D_WND* wnd)
 					(int)(sw->rect.Max.y - sw->rect.Min.y));
 
 				glUseProgram(rc->ansi_prg);
-				glUniform2i(0, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
+				glUniform2i(0, view_size[0], view_size[1]);
 
 				glUniform1i(1, 0);
 
@@ -4025,13 +4181,13 @@ void my_render(A3D_WND* wnd)
 				glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, itm);
 				glUniformMatrix4fv(rc->mesh_tm_loc, 1, GL_FALSE, ftm);
 				glUniform4fv(rc->mesh_lt_loc, 1, lt);
-				glUniform1i(rc->mesh_m_tex_loc, 2);
+				glUniform1i(rc->mesh_a_tex_loc, 2);
 				glUniform1i(rc->mesh_f_tex_loc, 3);
 				glUniform1i(rc->mesh_p_tex_loc, 4);
 
 				glBindVertexArray(rc->mesh_vao);
 
-				glBindTextureUnit(2, MyMaterial::tex);
+				glBindTextureUnit(2, rc->ansi_tex);
 				glBindTextureUnit(3, font[active_font].tex);
 				glBindTextureUnit(4, pal_tex);
 
@@ -4903,6 +5059,10 @@ void my_render(A3D_WND* wnd)
 					ImGui::SliderInt("RepForward", sp->t+1, 0, 50);
 					ImGui::SliderInt("RepLast", sp->t+2, 0, 50);
 					ImGui::SliderInt("RepBackward", sp->t+3, 0, 50);
+					ImGui::Separator();
+					ImGui::Checkbox("Rand Animation", &sp->rand_anim);
+					ImGui::Checkbox("Rand Frame", &sp->rand_frame);
+					ImGui::Checkbox("Rand Rotate", &sp->rand_yaw);
 
 					ImGui::EndTabItem();
 				}
@@ -5513,6 +5673,9 @@ void my_render(A3D_WND* wnd)
 	double inst_tm[16];
 	Mesh* inst_preview = 0;
 	Inst* hover_inst = 0;
+
+	bool sprite_preview = false;
+	float sprite_preview_pos[3] = { 0,0,0 };
 
 
 	if (!io.WantCaptureMouse && mouse_in)
@@ -6256,7 +6419,12 @@ void my_render(A3D_WND* wnd)
 								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
 
 								float pos[3] = { hit[0], hit[1], hit[2] };
-								inst = URDO_Create(world, active_sprite, flags, pos, sp->yaw, sp->anim, sp->frame, sp->t);
+
+								int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
+								int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
+								float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
+
+								inst = URDO_Create(world, active_sprite, flags, pos, _yaw, _anim, _frame, sp->t);
 
 								inst_added = true;
 								RebuildWorld(world);
@@ -6264,7 +6432,10 @@ void my_render(A3D_WND* wnd)
 							else
 							{
 								// we'll need to paint active_mesh with inst_tm
-								inst_preview = active_mesh;
+								sprite_preview = true;
+								sprite_preview_pos[0] = hit[0];
+								sprite_preview_pos[1] = hit[1];
+								sprite_preview_pos[2] = hit[2];
 							}
 						}
 
@@ -6443,6 +6614,15 @@ void my_render(A3D_WND* wnd)
 	if (inst_preview)
 		RenderContext::RenderMesh(inst_preview, inst_tm, rc);
 
+	if (sprite_preview)
+	{
+		SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
+		int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
+		int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
+		float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
+		RenderContext::RenderSprite(active_sprite, sprite_preview_pos, _yaw, _anim, _frame, sp->t, rc);
+	}
+
 //	if (sprite_preview)
 //		RenderContext::RenderSprite(sprite_preview, ..., rc);
 
@@ -6450,9 +6630,11 @@ void my_render(A3D_WND* wnd)
 
 
 	// bsp hierarchy boxes
+	/*
 	rc->BeginBSP(tm);
 	QueryWorldBSP(world, planes, clip_world, RenderContext::RenderBSP, rc);
 	rc->EndBSP();
+	*/
 
 	// overlay patch creation
 	// slihouette of newly created patch 

@@ -673,7 +673,7 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 
 	if (global_refl_mode)
 	{
-		if (r->int_flag)
+		//if (r->int_flag)
 		{
 			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
 			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
@@ -683,6 +683,7 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 			buf->s_pos[1] = (ty - 1) >> 1;
 			buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
 		}
+		/*
 		else
 		{
 			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
@@ -693,10 +694,11 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 			buf->s_pos[1] = (ty - 2) >> 1;
 			buf->s_pos[2] = (int)2 * r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
 		}
+		*/
 	}
 	else
 	{
-		if (r->int_flag)
+		//if (r->int_flag)
 		{
 			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
 			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
@@ -706,6 +708,7 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 			buf->s_pos[1] = (ty - 1) >> 1;
 			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
 		}
+		/*
 		else
 		{
 			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
@@ -716,6 +719,7 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 			buf->s_pos[1] = (ty - 2) >> 1;
 			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
 		}
+		*/
 	}
 
 	int ang = (int)floor((yaw - r->yaw) * s->angles / 360.0f + 0.5f);
@@ -1206,6 +1210,51 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 
 			// spare is in full blocks, ref in half!
 			float height = (2 * src->spare + f->ref[2]) * 0.5 * dz_dy + pos[2]; // *height_scale + pos[2]; // transform!
+
+			// about 200 cases
+			// FG_TRANSP | BK_TRANSP | SRC_SPACE | DST_SPACE 
+			// FG_OPAQUE | BK_OPAQUE | SRC_FULL  | DST_FULL  
+			//                       | SRC_LEFT	 | DST_LEFT	  
+			//                       | SRC_RIGHT | DST_RIGHT    
+			//                       | SRC_UPPER | DST_UPPER  
+			//                       | SRC_LOWER | DST_LOWER
+			//                       | SRC_OTHER | DST_OTHER
+
+			
+
+
+			// case classes:
+			/*
+			if (SRC_SPACE)
+			{
+				if (bg is transp)
+					NOP();
+				else
+				{
+					check 4 depth tests (as 0xF mask): 
+					if (0,1,2,8)
+						NOP();
+					else
+					if (3)
+						write lower
+					else
+					if (12)
+						write upper
+					else
+					if (5)
+						write left
+					else
+					if (10)
+						write right
+					else
+						write full
+				}
+			}
+			else
+			*/
+
+
+
 
 			if (src->bk != 255)
 			{
@@ -2213,7 +2262,8 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	static uint64_t attack_tim = stamp;
 	static int attack_frm = 18;	
 
-	if (anim == 0)
+	
+	if (anim == 0 )
 	{
 		int attack_ofs = (stamp - attack_tim) / 16667; // scale by microsec to 60 fps
 		attack_frm += attack_ofs;
@@ -2241,14 +2291,6 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 			sub_frm = 0;
 		else
 			sub_frm = attack_anim[sub_frm];
-
-		if (sub_frm == 0)
-			anim = 0;
-		else
-		{
-			anim = 1;
-			sub_frm--;
-		}
 
 		fr = sub_frm;
 

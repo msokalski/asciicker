@@ -39,9 +39,15 @@ Sprite* LoadPlayer(const char* path)
 {
 	uint8_t recolor[] = 
 	{
+		0
+		/*
 		1, // num of colors 
 		170,0,170, 170,0,0, // purple->red shirt
+		*/
 	};
+
+
+
 	Sprite* s = LoadSprite(path, "player", /*true,*/ recolor, true);
 
 	/*
@@ -144,6 +150,9 @@ void* GetSpriteCookie(Sprite* s)
 	return s->cookie;
 }
 
+
+extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_buf_len, size_t *pOut_len, int flags);
+
 Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const uint8_t* recolor, bool detached)
 {
 	FILE* f = fopen(path, "rb");
@@ -222,7 +231,10 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 
 	fread(in, 1, insize, f);
 
-	void* out = u_inflate(in, insize);
+
+	size_t out_size=0;
+	void* out = tinfl_decompress_mem_to_heap(in, insize, &out_size, 0);
+	// void* out = u_inflate(in, insize);
 	free(in);
 
 	/////////////////////////////////
@@ -233,7 +245,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	fread(&isize, 4, 1, f);
 	fclose(f);
 
-	assert(out && isize == *(uint32_t*)out);
+	// assert(out && isize == *(uint32_t*)out);
+	assert(out && isize == out_size);
 
 	/////////////////////////////////
 	// CREATE SPRITE from XP
@@ -245,7 +258,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 
 	if (layers < 3 || width < 1 || height < 1)
 	{
-		u_inflate_free(out);
+		free(out);
+		//u_inflate_free(out);
 		return 0;
 	}
 
@@ -299,6 +313,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	if (angles > 0)
 	{
 		projs = 2;
+		anim_sum = 0;
+		anims = 0;
 		for (int a = 1; a < width; a++)
 		{
 			int len = layer0[height*a].GetDigit();
@@ -308,6 +324,14 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 				anim_len[anims] = len;
 				anims++;
 			}
+			else
+				break;
+		}
+
+		if (!anims)
+		{
+			anims = 1;
+			anim_sum = 1;
 		}
 	}
 	else
@@ -490,6 +514,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 						int r = (c2->fg[0] * 5 + 128) / rgb_div;
 						int g = (c2->fg[1] * 5 + 128) / rgb_div;
 						int b = (c2->fg[2] * 5 + 128) / rgb_div;
+
 						c->fg = 16 + 36 * r + g * 6 + b;
 					}
 				}
@@ -506,8 +531,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	sprite->atlas = atlas;
 	sprite->frames = frames;
 
-	sprite->anim[0].length = 1;
-	for (int i=1; i<anims; i++)
+	for (int i = 0; i < anims; i++)
 		sprite->anim[i].length = anim_len[i];
 
 	for (int anim = 0; anim < sprite->anims; anim++)
@@ -534,17 +558,21 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 
 	float cos30 = cosf(30 * (M_PI / 180));
 	float z = fr_height / cos30 * HEIGHT_SCALE;
-	float dz = ref[0][1] / cos30 * HEIGHT_SCALE;
+	float dz = ref[0][1]*0.5f / cos30 * HEIGHT_SCALE;
 
-	sprite->proj_bbox[0] = -fr_width * .5f;
-	sprite->proj_bbox[1] = +fr_width * .5f;
-	sprite->proj_bbox[2] = -fr_width * .5f;
-	sprite->proj_bbox[3] = +fr_width * .5f;
-	sprite->proj_bbox[4] = -dz;
-	sprite->proj_bbox[5] = z-dz;
+	float zoom = 2.0 / 3.0;
+
+	sprite->proj_bbox[0] = -fr_width * .5f * zoom;
+	sprite->proj_bbox[1] = +fr_width * .5f * zoom;
+	sprite->proj_bbox[2] = -fr_width * .5f * zoom;
+	sprite->proj_bbox[3] = +fr_width * .5f * zoom;
+	sprite->proj_bbox[4] = -dz * zoom;
+	sprite->proj_bbox[5] = (z-dz) * zoom;
 
 	/////////////////////////////////
-	u_inflate_free(out);
+	
+	// u_inflate_free(out);
+	free(out);
 
 	if (detached)
 	{
