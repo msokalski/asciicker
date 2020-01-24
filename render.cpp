@@ -1153,6 +1153,133 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 	}
 }
 
+static const uint16_t glyph_coverage[256] =
+{
+	0x0000,0x2222,0x4433,0x3412,0x2312,0x2323,0x2312,0x1111,0x3333,0x1111,0x3333,0x4122,0x2222,0x2203,0x3322,0x3322,
+	0x1212,0x2121,0x2222,0x2211,0x3321,0x2222,0x0022,0x2233,0x2211,0x1122,0x2121,0x1212,0x0111,0x2222,0x1122,0x2211,
+	0x0000,0x2211,0x1100,0x2322,0x2211,0x1112,0x2222,0x1100,0x0201,0x1201,0x2211,0x1111,0x0011,0x1100,0x0011,0x2102,
+	0x3222,0x1211,0x2112,0x2121,0x2221,0x2221,0x1222,0x2101,0x2222,0x2211,0x1111,0x1111,0x1111,0x1111,0x1101,0x2111,
+	0x3212,0x2222,0x2322,0x1212,0x2322,0x2312,0x2302,0x1222,0x2222,0x1111,0x2012,0x2322,0x0322,0x3322,0x2322,0x2212,
+	0x2302,0x2221,0x2312,0x2221,0x2211,0x2222,0x2211,0x2222,0x2222,0x2211,0x2322,0x1212,0x0320,0x2121,0x1200,0x0011,
+	0x1100,0x1122,0x1322,0x1112,0x2122,0x1112,0x1202,0x1122,0x1322,0x1111,0x2121,0x1212,0x1111,0x1222,0x1122,0x1112,
+	0x1113,0x1122,0x1112,0x1121,0x1211,0x1122,0x1111,0x1122,0x1112,0x1122,0x1112,0x1211,0x1111,0x1111,0x1200,0x1122,
+	0x1212,0x1122,0x2112,0x2222,0x1122,0x1222,0x2222,0x1212,0x2212,0x2212,0x1212,0x1111,0x2211,0x1211,0x2222,0x1122,
+	0x1212,0x1122,0x3322,0x2222,0x1122,0x1122,0x1222,0x1222,0x1122,0x2222,0x2222,0x1212,0x1312,0x2222,0x1221,0x3112,
+	0x1222,0x1111,0x2122,0x1122,0x1322,0x2222,0x2211,0x2211,0x1112,0x1101,0x1110,0x2232,0x2232,0x1122,0x2211,0x2211,
+	0x1111,0x2222,0x3333,0x1111,0x1212,0x1313,0x2222,0x1123,0x1213,0x2222,0x2222,0x2222,0x2222,0x2311,0x1312,0x0112,
+	0x2110,0x2211,0x1122,0x2121,0x1111,0x2222,0x3131,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,
+	0x3311,0x2222,0x0033,0x3211,0x3121,0x2131,0x1132,0x3333,0x3333,0x1201,0x1021,0x4444,0x0044,0x0404,0x4040,0x4400,
+	0x1212,0x2212,0x1201,0x2222,0x1212,0x1112,0x1112,0x1211,0x2222,0x2212,0x2222,0x1222,0x1212,0x2213,0x1211,0x2222,
+	0x2211,0x1312,0x0212,0x0211,0x1202,0x2012,0x1111,0x1212,0x2200,0x0000,0x0000,0x2011,0x2200,0x2100,0x2222,0x1111,
+};
+
+static const uint16_t palette_rgb[256] =
+{
+	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
+	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
+
+	0x000, 0x001, 0x002, 0x003, 0x004, 0x005,
+	0x010, 0x011, 0x012, 0x013, 0x014, 0x015,
+	0x020, 0x021, 0x022, 0x023, 0x024, 0x025,
+	0x030, 0x031, 0x032, 0x033, 0x034, 0x035,
+	0x040, 0x041, 0x042, 0x043, 0x044, 0x045,
+	0x050, 0x051, 0x052, 0x053, 0x054, 0x055,
+
+	0x100, 0x101, 0x102, 0x103, 0x104, 0x105,
+	0x110, 0x111, 0x112, 0x113, 0x114, 0x115,
+	0x120, 0x121, 0x122, 0x123, 0x124, 0x125,
+	0x130, 0x131, 0x132, 0x133, 0x134, 0x135,
+	0x140, 0x141, 0x142, 0x143, 0x144, 0x145,
+	0x150, 0x151, 0x152, 0x153, 0x154, 0x155,
+
+	0x200, 0x201, 0x202, 0x203, 0x204, 0x205,
+	0x210, 0x211, 0x212, 0x213, 0x214, 0x215,
+	0x220, 0x221, 0x222, 0x223, 0x224, 0x225,
+	0x230, 0x231, 0x232, 0x233, 0x234, 0x235,
+	0x240, 0x241, 0x242, 0x243, 0x244, 0x245,
+	0x250, 0x251, 0x252, 0x253, 0x254, 0x255,
+
+	0x300, 0x301, 0x302, 0x303, 0x304, 0x305,
+	0x310, 0x311, 0x312, 0x313, 0x314, 0x315,
+	0x320, 0x321, 0x322, 0x323, 0x324, 0x325,
+	0x330, 0x331, 0x332, 0x333, 0x334, 0x335,
+	0x340, 0x341, 0x342, 0x343, 0x344, 0x345,
+	0x350, 0x351, 0x352, 0x353, 0x354, 0x355,
+
+	0x400, 0x401, 0x402, 0x403, 0x404, 0x405,
+	0x410, 0x411, 0x412, 0x413, 0x414, 0x415,
+	0x420, 0x421, 0x422, 0x423, 0x424, 0x425,
+	0x430, 0x431, 0x432, 0x433, 0x434, 0x435,
+	0x440, 0x441, 0x442, 0x443, 0x444, 0x445,
+	0x450, 0x451, 0x452, 0x453, 0x454, 0x455,
+
+	0x500, 0x501, 0x502, 0x503, 0x504, 0x505,
+	0x510, 0x511, 0x512, 0x513, 0x514, 0x515,
+	0x520, 0x521, 0x522, 0x523, 0x524, 0x525,
+	0x530, 0x531, 0x532, 0x533, 0x534, 0x535,
+	0x540, 0x541, 0x542, 0x543, 0x544, 0x545,
+	0x550, 0x551, 0x552, 0x553, 0x554, 0x555,
+
+	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
+	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
+	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000
+};
+
+int AverageGlyph(AnsiCell* ptr, int mask)
+{
+	int fg_rgb = palette_rgb[ptr->fg];
+	int bk_rgb = palette_rgb[ptr->bk];
+
+	int fg[3] = { fg_rgb & 0xf, (fg_rgb >> 4) & 0xf, (fg_rgb >> 8) & 0xf };
+	int bk[3] = { bk_rgb & 0xf, (bk_rgb >> 4) & 0xf, (bk_rgb >> 8) & 0xf };
+
+	int cc[3] = { 0,0,0 };
+
+	int cov = glyph_coverage[ptr->gl];
+	int fg_cov[4] = { cov & 0xf, (cov >> 4) & 0xf, (cov >> 8) & 0xf, (cov >> 12) & 0xf };
+	int bk_cov[4] = { 4 - fg_cov[0], 4 - fg_cov[1], 4 - fg_cov[2], 4 - fg_cov[3] };
+
+	int num = 0;
+
+	if (mask & 1)
+	{
+		cc[0] += fg[0] * fg_cov[0] + bk[0] * bk_cov[0];
+		cc[1] += fg[1] * fg_cov[0] + bk[1] * bk_cov[0];
+		cc[2] += fg[2] * fg_cov[0] + bk[2] * bk_cov[0];
+		num++;
+	}
+	if (mask & 2)
+	{
+		cc[0] += fg[0] * fg_cov[1] + bk[0] * bk_cov[1];
+		cc[1] += fg[1] * fg_cov[1] + bk[1] * bk_cov[1];
+		cc[2] += fg[2] * fg_cov[1] + bk[2] * bk_cov[1];
+		num++;
+	}
+	if (mask & 4)
+	{
+		cc[0] += fg[0] * fg_cov[2] + bk[0] * bk_cov[2];
+		cc[1] += fg[1] * fg_cov[2] + bk[1] * bk_cov[2];
+		cc[2] += fg[2] * fg_cov[2] + bk[2] * bk_cov[2];
+		num++;
+	}
+	if (mask & 8)
+	{
+		cc[0] += fg[0] * fg_cov[3] + bk[0] * bk_cov[3];
+		cc[1] += fg[1] * fg_cov[3] + bk[1] * bk_cov[3];
+		cc[2] += fg[2] * fg_cov[3] + bk[2] * bk_cov[3];
+		num++;
+	}
+
+	if (!num)
+		return 0;
+
+	cc[0] = (cc[0] + num * 2) / (num * 4);
+	cc[1] = (cc[1] + num * 2) / (num * 4);
+	cc[2] = (cc[2] + num * 2) / (num * 4);
+
+	return 16 + cc[0] + 6 * cc[1] + 36 * cc[2];
+}
+
 void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, bool refl, int anim, int frame, int angle, int pos[3])
 {
 	// intersect frame with screen buffer
@@ -1211,50 +1338,113 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 			// spare is in full blocks, ref in half!
 			float height = (2 * src->spare + f->ref[2]) * 0.5 * dz_dy + pos[2]; // *height_scale + pos[2]; // transform!
 
-			// about 200 cases
-			// FG_TRANSP | BK_TRANSP | SRC_SPACE | DST_SPACE 
-			// FG_OPAQUE | BK_OPAQUE | SRC_FULL  | DST_FULL  
-			//                       | SRC_LEFT	 | DST_LEFT	  
-			//                       | SRC_RIGHT | DST_RIGHT    
-			//                       | SRC_UPPER | DST_UPPER  
-			//                       | SRC_LOWER | DST_LOWER
-			//                       | SRC_OTHER | DST_OTHER
-
-			
-
-
-			// case classes:
-			/*
-			if (SRC_SPACE)
+#if 0
+			// early rejection
+			if (src->bk == 255 && src->fg == 255 ||
+				(src->gl == 32 || src->gl == 0) && src->bk == 255 ||
+				src->gl == 219 && src->fg == 255)
 			{
-				if (bg is transp)
-					NOP();
-				else
-				{
-					check 4 depth tests (as 0xF mask): 
-					if (0,1,2,8)
-						NOP();
-					else
-					if (3)
-						write lower
-					else
-					if (12)
-						write upper
-					else
-					if (5)
-						write left
-					else
-					if (10)
-						write right
-					else
-						write full
-				}
+				// NOP
 			}
 			else
-			*/
+			// full block write with FG & BK
+			if (src->bk != 255 && src->fg != 255)
+			{
+				int mask = 0;
+				if (height >= s00->height)
+				{
+					s00->height = height;
+					mask|=1;
+				}
+				if (height >= s01->height)
+				{
+					s01->height = height;
+					mask |= 2;
+				}
+				if (height >= s10->height)
+				{
+					s10->height = height;
+					mask |= 4;
+				}
+				if (height >= s11->height)
+				{
+					s11->height = height;
+					mask |= 8;
+				}
 
+				if (mask == 0xF)
+				{
+					*dst = *src;
+				}
+				else
+				if (mask == )
+				{
+				}
 
+			}
 
+			// full block write with BK
+			if (src->bk != 255 && (src->gl == 32 || src->gl == 0))
+			{
+
+			}
+
+			// full block write with FG
+			if (src->fg != 255 && src->gl == 219)
+			{
+
+			}
+
+			// half block transparaent
+			if ((src->bk == 255 || src->fg == 255) &&
+				src->gl >= 220 && src->gl <= 223)
+			{
+				if (src->bk == 255)
+				{
+					switch (src->gl)
+					{
+						case 220: // write fg to lower half
+							if (height >= s00->height)
+								;
+							if (height >= s01->height)
+								;
+							break;
+						case 221: // write fg to left half
+							if (height >= s00->height)
+								;
+							if (height >= s10->height)
+								;
+							break;
+
+						case 222: // write fg to right half
+							if (height >= s01->height)
+								;
+							if (height >= s11->height)
+								;
+							break;
+
+						case 223: // write fg to upper half
+							if (height >= s10->height)
+								;
+							if (height >= s11->height)
+								;
+							break;
+
+					}
+				}
+				else
+				{
+					switch (src->gl)
+					{
+						case 220: break; // write bk to upper half
+						case 221: break; // write bk to right half
+						case 222: break; // write bk to left half
+						case 223: break; // write bk to lower half
+					}
+				}
+			}
+
+#endif
 
 			if (src->bk != 255)
 			{
@@ -1266,22 +1456,34 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					if (!refl && height >= water || refl && height <= water)
 					{
 						if (height >= s00->height)
+						{
+							s00->height = height;
 							depth_passed++;
+						}
 						if (height >= s01->height)
+						{
+							s01->height = height;
 							depth_passed++;
+						}
 						if (height >= s10->height)
+						{
+							s10->height = height;
 							depth_passed++;
+						}
 						if (height >= s11->height)
+						{
+							s11->height = height;
 							depth_passed++;
+						}
 					}
 
 					if (depth_passed >= 3)
 					{
 						*dst = *src;
-						s00->height = height;
-						s01->height = height;
-						s10->height = height;
-						s11->height = height;
+						//s00->height = height;
+						//s01->height = height;
+						//s10->height = height;
+						//s11->height = height;
 					}
 				}
 				else
@@ -1292,13 +1494,25 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					if (!refl && height >= water || refl && height <= water)
 					{
 						if (height >= s00->height)
+						{
+							s00->height = height;
 							depth_passed++;
+						}
 						if (height >= s01->height)
+						{
+							s01->height = height;
 							depth_passed++;
+						}
 						if (height >= s10->height)
+						{
+							s10->height = height;
 							depth_passed++;
+						}
 						if (height >= s11->height)
+						{
+							s11->height = height;
 							depth_passed++;
+						}
 					}
 
 					if (depth_passed >= 3)
@@ -1314,10 +1528,10 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 							dst->gl = src->gl;
 						}
 
-						s00->height = height;
-						s01->height = height;
-						s10->height = height;
-						s11->height = height;
+						// s00->height = height;
+						// s01->height = height;
+						// s10->height = height;
+						// s11->height = height;
 					}
 				}
 			}
@@ -1330,13 +1544,25 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					if (!refl && height >= water || refl && height <= water)
 					{
 						if (height >= s00->height)
+						{
+							s00->height = height;
 							depth_passed++;
+						}
 						if (height >= s01->height)
+						{
+							s01->height = height;
 							depth_passed++;
+						}
 						if (height >= s10->height)
+						{
+							s10->height = height;
 							depth_passed++;
+						}
 						if (height >= s11->height)
+						{
+							s11->height = height;
 							depth_passed++;
+						}
 					}
 
 					if (depth_passed >= 3)
@@ -1352,10 +1578,10 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 							dst->gl = src->gl;
 						}
 
-						s00->height = height;
-						s01->height = height;
-						s10->height = height;
-						s11->height = height;
+						//s00->height = height;
+						//s01->height = height;
+						//s10->height = height;
+						//s11->height = height;
 					}
 				}
 			}

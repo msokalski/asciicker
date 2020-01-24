@@ -988,7 +988,7 @@ struct RenderContext
 				uniform vec4 lt_dif_clr;
 				uniform vec4 lt_amb_clr;
 
-				//uniform int ansi_depth_ofs;
+				uniform ivec2 ansi_depth_ofs;
 				uniform ivec2 sprite_wh;
 				uniform ivec2 ansi_wh;
 
@@ -1028,9 +1028,9 @@ struct RenderContext
 
 						vec4 cell = texture(a_tex, ansi_coord);
 
-						//float ds = 2.0 * (/*zoom*/ 1.0 * /*scale*/ 3.0) / 8/*VISUAL_CELLS*/ * 0.5 /*we're not dbl_wh*/;
-						//float dz_dy = 16/*HEIGHT_SCALE*/ / (cos(30 * 3.141592/*M_PI*/ / 180) * 4/*HEIGHT_CELLS*/ * ds);
-						//gl_FragDepth = gl_FragCoord.z + (2.0*cell.w*255.0 + ansi_depth_ofs) * 0.5 * dz_dy * 2.0 / 0xFFFF;
+						float ds = 2.0 * (/*zoom*/ 1.0 * /*scale*/ 3.0) / 8/*VISUAL_CELLS*/ * 0.5 /*we're not dbl_wh*/;
+						float dz_dy = 16/*HEIGHT_SCALE*/ / (cos(30 * 3.141592/*M_PI*/ / 180) * 4/*HEIGHT_CELLS*/ * ds);
+						gl_FragDepth = (16/*HEIGHT_SCALE*/ / 4 + ansi_depth_ofs.x + (2.0*cell.w*255.0 + ansi_depth_ofs.y) * 0.5 * dz_dy) / 0xFFFF; // *2.0 / 0xFFFF - 1.0;
 
 						int glyph_idx = int(round(cell.z * 255.0));
 
@@ -1055,7 +1055,7 @@ struct RenderContext
 					}
 					else
 					{
-						//gl_FragDepth = gl_FragCoord.z;
+						gl_FragDepth = gl_FragCoord.z;
 
 						color = tint;
 						color.a = 1.0;
@@ -1781,7 +1781,7 @@ struct RenderContext
 
 		mesh_ansi_wh_loc = glGetUniformLocation(mesh_prg, "ansi_wh");
 		mesh_sprite_wh_loc = glGetUniformLocation(mesh_prg, "sprite_wh");
-		//mesh_ansi_depth_ofs_loc = glGetUniformLocation(mesh_prg, "ansi_depth_ofs");
+		mesh_ansi_depth_ofs_loc = glGetUniformLocation(mesh_prg, "ansi_depth_ofs");
 
 		mesh_lt_dif_clr = glGetUniformLocation(mesh_prg, "lt_dif_clr");
 		mesh_lt_amb_clr = glGetUniformLocation(mesh_prg, "lt_amb_clr");
@@ -2178,7 +2178,7 @@ struct RenderContext
 
 		glUniform2i(rc->mesh_sprite_wh_loc, f->width, f->height);
 		glUniform2i(rc->mesh_ansi_wh_loc, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
-		//glUniform1i(rc->mesh_ansi_depth_ofs_loc, f->ref[2] + 2*(HEIGHT_SCALE/4));
+		glUniform2i(rc->mesh_ansi_depth_ofs_loc, (int)floorf(pos[2]+0.5), f->ref[2] );
 
 		for (int face = 0; face < 2; face++)
 		{
@@ -2485,7 +2485,7 @@ struct RenderContext
 	GLint mesh_lt_amb_clr;
 	GLint mesh_ansi_wh_loc;
 	GLint mesh_sprite_wh_loc;
-	//GLint mesh_ansi_depth_ofs_loc;
+	GLint mesh_ansi_depth_ofs_loc;
 
 	GLuint bsp_prg;
 	GLint bsp_tm_loc;
@@ -4443,8 +4443,50 @@ void my_render(A3D_WND* wnd)
 			a3dSetRect(wnd, r, mode);
 		}
 
-		static char utf8_buf[1024]="Z\xC3\xB3pa";
-		ImGui::InputText("UTF8",utf8_buf,1024);
+		ImGui::SameLine();
+		if (ImGui::Button("COVERAGE"))
+		{
+			int width = font[active_font].width;
+			int height = font[active_font].height;
+			uint8_t* img = (uint8_t*)malloc(width*height);
+			glGetTextureSubImage(font[active_font].tex, 0, 0, 0, 0, width, height, 1, GL_ALPHA, GL_UNSIGNED_BYTE, width*height, img);
+
+			int cw = width / 32;
+			int ch = height / 32;
+
+			int cov[32][32] = {{0}};
+
+			for (int y = 0; y < height; y++)
+			{
+				int cy = y / ch;
+				for (int x = 0; x < width; x++)
+				{
+					int cx = x / cw;
+					cov[cy][cx] += img[y*width+x];
+				}
+			}
+
+			int denom = 255 * (width >> 5)*(height >> 5) / 4;
+
+			for (int cy=0; cy<32; cy++)
+				for (int cx = 0; cx < 32; cx++)
+					cov[cy][cx] = (cov[cy][cx] + (denom>>1)) / denom;
+
+			for (int cy = 0; cy < 32; cy += 2)
+			{
+				for (int cx = 0; cx < 32; cx += 2)
+				{
+					// flip upper/lower
+					printf("0x%d%d%d%d,", cov[cy][cx+1], cov[cy][cx], cov[cy+1][cx+1], cov[cy+1][cx]);
+				}
+				printf("\n");
+			}
+
+			printf("--------\n");
+
+			free(img);
+		}
+
 
 		if (ImGui::CollapsingHeader("View Control", ImGuiTreeNodeFlags_DefaultOpen))
 		{
