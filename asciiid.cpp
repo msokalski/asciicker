@@ -2058,6 +2058,8 @@ struct RenderContext
 		mesh_faces=0;
 
 		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
+
+		glEnable(GL_DEPTH_CLAMP);
 	}
 
 	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie)
@@ -2263,6 +2265,8 @@ struct RenderContext
 
 		glDisable(GL_CULL_FACE);
 		glDisable(GL_DEPTH_TEST);
+
+		glDisable(GL_DEPTH_CLAMP);
 	}
 
 	void BeginPatches(const double* tm, const float* lt, const float* br, const float* qd, const float* pr)

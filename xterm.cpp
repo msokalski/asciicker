@@ -526,7 +526,7 @@ int main(int argc, char* argv[])
         global_lt[3] = lt[3];
 
         {
-            FILE* f = fopen("a3d/game_sprites.a3d","rb");
+            FILE* f = fopen("a3d/game.a3d","rb");
 
             if (f)
             {
