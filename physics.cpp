@@ -735,7 +735,7 @@ struct Physics
 	}    
 };
 
-void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 {
 	static const float xy_speed = 0.13;
 	static const float radius_cells = 2; // in full x-cells
@@ -751,8 +751,12 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 
 	io->dt = stamp - phys->stamp;
 
+	int steps_handled = 0;
+
 	while (stamp - phys->stamp >= interval) // 5ms physics steps ( 200 steps/sec )
 	{
+		steps_handled++;
+
 		uint64_t elaps = stamp - phys->stamp;
 		if (elaps > interval)
 			elaps = interval;
@@ -1250,6 +1254,8 @@ void Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 	io->player_dir = phys->player_dir;
 	io->player_stp = phys->player_stp;
 
+	return steps_handled;
+
 	// OLD POS
 	// after updating x,y,z by time and keyb bits
 	// we need to fix z so player doesn't penetrate terrain
@@ -1383,4 +1389,30 @@ void DeletePhysics(Physics* phys)
     if (phys->soup)
         free(phys->soup);
     free(phys);
+}
+
+void SetPhysicsPos(Physics* phys, float pos[3], float vel[3])
+{
+	// TODO: should be save (resolve collisions)
+	// ...
+
+	if (pos)
+	{
+		phys->pos[0] = pos[0];
+		phys->pos[1] = pos[1];
+		phys->pos[2] = pos[2];
+	}
+
+	if (vel)
+	{
+		phys->vel[0] = vel[0];
+		phys->vel[1] = vel[1];
+		phys->vel[2] = vel[2];
+	}
+}
+
+void SetPhysicsYaw(Physics* phys, float yaw, float vel)
+{
+	phys->yaw = yaw;
+	phys->yaw_vel = vel;
 }

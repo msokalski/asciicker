@@ -25,6 +25,7 @@
 #include "gl.h"
 #include "rgba8.h"
 
+#include "game.h"
 
 #ifdef __linux__
 /*
@@ -483,33 +484,7 @@ int main(int argc, char* argv[])
 
 	float last_yaw = yaw;
 
-	// load sprites accessible inside world maps
-	LoadSprite("./sprites/plydie-0011.xp", "plydie-0011.xp");
-
-	// PLAYER
-	
-	player_sprite = LoadPlayer("./sprites/player-0011.xp");
-	attack_sprite = LoadPlayer("./sprites/plydie-0011.xp");
-	//player_sprite = LoadPlayer("./sprites/wolfie-0001.xp");
-	//attack_sprite = LoadPlayer("./sprites/wolack-0001.xp");
-    //player_sprite = LoadPlayer("./sprites/player-0011.xp");
-	//attack_sprite = LoadPlayer("./sprites/attack-0011.xp");
-	//player_sprite = LoadPlayer("./sprites/player-0001.xp");
-	//attack_sprite = LoadPlayer("./sprites/attack-0001.xp");
-
-	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory"/*, false*/);
-	for (int f = 0; f < inventory_sprite->frames; f++)
-	{
-		inventory_sprite->atlas[f].ref[0] = 0;
-		inventory_sprite->atlas[f].ref[1] = 0;
-		inventory_sprite->atlas[f].ref[2] = 0x10000;
-	}
-
-	// WOLFIE
-	// player_sprite = LoadPlayer("./sprites/wolfie.xp");
-
-    if (!player_sprite)
-        return -1;
+	LoadSprites();
 
     if (!term)
     {
@@ -526,7 +501,7 @@ int main(int argc, char* argv[])
         global_lt[3] = lt[3];
 
         {
-            FILE* f = fopen("a3d/game.a3d","rb");
+            FILE* f = fopen("a3d/game_sprites.a3d","rb");
 
             if (f)
             {

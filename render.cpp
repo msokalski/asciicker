@@ -274,18 +274,23 @@ struct SpriteRenderBuf
 
 struct Renderer
 {
-	Renderer()
+	void Init()
 	{
 		memset(this, 0, sizeof(Renderer));
+		pn.reseed(std::default_random_engine::default_seed);
 	}
 
-	~Renderer()
+	void Free()
 	{
 		if (sample_buffer.ptr)
 			free(sample_buffer.ptr);
 		if (sprites_alloc)
 			free(sprites_alloc);
 	}
+
+	uint64_t stamp;
+	siv::PerlinNoise pn;
+	double pn_time;
 
 	SampleBuffer sample_buffer; // render surface
 
@@ -1173,6 +1178,7 @@ static const uint16_t glyph_coverage[256] =
 	0x2211,0x1312,0x0212,0x0211,0x1202,0x2012,0x1111,0x1212,0x2200,0x0000,0x0000,0x2011,0x2200,0x2100,0x2222,0x1111,
 };
 
+/*
 static const uint16_t palette_rgb[256] =
 {
 	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
@@ -1224,9 +1230,43 @@ static const uint16_t palette_rgb[256] =
 	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
 	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000
 };
+*/
 
-int AverageGlyph(AnsiCell* ptr, int mask)
+int AverageGlyph(const AnsiCell* ptr, int mask)
 {
+	// SIMPLER:
+	// calc averaged coverage over masked quadrants
+	// if result is greater than half, return foreground otherwise background
+
+	int cov = glyph_coverage[ptr->gl];
+
+	int num = 0;
+	int sum = 0;
+	if (mask & 1)
+	{
+		sum += cov & 0xf;
+		num++;
+	}
+	if (mask & 2)
+	{
+		sum += (cov >> 4) & 0xf;
+		num++;
+	}
+	if (mask & 4)
+	{
+		sum += (cov >> 8) & 0xf;
+		num++;
+	}
+	if (mask & 8)
+	{
+		sum += (cov >> 12) & 0xf;
+		num++;
+	}
+
+	return sum > num * 2 ? ptr->fg : ptr->bk;
+
+	/*
+	// too complex, results in massive color bleeding
 	int fg_rgb = palette_rgb[ptr->fg];
 	int bk_rgb = palette_rgb[ptr->bk];
 
@@ -1278,6 +1318,7 @@ int AverageGlyph(AnsiCell* ptr, int mask)
 	cc[2] = (cc[2] + num * 2) / (num * 4);
 
 	return 16 + cc[0] + 6 * cc[1] + 36 * cc[2];
+	*/
 }
 
 void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, bool refl, int anim, int frame, int angle, int pos[3])
@@ -1337,115 +1378,431 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 
 			// spare is in full blocks, ref in half!
 			float height = (2 * src->spare + f->ref[2]) * 0.5 * dz_dy + pos[2]; // *height_scale + pos[2]; // transform!
-
-#if 0
-			// early rejection
-			if (src->bk == 255 && src->fg == 255 ||
-				(src->gl == 32 || src->gl == 0) && src->bk == 255 ||
-				src->gl == 219 && src->fg == 255)
+			if (refl && src->gl == 31)
 			{
-				// NOP
+				int a = 0;
 			}
-			else
-			// full block write with FG & BK
-			if (src->bk != 255 && src->fg != 255)
+			if (!refl && height >= water || refl && height <= water)
 			{
-				int mask = 0;
-				if (height >= s00->height)
+				if (refl)
 				{
-					s00->height = height;
-					mask|=1;
-				}
-				if (height >= s01->height)
-				{
-					s01->height = height;
-					mask |= 2;
-				}
-				if (height >= s10->height)
-				{
-					s10->height = height;
-					mask |= 4;
-				}
-				if (height >= s11->height)
-				{
-					s11->height = height;
-					mask |= 8;
+					int a = 0;
 				}
 
-				if (mask == 0xF)
+				// early rejection
+				if (src->bk == 255 && src->fg == 255 ||
+					(src->gl == 32 || src->gl == 0) && src->bk == 255 ||
+					src->gl == 219 && src->fg == 255)
 				{
-					*dst = *src;
+					// NOP
 				}
 				else
-				if (mask == )
+				// full block write with FG & BK
+				if (src->bk != 255 && src->fg != 255)
 				{
-				}
-
-			}
-
-			// full block write with BK
-			if (src->bk != 255 && (src->gl == 32 || src->gl == 0))
-			{
-
-			}
-
-			// full block write with FG
-			if (src->fg != 255 && src->gl == 219)
-			{
-
-			}
-
-			// half block transparaent
-			if ((src->bk == 255 || src->fg == 255) &&
-				src->gl >= 220 && src->gl <= 223)
-			{
-				if (src->bk == 255)
-				{
-					switch (src->gl)
+					int mask = 0;
+					if (height >= s00->height)
 					{
-						case 220: // write fg to lower half
-							if (height >= s00->height)
-								;
-							if (height >= s01->height)
-								;
-							break;
-						case 221: // write fg to left half
-							if (height >= s00->height)
-								;
-							if (height >= s10->height)
-								;
-							break;
+						s00->height = height;
+						mask|=1;
+					}
+					if (height >= s01->height)
+					{
+						s01->height = height;
+						mask |= 2;
+					}
+					if (height >= s10->height)
+					{
+						s10->height = height;
+						mask |= 4;
+					}
+					if (height >= s11->height)
+					{
+						s11->height = height;
+						mask |= 8;
+					}
 
-						case 222: // write fg to right half
-							if (height >= s01->height)
-								;
-							if (height >= s11->height)
-								;
-							break;
+					if (mask == 0xF)
+					{
+						*dst = *src;
+					}
+					else
+					if (mask == 0x0)
+					{
+					}
+					else
+					if (mask==0x3) // lower
+					{
+						dst->bk = AverageGlyph(dst, 0xC);
+						dst->fg = AverageGlyph(src, 0x3);
+						dst->gl = 220;
+					}
+					else
+					if (mask == 0xC) // upper
+					{
+						dst->bk = AverageGlyph(dst, 0x3);
+						dst->fg = AverageGlyph(src, 0xC);
+						dst->gl = 223;
+					}
+					else
+					if (mask == 0x5) // left
+					{
+						dst->bk = AverageGlyph(dst, 0xA);
+						dst->fg = AverageGlyph(src, 0x5);
+						dst->gl = 221;
+					}
+					else
+					if (mask == 0xA) // right
+					{
+						dst->bk = AverageGlyph(dst, 0x5);
+						dst->fg = AverageGlyph(src, 0xA);
+						dst->gl = 222;
+					}
+					else
+					{
+						dst->bk = AverageGlyph(dst, 0xF-mask);
+						dst->fg = AverageGlyph(dst, mask);
+						if (mask == 1 || mask == 2 || mask == 4 || mask == 8)
+							dst->gl = 176;
+						else
+						if (mask == 9 || mask == 6)
+							dst->gl = 177;
+						else
+							dst->gl = 178;
+					}
+				}
+				else
+				// full block write with BK
+				if (src->bk != 255 && (src->gl == 32 || src->gl == 0))
+				{
+					int mask = 0;
+					if (height >= s00->height)
+					{
+						s00->height = height;
+						mask |= 1;
+					}
+					if (height >= s01->height)
+					{
+						s01->height = height;
+						mask |= 2;
+					}
+					if (height >= s10->height)
+					{
+						s10->height = height;
+						mask |= 4;
+					}
+					if (height >= s11->height)
+					{
+						s11->height = height;
+						mask |= 8;
+					}
 
-						case 223: // write fg to upper half
-							if (height >= s10->height)
-								;
-							if (height >= s11->height)
-								;
-							break;
+					if (mask == 0xF)
+					{
+						dst->gl = 219;
+						dst->fg = src->bk;
+					}
+					else
+					if (mask == 0x0)
+					{
+					}
+					else
+					if (mask==0x3) // lower
+					{
+						dst->bk = AverageGlyph(dst, 0xC);
+						dst->fg = src->bk;
+						dst->gl = 220;
+					}
+					else
+					if (mask == 0xC) // upper
+					{
+						dst->bk = AverageGlyph(dst, 0x3);
+						dst->fg = src->bk;
+						dst->gl = 223;
+					}
+					else
+					if (mask == 0x5) // left
+					{
+						dst->bk = AverageGlyph(dst, 0xA);
+						dst->fg = src->bk;
+						dst->gl = 221;
+					}
+					else
+					if (mask == 0xA) // right
+					{
+						dst->bk = AverageGlyph(dst, 0x5);
+						dst->fg = src->bk;
+						dst->gl = 222;
+					}
+					else
+					{
+						dst->bk = AverageGlyph(dst, 0xF-mask);
+						dst->fg = src->bk;
+						if (mask == 1 || mask == 2 || mask == 4 || mask == 8)
+							dst->gl = 176;
+						else
+						if (mask == 9 || mask == 6)
+							dst->gl = 177;
+						else
+							dst->gl = 178;
+					}
+				}
+				else
+				// full block write with FG
+				if (src->fg != 255 && src->gl == 219)
+				{
+					int mask = 0;
+					if (height >= s00->height)
+					{
+						s00->height = height;
+						mask |= 1;
+					}
+					if (height >= s01->height)
+					{
+						s01->height = height;
+						mask |= 2;
+					}
+					if (height >= s10->height)
+					{
+						s10->height = height;
+						mask |= 4;
+					}
+					if (height >= s11->height)
+					{
+						s11->height = height;
+						mask |= 8;
+					}
 
+					if (mask == 0xF)
+					{
+						dst->gl = 219;
+						dst->fg = src->bk;
+					}
+					else
+					if (mask == 0x0)
+					{
+					}
+					else
+					if (mask==0x3) // lower
+					{
+						dst->bk = AverageGlyph(dst, 0xC);
+						dst->fg = src->fg;
+						dst->gl = 220;
+					}
+					else
+					if (mask == 0xC) // upper
+					{
+						dst->bk = AverageGlyph(dst, 0x3);
+						dst->fg = src->fg;
+						dst->gl = 223;
+					}
+					else
+					if (mask == 0x5) // left
+					{
+						dst->bk = AverageGlyph(dst, 0xA);
+						dst->fg = src->fg;
+						dst->gl = 221;
+					}
+					else
+					if (mask == 0xA) // right
+					{
+						dst->bk = AverageGlyph(dst, 0x5);
+						dst->fg = src->fg;
+						dst->gl = 222;
+					}
+					else
+					{
+						dst->bk = AverageGlyph(dst, 0xF-mask);
+						dst->fg = src->fg;
+						if (mask == 1 || mask == 2 || mask == 4 || mask == 8)
+							dst->gl = 176;
+						else
+						if (mask == 9 || mask == 6)
+							dst->gl = 177;
+						else
+							dst->gl = 178;
+					}
+				}
+				else
+				// half block transparaent
+				if (src->gl >= 220 && src->gl <= 223)
+				{
+					int mask = 0;
+					if (src->bk == 255 && src->gl == 220 || src->fg == 255 && src->gl == 223) // lower
+					{
+						if (height >= s00->height)
+						{
+							s00->height = height;
+							mask |= 1;
+						}
+						if (height >= s01->height)
+						{
+							s01->height = height;
+							mask |= 2;
+						}
+					}
+					else
+					if (src->bk == 255 && src->gl == 221 || src->fg == 255 && src->gl == 222) // left
+					{
+						if (height >= s00->height)
+						{
+							s00->height = height;
+							mask |= 1;
+						}
+						if (height >= s10->height)
+						{
+							s10->height = height;
+							mask |= 4;
+						}
+					}
+					else
+					if (src->bk == 255 && src->gl == 222 || src->fg == 255 && src->gl == 221) // right
+					{
+						if (height >= s01->height)
+						{
+							s01->height = height;
+							mask |= 2;
+						}
+						if (height >= s11->height)
+						{
+							s11->height = height;
+							mask |= 8;
+						}
+					}
+					else
+					if (src->bk == 255 && src->gl == 223 || src->fg == 255 && src->gl == 220) // upper
+					{
+						if (height >= s10->height)
+						{
+							s10->height = height;
+							mask |= 4;
+						}
+						if (height >= s11->height)
+						{
+							s11->height = height;
+							mask |= 8;
+						}
+					}
+
+					int color = src->bk == 255 ? src->fg : src->bk;
+					if (mask == 0x0)
+					{
+					}
+					else
+					if (mask==0x3) // lower
+					{
+						dst->bk = AverageGlyph(dst, 0xC);
+						dst->fg = color;
+						dst->gl = 220;
+					}
+					else
+					if (mask == 0xC) // upper
+					{
+						dst->bk = AverageGlyph(dst, 0x3);
+						dst->fg = color;
+						dst->gl = 223;
+					}
+					else
+					if (mask == 0x5) // left
+					{
+						dst->bk = AverageGlyph(dst, 0xA);
+						dst->fg = color;
+						dst->gl = 221;
+					}
+					else
+					if (mask == 0xA) // right
+					{
+						dst->bk = AverageGlyph(dst, 0x5);
+						dst->fg = color;
+						dst->gl = 222;
+					}
+					else
+					{
+						dst->bk = AverageGlyph(dst, 0xF-mask);
+						dst->fg = src->fg;
+						dst->gl = 176;
 					}
 				}
 				else
 				{
-					switch (src->gl)
+					// something else with transparency
+					int mask = 0;
+					if (height >= s00->height)
 					{
-						case 220: break; // write bk to upper half
-						case 221: break; // write bk to right half
-						case 222: break; // write bk to left half
-						case 223: break; // write bk to lower half
+						s00->height = height;
+						mask|=1;
+					}
+					if (height >= s01->height)
+					{
+						s01->height = height;
+						mask |= 2;
+					}
+					if (height >= s10->height)
+					{
+						s10->height = height;
+						mask |= 4;
+					}
+					if (height >= s11->height)
+					{
+						s11->height = height;
+						mask |= 8;
+					}
+
+					if (mask == 0xF)
+					{
+						dst->bk = AverageGlyph(dst, 0xF);
+						dst->fg = src->fg;
+						dst->gl = src->gl;
+					}
+					else
+					if (mask == 0x0)
+					{
+					}
+					else
+					if (mask==0x3) // lower
+					{
+						dst->bk = AverageGlyph(dst, 0xC);
+						dst->fg = AverageGlyph(src, 0x3);
+						dst->gl = 220;
+					}
+					else
+					if (mask == 0xC) // upper
+					{
+						dst->bk = AverageGlyph(dst, 0x3);
+						dst->fg = AverageGlyph(src, 0xC);
+						dst->gl = 223;
+					}
+					else
+					if (mask == 0x5) // left
+					{
+						dst->bk = AverageGlyph(dst, 0xA);
+						dst->fg = AverageGlyph(src, 0x5);
+						dst->gl = 221;
+					}
+					else
+					if (mask == 0xA) // right
+					{
+						dst->bk = AverageGlyph(dst, 0x5);
+						dst->fg = AverageGlyph(src, 0xA);
+						dst->gl = 222;
+					}
+					else
+					{
+						dst->bk = AverageGlyph(dst, 0xF-mask);
+						dst->fg = AverageGlyph(dst, mask);
+						if (mask == 1 || mask == 2 || mask == 4 || mask == 8)
+							dst->gl = 176;
+						else
+						if (mask == 9 || mask == 6)
+							dst->gl = 177;
+						else
+							dst->gl = 178;
 					}
 				}
 			}
+			///////////////////////////
 
-#endif
-
+			/*
 			if (src->bk != 255)
 			{
 				if (src->fg != 255)
@@ -1585,22 +1942,35 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					}
 				}
 			}
+			*/
 		}
 	}
 }
 
-bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, float player_dir, int player_stp, int dt, float hist[][3])
+Renderer* CreateRenderer(uint64_t stamp)
+{
+	Renderer* r = (Renderer*)malloc(sizeof(Renderer));
+
+	r->Init();
+	r->stamp = stamp;
+	return r;
+}
+
+void DeleteRenderer(Renderer* r)
+{
+	r->Free();
+	free(r);
+}
+
+bool Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Sprite* sprite, int anim, int frame, float dir)
 {
 	AnsiCell* out_ptr = ptr;
-	static Renderer r;
 
-	static siv::PerlinNoise pn;
-	static double pn_time = 0.0;
-
-
-	pn_time += 0.02 * dt / 16666.0; // dt is in microsecs
-	if (pn_time >= 1000000000000.0)
-		pn_time = 0.0;
+	double dt = stamp - r->stamp;
+	r->stamp = stamp;
+	r->pn_time += 0.02 * dt / 16666.0; // dt is in microsecs
+	if (r->pn_time >= 1000000000000.0)
+		r->pn_time = 0.0;
 
 
 #ifdef DBL
@@ -1621,71 +1991,71 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 
 	float ds = 2*zoom / VISUAL_CELLS;
 
-	if (!r.sample_buffer.ptr)
+	if (!r->sample_buffer.ptr)
 	{
-		r.int_flag = true;
+		r->int_flag = true;
 		for (int uv=0; uv<HEIGHT_CELLS; uv++)
 		{
-			r.patch_uv[uv][0] = uv * VISUAL_CELLS / HEIGHT_CELLS;
-			r.patch_uv[uv][1] = (uv+1) * VISUAL_CELLS / HEIGHT_CELLS;
+			r->patch_uv[uv][0] = uv * VISUAL_CELLS / HEIGHT_CELLS;
+			r->patch_uv[uv][1] = (uv+1) * VISUAL_CELLS / HEIGHT_CELLS;
 		};
 
 
-		r.sample_buffer.w = dw;
-		r.sample_buffer.h = dh;
-		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample) * 2); // upper half is clear cache
+		r->sample_buffer.w = dw;
+		r->sample_buffer.h = dh;
+		r->sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample) * 2); // upper half is clear cache
 
 		for (int cl = dw * dh; cl < 2*dw*dh; cl++)
 		{
-			r.sample_buffer.ptr[cl].height = -1000000;
-			r.sample_buffer.ptr[cl].spare = 0x8;
-			r.sample_buffer.ptr[cl].diffuse = 0xFF;
-			r.sample_buffer.ptr[cl].visual = 0xC | (0xC << 5) | (0x1B << 10);
+			r->sample_buffer.ptr[cl].height = -1000000;
+			r->sample_buffer.ptr[cl].spare = 0x8;
+			r->sample_buffer.ptr[cl].diffuse = 0xFF;
+			r->sample_buffer.ptr[cl].visual = 0xC | (0xC << 5) | (0x1B << 10);
 		}
 	}
 	else
-	if (r.sample_buffer.w != dw || r.sample_buffer.h != dh)
+	if (r->sample_buffer.w != dw || r->sample_buffer.h != dh)
 	{
-		r.int_flag = true;
-		r.sample_buffer.w = dw;
-		r.sample_buffer.h = dh;
-		free(r.sample_buffer.ptr);
-		r.sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample) * 2); // upper half is clear cache
+		r->int_flag = true;
+		r->sample_buffer.w = dw;
+		r->sample_buffer.h = dh;
+		free(r->sample_buffer.ptr);
+		r->sample_buffer.ptr = (Sample*)malloc(dw*dh * sizeof(Sample) * 2); // upper half is clear cache
 
 		for (int cl = dw * dh; cl < 2 * dw*dh; cl++)
 		{
-			r.sample_buffer.ptr[cl].height = -1000000;
-			r.sample_buffer.ptr[cl].spare = 0x8;
-			r.sample_buffer.ptr[cl].diffuse = 0xFF;
-			r.sample_buffer.ptr[cl].visual = 0xC | (0xC << 5) | (0x1B << 10);
+			r->sample_buffer.ptr[cl].height = -1000000;
+			r->sample_buffer.ptr[cl].spare = 0x8;
+			r->sample_buffer.ptr[cl].diffuse = 0xFF;
+			r->sample_buffer.ptr[cl].visual = 0xC | (0xC << 5) | (0x1B << 10);
 		}
 	}
 	else
 	{
-		if (pos[0] != r.pos[0] || pos[1] != r.pos[1] || pos[2] != r.pos[2])
+		if (pos[0] != r->pos[0] || pos[1] != r->pos[1] || pos[2] != r->pos[2])
 		{
-			r.int_flag = true;
+			r->int_flag = true;
 		}
 
-		if (yaw != r.yaw)
+		if (yaw != r->yaw)
 		{
-			r.int_flag = false;
+			r->int_flag = false;
 		}
 	}
 
 
-	r.pos[0] = pos[0];
-	r.pos[1] = pos[1];
-	r.pos[2] = pos[2];
-	r.yaw = yaw;
+	r->pos[0] = pos[0];
+	r->pos[1] = pos[1];
+	r->pos[2] = pos[2];
+	r->yaw = yaw;
 
-	r.light[0] = lt[0];
-	r.light[1] = lt[1];
-	r.light[2] = lt[2];
-	r.light[3] = lt[3];
+	r->light[0] = lt[0];
+	r->light[1] = lt[1];
+	r->light[2] = lt[2];
+	r->light[3] = lt[3];
 
-	// memset(r.sample_buffer.ptr, 0x00, dw*dh * sizeof(Sample));
-	memcpy(r.sample_buffer.ptr, r.sample_buffer.ptr + dw * dh, dw*dh * sizeof(Sample));
+	// memset(r->sample_buffer.ptr, 0x00, dw*dh * sizeof(Sample));
+	memcpy(r->sample_buffer.ptr, r->sample_buffer.ptr + dw * dh, dw*dh * sizeof(Sample));
 
 	// for every cell we need to know world's xy coord where z is at the water level
 
@@ -1705,7 +2075,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	int water_i = (int)floor(water / (HEIGHT_SCALE / (4 * ds * cos30)));
 	water = (float)(water_i * (HEIGHT_SCALE / (4 * ds * cos30)));
 
-	r.water = water;
+	r->water = water;
 
 	double a = yaw * M_PI / 180.0;
 	double sinyaw = sin(a);
@@ -1731,33 +2101,33 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	tm[14] = 0.0; //-1.0;
 	tm[15] = 1.0;
 
-	r.mul[0] = tm[0];
-	r.mul[1] = tm[1];
-	r.mul[2] = tm[4];
-	r.mul[3] = tm[5];
-	r.mul[4] = 0;
-	r.mul[5] = tm[9];
+	r->mul[0] = tm[0];
+	r->mul[1] = tm[1];
+	r->mul[2] = tm[4];
+	r->mul[3] = tm[5];
+	r->mul[4] = 0;
+	r->mul[5] = tm[9];
 
 	// if yaw didn't change, make it INTEGRAL (and EVEN in case of DBL)
-	r.add[0] = tm[12];
-	r.add[1] = tm[13] + 0.5;
-	r.add[2] = tm[14];
+	r->add[0] = tm[12];
+	r->add[1] = tm[13] + 0.5;
+	r->add[2] = tm[14];
 
-	if (r.int_flag)
+	if (r->int_flag)
 	{
-		int x = (int)floor(r.add[0] + 0.5);
-		int y = (int)floor(r.add[1] + 0.5);
+		int x = (int)floor(r->add[0] + 0.5);
+		int y = (int)floor(r->add[1] + 0.5);
 
 		#ifdef DBL
 		x &= ~1;
 		y &= ~1;
 		#endif
 
-		r.add[0] = (double)x;
-		r.add[1] = (double)y;
+		r->add[0] = (double)x;
+		r->add[1] = (double)y;
 	}
 
-	double proj_tm[] = { r.mul[0], r.mul[1], r.mul[2], r.mul[3], r.mul[4], r.mul[5], r.add[0], r.add[1], r.add[2] };
+	double proj_tm[] = { r->mul[0], r->mul[1], r->mul[2], r->mul[3], r->mul[4], r->mul[5], r->add[0], r->add[1], r->add[2] };
 
 	int planes = 5;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
@@ -1768,7 +2138,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	double clip_right[4] =  {-1, 0, 0, 1 };
 	double clip_bottom[4] = { 0, 1, 0, 1 };
 	double clip_top[4] =    { 0,-1, 0, 1 };
-	double clip_water[4] =  { 0, 0, 1, -((r.water-1)*2.0/0xffff - 1.0) };
+	double clip_water[4] =  { 0, 0, 1, -((r->water-1)*2.0/0xffff - 1.0) };
 
 	// easier to use another transform for clipping
 	{
@@ -1798,10 +2168,10 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
 
-	r.sprites = 0;
-	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
+	r->sprites = 0;
+	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
 	QueryWorldCB cb = { Renderer::RenderMesh , Renderer::RenderSprite };
-	QueryWorld(w, planes, clip_world, &cb, &r);
+	QueryWorld(w, planes, clip_world, &cb, r);
 
 	// HANDLE drawing sprites
 	// ...
@@ -1819,7 +2189,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	{
 		for (int x = sh_x-5; x <= sh_x+5; x++)
 		{
-			Sample* s = r.sample_buffer.ptr + x + y * dw;
+			Sample* s = r->sample_buffer.ptr + x + y * dw;
 			if (abs(s->height - pos[2]) <= 64)
 			{
 				double screen_space[] = { (double)x,(double)y,s->height,1.0 };
@@ -1874,38 +2244,38 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	//tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[9]) * HEIGHT_CELLS;
 	tm[12] = dw*0.5 - (pos[0] * tm[0] * HEIGHT_CELLS + pos[1] * tm[4] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[8]);
 	tm[13] = dh*0.5 - (pos[0] * tm[1] * HEIGHT_CELLS + pos[1] * tm[5] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[9]);
-	tm[14] = 2*r.water;
+	tm[14] = 2*r->water;
 
-	r.mul[0] = tm[0];
-	r.mul[1] = tm[1];
-	r.mul[2] = tm[4];
-	r.mul[3] = tm[5];
-	r.mul[4] = 0;
-	r.mul[5] = tm[9];
+	r->mul[0] = tm[0];
+	r->mul[1] = tm[1];
+	r->mul[2] = tm[4];
+	r->mul[3] = tm[5];
+	r->mul[4] = 0;
+	r->mul[5] = tm[9];
 
 	// if yaw didn't change, make it INTEGRAL (and EVEN in case of DBL)
-	r.add[0] = tm[12];
-	r.add[1] = tm[13] + 0.5;
-	r.add[2] = tm[14];
+	r->add[0] = tm[12];
+	r->add[1] = tm[13] + 0.5;
+	r->add[2] = tm[14];
 
-	if (r.int_flag)
+	if (r->int_flag)
 	{
-		int x = (int)floor(r.add[0] + 0.5);
-		int y = (int)floor(r.add[1] + 0.5);
+		int x = (int)floor(r->add[0] + 0.5);
+		int y = (int)floor(r->add[1] + 0.5);
 
 		#ifdef DBL
 		x &= ~1;
 		y &= ~1;
 		#endif
 
-		r.add[0] = (double)x;
-		r.add[1] = (double)y;
+		r->add[0] = (double)x;
+		r->add[1] = (double)y;
 	}
 
-	double refl_tm[] = { r.mul[0], r.mul[1], r.mul[2], r.mul[3], r.mul[4], r.mul[5], r.add[0], r.add[1], r.add[2] };
+	double refl_tm[] = { r->mul[0], r->mul[1], r->mul[2], r->mul[3], r->mul[4], r->mul[5], r->add[0], r->add[1], r->add[2] };
 
 	clip_water[2] = -1; // was +1
-	clip_water[3] = +((r.water+1)*-2.0 / 0xffff + 1.0); // was -((r.water-1)*2.0/0xffff - 1.0)
+	clip_water[3] = +((r->water+1)*-2.0 / 0xffff + 1.0); // was -((r->water-1)*2.0/0xffff - 1.0)
 
 	{
 		// somehow it works
@@ -1922,8 +2292,8 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		clip_tm[9] = -cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
 		clip_tm[10] = -2. / 0xffff;
 		clip_tm[11] = 0;
-		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2 * r.water - pos[2]) * clip_tm[8]);
-		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2 * r.water - pos[2]) * clip_tm[9]);
+		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2 * r->water - pos[2]) * clip_tm[8]);
+		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2 * r->water - pos[2]) * clip_tm[9]);
 		clip_tm[14] = +1.0;
 		clip_tm[15] = 1.0;
 
@@ -1935,8 +2305,8 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	}
 
 	global_refl_mode = true;
-	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, &r);
-	QueryWorld(w, planes, clip_world, &cb, &r);
+	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
+	QueryWorld(w, planes, clip_world, &cb, r);
 
 	global_refl_mode = false;
 
@@ -1955,7 +2325,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 	}
 	*/
 
-	Sample* src = r.sample_buffer.ptr + 2 + 2 * dw;
+	Sample* src = r->sample_buffer.ptr + 2 + 2 * dw;
 	for (int y = 0; y < height; y++)
 	{
 		for (int x = 0; x < width; x++, ptr++)
@@ -2355,7 +2725,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 				w[0] = round(w[0]);
 				w[1] = round(w[1]);
 
-				double d = pn.octaveNoise0_1(w[0] * 0.05, w[1] * 0.05, pn_time, 4);
+				double d = r->pn.octaveNoise0_1(w[0] * 0.05, w[1] * 0.05, r->pn_time, 4);
 
 				int id = (int)(d * 5) - 2;
 
@@ -2435,21 +2805,7 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		#endif
 	}
 
-	// so blend sprites directly to ansi
-
-	/*
-	{
-		double p[3] = { pos[0],pos[1],-1 };
-		double v[3] = { 0,0,-1 };
-		double r[4] = { 0,0,0,1 };
-		Patch* patch = HitTerrain(t, p, v, r);
-
-		if (patch)
-		{
-			player_pos[2] = r[2];
-		}
-	}
-	*/
+#if 0
 
 	int ang = (int)floor((player_dir-yaw) * player_sprite->angles / 360.0f + 0.5f);
 	/*
@@ -2522,14 +2878,14 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 
 		int pos_push[3] = { player_pos[0] , player_pos[1] , player_pos[2] };
 
-		// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
-		player_pos[1] = height / 2 - (int)floor(2 * (pos[2] - r.water)*dy_dz + 0.5);
+		// player_pos[1] = height / 2 + (int)floor((2 * r->water - pos[2]) * dy_dz + 0.5);
+		player_pos[1] = height / 2 - (int)floor(2 * (pos[2] - r->water)*dy_dz + 0.5);
 
-		// player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5);
-		player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5) - HEIGHT_SCALE / 4;
+		// player_pos[2] = (int)floor(2 * r->water - pos[2] + 0.5);
+		player_pos[2] = (int)floor(2 * r->water - pos[2] + 0.5) - HEIGHT_SCALE / 4;
 
-		r.RenderSprite(out_ptr, width, height, attack_sprite, true, anim, fr, ang, player_pos);
-		r.RenderSprite(out_ptr, width, height, attack_sprite, false, anim, fr, ang, pos_push);
+		r->RenderSprite(out_ptr, width, height, attack_sprite, true, anim, fr, ang, player_pos);
+		r->RenderSprite(out_ptr, width, height, attack_sprite, false, anim, fr, ang, pos_push);
 	}
 	else
 	{
@@ -2537,36 +2893,67 @@ bool Render(uint64_t stamp, Terrain* t, World* w, float water, float zoom, float
 		attack_tim = stamp;
 		attack_frm = 18;	
 
-		r.RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr, ang, player_pos);
+		r->RenderSprite(out_ptr, width, height, player_sprite, false, anim, fr, ang, player_pos);
 
-		// player_pos[1] = height / 2 + (int)floor((2 * r.water - pos[2]) * dy_dz + 0.5);
-		player_pos[1] = height / 2 - (int)floor(2 * (pos[2] - r.water)*dy_dz + 0.5);
+		// player_pos[1] = height / 2 + (int)floor((2 * r->water - pos[2]) * dy_dz + 0.5);
+		player_pos[1] = height / 2 - (int)floor(2 * (pos[2] - r->water)*dy_dz + 0.5);
 
-		// player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5);
-		player_pos[2] = (int)floor(2 * r.water - pos[2] + 0.5) - HEIGHT_SCALE / 4;
+		// player_pos[2] = (int)floor(2 * r->water - pos[2] + 0.5);
+		player_pos[2] = (int)floor(2 * r->water - pos[2] + 0.5) - HEIGHT_SCALE / 4;
 
-		r.RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
+		r->RenderSprite(out_ptr, width, height, player_sprite, true, anim, fr, ang, player_pos);
 	}
+
+#else
+	if (sprite)
+	{
+		int ang = (int)floor((dir - yaw) * sprite->angles / 360.0f + 0.5f);
+		ang = ang >= 0 ? ang % sprite->angles : (ang % sprite->angles + sprite->angles) % sprite->angles;
+
+		{
+			int player_pos[3]=
+			{
+				width / 2,
+				height / 2,
+				(int)floor(pos[2] + 0.5) + HEIGHT_SCALE / 4 
+			};
+			r->RenderSprite(out_ptr, width, height, sprite, false, anim, frame, ang, player_pos);
+		}
+
+		{
+			static const float dy_dz = (cos(30 * M_PI / 180) * HEIGHT_CELLS * (ds / 2/*we're not dbl_wh*/)) / HEIGHT_SCALE;
+
+			int player_pos[3] =
+			{
+				width / 2,
+				height / 2 - (int)floor(2 * (pos[2] - r->water)*dy_dz + 0.5),
+				(int)floor(2 * r->water - pos[2] + 0.5) - HEIGHT_SCALE / 4
+			};
+			r->RenderSprite(out_ptr, width, height, sprite, true, anim, frame, ang, player_pos);
+		}
+	}
+#endif
 
 
 	// lets check drawing sprites in world space
-	for (int s=0; s<r.sprites; s++)
+	for (int s=0; s<r->sprites; s++)
 	{
-		SpriteRenderBuf* buf = r.sprites_alloc + s;
+		SpriteRenderBuf* buf = r->sprites_alloc + s;
 
 		// IT IS PERFECTLY STICKED TO WORLD!
 		// it may not perectly stick to character but its fine! (its kinda character is not perfectly positioned)
 
 
-		int frame = 0;
-		int anim = 0;
-		r.RenderSprite(out_ptr, width, height, buf->sprite, buf->refl, anim, frame, buf->angle, buf->s_pos);
+		int frame = buf->frame;
+		int anim = buf->anim;
+		r->RenderSprite(out_ptr, width, height, buf->sprite, buf->refl, anim, frame, buf->angle, buf->s_pos);
 	}
 
-
+	/*
 	int invpos[3] = { 1,1,0 };
 	if (inventory_sprite)
-		r.RenderSprite(out_ptr, width, height, inventory_sprite, false, 0, 0, 0, invpos);
+		r->RenderSprite(out_ptr, width, height, inventory_sprite, false, 0, 0, 0, invpos);
+	*/
 
 	return true;
 }

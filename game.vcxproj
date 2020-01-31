@@ -175,6 +175,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="fast_rand.h" />
+    <ClInclude Include="game.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
     <ClInclude Include="matrix.h" />
@@ -192,6 +193,7 @@
     <ClInclude Include="upng.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="game.cpp" />
     <ClCompile Include="render.cpp" />
     <ClCompile Include="screen.cpp" />
     <ClCompile Include="term.cpp" />

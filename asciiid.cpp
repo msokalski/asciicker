@@ -26,8 +26,6 @@
 
 #include "platform.h"
 
-// #include "term.h"
-
 #include "texheap.h"
 #include "terrain.h"
 #include "mesh.h"
@@ -42,6 +40,7 @@
 #include "term.h"
 
 #include "render.h"
+#include "game.h"
 
 // A3D_WND* wnd = 0;
 
@@ -7432,12 +7431,12 @@ void my_ptydata(A3D_PTY* pty)
 */
 
 #include "sprite.h"
-Sprite* player_sprite = 0;
-Sprite* attack_sprite = 0;
-Sprite* inventory_sprite = 0;
-
+extern Sprite* player_0000;
 int main(int argc, char *argv[]) 
 {
+	LoadSprites();
+
+#if 0
 	// player_sprite = LoadPlayer("./sprites/wolfie-0.xp");
 	player_sprite = LoadPlayer("./sprites/player-0000.xp");
 	attack_sprite = LoadPlayer("./sprites/plydie-0000.xp");
@@ -7448,6 +7447,7 @@ int main(int argc, char *argv[])
 		inventory_sprite->atlas[f].ref[1] = 0;
 		inventory_sprite->atlas[f].ref[2] = 0x10000;
 	}
+#endif
 
 	/*
 	FILE* act = fopen("d:/xterm.act", "wb");
@@ -7495,9 +7495,14 @@ int main(int argc, char *argv[])
 	a3dOpen(&pi, &gd, 0);
 	a3dLoop();
 
+#if 0
 	FreeSprite(player_sprite);
 	FreeSprite(attack_sprite);
 	FreeSprite(inventory_sprite);
+#endif
+
+	FreeSprites();
+
 
 	return 0;
 }

@@ -6,12 +6,11 @@
 #include <math.h>
 #include "term.h"
 #include "platform.h"
-#include "render.h"
 #include "fast_rand.h"
 #include "matrix.h"
 #include "gl.h"
 
-#include "physics.h"
+#include "game.h"
 
 #define CODE(...) #__VA_ARGS__
 #define DEFN(a,s) "#define " #a #s "\n"
@@ -23,15 +22,8 @@ struct TERM_LIST
 	TERM_LIST* next;
 	A3D_WND* wnd;
 
-	Physics* phys;
-
-	int mouse_b;
-	int mouse_x;
-	int mouse_y;
-	bool mouse_j;
-	bool mouse_rot;
-	float mouse_rot_x;
-	float mouse_rot_yaw;
+	Game* game;
+	//Physics* phys;
 
 	float yaw;
 
@@ -68,6 +60,27 @@ void term_render(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
+	int wnd_wh[2];
+
+	a3dGetRect(wnd, 0, wnd_wh);
+
+	int fnt_wh[2];
+	int fnt_tex = GetGLFont(fnt_wh, wnd_wh);
+
+	int width = wnd_wh[0] / (fnt_wh[0] >> 4);
+	int height = wnd_wh[1] / (fnt_wh[1] >> 4);
+
+	if (width > term->max_width)
+		width = term->max_width;
+	if (height > term->max_height)
+		height = term->max_height;
+
+	uint64_t stamp = a3dGetTime();
+
+	term->game->Render(stamp, term->buf, width, height);
+
+#if 0
+
 	PhysicsIO io;
 
 	float speed = 1;
@@ -89,22 +102,6 @@ void term_render(A3D_WND* wnd)
 	//io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
 
 
-	int wnd_wh[2];
-
-	a3dGetRect(wnd, 0, wnd_wh);
-
-	int fnt_wh[2];
-	int fnt_tex = GetGLFont(fnt_wh, wnd_wh);
-
-	int width = wnd_wh[0] / (fnt_wh[0] >> 4);
-	int height = wnd_wh[1] / (fnt_wh[1] >> 4);
-
-	if (width > term->max_width)
-		width = term->max_width;
-	if (height > term->max_height)
-		height = term->max_height;
-
-	uint64_t stamp = a3dGetTime();
 
 	if (term->mouse_rot)
 	{
@@ -145,7 +142,6 @@ void term_render(A3D_WND* wnd)
 		term->mouse_j = false;
 	}
 
-
 	// FPS DUMPER
 	{
 		static int frames = 0;
@@ -161,25 +157,6 @@ void term_render(A3D_WND* wnd)
 			frames = 0;
 		}
 	}
-
-	glClearColor(0,0,0,0);
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	char utf8[64];
-	sprintf(utf8, "ASCIIID Term %d x %d", width, height);
-	a3dSetTitle(wnd, utf8);
-
-	int vp_wh[2] =
-	{
-		width * (fnt_wh[0] >> 4),
-		height * (fnt_wh[1] >> 4)
-	};
-
-	int vp_xy[2]=
-	{
-		(wnd_wh[0] - vp_wh[0]) / 2,
-		(wnd_wh[1] - vp_wh[1]) / 2
-	};
 
 	float zoom = 1.0;
 	//Render(terrain, world, term->water, zoom, term->yaw, term->pos, width, height, term->buf);
@@ -198,18 +175,27 @@ void term_render(A3D_WND* wnd)
 		global_lt[3]
 	};
 
-	// local light override
-	/*
-	lt[0] = cos((yaw-90) * M_PI / 180);
-	lt[1] = sin((yaw-90) * M_PI / 180);
-	lt[2] = 0.5;
-	ln = 1.0f / sqrtf(lt[0] * lt[0] + lt[1] * lt[1] + lt[2] * lt[2]);
-	lt[0] *= ln;
-	lt[1] *= ln;
-	lt[2] *= ln;
-	*/
-
 	Render(stamp,terrain, world, io.water, zoom, io.yaw, io.pos, lt, width, height, term->buf, io.player_dir, io.player_stp, io.dt, io.xyz);
+#endif
+
+	glClearColor(0, 0, 0, 0);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	char utf8[64];
+	sprintf(utf8, "ASCIIID Term %d x %d", width, height);
+	a3dSetTitle(wnd, utf8);
+
+	int vp_wh[2] =
+	{
+		width * (fnt_wh[0] >> 4),
+		height * (fnt_wh[1] >> 4)
+	};
+
+	int vp_xy[2] =
+	{
+		(wnd_wh[0] - vp_wh[0]) / 2,
+		(wnd_wh[1] - vp_wh[1]) / 2
+	};
 
 	// copy term->buf to some texture
 	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
@@ -242,35 +228,22 @@ void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
-	if ((mi & 0xF) == RIGHT_DN && term->mouse_b == 0)
+	switch (mi & 0xF)
 	{
-		term->mouse_rot = true;
-		term->mouse_rot_x = x;
-		term->mouse_rot_yaw = term->yaw;
+		case MouseInfo::MOVE:		term->game->OnMouse(Game::GAME_MOUSE::MOUSE_MOVE, x, y); break;
+		case MouseInfo::LEFT_DN:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_LEFT_BUT_DOWN, x, y); break;
+		case MouseInfo::LEFT_UP:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_LEFT_BUT_UP, x, y); break;
+		case MouseInfo::RIGHT_DN:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN, x, y); break;
+		case MouseInfo::RIGHT_UP:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_RIGHT_BUT_UP, x, y); break;
+		case MouseInfo::WHEEL_UP:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_WHEEL_UP, x, y); break;
+		case MouseInfo::WHEEL_DN:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_WHEEL_DOWN, x, y); break;
 	}
-	else
-	if ((mi & 0xF) == RIGHT_UP)
-		term->mouse_rot = false;
-
-	if ((mi & 0xF) == LEFT_DN || (mi & 0xF) == RIGHT_DN)
-	{
-		term->mouse_b++;
-		if (term->mouse_b==2)
-			term->mouse_j = true;
-	}
-
-	if ((mi & 0xF) == LEFT_UP || (mi & 0xF) == RIGHT_UP)
-	{
-		if (term->mouse_b)
-			term->mouse_b--;
-	}
-
-	term->mouse_x = x;
-	term->mouse_y = y;
 }
 
 void term_resize(A3D_WND* wnd, int w, int h)
 {
+	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+	term->game->OnSize(w, h);
 }
 
 void term_init(A3D_WND* wnd)
@@ -278,19 +251,13 @@ void term_init(A3D_WND* wnd)
 	TERM_LIST* term = (TERM_LIST*)malloc(sizeof(TERM_LIST));
 	term->wnd = wnd;
 
-	term->mouse_rot = false;
-	term->mouse_j = false;
-	term->mouse_b = 0;
-	term->mouse_x = 0;
-	term->mouse_y = 0;
-
-
 	uint64_t stamp = a3dGetTime();
-	float yaw = rot_yaw;
-	float pos[3]={pos_x,pos_y,pos_z};
-	float dir = 0;
 
-	term->phys = CreatePhysics(terrain,world,pos,dir,yaw,stamp);
+	float pos[3] = { pos_x, pos_y, pos_z };
+	float yaw = rot_yaw;
+	float dir = 0;
+	int water = probe_z;
+	term->game = CreateGame(water, pos, yaw, dir, stamp);
 
 	int loglen = 999;
 	char logstr[1000] = "";
@@ -479,6 +446,8 @@ void term_init(A3D_WND* wnd)
 
 void term_keyb_char(A3D_WND* wnd, wchar_t chr)
 {
+	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+	term->game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, (int)chr);
 }
 
 void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
@@ -497,24 +466,25 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 			else
 				a3dSetRect(wnd, 0, A3D_WND_NORMAL);
 		}
-		term->keys[ki >> 3] |= 1 << (ki & 0x7);
+		
+		term->game->OnKeyb(Game::GAME_KEYB::KEYB_DOWN, ki);
 	}
 	else
-		term->keys[ki >> 3] &= ~(1 << (ki & 0x7));
+		term->game->OnKeyb(Game::GAME_KEYB::KEYB_UP, ki);
 }
 
 void term_keyb_focus(A3D_WND* wnd, bool set)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
-	memset(term->keys, 0, 32);
+	term->game->OnFocus(set);
 }
 
 void term_close(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
-	if (term->phys)
-		DeletePhysics(term->phys);
+	if (term->game)
+		DeleteGame(term->game);
 
 	glDeleteTextures(1, &term->tex);
 	glDeleteVertexArrays(1, &term->vao);
