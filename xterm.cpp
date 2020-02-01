@@ -104,10 +104,10 @@ void SetScreen(bool alt)
         write(STDOUT_FILENO, alt?"\x1B[?2017h":"\x1B[?2017l", 8);
     }
     
-    // \x1B[?1003h all mouse events
-    // \x1B[?1006h enable extended mouse encodings in SGR < Bc,Px,Py,m|M format 
-    static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l" "\x1B[?1003h" "\x1B[?1006h"; // +home, -wrap, -cursor, +mouse
-    static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h" "\x1B[?1003l" "\x1B[?1006l"; // +def_fg/bg, +wrap, +cursor, -mouse
+    // // \x1B[?1002h only drags \x1B[?1003h all mouse events
+    // \x1B[?1006h enable extended mouse encodings in SGR < Bc;Px;Pym|M format 
+    static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l" "\x1B[?1002h" "\x1B[?1006h"; // +home, -wrap, -cursor, +mouse
+    static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h" "\x1B[?1002l" "\x1B[?1006l"; // +def_fg/bg, +wrap, +cursor, -mouse
     static int on_len = strlen(on_str);
     static int off_len = strlen(off_str);
 
@@ -777,6 +777,7 @@ int main(int argc, char* argv[])
                 if (stream[i]>=' ' && stream[i]<=127)
                 {
                     game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, stream[i]);
+                    i++;
                     continue;
                 }
 
@@ -914,19 +915,19 @@ int main(int argc, char* argv[])
                 // mouse SGR (1006) -> CSI < Bc;Px;Py;M (press) or CSI < Bc;Px;Py;m (release) 
                 if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '<')
                 {
-                    int j=i+3;
+                    int k=i+3;
 
                     int val[3]={0,0,0};
                     int fields=0, offset=0;
-                    while (bytes-j>0)
+                    while (bytes-k>0)
                     {
-                        if (stream[j]<'0' || stream[j]>'9')
+                        if (stream[k]<'0' || stream[k]>'9')
                         {
-                            int c = stream[j];
-                            val[fields] = atoi(stream+j-offset);
+                            int c = stream[k];
+                            val[fields] = atoi(stream+k-offset);
                             fields++;
                             offset=0;
-                            j++;
+                            k++;
 
                             switch (c)
                             {
@@ -968,7 +969,6 @@ int main(int argc, char* argv[])
                                                 case 2:
                                                     game->OnMouse(Game::MOUSE_RIGHT_BUT_UP,val[1]-1,val[2]-1);
                                                     break;
-
                                                 default:
                                                     game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
                                             }
@@ -979,17 +979,17 @@ int main(int argc, char* argv[])
                                 }
                             }
 
-                            i=j;
+                            i=k;
                             break;
                         }
                         else
                         {
                             offset++;
-                            j++;
+                            k++;
                         }
                     }
                     
-                    break;
+                    continue;
                 }
 
                 // 3. kitty keys

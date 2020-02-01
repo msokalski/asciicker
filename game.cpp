@@ -433,6 +433,16 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	else
 	if (keyb == GAME_KEYB::KEYB_UP)
 		input.key[key >> 3] &= ~(1 << (key & 0x7));
+	else
+	if (keyb == GAME_KEYB::KEYB_CHAR)
+	{
+		/* code */
+	}
+	else
+	if (keyb == GAME_KEYB::KEYB_PRESS)
+	{
+		/* code */
+	}
 }
 
 void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
