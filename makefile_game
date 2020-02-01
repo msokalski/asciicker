@@ -6,6 +6,7 @@ BIN := .run/game
 
 # source files
 # SRCS :=	xterm.cpp \
+#		game.cpp \
 # 		render.cpp \
 # 		terrain.cpp \
 # 		mesh.cpp \
@@ -21,6 +22,7 @@ SRCS :=	gl.c \
 		x11.cpp \
         term.cpp \
 		xterm.cpp \
+		game.cpp \
 		render.cpp \
 		terrain.cpp \
 		mesh.cpp \
@@ -73,14 +75,14 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-CPPFLAGS := -save-temps=obj -pthread -DGAME -O3
+# CPPFLAGS := -save-temps=obj -pthread -DGAME -O3
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME -O3
-# CPPFLAGS := -g -save-temps=obj -pthread -DGAME -fsanitize=address
+CPPFLAGS := -g -save-temps=obj -pthread -DGAME -fsanitize=address
 
 # linker flags
-LDFLAGS := -save-temps=obj -pthread -O3
+# LDFLAGS := -save-temps=obj -pthread -O3
 # LDFLAGS := -g -save-temps=obj -pthread -O3
-# LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address
+LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address
 
 # flags required for dependency generation; passed to compilers
 DEPFLAGS = -MT $@ -MD -MP -MF $(DEPDIR)/$*.Td

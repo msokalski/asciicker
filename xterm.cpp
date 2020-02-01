@@ -104,8 +104,10 @@ void SetScreen(bool alt)
         write(STDOUT_FILENO, alt?"\x1B[?2017h":"\x1B[?2017l", 8);
     }
     
-    static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l" "\x1B[?1002h"; // +home, -wrap, -cursor, +mouse
-    static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h" "\x1B[?1002l"; // +def_fg/bg, +wrap, +cursor, -mouse
+    // \x1B[?1003h all mouse events
+    // \x1B[?1006h enable extended mouse encodings in SGR < Bc,Px,Py,m|M format 
+    static const char* on_str = "\x1B[?1049h" "\x1B[H" "\x1B[?7l" "\x1B[?25l" "\x1B[?1003h" "\x1B[?1006h"; // +home, -wrap, -cursor, +mouse
+    static const char* off_str = "\x1B[39m;\x1B[49m" "\x1B[?1049l" "\x1B[?7h" "\x1B[?25h" "\x1B[?1003l" "\x1B[?1006l"; // +def_fg/bg, +wrap, +cursor, -mouse
     static int on_len = strlen(on_str);
     static int off_len = strlen(off_str);
 
@@ -412,11 +414,6 @@ void* GetFontArr()
 	return font;
 }
 
-
-Sprite* player_sprite = 0;
-Sprite* attack_sprite = 0;
-Sprite* inventory_sprite = 0;
-
 // make term happy
 float pos_x,pos_y,pos_z;
 float rot_yaw;
@@ -477,6 +474,7 @@ int main(int argc, char* argv[])
 
 
     float water = 55;
+    float dir = 0;
 
     float yaw = 45;
     float pos[3] = {0,15,0};
@@ -566,12 +564,6 @@ int main(int argc, char* argv[])
             a3dLoop();
         }
 
-        if (player_sprite)
-            FreeSprite(player_sprite);
-
-		if (inventory_sprite)
-			FreeSprite(inventory_sprite);
-
         if (terrain)
             DeleteTerrain(terrain);
 
@@ -609,12 +601,7 @@ int main(int argc, char* argv[])
     }
     */
 
-    float player_dir = 0;
-    int  player_stp = -1;    
-
-    Physics* phys = 0;
-    //Terrain* terrain = 0;
-    //World* world = 0;
+    Game* game = 0;
     terrain = 0;
     world = 0;
 
@@ -624,18 +611,6 @@ int main(int argc, char* argv[])
     uint64_t begin = GetTime();
     uint64_t stamp = begin;
     uint64_t frames = 0;
-
-    const int sticky_input = 30000;
-
-	float mouse_rot_x = 0;
-	float mouse_rot_yaw = 0;
-	bool mouse_rot = false;
-    int mouse_b=0; // num of buttons down (we can't be sure which ones!)
-    int mouse_x;
-    int mouse_y;    
-
-    if (!player_sprite)
-        goto exit;
 
     {
         FILE* f = fopen("a3d/game.a3d","rb");
@@ -750,7 +725,7 @@ int main(int argc, char* argv[])
     begin = GetTime();
     stamp = begin;
 
-    phys = CreatePhysics(terrain,world,pos,player_dir,yaw,stamp);
+    game = CreateGame(water,pos,yaw,dir,stamp);
 
     while(running)
     {
@@ -777,9 +752,6 @@ int main(int argc, char* argv[])
         pfds[0].events = POLLIN; 
         pfds[0].revents = 0;
 
-        PhysicsIO io = {0};
-        io.water = 55;
-
         poll(pfds, 1, 0); // 0 no timeout, -1 block
 
         if (pfds[0].revents & POLLIN) 
@@ -801,27 +773,10 @@ int main(int argc, char* argv[])
 
                 int type = 0, mods = 0;
 
-                /*
-                if (!xterm_kitty)
-                {
-                    FILE* log = fopen("log.bin","a+");
-                    fprintf(log,"0x%02X(%c)\n",stream[i],stream[i]);
-                    fclose(log);
-                    i++;
-                    continue;
-                }
-                */
-
-
                 // unescaped input can only jump
                 if (stream[i]>=' ' && stream[i]<=127)
                 {
-                    switch (stream[i])
-                    {
-                        case ' ': mouse_j = true; kbd['A']=sticky_input; break;
-                    }
-                    
-                    i++;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, stream[i]);
                     continue;
                 }
 
@@ -833,70 +788,63 @@ int main(int argc, char* argv[])
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'P')
                 {
                     // F1
-                    kbd['/']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F1);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'Q')
                 {
                     // F2
-                    kbd['*']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F2);
                     i+=3;
                 }
 
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '3' && stream[i+3] == '~')
                 {
                     // DEL
-                    kbd['3']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DELETE);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '2' && stream[i+3] == '~')
                 {
                     // INS
-                    kbd['2']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_INSERT);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '5' && stream[i+3] == '~')
                 {
                     // PGUP
-                    kbd['8']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEUP);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '6' && stream[i+3] == '~')
                 {
                     // PGDN
-                    kbd['9']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN);
                     i+=4;
                 }
-
-                
-
-                // SHOULD HAVE
-                // TODO: non-kitty arrows (in case mouse in not available - YUCK!)
-                // scan for mods: +shift (slower) +alt (jump)
-                // ...
 
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'D')
                 {
                     // left
-                    kbd['5']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_LEFT);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'C')
                 {
                     // right
-                    kbd['4']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_RIGHT);
                     i+=3;
                 }                
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'A')
                 {
                     // up
-                    kbd['7']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_UP);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'B')
                 {
                     // down
-                    kbd['6']=sticky_input;
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DOWN);
                     i+=3;
                 }    
 
@@ -906,92 +854,142 @@ int main(int argc, char* argv[])
                         break;
 
                     int mods = stream[i+4] - 0x31;
+                    int a3d_mods = 0;
 
                     if (mods&1)
                     {
                         // shift
-                        kbd[128+'a'] = sticky_input;
+                        a3d_mods |= 0x1<<8;
                     }
                     if (mods&2)
                     {
                         // alt
-                        kbd[128+'c'] = sticky_input;
+                        a3d_mods |= 0x2<<8;
                     }
+                    if (mods&4)
+                    {
+                        // ctrl ???
+                        a3d_mods |= 0x4<<8;
+                    }
+                    
 
                     switch (stream[i+5])
                     {
                         case 'P': // f1
-                            kbd['/']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F1 | a3d_mods);
                             break;
                         case 'Q': // f2
-                            kbd['*']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F2 | a3d_mods);
                             break;
                         case '3': // del
-                            kbd['3']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DELETE | a3d_mods);
                             break;
                         case '2': // ins
-                            kbd['2']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_INSERT | a3d_mods);
                             break;
                         case '5': // pgup
-                            kbd['8']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEUP | a3d_mods);
                             break;
                         case '6': // pgdn
-                            kbd['9']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN | a3d_mods);
                             break;
 
                         case 'A': // up
-                            kbd['7']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_UP | a3d_mods);
                             break;
                         case 'B': // down
-                            kbd['6']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DOWN | a3d_mods);
                             break;
                         case 'C': // right
-                            kbd['4']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_RIGHT | a3d_mods);
                             break;
                         case 'D': // left
-                            kbd['5']=sticky_input;
+                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_LEFT | a3d_mods);
                             break;
                     }
 
                     i+=6;
                 }            
 
-                // mouse
-                if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'M')
+                // mouse SGR (1006) -> CSI < Bc;Px;Py;M (press) or CSI < Bc;Px;Py;m (release) 
+                if (bytes-i >= 3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '<')
                 {
-                    // code = (0=mb1_down,1=mb2_down,2=mb3_down,3=release) + higher bits for mods
-                    // x,y
+                    int j=i+3;
 
-                    if (bytes-i < 6)
-                        break;
-
-                    if ((stream[i+3]&0x60) == 0x20) // ensure base without motion
+                    int val[3]={0,0,0};
+                    int fields=0, offset=0;
+                    while (bytes-j>0)
                     {
-                        if ((stream[i+3]&3) == 3)
+                        if (stream[j]<'0' || stream[j]>'9')
                         {
-                            if (mouse_b)
-                                mouse_b--;
-							mouse_rot = false;
-						}
+                            int c = stream[j];
+                            val[fields] = atoi(stream+j-offset);
+                            fields++;
+                            offset=0;
+                            j++;
+
+                            switch (c)
+                            {
+                                case ';':
+                                    if (fields<3)
+                                        continue;
+                                    break;
+
+                                case 'm':
+                                case 'M':
+                                {
+                                    if (fields==3)
+                                    {
+                                        int but = val[0] & 0x3;
+
+                                        if (c=='M')
+                                        {
+                                            switch(but)
+                                            {
+                                                case 0:
+                                                    game->OnMouse(Game::MOUSE_LEFT_BUT_DOWN,val[1]-1,val[2]-1);
+                                                    break;
+                                                case 2:
+                                                    game->OnMouse(Game::MOUSE_RIGHT_BUT_DOWN,val[1]-1,val[2]-1);
+                                                    break;
+
+                                                default:
+                                                    game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                            }
+                                        }
+                                        else
+                                        if (c=='m')
+                                        {
+                                            switch(but)
+                                            {
+                                                case 0:
+                                                    game->OnMouse(Game::MOUSE_LEFT_BUT_UP,val[1]-1,val[2]-1);
+                                                    break;
+                                                case 2:
+                                                    game->OnMouse(Game::MOUSE_RIGHT_BUT_UP,val[1]-1,val[2]-1);
+                                                    break;
+
+                                                default:
+                                                    game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                            }
+                                        }
+                                        
+                                    }
+                                    break;
+                                }
+                            }
+
+                            i=j;
+                            break;
+                        }
                         else
                         {
-							if (mouse_b == 0 && (stream[i + 3] & 3) == 2)
-							{
-								mouse_rot = true;
-								mouse_rot_yaw = last_yaw;
-								mouse_rot_x = (uint8_t)stream[i+4] - 33;
-							}
-
-                            mouse_b++;
-                            if (mouse_b>=2) // emu jump
-                                mouse_j = true;
+                            offset++;
+                            j++;
                         }
                     }
-
-                    mouse_x = (uint8_t)stream[i+4] - 33;
-                    mouse_y = (uint8_t)stream[i+5] - 33;
-
-                    i+=6;
+                    
+                    break;
                 }
 
                 // 3. kitty keys
@@ -1226,84 +1224,14 @@ int main(int argc, char* argv[])
             }
         }
 
-        if (xterm_kitty)
-        {
-            float speed = 1.0;
-            if (kbd[128 + 'a'] || kbd[128 + 'e']) // SHIFT (emulated from mods)
-                speed *= 0.5;
-            io.jump = kbd[128 + 'c'] || kbd[128 + 'g'] || kbd['A'] || mouse_j; // ALT / space
-            io.x_force = (kbd['4'] - kbd['5'])*speed; // LEFT-RIGHT
-            io.y_force = (kbd['7'] - kbd['6'])*speed; // UP-DOWN
-
-            float len = sqrtf(io.x_force*io.x_force+io.y_force*io.y_force);
-            if (len>0)
-                speed /= len;
-            io.x_force *= speed;
-            io.y_force *= speed;
-
-
-            io.torque = (int)(kbd['3'] || kbd['8'] || kbd['/']) - // DEL,PGUP,F1
-                        (int)(kbd['2'] || kbd['9'] || kbd['*']);  // INS,PGDN,F2
-        }
-        else
-        {
-            // parse cursor keys + keypad + modifiers shift/alt
-            // io.slow = false; // check for last input was capital or with shift
-            float speed = 1.0;
-            if (kbd[128 + 'a'] || kbd[128 + 'e']) // SHIFT (emulated from mods)
-                speed *= 0.5;
-            io.jump = kbd['A'] || kbd[128+'c'] || mouse_j;
-            io.x_force = (kbd['4'] - kbd['5'])*speed; // LEFT-RIGHT
-            io.y_force = (kbd['7'] - kbd['6'])*speed; // UP-DOWN
-
-            float len = sqrtf(io.x_force*io.x_force+io.y_force*io.y_force);
-            if (len>0)
-                speed /= len;
-            io.x_force *= speed;
-            io.y_force *= speed;
-
-            io.torque = (int)(kbd['3'] || kbd['8'] || kbd['/']) - // DEL,PGUP,F1
-                        (int)(kbd['2'] || kbd['9'] || kbd['*']);  // INS,PGDN,F2        
-        }
-
-		if (mouse_rot)
-		{
-			// io.torque = -2 * (mouse_x * 2 - wh[0]) / (float)wh[0];
-
-			float sensitivity = 200.0f / wh[0];
-			float yaw = mouse_rot_yaw - sensitivity * (mouse_x - mouse_rot_x);
-			io.torque = 1000000;
-			io.yaw = yaw;
-		}
-		else
-        if (mouse_b)
-        {
-            // override keyb
-            float speed = 1.0;
-            io.x_force = speed*2*(mouse_x*2 - wh[0]) / (float)wh[0];
-            io.y_force = speed*2*(wh[1] - mouse_y*2) / (float)wh[1];
-        }
-
-        Animate(phys,stamp,&io);
-		last_yaw = io.yaw;
-
-        if (!io.jump)
-        {
-            if (xterm_kitty)
-            {
-                kbd[128 + 'c'] = 0;
-                kbd[128 + 'g'] = 0;
-            }
-            else
-                kbd[' '] = 0;
-        }
-
         // get current terminal w,h
         // if changed realloc renderer output
         int nwh[2] = {0,0};
         GetWH(nwh);
         if (nwh[0]!=wh[0] || nwh[1]!=wh[1])
         {
+            game->OnSize(nwh[0],nwh[1]);
+
             wh[0] = nwh[0];
             wh[1] = nwh[1];
 
@@ -1323,7 +1251,7 @@ int main(int argc, char* argv[])
         // -> read them all, mark as pressed for 0.1 sec / if already pressed prolong
 
         // render
-        Render(stamp,terrain,world,water,1.0,io.yaw,io.pos,lt,wh[0],wh[1],buf,io.player_dir,io.player_stp,io.dt,io.xyz);
+        game->Render(stamp,buf,wh[0],wh[1]);
 
         // write to stdout
         Print(buf,wh[0],wh[1],CP437_UTF8);
@@ -1332,9 +1260,6 @@ int main(int argc, char* argv[])
 
     exit:
     uint64_t end = GetTime();
-
-    if (player_sprite)
-	    FreeSprite(player_sprite);
 
     if (terrain)
         DeleteTerrain(terrain);
@@ -1345,8 +1270,8 @@ int main(int argc, char* argv[])
     if (buf)
         free(buf);
 
-    if (phys)
-        DeletePhysics(phys);
+    if (game)
+        DeleteGame(game);
 
     SetScreen(false);
 

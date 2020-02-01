@@ -151,6 +151,7 @@ struct Game
 		KEYB_DOWN,
 		KEYB_UP,
 		KEYB_CHAR,
+		KEYB_PRESS, // non-char terminal input with modifiers
 	};
 
 	enum GAME_MOUSE

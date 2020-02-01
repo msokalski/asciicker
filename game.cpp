@@ -1,3 +1,5 @@
+#include <string.h>
+#include <math.h>
 #include "game.h"
 #include "platform.h"
 
@@ -366,7 +368,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
 
-	keyb.Paint(ptr, width, height, 5);
+	// keyb.Paint(ptr, width, height, 5);
 
 	if (input.shot)
 	{
@@ -374,7 +376,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		FILE* f = fopen("./shot.xp", "wb");
 		if (f)
 		{
-			uint32_t hdr[4] = { -1, 1, width, height };
+			uint32_t hdr[4] = { (uint32_t)-1, (uint32_t)1, (uint32_t)width, (uint32_t)height };
 			fwrite(hdr, sizeof(uint32_t), 4, f);
 			for (int x = 0; x < width; x++)
 			{
