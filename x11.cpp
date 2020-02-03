@@ -802,6 +802,15 @@ void a3dLoop()
 {
 	XSync(dpy,False);
 
+	// for all created wnds, force size notifications
+	A3D_WND* wnd = wnd_head;
+	while (wnd)
+	{
+		wnd->platform_api.resize(wnd, wnd->gwa_width, wnd->gwa_height);
+		wnd = wnd->next;
+	}
+
+
 	Window win;
 	XEvent                  xev;
 

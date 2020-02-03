@@ -13,30 +13,45 @@ struct KeyCap
 	{
 		WIDTH_DELTA1 = 1,
 		WIDTH_DELTA2 = 2,
-		WIDTH_DELTA3 = 3, // unused
-		WIDTH_DELTA4 = 4,
-		RIGHT_ALIGN = 8,
-		DARK_COLOR = 0x10,
+		WIDTH_DELTA3 = 3,
+		// WIDTH_DELTA ... upto 7
+		DARK_COLOR = 8,
 	};
 	int flags; // left = 0, right = 1
 	int size;
 	int a3d_key;
-	const char* cap[5][2];
+	const char* cap[6][2];
 
 	// other calculabe fields 
-	int Paint(AnsiCell* ptr, int width, int height, int x, int y, int width_mul) const
+	int Paint(AnsiCell* ptr, int width, int height, int x, int y, int width_mul, const uint8_t key[32]) const
 	{
 		static const uint8_t white = 16 + 5 * 1 + 5 * 6 + 5 * 36;
 		static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
 		static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
 		static const uint8_t black = 16 + 0;
-		static const AnsiCell bevel[2][3] =
+
+		static const uint8_t lt_red = 16 + 1 * 1 + 1 * 6 + 5 * 36;
+		static const uint8_t dk_red = 16 + 0 * 1 + 0 * 6 + 3 * 36;
+
+		static const AnsiCell bevel_norm[2][3] =
 		{
 			{ {white,lt_grey,176}, { black,lt_grey,32 }, {dk_grey,lt_grey,176} },
 			{ {lt_grey,dk_grey,176}, { black,dk_grey,32 }, {black,dk_grey,176} }
 		};
 
-		int b = (flags >> 4) & 1;
+		static const AnsiCell bevel_down[2][3] =
+		{
+			{ {lt_red,dk_red,176}, { white,dk_red,32 }, {black,dk_red,176} },
+			{ {lt_red,dk_red,176}, { white,dk_red,32 }, {black,dk_red,176} },
+		};
+
+		const AnsiCell(*bevel)[3];
+		if (key[a3d_key >> 3] & (1 << (a3d_key & 7)))
+			bevel = bevel_down;
+		else
+			bevel = bevel_norm;
+
+		int b = (flags >> 3) & 1;
 		int w = (flags & 0x7) * width_mul + size + 2;
 
 		AnsiCell* top = ptr + width * (y + 3) + x;
@@ -44,119 +59,141 @@ struct KeyCap
 		AnsiCell* lower = ptr + width * (y + 1) + x;
 		AnsiCell* bottom = ptr + width * (y + 0) + x;
 
+		int dx_lo = -x;
+		int dx_hi = width - x;
+
 		int dx = 0;
 		for (; dx < w - 1; dx++)
-			top[dx] = bevel[b][0];
-		top[dx] = bevel[b][1];
+			if (dx>=dx_lo && dx<dx_hi)
+				top[dx] = bevel[b][0];
+		if (dx >= dx_lo && dx < dx_hi)
+			top[dx] = bevel[b][1];
 
 		int cap_index = 0;
-		for (int i = 0; i < width_mul; i++)
+		for (int i = 0; i <= width_mul; i++)
 			if (cap[i][0])
 				cap_index = i;
+			else
+				break;
 
 		const char* upper_cap = cap[cap_index][0];
 		const char* lower_cap = cap[cap_index][1];
 
-		upper[0] = bevel[b][0];
+		if (0 >= dx_lo && 0 < dx_hi)
+			upper[0] = bevel[b][0];
+
 		dx = 1;
 		for (; dx < w - 1 && upper_cap[dx - 1]; dx++)
 		{
-			upper[dx] = bevel[b][1];
-			upper[dx].gl = upper_cap[dx - 1];
+			if (dx >= dx_lo && dx < dx_hi)
+			{
+				upper[dx] = bevel[b][1];
+				upper[dx].gl = upper_cap[dx - 1];
+			}
 		}
 		for (; dx < w - 1; dx++)
-			upper[dx] = bevel[b][1];
-		upper[dx] = bevel[b][2];
+			if (dx >= dx_lo && dx < dx_hi)
+				upper[dx] = bevel[b][1];
+		if (dx >= dx_lo && dx < dx_hi)
+			upper[dx] = bevel[b][2];
 
-		lower[0] = bevel[b][0];
+		if (0 >= dx_lo && 0 < dx_hi)
+			lower[0] = bevel[b][0];
 		dx = 1;
 		for (; dx < w - 1 && lower_cap[dx - 1]; dx++)
 		{
-			lower[dx] = bevel[b][1];
-			lower[dx].gl = lower_cap[dx - 1];
+			if (dx >= dx_lo && dx < dx_hi)
+			{
+				lower[dx] = bevel[b][1];
+				lower[dx].gl = lower_cap[dx - 1];
+			}
 		}
 		for (; dx < w - 1; dx++)
-			lower[dx] = bevel[b][1];
-		lower[dx] = bevel[b][2];
+			if (dx >= dx_lo && dx < dx_hi)
+				lower[dx] = bevel[b][1];
+		if (dx >= dx_lo && dx < dx_hi)
+			lower[dx] = bevel[b][2];
 
-		bottom[0] = bevel[b][1];
+		if (0 >= dx_lo && 0 < dx_hi)
+			bottom[0] = bevel[b][1];
 		dx = 1;
 		for (; dx < w; dx++)
-			bottom[dx] = bevel[b][2];
+			if (dx >= dx_lo && dx < dx_hi)
+				bottom[dx] = bevel[b][2];
 
 		return w + 1;
 	}
 };
 
-const static KeyCap row0[] =
+static const KeyCap row0[] =
 {
-	{ 0x01, 2, A3D_1, {{"!","1"}, {0,0}} },
-	{ 0x01, 2, A3D_2, {{"@","2"}, {0,0}} },
-	{ 0x01, 2, A3D_3, {{"#","3"}, {0,0}} },
-	{ 0x01, 2, A3D_4, {{"$","4"}, {0,0}} },
-	{ 0x01, 2, A3D_5, {{"%","5"}, {0,0}} },
-	{ 0x01, 2, A3D_6, {{"^","6"}, {0,0}} },
-	{ 0x01, 2, A3D_7, {{"&","7"}, {0,0}} },
-	{ 0x01, 2, A3D_8, {{"*","8"}, {0,0}} },
-	{ 0x01, 2, A3D_9, {{"(","9"}, {0,0}} },
-	{ 0x01, 2, A3D_0, {{")","0"}, {0,0}} },
-	{ 0x19, 4, A3D_BACKSPACE, {{"\x11""Bck"," Spc"}, {"\x11""Back","Space"}, {"\x11 Back"," Space"}, {"\x11  Back","  Space"}, {0,0}} },
+	{ 0x01, 1, A3D_1, {{"!","1"}, {0,0}} },
+	{ 0x01, 1, A3D_2, {{"@","2"}, {0,0}} },
+	{ 0x01, 1, A3D_3, {{"#","3"}, {0,0}} },
+	{ 0x01, 1, A3D_4, {{"$","4"}, {0,0}} },
+	{ 0x01, 1, A3D_5, {{"%","5"}, {0,0}} },
+	{ 0x01, 1, A3D_6, {{"^","6"}, {0,0}} },
+	{ 0x01, 1, A3D_7, {{"&","7"}, {0,0}} },
+	{ 0x01, 1, A3D_8, {{"*","8"}, {0,0}} },
+	{ 0x01, 1, A3D_9, {{"(","9"}, {0,0}} },
+	{ 0x01, 1, A3D_0, {{")","0"}, {0,0}} },
+	{ 0x09, 3, A3D_BACKSPACE, {{"\x11""Bk"," Sp"}, {"\x11""Bck"," Spc"}, {"\x11""Back","Space"}, {"\x11 Back"," Space"}, {"\x11  Back","  Space"}, {0,0}} },
 };
 
-const static KeyCap row1[] =
+static const KeyCap row1[] =
 {
-	{ 0x01, 2, A3D_Q, {{"Q",""}, {0,0}} },
-	{ 0x01, 2, A3D_W, {{"W",""}, {0,0}} },
-	{ 0x01, 2, A3D_E, {{"E",""}, {0,0}} },
-	{ 0x01, 2, A3D_R, {{"R",""}, {0,0}} },
-	{ 0x01, 2, A3D_T, {{"T",""}, {0,0}} },
-	{ 0x01, 2, A3D_Y, {{"Y",""}, {0,0}} },
-	{ 0x01, 2, A3D_U, {{"U",""}, {0,0}} },
-	{ 0x01, 2, A3D_I, {{"I",""}, {0,0}} },
-	{ 0x01, 2, A3D_O, {{"O",""}, {0,0}} },
-	{ 0x01, 2, A3D_P, {{"P",""}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_TILDE, {{"~","`"}, {0,0}} },
+	{ 0x01, 1, A3D_Q, {{"Q",""}, {0,0}} },
+	{ 0x01, 1, A3D_W, {{"W",""}, {0,0}} },
+	{ 0x01, 1, A3D_E, {{"E",""}, {0,0}} },
+	{ 0x01, 1, A3D_R, {{"R",""}, {0,0}} },
+	{ 0x01, 1, A3D_T, {{"T",""}, {0,0}} },
+	{ 0x01, 1, A3D_Y, {{"Y",""}, {0,0}} },
+	{ 0x01, 1, A3D_U, {{"U",""}, {0,0}} },
+	{ 0x01, 1, A3D_I, {{"I",""}, {0,0}} },
+	{ 0x01, 1, A3D_O, {{"O",""}, {0,0}} },
+	{ 0x01, 1, A3D_P, {{"P",""}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_TILDE, {{"~","`"}, {0,0}} },
 };
 
-const static KeyCap row2[] =
+static const KeyCap row2[] =
 {
-	{ 0x01, 2, A3D_OEM_QUOTATION, {{"\"","\'"}, {0,0}} },
-	{ 0x01, 2, A3D_A, {{"A",""}, {0,0}} },
-	{ 0x01, 2, A3D_S, {{"S",""}, {0,0}} },
-	{ 0x01, 2, A3D_D, {{"D",""}, {0,0}} },
-	{ 0x01, 2, A3D_F, {{"F",""}, {0,0}} },
-	{ 0x01, 2, A3D_G, {{"G",""}, {0,0}} },
-	{ 0x01, 2, A3D_H, {{"H",""}, {0,0}} },
-	{ 0x01, 2, A3D_J, {{"J",""}, {0,0}} },
-	{ 0x01, 2, A3D_K, {{"K",""}, {0,0}} },
-	{ 0x01, 2, A3D_L, {{"L",""}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_COLON, {{":",";"}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_QUOTATION, {{"\"","\'"}, {0,0}} },
+	{ 0x01, 1, A3D_A, {{"A",""}, {0,0}} },
+	{ 0x01, 1, A3D_S, {{"S",""}, {0,0}} },
+	{ 0x01, 1, A3D_D, {{"D",""}, {0,0}} },
+	{ 0x01, 1, A3D_F, {{"F",""}, {0,0}} },
+	{ 0x01, 1, A3D_G, {{"G",""}, {0,0}} },
+	{ 0x01, 1, A3D_H, {{"H",""}, {0,0}} },
+	{ 0x01, 1, A3D_J, {{"J",""}, {0,0}} },
+	{ 0x01, 1, A3D_K, {{"K",""}, {0,0}} },
+	{ 0x01, 1, A3D_L, {{"L",""}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_COLON, {{":",";"}, {0,0}} },
 };
 
-const static KeyCap row3[] =
+static const KeyCap row3[] =
 {
-	{ 0x01, 2, A3D_OEM_BACKSLASH, {{"|","\\"}, {0,0}} },
-	{ 0x01, 2, A3D_Z, {{"Z",""}, {0,0}} },
-	{ 0x01, 2, A3D_X, {{"X",""}, {0,0}} },
-	{ 0x01, 2, A3D_C, {{"C",""}, {0,0}} },
-	{ 0x01, 2, A3D_V, {{"V",""}, {0,0}} },
-	{ 0x01, 2, A3D_B, {{"B",""}, {0,0}} },
-	{ 0x01, 2, A3D_N, {{"N",""}, {0,0}} },
-	{ 0x01, 2, A3D_M, {{"M",""}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_COMMA, {{"<",","}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_PERIOD, {{">","."}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_SLASH, {{"?","/"}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_BACKSLASH, {{"|","\\"}, {0,0}} },
+	{ 0x01, 1, A3D_Z, {{"Z",""}, {0,0}} },
+	{ 0x01, 1, A3D_X, {{"X",""}, {0,0}} },
+	{ 0x01, 1, A3D_C, {{"C",""}, {0,0}} },
+	{ 0x01, 1, A3D_V, {{"V",""}, {0,0}} },
+	{ 0x01, 1, A3D_B, {{"B",""}, {0,0}} },
+	{ 0x01, 1, A3D_N, {{"N",""}, {0,0}} },
+	{ 0x01, 1, A3D_M, {{"M",""}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_COMMA, {{"<",","}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_PERIOD, {{">","."}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_SLASH, {{"?","/"}, {0,0}} },
 };
 
-const static KeyCap row4[] =
+static const KeyCap row4[] =
 {
-	{ 0x10, 7, A3D_LSHIFT, {{"Shift \x1E",""}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_MINUS, {{"_","-"}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_PLUS, {{"+","="}, {0,0}} },
-	{ 0x05,22-6, A3D_SPACE, {{"Space",""}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_OPEN, {{"{","["}, {0,0}} },
-	{ 0x01, 2, A3D_OEM_CLOSE, {{"}","]"}, {0,0}} },
-	{ 0x1A, 5, A3D_ENTER, {{"Enter","\x11\xC4\xD9"}, {" Enter"," \x11\xC4\xD9"}, {"\x11\xC4\xD9 Enter",""}, {0,0}} },
+	{ 0x0A, 3, A3D_LSHIFT, {{"Shf"," \x1E"}, {"Shift","  \x1E"}, {"Shift \x1E",""}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_MINUS, {{"_","-"}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_PLUS, {{"+","="}, {0,0}} },
+	{ 0x03,15, A3D_SPACE, {{"Space",""}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_OPEN, {{"{","["}, {0,0}} },
+	{ 0x01, 1, A3D_OEM_CLOSE, {{"}","]"}, {0,0}} },
+	{ 0x0A, 3, A3D_ENTER, {{"Ent","\x11\xC4\xD9"}, {"Enter","\x11\xC4\xD9"}, {" Enter"," \x11\xC4\xD9"}, {"\x11\xC4\xD9 Enter",""}, {0,0}} },
 };
 
 struct KeyRow
@@ -168,35 +205,289 @@ struct KeyRow
 	// other calculabe fields 
 	// ...
 
-	void Paint(AnsiCell* ptr, int width, int height, int x, int y, int width_mul) const
+	void Paint(AnsiCell* ptr, int width, int height, int x, int y, int width_mul, const uint8_t key[32], int xarr[]) const
 	{
 		int xadv = x + xofs;
 		for (int cap = 0; cap < caps; cap++)
-			xadv += row[cap].Paint(ptr, width, height, xadv, y, width_mul);
+		{
+			if (xarr)
+				xarr[cap] = xadv;
+			xadv += row[cap].Paint(ptr, width, height, xadv, y, width_mul, key);
+		}
+		if (xarr)
+			xarr[caps] = xadv;
 	}
 };
 
 struct Keyb
 {
+	int add_size;
+	int mul_size;
 	KeyRow rows[5];
 
-	void Paint(AnsiCell* ptr, int width, int height, int width_mul) const
+	int GetCap(int dx, int dy, int width_mul) const
 	{
-		const static int yadv = 5;
+		// calc row
+		static const int yadv = 5;
+		if (dy < 1 || dy >= 5 * yadv) // check if in range and not over any horizontal divider
+			return -1;
+		const KeyRow* r = rows + 4 - (dy - 1) / yadv;
 
-		int xofs = 1;
-		int yofs = 1;
+		int xadv = 1 + r->xofs;
+		if (dx < xadv)
+			return -1;
+		for (int c = 0; c < r->caps; c++)
+		{
+			int w = (r->row[c].flags & 0x7) * width_mul + r->row[c].size + 2;
 
+			if (dx >= xadv)
+			{
+				if (dx < xadv + w)
+				{
+					if (dy % 5 == 0)
+						return 0;
+					return r->row[c].a3d_key;
+				}
+			}
+			else
+				return 0;
+
+			xadv += w + 1;
+		}
+
+		return -1;
+	}
+
+	int Width(int width_mul) const
+	{
+		return add_size + width_mul * mul_size;
+	}
+
+	void Paint(AnsiCell* ptr, int x, int y, int width, int height, int width_mul, const uint8_t key[32]) const
+	{
+		static const int yadv = 5;
+
+		int xofs = 1+x;
+		int yofs = 1+y;
+
+		static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
+		static const uint8_t black = 16 + 0;
+
+		static const AnsiCell line = { dk_grey, black, 0, 0 };
+
+		int xarr[2][16];
 		for (int i = 0; i < 5; i++)
 		{
-			rows[4 - i].Paint(ptr, width, height, xofs, yofs, width_mul);
+			rows[4 - i].Paint(ptr, width, height, xofs, yofs, width_mul, key, xarr[i&1]);
+
+			int caps = rows[4 - i].caps;
+
+			int yend = yofs + yadv - 1;
+			AnsiCell* below = ptr + (yofs - 1)*width;
+
+			if (yofs < 1 || yofs-1 >= height)
+				below = 0;
+
+			// vertical lines
+			for (int j = 0; j <= caps; j++)
+			{
+				int from = xarr[i&1][j] - 1;
+				if (from >= 0 && from < width)
+				{
+					for (int v = yofs; v < yend; v++)
+					{
+						if (v >= 0 && v < height)
+						{
+							ptr[width*v + from] = line;
+							ptr[width*v + from].gl = 179;
+						}
+					}
+				}
+			}
+
+			if (i == 0)
+			{
+				if (below)
+				{
+					if (xarr[0][0] - 1 >= 0 && xarr[0][0] - 1 < width)
+					{
+						below[xarr[0][0] - 1] = line;
+						below[xarr[0][0] - 1].gl = 192;
+					}
+
+					for (int j = 0; j < caps; j++)
+					{
+						int from = xarr[0][j];
+						int to = xarr[0][j + 1] - 1;
+
+						for (int h = from; h < to; h++)
+						{
+							if (h >= 0 && h < width)
+							{
+								below[h] = line;
+								below[h].gl = 196;
+							}
+						}
+
+						if (to >= 0 && to < width)
+						{
+							below[to] = line;
+							below[to].gl = j == caps - 1 ? 217 : 193;
+						}
+					}
+				}
+			}
+			else
+			{
+				int prev_caps = rows[5 - i].caps;
+
+				int* upper = xarr[i & 1];
+				int* lower = xarr[(i & 1) ^ 1];
+
+				if (below)
+				{
+					int h,l,u;
+
+					if (lower[0] < upper[0])
+					{
+						if (lower[0] - 1 >= 0 && lower[0] - 1 < width)
+						{
+							below[lower[0] - 1] = line;
+							below[lower[0] - 1].gl = 218;
+						}
+						h = lower[0];
+						l = 1;
+						u = 0;
+					}
+					else
+					if (lower[0] > upper[0])
+					{
+						if (upper[0] - 1 >= 0 && upper[0] - 1 < width)
+						{
+							below[upper[0] - 1] = line;
+							below[upper[0] - 1].gl = 192;
+						}
+						h = upper[0];
+						l = 0;
+						u = 1;
+					}
+					else
+					{
+						if (upper[0] - 1 >= 0 && upper[0] - 1 < width)
+						{
+							below[upper[0] - 1] = line;
+							below[upper[0] - 1].gl = 195;
+						}
+						h = upper[0];
+						l = u = 1;
+					}
+
+					int e;
+					if (lower[prev_caps] < upper[caps])
+					{
+						if (upper[caps] - 1 >= 0 && upper[caps] - 1 < width)
+						{
+							below[upper[caps] - 1] = line;
+							below[upper[caps] - 1].gl = 217;
+						}
+						e = upper[caps]-1;
+					}
+					else
+					if (lower[prev_caps] > upper[caps])
+					{
+						if (lower[prev_caps] - 1 >= 0 && lower[prev_caps] - 1 < width)
+						{
+							below[lower[prev_caps] - 1] = line;
+							below[lower[prev_caps] - 1].gl = 191;
+						}
+						e = lower[prev_caps] - 1;
+					}
+					else
+					{
+						if (upper[caps] - 1 >= 0 && upper[caps] - 1 < width)
+						{
+							below[upper[caps] - 1] = line;
+							below[upper[caps] - 1].gl = 180;
+						}
+						e = upper[caps] - 1;
+					}
+
+					for (;h < e; h++)
+					{
+						if (h>=0 && h<width)
+							below[h] = line;
+						if (h == upper[u] - 1)
+						{
+							u++;
+							if (h == lower[l] - 1)
+							{
+								l++;
+								if (h >= 0 && h < width)
+									below[h].gl = 197;
+							}
+							else
+								if (h >= 0 && h < width)
+									below[h].gl = 193;
+						}
+						else
+						if (h == lower[l] - 1)
+						{
+							l++;
+							if (h >= 0 && h < width)
+								below[h].gl = 194;
+						}
+						else
+							if (h >= 0 && h < width)
+								below[h].gl = 196;
+					}
+				}
+
+				if (i == 4)
+				{
+					AnsiCell* above = ptr + (yofs + yadv - 1)*width;
+					if (yofs + yadv < 1 || yofs + yadv - 1 >= height)
+						above = 0;
+
+					if (above)
+					{
+						if (upper[0] - 1 >= 0 && upper[0] - 1 < width)
+						{
+							above[upper[0] - 1] = line;
+							above[upper[0] - 1].gl = 218;
+						}
+
+						for (int j = 0; j < caps; j++)
+						{
+							int from = upper[j];
+							int to = upper[j + 1] - 1;
+
+							for (int h = from; h < to; h++)
+							{
+								if (h >= 0 && h < width)
+								{
+									above[h] = line;
+									above[h].gl = 196;
+								}
+							}
+
+							if (to >= 0 && to < width)
+							{
+								above[to] = line;
+								above[to].gl = j == caps - 1 ? 191 : 194;
+							}
+						}
+					}
+				}
+			}
+
 			yofs += yadv;
 		}
 	}
 };
 
-const static Keyb keyb =
+static const Keyb keyb =
 {
+	47, 11,
 	{
 		{ 0,11, row0 },
 		{ 2,11, row1 },
@@ -288,8 +579,17 @@ void DeleteGame(Game* g)
 	}
 }
 
+void Game::ScreenToCell(int p[2]) const
+{
+	p[0] = (2*p[0] - input.size[0] + render_size[0] * font_size[0]) / (2 * font_size[0]);
+	p[1] = (input.size[1] - 2*p[1] + render_size[1] * font_size[1]) / (2 * font_size[1]);
+}
+
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
+	render_size[0] = width;
+	render_size[1] = height;
+
 	float lt[4] = { 1,0,1,0.5 };
 
 	PhysicsIO io;
@@ -308,6 +608,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		io.y_force = 2 * (input.size[1] - input.pos[1] * 2) / (float)input.size[1];
 	}
 	else
+	if (!show_keyb)
 	{
 		float speed = 1;
 		if (input.IsKeyDown(A3D_LSHIFT) || input.IsKeyDown(A3D_RSHIFT))
@@ -330,6 +631,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		SetPhysicsYaw(physics, yaw, 0);
 	}
 	else
+	if (!show_keyb)
 	{
 		io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
 			(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E));
@@ -368,7 +670,27 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
 
-	// keyb.Paint(ptr, width, height, 5);
+	if (show_keyb)
+	{
+		int mul, keyb_width;
+		for (int mode = 1; mode <= 16; mode++)
+		{
+			mul = mode;
+			keyb_width = keyb.Width(mul);
+			if (keyb_width + 1 >= width)
+			{
+				mul--;
+				keyb_width = keyb.Width(mul);
+				break;
+			}
+		}
+
+		keyb_pos[0] = (width - keyb_width) / 2;
+		keyb_pos[1] = 1;
+		keyb_mul = mul;
+
+		keyb.Paint(ptr, keyb_pos[0], keyb_pos[1], width, height, keyb_mul, input.key);
+	}
 
 	if (input.shot)
 	{
@@ -410,11 +732,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	stamp = _stamp;
 }
 
-void Game::OnSize(int w, int h)
+void Game::OnSize(int w, int h, int fw, int fh)
 {
 	memset(&input, 0, sizeof(Input));
 	input.size[0] = w;
 	input.size[1] = h;
+	font_size[0] = fw;
+	font_size[1] = fh;
 }
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)
@@ -424,9 +748,21 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	// if nothing focused 
 	if (keyb == GAME_KEYB::KEYB_DOWN)
 	{
+		if (key == A3D_TAB)
+		{
+			if (show_keyb)
+				memset(input.key, 0, 32);
+			show_keyb = !show_keyb;
+		}
+		if (key == A3D_ESCAPE && show_keyb)
+		{
+			if (show_keyb)
+				memset(input.key, 0, 32);
+			show_keyb = false;
+		}
 		if (key == A3D_F10)
 			input.shot = true;
-		if (key == A3D_SPACE)
+		if (key == A3D_SPACE && !show_keyb)
 			input.jump = true;
 		input.key[key >> 3] |= 1 << (key & 0x7);
 	}
@@ -453,12 +789,42 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 	switch (mouse)
 	{
 		case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: 
+
+			if (show_keyb && !input.drag)
+			{
+				int cp[2] = { x,y };
+				ScreenToCell(cp);
+				int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul);
+
+				if (cap > 0)
+				{
+					OnKeyb(GAME_KEYB::KEYB_DOWN, cap);  // just to hilight keycap
+					OnKeyb(GAME_KEYB::KEYB_CHAR, cap); // like from terminal!
+					keyb_cap[10/*mouse_touch_id*/] = cap;
+
+					// setup autorepeat initial delay>
+					// ...
+				}
+				else
+				// negative cap -> hit outside entire keyboard
+				if (cap < 0)
+				{
+					if (input.but == 0)
+					{
+						input.drag = 1;
+						input.drag_from[0] = x;
+						input.drag_from[1] = y;
+					}
+				}
+			}
+			else
 			if (input.but == 0)
 			{
 				input.drag = 1;
 				input.drag_from[0] = x;
 				input.drag_from[1] = y;
 			}
+
 			input.but |= 1; 
 			break;
 
@@ -483,6 +849,32 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 				input.drag = 0; 
 			input.but &= ~2; 
 			break;
+	}
+
+	if (mouse != MOUSE_LEFT_BUT_DOWN)
+	{
+		if (show_keyb)
+		{
+			if (keyb_cap[10/*mouse_touch_id*/])
+			{
+				if (mouse == MOUSE_LEFT_BUT_UP)
+				{
+					OnKeyb(GAME_KEYB::KEYB_UP, keyb_cap[10/*mouse_touch_id*/]); // un-hilight keycap
+					keyb_cap[10/*mouse_touch_id*/] = 0;
+				}
+				else
+				{
+					int cp[2] = { x,y };
+					ScreenToCell(cp);
+					int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul);
+					if (cap != keyb_cap[10/*mouse_touch_id*/])
+					{
+						OnKeyb(GAME_KEYB::KEYB_UP, keyb_cap[10/*mouse_touch_id*/]); // un-hilight keycap
+						keyb_cap[10/*mouse_touch_id*/] = 0;
+					}
+				}
+			}
+		}
 	}
 
 	input.pos[0] = x;

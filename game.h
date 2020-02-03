@@ -101,6 +101,14 @@ struct Game
 
 	uint64_t stamp;
 
+	int font_size[2];
+	int render_size[2];
+
+	bool show_keyb;
+	int keyb_cap[11]; // cap down by 10 touches and mouse
+	int keyb_pos[2];
+	int keyb_mul;
+
 	int water;
 	float prev_yaw;
 
@@ -177,10 +185,11 @@ struct Game
 	void OnMouse(GAME_MOUSE mouse, int x, int y);
 	void OnTouch(GAME_TOUCH touch, int id, int x, int y);
 	void OnFocus(bool set);
-	void OnSize(int w, int h);
+	void OnSize(int w, int h, int fw, int fh);
 
 	// update physics with accumulated input then render state to output
 	void Render(uint64_t _stamp, AnsiCell* ptr, int width, int height);
+	void ScreenToCell(int p[2]) const;
 };
 
 Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp);

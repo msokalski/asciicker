@@ -996,6 +996,16 @@ void a3dLoop() // infinite untill all windows are destroyed
 {
 	// while (!wnd->closing)
 
+	// for all created wnds, force size notifications
+	A3D_WND* wnd = wnd_head;
+	while (wnd)
+	{
+		RECT rc;
+		GetClientRect(wnd->hwnd, &rc);
+		wnd->platform_api.resize(wnd, rc.right, rc.bottom);
+		wnd = wnd->next;
+	}
+
 	while (wnd_head)
 	{
 		MSG msg;

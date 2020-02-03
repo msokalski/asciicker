@@ -243,7 +243,12 @@ void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 void term_resize(A3D_WND* wnd, int w, int h)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
-	term->game->OnSize(w, h);
+
+	int fnt_wh[2] = { 0,0 };
+	int wnd_wh[2] = { w,h };
+	int fnt_tex = GetGLFont(fnt_wh, wnd_wh);
+
+	term->game->OnSize(w, h, fnt_wh[0] >> 4, fnt_wh[1] >> 4);
 }
 
 void term_init(A3D_WND* wnd)
