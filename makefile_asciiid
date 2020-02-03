@@ -9,7 +9,7 @@ SRCS :=	asciiid.cpp \
 		term.cpp \
 		x11.cpp \
 		urdo.cpp \
-		game.cpp \		
+		game.cpp \
 		render.cpp \
 		terrain.cpp \
 		mesh.cpp \
