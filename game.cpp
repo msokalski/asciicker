@@ -3,6 +3,441 @@
 #include "game.h"
 #include "platform.h"
 
+struct TalkBox
+{
+	int max_width, max_height;
+	int size[2];
+	int cursor_xy[2];
+	int cursor_pos;
+	int len;
+	bool show_cursor;
+
+	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor) const
+	{
+		// x,y is at smoke spot, box will be centered above it
+
+		struct Cookie
+		{
+			const TalkBox* box;
+			AnsiCell* ptr;
+			int width, height, x, y;
+			int span;
+			int rows;
+			static void Print(int dx, int dy, const char* str, int len, void* cookie)
+			{
+				static const uint8_t white = 16 + 5 * 1 + 5 * 6 + 5 * 36;
+				static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
+				static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
+
+				Cookie* c = (Cookie*)cookie;
+				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
+				for (int i=0; i<len; i++)
+				{
+					if (str[i] == '\n')
+					{
+						// TODO: 
+						// fill till span with spaces!
+						// ...
+						for (int x = dx + i; x < c->span; x++)
+						{
+							AnsiCell* ac = ar + x;
+							ac->fg = white;
+							ac->bk = dk_grey;
+							ac->gl = ' ';
+							ac->spare = 0;
+						}
+						c->rows++;
+						break;
+					}
+					AnsiCell* ac = ar + i + dx;
+					ac->fg = white;
+					ac->bk = dk_grey;
+					ac->gl = str[i];
+					ac->spare = 0;
+				}
+			}
+		};
+
+		int w = (size[0]+1); // +1 for left margin, |1 to make it odd
+		
+		Cookie cookie = { this, ptr, width, height, x - w/2 +1, y + size[1]+2, w, 0 };
+		int bl = Reflow(0, 0, Cookie::Print, &cookie);
+		assert(bl >= 0);
+
+		AnsiCell* ll = ptr + x - w / 2 - 1 + (y + 1) * width;
+		AnsiCell* bc = ptr + x + y * width;
+		AnsiCell* lr = ptr + x + w / 2 + 1 + (y + 1) * width;
+		AnsiCell* ul = ptr + x - w / 2 - 1 + (y + 4 + size[1]) * width;
+		AnsiCell* ur = ptr + x + w / 2 + 1 + (y + 4 + size[1]) * width;
+
+		static const uint8_t black = 16;
+		static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
+		static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
+
+		bc->bk = black;
+		bc->fg = lt_grey;
+		bc->gl = 179;
+
+		bc += width;
+
+		bc->bk = black;
+		bc->fg = lt_grey;
+		bc->gl = 194;
+
+		ll->bk = black;
+		ll->fg = lt_grey;
+		ll->gl = 192;
+
+		lr->bk = black;
+		lr->fg = lt_grey;
+		lr->gl = 217;
+
+		ul->bk = black;
+		ul->fg = lt_grey;
+		ul->gl = 218;
+
+		ur->bk = black;
+		ur->fg = lt_grey;
+		ur->gl = 191;
+
+		for (int i = 1; i <= w / 2; i++)
+		{
+			ll[i].bk = black;
+			ll[i].fg = lt_grey;
+			ll[i].gl = 196;
+			lr[-i].bk = black;
+			lr[-i].fg = lt_grey;
+			lr[-i].gl = 196;
+
+			ul[i].bk = black;
+			ul[i].fg = lt_grey;
+			ul[i].gl = 196;
+			ur[-i].bk = black;
+			ur[-i].fg = lt_grey;
+			ur[-i].gl = 196;
+		}
+
+		bc += width*(1+size[1]+2);
+
+		bc->bk = black;
+		bc->fg = lt_grey;
+		bc->gl = 196;
+
+		ll += width;
+		lr += width;
+
+		for (int i = 2; i < w+2; i++)
+		{
+			ll[i].bk = dk_grey;
+			ll[i].fg = black;
+			ll[i].gl = ' ';
+		}
+
+		for (int i = 0; i < size[1]+2; i++)
+		{
+			ll->bk = black;
+			ll->fg = lt_grey;
+			ll->gl = 179;
+			ll[1].bk = dk_grey;
+			ll[1].fg = black;
+			ll[1].gl = ' ';
+
+			lr->bk = black;
+			lr->fg = lt_grey;
+			lr->gl = 179;
+
+			ll += width;
+			lr += width;
+		}
+
+		ll -= width;
+
+		for (int i = 2; i < w+2; i++)
+		{
+			ll[i].bk = dk_grey;
+			ll[i].fg = black;
+			ll[i].gl = ' ';
+		}
+	}
+
+	void MoveCursor(int dx, int dy)
+	{
+		// update cursor pos
+		cursor_xy[0] += dx;
+		cursor_xy[1] += dy;
+
+		if (cursor_xy[0] < 0)
+			cursor_xy[0] = 0;
+		if (cursor_xy[1] < 0)
+			cursor_xy[1] = 0;
+
+		if (cursor_xy[1] >= size[1])
+			cursor_xy[1] = size[1] - 1;
+
+		int bl = Reflow(0, 0, false);
+
+		assert(bl >= 0);
+
+		if (cursor_xy[0] > (bl & 0xFF))
+			cursor_xy[0] = bl & 0xFF;
+
+		cursor_pos = (bl >> 8) + cursor_xy[0];
+	}
+	
+	bool Input(int ch)
+	{
+		// insert / delete char, update size and cursor pos
+
+		if (ch == 127)
+		{
+			if (cursor_pos > 0)
+			{
+				if (cursor_pos < len)
+					memmove(buf + cursor_pos - 1, buf + cursor_pos, len - cursor_pos);
+				cursor_pos--;
+				len--;
+
+				int _size[2], _pos[2];
+				int bl = Reflow(_size, _pos, false);
+
+				assert(bl >= 0);
+
+				size[0] = _size[0];
+				size[1] = _size[1];
+				cursor_xy[0] = _pos[0];
+				cursor_xy[1] = _pos[1];
+			}
+			else
+				return false;
+		}
+		else
+		{
+			if (len < 256)
+			{
+				if (cursor_pos < len)
+					memmove(buf + cursor_pos + 1, buf + cursor_pos, len - cursor_pos);
+				buf[cursor_pos] = ch;
+				cursor_pos++;
+				len++;
+
+				int _size[2],_pos[2];
+				if (Reflow(_size, _pos, false) >= 0)
+				{
+					size[0] = _size[0];
+					size[1] = _size[1];
+					cursor_xy[0] = _pos[0];
+					cursor_xy[1] = _pos[1];
+				}
+				else
+				{
+					// revert!!!
+					if (cursor_pos < len)
+						memmove(buf + cursor_pos - 1, buf + cursor_pos, len - cursor_pos);
+					cursor_pos--;
+					len--;
+
+					return false;
+				}
+			}
+			else
+				return false;
+		}
+
+		return true;
+	}
+
+	// returns -1 on overflow, otherwise (b<<8) | l 
+	// where l = cursor_xy[1] line length and b = cursor_pos at cursor_xy[1] line begining
+	int Reflow(int* _size, int* _pos, void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
+	{
+		int x = 0, y = 0;
+		int cx = 0, cy = 0;
+		int wordlen = 0;
+
+		int w = 0, l = 0, b = 0;
+
+		for (int c = 0; c < len; c++)
+		{
+			assert(x < max_width);
+
+			if (c == cursor_pos)
+			{
+				cx = x;
+				cy = y;
+			}
+
+			// distinguish from regular character, space and line breaker
+			if (buf[c] == ' ')
+			{
+				if (print)
+				{
+					/*
+					for (int i=c-wordlen; i<c; i++)
+						printf("%c", buf[i]);
+					printf("~");
+					*/
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // +1 to include space char
+				}
+
+				wordlen = 0;
+				x++;
+
+				if (x > w)
+				{
+					w = x;
+					if (y == cursor_xy[1])
+						l = w;
+				}
+
+				if (x == max_width)
+				{
+					if (print)
+					{
+						//printf("\n");
+						print(x, y, "\n", 1, cookie);
+					}
+					x = 0;
+					y++;
+					if (y == cursor_xy[1])
+						b = c+1;
+					if (y == max_height && max_height)
+						return -1;
+				}
+			}
+			else
+			if (buf[c] == '\n')
+			{
+				// treat it as the last word's char!
+
+				if (print)
+				{
+					/*
+					for (int i = c - wordlen; i < c; i++)
+						printf("%c", buf[i]);
+					printf("@\n");
+					*/
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // including '\n'
+				}
+
+				wordlen = 0;
+				x = 0;
+				y++;
+				if (y == max_height && max_height)
+					return -1;
+				if (y == cursor_xy[1])
+					b = c+1;
+				if (x > w) // too late, x==0 !!!
+				{
+					w = x;
+					if (y == cursor_xy[1])
+						l = w;
+				}
+			}
+			else
+			{
+				x++;
+				wordlen++;
+				if (x == max_width)
+				{
+					if (x > wordlen)
+					{
+						if (print)
+						{
+							//printf("\n");
+							print(x - wordlen, y, "\n", 1, cookie);
+						}
+
+						c -= wordlen; // retry with word beggining on next line
+					}
+					else
+					{
+						w = max_width;
+						if (print)
+						{
+							/*
+							for (int i = c - (wordlen-1); i <= c; i++)
+								printf("%c", buf[i]);
+							*/
+
+							print(0, y, buf + c - (wordlen-1), wordlen, cookie);
+
+							// no '\n' for fully filled line
+						}
+					}
+				
+					y++;
+					if (y == max_height && max_height)
+						return -1;
+					x = 0;
+					if (y == cursor_xy[1])
+						b = c+1;
+					wordlen = 0;
+				}
+			}
+		}
+
+		if (print)
+		{
+			/*
+			for (int i = len - wordlen; i < len; i++)
+				printf("%c", buf[i]);
+			printf("\n");
+			*/
+			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie);
+			print(x, y, "\n", 1, cookie);
+		}
+
+		if (wordlen && x > w)
+		{
+			w = x;
+			if (y == cursor_xy[1])
+				l = w;
+		}
+
+		if (_size)
+		{
+			_size[0] = w;
+			_size[1] = y + 1;
+		}
+
+		if (_pos)
+		{
+			if (cursor_pos == len)
+			{
+				_pos[0] = x;
+				_pos[1] = y;
+			}
+			else
+			{
+				_pos[0] = cx;
+				_pos[1] = cy;
+			}
+		}
+
+		return (b<<8) | l;
+	}
+
+	char buf[256];
+};
+
+TalkBox talk_box;
+
+int Test()
+{
+	talk_box.cursor_pos = 0;
+	talk_box.max_width = 33; // MAKE IT ODD!!!
+	talk_box.max_height = 0; // off
+	talk_box.show_cursor = false;
+
+	// char demo[] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
+	char demo[] = "Lorem ipsum! fucking donor.";
+	talk_box.len = strlen(demo);
+	memcpy(talk_box.buf, demo, talk_box.len);
+
+	return talk_box.Reflow(talk_box.size, talk_box.cursor_xy);
+}
+
+int test_passed = Test();
 
 struct KeyCap
 {
@@ -225,8 +660,11 @@ struct Keyb
 	int mul_size;
 	KeyRow rows[5];
 
-	int GetCap(int dx, int dy, int width_mul) const
+	int GetCap(int dx, int dy, int width_mul, char* ch, bool shift_on) const
 	{
+		if (ch)
+			*ch = 0;
+
 		// calc row
 		static const int yadv = 5;
 		if (dy < 1 || dy >= 5 * yadv) // check if in range and not over any horizontal divider
@@ -246,6 +684,31 @@ struct Keyb
 				{
 					if (dy % 5 == 0)
 						return 0;
+
+					if (ch)
+					{
+						if (r->row[c].a3d_key == A3D_BACKSPACE)
+							*ch = 127;
+						else
+						if (r->row[c].a3d_key == A3D_ENTER)
+							*ch = '\n';
+						else
+						if (r->row[c].a3d_key == A3D_SPACE)
+							*ch = ' ';
+						else
+						if (r->row[c].a3d_key != A3D_LSHIFT)
+						{
+							if (shift_on)
+								*ch = r->row[c].cap[0][0][0];
+							else
+							{
+								if (r->row[c].cap[0][0][0] >= 'A' && r->row[c].cap[0][0][0] <= 'Z')
+									*ch = r->row[c].cap[0][0][0] + 'a' - 'A';
+								else
+									*ch = r->row[c].cap[0][1][0];
+							}
+						}
+					}
 					return r->row[c].a3d_key;
 				}
 			}
@@ -689,8 +1152,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		keyb_pos[1] = 1;
 		keyb_mul = mul;
 
-		keyb.Paint(ptr, keyb_pos[0], keyb_pos[1], width, height, keyb_mul, input.key);
+		uint8_t key[32];
+		for (int i = 0; i < 32; i++)
+			key[i] = keyb_key[i] | input.key[i];
+		keyb.Paint(ptr, keyb_pos[0], keyb_pos[1], width, height, keyb_mul, key);
 	}
+
+	talk_box.Paint(ptr, width, height, width / 2, height / 2 + 8, false);
 
 	if (input.shot)
 	{
@@ -751,13 +1219,13 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		if (key == A3D_TAB)
 		{
 			if (show_keyb)
-				memset(input.key, 0, 32);
+				memset(keyb_key, 0, 32);
 			show_keyb = !show_keyb;
 		}
 		if (key == A3D_ESCAPE && show_keyb)
 		{
 			if (show_keyb)
-				memset(input.key, 0, 32);
+				memset(keyb_key, 0, 32);
 			show_keyb = false;
 		}
 		if (key == A3D_F10)
@@ -772,11 +1240,19 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	else
 	if (keyb == GAME_KEYB::KEYB_CHAR)
 	{
-		/* code */
+		if (key != 9) // we skip all TABs
+		{
+			// if type box is visible pass this input to it
+			printf("CH:%d (%c)\n", key, key);
+		}
 	}
 	else
 	if (keyb == GAME_KEYB::KEYB_PRESS)
 	{
+		// it is like a KEYB_CHAR (not producing releases) but for non-printable keys
+		// main input from terminals 
+		// ....
+
 		/* code */
 	}
 }
@@ -794,12 +1270,23 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 			{
 				int cp[2] = { x,y };
 				ScreenToCell(cp);
-				int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul);
+
+				bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+				char ch=0;
+				int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, &ch, shift_on);
 
 				if (cap > 0)
 				{
-					OnKeyb(GAME_KEYB::KEYB_DOWN, cap);  // just to hilight keycap
-					OnKeyb(GAME_KEYB::KEYB_CHAR, cap); // like from terminal!
+					if (cap == A3D_LSHIFT)
+					{
+						keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
+					}
+					else
+					{
+						if (ch)
+							OnKeyb(GAME_KEYB::KEYB_CHAR, ch); // like from terminal!
+						keyb_key[cap >> 3] |= 1 << (cap & 7);  // just to hilight keycap
+					}
 					keyb_cap[10/*mouse_touch_id*/] = cap;
 
 					// setup autorepeat initial delay>
@@ -859,17 +1346,21 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 			{
 				if (mouse == MOUSE_LEFT_BUT_UP)
 				{
-					OnKeyb(GAME_KEYB::KEYB_UP, keyb_cap[10/*mouse_touch_id*/]); // un-hilight keycap
+					int uncap = keyb_cap[10/*mouse_touch_id*/];
+					if (uncap!=A3D_LSHIFT)
+						keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
 					keyb_cap[10/*mouse_touch_id*/] = 0;
 				}
 				else
 				{
 					int cp[2] = { x,y };
 					ScreenToCell(cp);
-					int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul);
+					int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, 0,false);
 					if (cap != keyb_cap[10/*mouse_touch_id*/])
 					{
-						OnKeyb(GAME_KEYB::KEYB_UP, keyb_cap[10/*mouse_touch_id*/]); // un-hilight keycap
+						int uncap = keyb_cap[10/*mouse_touch_id*/];
+						if (uncap != A3D_LSHIFT)
+							keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
 						keyb_cap[10/*mouse_touch_id*/] = 0;
 					}
 				}

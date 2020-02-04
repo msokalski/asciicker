@@ -108,6 +108,7 @@ struct Game
 	int keyb_cap[11]; // cap down by 10 touches and mouse
 	int keyb_pos[2];
 	int keyb_mul;
+	uint8_t keyb_key[32]; // simulated key presses by touch/mouse
 
 	int water;
 	float prev_yaw;
