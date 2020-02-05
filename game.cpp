@@ -3,6 +3,7 @@
 #include "game.h"
 #include "platform.h"
 
+int TalkBox_blink = 0;
 struct TalkBox
 {
 	int max_width, max_height;
@@ -10,7 +11,8 @@ struct TalkBox
 	int cursor_xy[2];
 	int cursor_pos;
 	int len;
-	bool show_cursor;
+
+	int cache_bl; // cache cursor's line offset and length
 
 	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor) const
 	{
@@ -25,12 +27,16 @@ struct TalkBox
 			int rows;
 			static void Print(int dx, int dy, const char* str, int len, void* cookie)
 			{
+				Cookie* c = (Cookie*)cookie;
+				if (c->y - dy < 0 || c->y - dy >= c->height)
+					return;
+
 				static const uint8_t white = 16 + 5 * 1 + 5 * 6 + 5 * 36;
 				static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
 				static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
 
-				Cookie* c = (Cookie*)cookie;
 				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
+
 				for (int i=0; i<len; i++)
 				{
 					if (str[i] == '\n')
@@ -40,6 +46,9 @@ struct TalkBox
 						// ...
 						for (int x = dx + i; x < c->span; x++)
 						{
+							if (x < 0 || x >= c->width)
+								continue;
+
 							AnsiCell* ac = ar + x;
 							ac->fg = white;
 							ac->bk = dk_grey;
@@ -49,6 +58,10 @@ struct TalkBox
 						c->rows++;
 						break;
 					}
+
+					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
+						continue;
+
 					AnsiCell* ac = ar + i + dx;
 					ac->fg = white;
 					ac->bk = dk_grey;
@@ -58,137 +71,265 @@ struct TalkBox
 			}
 		};
 
-		int w = (size[0]+1); // +1 for left margin, |1 to make it odd
-		
-		Cookie cookie = { this, ptr, width, height, x - w/2 +1, y + size[1]+2, w, 0 };
+		int w = size[0]+3;
+		int left = x - w/2;
+		int right = left + w -1;
+		int center = left+w/2;
+
+		int bottom = y;
+		int lower = y + 1;
+		int upper = y + 4 + size[1];
+
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		assert(bl >= 0);
+		assert(bl == cache_bl);
 
-		AnsiCell* ll = ptr + x - w / 2 - 1 + (y + 1) * width;
-		AnsiCell* bc = ptr + x + y * width;
-		AnsiCell* lr = ptr + x + w / 2 + 1 + (y + 1) * width;
-		AnsiCell* ul = ptr + x - w / 2 - 1 + (y + 4 + size[1]) * width;
-		AnsiCell* ur = ptr + x + w / 2 + 1 + (y + 4 + size[1]) * width;
+		AnsiCell* ll = ptr + left + lower * width;
+		AnsiCell* bc = ptr + center + bottom * width;
+		AnsiCell* lr = ptr + right + lower * width;
+		AnsiCell* ul = ptr + left + upper * width;
+		AnsiCell* ur = ptr + right + upper * width;
 
 		static const uint8_t black = 16;
 		static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
 		static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
 
-		bc->bk = black;
-		bc->fg = lt_grey;
-		bc->gl = 179;
-
-		bc += width;
-
-		bc->bk = black;
-		bc->fg = lt_grey;
-		bc->gl = 194;
-
-		ll->bk = black;
-		ll->fg = lt_grey;
-		ll->gl = 192;
-
-		lr->bk = black;
-		lr->fg = lt_grey;
-		lr->gl = 217;
-
-		ul->bk = black;
-		ul->fg = lt_grey;
-		ul->gl = 218;
-
-		ur->bk = black;
-		ur->fg = lt_grey;
-		ur->gl = 191;
-
-		for (int i = 1; i <= w / 2; i++)
+		if (center >= 0 && center < width)
 		{
-			ll[i].bk = black;
-			ll[i].fg = lt_grey;
-			ll[i].gl = 196;
-			lr[-i].bk = black;
-			lr[-i].fg = lt_grey;
-			lr[-i].gl = 196;
+			if (bottom >= 0 && bottom < height)
+			{
+				bc->bk = black;
+				bc->fg = lt_grey;
+				bc->gl = 179;
+			}
 
-			ul[i].bk = black;
-			ul[i].fg = lt_grey;
-			ul[i].gl = 196;
-			ur[-i].bk = black;
-			ur[-i].fg = lt_grey;
-			ur[-i].gl = 196;
+			bc += width;
+
+			if (lower >= 0 && lower < height)
+			{
+				bc->bk = black;
+				bc->fg = lt_grey;
+				bc->gl = 194;
+			}
 		}
 
-		bc += width*(1+size[1]+2);
-
-		bc->bk = black;
-		bc->fg = lt_grey;
-		bc->gl = 196;
-
-		ll += width;
-		lr += width;
-
-		for (int i = 2; i < w+2; i++)
+		if (lower >= 0 && lower < height)
 		{
-			ll[i].bk = dk_grey;
-			ll[i].fg = black;
-			ll[i].gl = ' ';
+			if (left >= 0 && left < width)
+			{
+				ll->bk = black;
+				ll->fg = lt_grey;
+				ll->gl = 192;
+			}
+
+			if (right >= 0 && right < width)
+			{
+				lr->bk = black;
+				lr->fg = lt_grey;
+				lr->gl = 217;
+			}
 		}
 
-		for (int i = 0; i < size[1]+2; i++)
+		if (upper >= 0 && upper < height)
 		{
-			ll->bk = black;
-			ll->fg = lt_grey;
-			ll->gl = 179;
-			ll[1].bk = dk_grey;
-			ll[1].fg = black;
-			ll[1].gl = ' ';
+			if (left >= 0 && left < width)
+			{
+				ul->bk = black;
+				ul->fg = lt_grey;
+				ul->gl = 218;
+			}
 
-			lr->bk = black;
-			lr->fg = lt_grey;
-			lr->gl = 179;
-
-			ll += width;
-			lr += width;
+			if (right >= 0 && right < width)
+			{
+				ur->bk = black;
+				ur->fg = lt_grey;
+				ur->gl = 191;
+			}
 		}
 
-		ll -= width;
-
-		for (int i = 2; i < w+2; i++)
+		if (lower >= 0 && lower < height)
 		{
-			ll[i].bk = dk_grey;
-			ll[i].fg = black;
-			ll[i].gl = ' ';
+			AnsiCell* row = ptr + lower * width;
+			for (int i = left + 1; i < right; i++)
+			{
+				if (i >= 0 && i < width && i != center)
+				{
+					row[i].bk = black;
+					row[i].fg = lt_grey;
+					row[i].gl = 196;
+				}
+			}
+		}
+
+		if (upper >= 0 && upper < height)
+		{
+			AnsiCell* row = ptr + upper * width;
+			for (int i = left + 1; i < right; i++)
+			{
+				if (i >= 0 && i < width)
+				{
+					row[i].bk = black;
+					row[i].fg = lt_grey;
+					row[i].gl = 196;
+				}
+			}
+		}
+
+		if (lower + 1 >= 0 && lower + 1 < height)
+		{
+			AnsiCell* row = ptr + (lower + 1) * width;
+
+			for (int i = left + 2; i < right; i++)
+			{
+				row[i].bk = dk_grey;
+				row[i].fg = black;
+				row[i].gl = ' ';
+			}
+		}
+
+		for (int i = lower+1; i <= upper-1; i++)
+		{
+			if (i >= 0 && i < height)
+			{
+				AnsiCell* row = ptr + i * width;
+				if (left >= 0 && left < width)
+				{
+					row[left].bk = black;
+					row[left].fg = lt_grey;
+					row[left].gl = 179;
+				}
+
+				if (left + 1 >= 0 && left + 1 < width)
+				{
+					row[left + 1].bk = dk_grey;
+					row[left + 1].fg = black;
+					row[left + 1].gl = ' ';
+				}
+
+				if (right >= 0 && right < width)
+				{
+					row[right].bk = black;
+					row[right].fg = lt_grey;
+					row[right].gl = 179;
+				}
+			}
+		}
+
+		if (upper - 1 >= 0 && upper - 1 < height)
+		{
+			AnsiCell* row = ptr + (upper-1) * width;
+
+			for (int i = left + 2; i < right; i++)
+			{
+				row[i].bk = dk_grey;
+				row[i].fg = black;
+				row[i].gl = ' ';
+			}
+		}
+
+		TalkBox_blink++;
+		if ((TalkBox_blink & 63) < 32)
+		{
+			int cx = left + 2 + cursor_xy[0];
+			int cy = upper - 2 - cursor_xy[1];
+			if (cx >= 0 && cx < width && cy >= 0 && cy < height)
+			{
+				AnsiCell* row = ptr + cx + cy * width;
+				uint8_t swap = row->fg;
+				row->fg = row->bk;
+				row->bk = swap;
+			}
 		}
 	}
 
-	void MoveCursor(int dx, int dy)
+	void MoveCursorX(int dx)
 	{
-		// update cursor pos
-		cursor_xy[0] += dx;
-		cursor_xy[1] += dy;
+		TalkBox_blink = 0;
+		if (dx < 0 && cursor_pos>0 || dx > 0 && cursor_pos < len)
+		{
+			cursor_pos += dx;
+			if (cursor_pos < 0)
+				cursor_pos = 0;
+			if (cursor_pos > len)
+				cursor_pos = len;
 
-		if (cursor_xy[0] < 0)
-			cursor_xy[0] = 0;
-		if (cursor_xy[1] < 0)
-			cursor_xy[1] = 0;
+			// if jumped to another line then reflow
+			if (cursor_pos < (cache_bl >> 8) || cursor_pos >= (cache_bl & 0xFF))
+			{
+				int _pos[2];
+				int bl = Reflow(0, _pos); // pos is given -> calc bl for cursor_pos instead of cursor_xy[1]
 
-		if (cursor_xy[1] >= size[1])
-			cursor_xy[1] = size[1] - 1;
+				assert(bl >= 0);
+				cache_bl = bl; // problem: bl is calculated for OLD cursor_xy[1]! it should be calculated for cursor_pos!
 
-		int bl = Reflow(0, 0, false);
+				cursor_xy[0] = _pos[0];
+				cursor_xy[1] = _pos[1];
 
-		assert(bl >= 0);
+				/*
+				// work around: update it once again after setting NEW cursor_xy[1]
+				bl = Reflow(0, _pos);
+				cache_bl = bl;
+				*/
+			}
+			else
+			{
+				cursor_xy[0] += dx;
+			}
+		}
+	}
 
-		if (cursor_xy[0] > (bl & 0xFF))
-			cursor_xy[0] = bl & 0xFF;
+	void MoveCursorY(int dy)
+	{
+		TalkBox_blink = 0;
+		if (dy < 0 && cursor_xy[1]>0 || dy > 0 && cursor_xy[1] < size[1] - 1)
+		{
+			// update cursor pos
+			cursor_xy[1] += dy;
 
-		cursor_pos = (bl >> 8) + cursor_xy[0];
+			if (cursor_xy[1] < 0)
+				cursor_xy[1] = 0;
+
+			if (cursor_xy[1] >= size[1])
+				cursor_xy[1] = size[1] - 1;
+
+			int bl = Reflow(0, 0);
+			assert(bl >= 0);
+			cache_bl = bl; // here it is ok ( no pos is given )
+
+			if (cursor_xy[0] >= (bl & 0xFF))
+				cursor_xy[0] = (bl & 0xFF) - 1;
+
+			cursor_pos = (bl >> 8) + cursor_xy[0];
+		}
 	}
 	
 	bool Input(int ch)
 	{
 		// insert / delete char, update size and cursor pos
+		TalkBox_blink = 0;
 
 		if (ch == 127)
+		{
+			if (cursor_pos == len)
+				return false;
+			if (cursor_pos < len-1)
+				memmove(buf + cursor_pos, buf + cursor_pos + 1, len - 1 - cursor_pos);
+			len--;
+
+			int _size[2], _pos[2];
+			int bl = Reflow(_size, _pos);
+
+			assert(bl >= 0);
+			cache_bl = bl;
+
+			size[0] = _size[0];
+			size[1] = _size[1];
+			cursor_xy[0] = _pos[0];
+			cursor_xy[1] = _pos[1];
+		}
+		else
+		if (ch == 8)
 		{
 			if (cursor_pos > 0)
 			{
@@ -198,9 +339,10 @@ struct TalkBox
 				len--;
 
 				int _size[2], _pos[2];
-				int bl = Reflow(_size, _pos, false);
+				int bl = Reflow(_size, _pos);
 
 				assert(bl >= 0);
+				cache_bl = bl;
 
 				size[0] = _size[0];
 				size[1] = _size[1];
@@ -221,12 +363,14 @@ struct TalkBox
 				len++;
 
 				int _size[2],_pos[2];
-				if (Reflow(_size, _pos, false) >= 0)
+				int bl = Reflow(_size, _pos);
+				if (bl >= 0)
 				{
 					size[0] = _size[0];
 					size[1] = _size[1];
 					cursor_xy[0] = _pos[0];
 					cursor_xy[1] = _pos[1];
+					cache_bl = bl;
 				}
 				else
 				{
@@ -247,35 +391,48 @@ struct TalkBox
 	}
 
 	// returns -1 on overflow, otherwise (b<<8) | l 
-	// where l = cursor_xy[1] line length and b = cursor_pos at cursor_xy[1] line begining
+	// where l = 'current line' length and b = buffer offset at 'current line' begining
+	// if _pos is null 'current line' is given directly by cursor_xy[1] otherwise indirectly by cursor_pos
 	int Reflow(int* _size, int* _pos, void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
 	{
 		int x = 0, y = 0;
 		int cx = 0, cy = 0;
 		int wordlen = 0;
+					
+		int w = 2, l = 0, b = 0;
 
-		int w = 0, l = 0, b = 0;
+		// todo:
+		// actually we need to call print() only on y++ and last line!
+
+		int temp_b = 0;
+		int current_line = _pos ? -1 : cursor_xy[1];
 
 		for (int c = 0; c < len; c++)
 		{
 			assert(x < max_width);
 
+			if (x == 0)
+				temp_b = c;
+
 			if (c == cursor_pos)
 			{
 				cx = x;
 				cy = y;
+
+				if (current_line < 0)
+					current_line = y;
 			}
 
-			// distinguish from regular character, space and line breaker
+			if (y == current_line)
+			{
+				b = temp_b;
+				l = x;
+			}
+
 			if (buf[c] == ' ')
 			{
 				if (print)
 				{
-					/*
-					for (int i=c-wordlen; i<c; i++)
-						printf("%c", buf[i]);
-					printf("~");
-					*/
 					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // +1 to include space char
 				}
 
@@ -283,23 +440,21 @@ struct TalkBox
 				x++;
 
 				if (x > w)
-				{
 					w = x;
-					if (y == cursor_xy[1])
-						l = w;
-				}
+
+				if (y == current_line)
+					l = x;
+
 
 				if (x == max_width)
 				{
 					if (print)
 					{
-						//printf("\n");
 						print(x, y, "\n", 1, cookie);
 					}
 					x = 0;
 					y++;
-					if (y == cursor_xy[1])
-						b = c+1;
+
 					if (y == max_height && max_height)
 						return -1;
 				}
@@ -307,91 +462,100 @@ struct TalkBox
 			else
 			if (buf[c] == '\n')
 			{
-				// treat it as the last word's char!
-
 				if (print)
 				{
-					/*
-					for (int i = c - wordlen; i < c; i++)
-						printf("%c", buf[i]);
-					printf("@\n");
-					*/
 					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // including '\n'
 				}
+
+				if (x >= w) // moved
+					w = x+1;
+				if (y == current_line)
+					l = x+1;
 
 				wordlen = 0;
 				x = 0;
 				y++;
 				if (y == max_height && max_height)
 					return -1;
-				if (y == cursor_xy[1])
-					b = c+1;
-				if (x > w) // too late, x==0 !!!
-				{
-					w = x;
-					if (y == cursor_xy[1])
-						l = w;
-				}
 			}
 			else
 			{
-				x++;
-				wordlen++;
-				if (x == max_width)
+				if (x == max_width - 1)
 				{
-					if (x > wordlen)
+					if (x == wordlen) // break the word!
+					{
+						w = max_width;
+						if (y == current_line)
+							l = max_width;
+
+						if (print)
+						{
+							print(0, y, buf+c-wordlen, wordlen, cookie);
+							print(x, y, "\n", 1, cookie);
+						}
+						wordlen = 0;
+						y++;
+						x = 0;
+						c--; // current char must be moved to the next line
+
+						if (y == max_height && max_height)
+							return -1;
+
+						continue;
+					}
+					else // try wrapping the word
 					{
 						if (print)
 						{
-							//printf("\n");
 							print(x - wordlen, y, "\n", 1, cookie);
 						}
 
-						c -= wordlen; // retry with word beggining on next line
-					}
-					else
-					{
-						w = max_width;
-						if (print)
-						{
-							/*
-							for (int i = c - (wordlen-1); i <= c; i++)
-								printf("%c", buf[i]);
-							*/
+						c -= wordlen+1;
+						wordlen = 0;
+						x = 0;
+						y++;
 
-							print(0, y, buf + c - (wordlen-1), wordlen, cookie);
+						if (y == max_height && max_height)
+							return -1;
 
-							// no '\n' for fully filled line
-						}
+						continue;
 					}
-				
-					y++;
-					if (y == max_height && max_height)
-						return -1;
-					x = 0;
-					if (y == cursor_xy[1])
-						b = c+1;
-					wordlen = 0;
 				}
+				x++;
+				wordlen++;
 			}
 		}
 
 		if (print)
 		{
-			/*
-			for (int i = len - wordlen; i < len; i++)
-				printf("%c", buf[i]);
-			printf("\n");
-			*/
 			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie);
 			print(x, y, "\n", 1, cookie);
 		}
 
-		if (wordlen && x > w)
+		if (x >= w)
 		{
-			w = x;
-			if (y == cursor_xy[1])
-				l = w;
+			w = x + 1; // ensure extra space char at ending
+		}
+
+		// terminator handler
+		{
+			if (x == 0)
+				temp_b = len;
+
+			if (len == cursor_pos)
+			{
+				cx = x;
+				cy = y;
+
+				if (current_line < 0)
+					current_line = y;
+			}
+
+			if (y == current_line)
+			{
+				b = temp_b;
+				l = x + 1; // like w
+			}
 		}
 
 		if (_size)
@@ -419,25 +583,6 @@ struct TalkBox
 
 	char buf[256];
 };
-
-TalkBox talk_box;
-
-int Test()
-{
-	talk_box.cursor_pos = 0;
-	talk_box.max_width = 33; // MAKE IT ODD!!!
-	talk_box.max_height = 0; // off
-	talk_box.show_cursor = false;
-
-	// char demo[] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
-	char demo[] = "Lorem ipsum! fucking donor.";
-	talk_box.len = strlen(demo);
-	memcpy(talk_box.buf, demo, talk_box.len);
-
-	return talk_box.Reflow(talk_box.size, talk_box.cursor_xy);
-}
-
-int test_passed = Test();
 
 struct KeyCap
 {
@@ -688,7 +833,7 @@ struct Keyb
 					if (ch)
 					{
 						if (r->row[c].a3d_key == A3D_BACKSPACE)
-							*ch = 127;
+							*ch = 8;
 						else
 						if (r->row[c].a3d_key == A3D_ENTER)
 							*ch = '\n';
@@ -1034,6 +1179,8 @@ void DeleteGame(Game* g)
 {
 	if (g)
 	{
+		if (g->player.talk_box)
+			free(g->player.talk_box);
 		if (g->renderer)
 			DeleteRenderer(g->renderer);
 		if (g->physics)
@@ -1071,7 +1218,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		io.y_force = 2 * (input.size[1] - input.pos[1] * 2) / (float)input.size[1];
 	}
 	else
-	if (!show_keyb)
+	if (!player.talk_box)
 	{
 		float speed = 1;
 		if (input.IsKeyDown(A3D_LSHIFT) || input.IsKeyDown(A3D_RSHIFT))
@@ -1094,7 +1241,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		SetPhysicsYaw(physics, yaw, 0);
 	}
 	else
-	if (!show_keyb)
+	if (!player.talk_box)
 	{
 		io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
 			(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E));
@@ -1158,7 +1305,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		keyb.Paint(ptr, keyb_pos[0], keyb_pos[1], width, height, keyb_mul, key);
 	}
 
-	talk_box.Paint(ptr, width, height, width / 2, height / 2 + 8, false);
+	if (player.talk_box)
+		player.talk_box->Paint(ptr, width, height, width / 2, height / 2 + 8, false);
 
 	if (input.shot)
 	{
@@ -1214,25 +1362,57 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	// handle layers first ...
 
 	// if nothing focused 
+
 	if (keyb == GAME_KEYB::KEYB_DOWN)
 	{
-		if (key == A3D_TAB)
+		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
+		key &= ~A3D_AUTO_REPEAT;
+
+		if ((key == A3D_TAB || key == A3D_ESCAPE) && !auto_rep)
 		{
-			if (show_keyb)
-				memset(keyb_key, 0, 32);
-			show_keyb = !show_keyb;
+			if (!player.talk_box && key == A3D_TAB)
+			{
+				TalkBox_blink = 32;
+				player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+				memset(player.talk_box, 0, sizeof(TalkBox));
+				player.talk_box->max_width = 33;
+				player.talk_box->max_height = 7; // 0: off
+				int s[2];
+				player.talk_box->Reflow(s,0);
+				player.talk_box->size[0] = s[0];
+				player.talk_box->size[1] = s[1];
+			}
+			else
+			if (player.talk_box)
+			{
+				free(player.talk_box);
+				player.talk_box = 0;
+				if (show_keyb)
+					memset(keyb_key, 0, 32);
+				show_keyb = false;
+			}
 		}
-		if (key == A3D_ESCAPE && show_keyb)
-		{
-			if (show_keyb)
-				memset(keyb_key, 0, 32);
-			show_keyb = false;
-		}
-		if (key == A3D_F10)
+
+		if (key == A3D_F10 && !auto_rep)
 			input.shot = true;
-		if (key == A3D_SPACE && !show_keyb)
+		if (key == A3D_SPACE && !player.talk_box && !auto_rep)
 			input.jump = true;
-		input.key[key >> 3] |= 1 << (key & 0x7);
+
+		if (!auto_rep)
+			input.key[key >> 3] |= 1 << (key & 0x7);
+
+		// temp (also with auto_rep)
+		if (player.talk_box)
+		{
+			if (key == A3D_LEFT)
+				player.talk_box->MoveCursorX(-1);
+			if (key == A3D_RIGHT)
+				player.talk_box->MoveCursorX(+1);
+			if (key == A3D_UP)
+				player.talk_box->MoveCursorY(-1);
+			if (key == A3D_DOWN)
+				player.talk_box->MoveCursorY(+1);
+		}
 	}
 	else
 	if (keyb == GAME_KEYB::KEYB_UP)
@@ -1242,8 +1422,16 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	{
 		if (key != 9) // we skip all TABs
 		{
+			if (key == '\r') // windows only? todo: check linux and browsers
+				key = '\n';
+			if ((key < 32 || key > 127) && key!=8 && key!='\n')
+				return;
+
 			// if type box is visible pass this input to it
-			printf("CH:%d (%c)\n", key, key);
+			// printf("CH:%d (%c)\n", key, key);
+
+			if (player.talk_box)
+				player.talk_box->Input(key);
 		}
 	}
 	else
@@ -1257,6 +1445,51 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	}
 }
 
+static bool PlayerHit(Game* g, int x, int y)
+{
+	int down[2] = { x,y };
+	g->ScreenToCell(down);
+
+	// if talkbox is open check it too
+	if (g->player.talk_box)
+	{
+		int w = g->player.talk_box->size[0] + 3;
+		int left = g->render_size[0] / 2 - w / 2;
+		int center = left + w / 2;
+		int right = left + w - 1;
+		int bottom = g->render_size[1] / 2 + 8;
+		int lower = bottom + 1;
+		int upper = bottom + 4 + g->player.talk_box->size[1];
+
+		if (down[0] >= left && down[0] <= right && down[1] >= lower && down[1] <= upper || down[0] == center && down[1] == bottom)
+			return true;
+	}
+
+	Sprite* s = g->player.sprite;
+	if (s)
+	{
+		int ang = (int)floor((g->player.dir - g->prev_yaw) * s->angles / 360.0f + 0.5f);
+		ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
+		int i = g->player.frame + ang * s->anim[g->player.anim].length;
+		// refl: i += s->anim[anim].length * s->angles;
+		Sprite::Frame* f = s->atlas + s->anim[g->player.anim].frame_idx[i];
+
+		int sx = down[0] - g->render_size[0] / 2 + f->ref[0] / 2;
+		int sy = down[1] - g->render_size[1] / 2 + f->ref[1] / 2;
+
+		if (sx >= 0 && sx < f->width && sy >= 0 && sy < f->height)
+		{
+			AnsiCell* ac = f->cell + sx + f->width * sy;
+			if (ac->fg != 255 && ac->gl != 0 && ac->gl != 32 || ac->bk != 255 && ac->gl != 219)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 {
 	// handle layers first ...
@@ -1265,7 +1498,7 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 	switch (mouse)
 	{
 		case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: 
-
+			player_hit = false;
 			if (show_keyb && !input.drag)
 			{
 				int cp[2] = { x,y };
@@ -1301,6 +1534,9 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 						input.drag = 1;
 						input.drag_from[0] = x;
 						input.drag_from[1] = y;
+
+						// check player hit
+						player_hit = PlayerHit(this, x, y);
 					}
 				}
 			}
@@ -1310,12 +1546,62 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 				input.drag = 1;
 				input.drag_from[0] = x;
 				input.drag_from[1] = y;
+
+				// check player hit
+				player_hit = PlayerHit(this, x, y);
 			}
 
 			input.but |= 1; 
 			break;
 
-		case GAME_MOUSE::MOUSE_LEFT_BUT_UP:   
+		case GAME_MOUSE::MOUSE_LEFT_BUT_UP: 
+
+			if (player_hit)
+			{
+				player_hit = false;
+				int down[2] = { input.drag_from[0], input.drag_from[1] };
+				ScreenToCell(down);
+
+				int up[2] = { x, y };
+				ScreenToCell(up);
+
+				up[0] -= down[0];
+				up[1] -= down[1];
+
+				if (up[0] * up[0] <= 1 && up[1] * up[1] <= 1)
+				{
+					if (player.talk_box)
+					{
+						// close talk_box (and keyb if also open)
+						free(player.talk_box);
+						player.talk_box = 0;
+						if (show_keyb)
+							memset(keyb_key, 0, 32);
+						show_keyb = false;
+					}
+					else
+					{
+						// open talk_box (and keyb if not open)
+						TalkBox_blink = 32;
+						player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+						memset(player.talk_box, 0, sizeof(TalkBox));
+						player.talk_box->max_width = 33;
+						player.talk_box->max_height = 7; // 0: off
+						int s[2];
+						player.talk_box->Reflow(s, 0);
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						show_keyb = true;
+					}
+				}
+			}
+
+			// if released at same pos as but_down, it is click. then:
+			//   if pos is on player:
+			//      if talkbox is open: hide talkbox ( & keyb if open )
+			//         otherwise:       show talkbox ( & keyb if not open )
+			//      (keyb cannot be open without talkbox... at the moment)
+
 			if (input.drag == 1) 
 				input.drag = 0; 
 			input.but &= ~1; 
@@ -1370,6 +1656,23 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 
 	input.pos[0] = x;
 	input.pos[1] = y;
+
+	if (player_hit)
+	{
+		int down[2] = { input.drag_from[0], input.drag_from[1] };
+		ScreenToCell(down);
+
+		int up[2] = { x, y };
+		ScreenToCell(up);
+
+		up[0] -= down[0];
+		up[1] -= down[1];
+
+		if (up[0] * up[0] > 1 || up[1] * up[1] > 1)
+		{
+			player_hit = false;
+		}
+	}
 }
 
 void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)

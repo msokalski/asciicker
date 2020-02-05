@@ -459,8 +459,8 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
-	if (ki&A3D_AUTO_REPEAT)
-		return;
+	// if (ki&A3D_AUTO_REPEAT)
+	//	return;
 
 	if (down)
 	{
@@ -471,11 +471,12 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 			else
 				a3dSetRect(wnd, 0, A3D_WND_NORMAL);
 		}
-		
-		term->game->OnKeyb(Game::GAME_KEYB::KEYB_DOWN, ki);
+		else
+			term->game->OnKeyb(Game::GAME_KEYB::KEYB_DOWN, ki);
 	}
 	else
-		term->game->OnKeyb(Game::GAME_KEYB::KEYB_UP, ki);
+		if (ki != A3D_F11)
+			term->game->OnKeyb(Game::GAME_KEYB::KEYB_UP, ki);
 }
 
 void term_keyb_focus(A3D_WND* wnd, bool set)

@@ -684,6 +684,13 @@ LRESULT WINAPI a3dWndProc(HWND h, UINT m, WPARAM w, LPARAM l)
 				}
 				*/
 			}
+
+			// delete key does not produce delete char! - let's emulate
+			if (wnd->platform_api.keyb_char && w == VK_DELETE && (m == WM_KEYDOWN || m == WM_SYSKEYDOWN))
+			{
+				wnd->platform_api.keyb_char(wnd, 127);
+			}
+
 			break;
 
 		/*
