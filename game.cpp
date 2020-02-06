@@ -1158,15 +1158,16 @@ Sprite* wolack_0011=0;
 
 void LoadSprites()
 {
-	// must be detached to do not interfere with meshprefs of asciiid
-	player_0000 = LoadSprite("./sprites/player-0000.xp", "player_0000.xp", 0, true);
-	wolfie_0011 = LoadSprite("./sprites/wolfie-0011.xp", "wolfie-0011.xp", 0, true);
-	plydie_0000 = LoadSprite("./sprites/plydie-0000.xp", "plydie-0000.xp", 0, true);
+	player_0000 = LoadSprite("./sprites/player-0000.xp", "player-0000.xp", 0, false);
+	wolfie_0011 = LoadSprite("./sprites/wolfie-0011.xp", "wolfie-0011.xp", 0, false);
+	plydie_0000 = LoadSprite("./sprites/plydie-0000.xp", "plydie-0000.xp", 0, false);
 }
 
 void FreeSprites()
 {
 	FreeSprite(player_0000);
+	FreeSprite(wolfie_0011);
+	FreeSprite(plydie_0000);
 }
 
 Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)

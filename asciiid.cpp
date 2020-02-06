@@ -3225,7 +3225,9 @@ static bool SpriteScan(A3D_DirItem item, const char* name, void* cookie)
 	snprintf(buf, 4095, "%s/%s", (char*)cookie, name);
 	buf[4095] = 0;
 
-	Sprite* s = GetFirstSprite(/*world*/);
+	Sprite* s = 0;
+	/*
+	Sprite* s = GetFirstSprite();
 	while (s)
 	{
 		char sprite_name[256];
@@ -3238,6 +3240,7 @@ static bool SpriteScan(A3D_DirItem item, const char* name, void* cookie)
 	}
 
 	if (!s)
+	*/
 	{
 		s = LoadSprite(/*world,*/ buf, name);
 		if (s)
@@ -7444,8 +7447,6 @@ void my_ptydata(A3D_PTY* pty)
 }
 */
 
-#include "sprite.h"
-extern Sprite* player_0000;
 int main(int argc, char *argv[]) 
 {
 	LoadSprites();

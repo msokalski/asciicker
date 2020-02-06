@@ -75,6 +75,14 @@ Sprite* LoadPlayer(const char* path)
 
 void FreeSprite(Sprite* spr)
 {
+	assert(spr->refs>=1);
+
+	if (spr->refs > 1)
+	{
+		spr->refs--;
+		return;
+	}
+
 	if (spr->prev)
 		spr->prev->next = spr->next;
 	else
@@ -155,6 +163,21 @@ extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_b
 
 Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const uint8_t* recolor, bool detached)
 {
+	if (!detached)
+	{
+		// first, lookup linked sprites, return pointer to already loaded one if found
+		Sprite* s = GetFirstSprite();
+		while (s)
+		{
+			if (strcmp(s->name, name) == 0)
+			{
+				s->refs++;
+				return s;
+			}
+			s = s->next;
+		}
+	}
+
 	FILE* f = fopen(path, "rb");
 	if (!f)
 		return 0;
@@ -524,6 +547,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 
 	Sprite* sprite = (Sprite*)malloc(sizeof(Sprite) + sizeof(Sprite::Anim));
 
+	sprite->refs = 1;
 	sprite->cookie = 0;
 	sprite->projs = projs;
 	sprite->angles = angles;

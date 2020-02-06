@@ -4,6 +4,8 @@
 
 struct Sprite
 {
+	int refs;
+
 	struct Frame
 	{
 		int width;
