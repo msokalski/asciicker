@@ -5203,9 +5203,23 @@ void my_render(A3D_WND* wnd)
 		{
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 			ImGui::PushButtonRepeat(true);
-			if (ImGui::ArrowButton("##fnt_left", ImGuiDir_Left)) { if (active_font > 0) active_font--; }
+			if (ImGui::ArrowButton("##fnt_left", ImGuiDir_Left)) 
+			{ 
+				if (active_font > 0) 
+				{
+					active_font--; 
+					TermResizeAll();
+				}
+			}
 			ImGui::SameLine(0.0f, spacing);
-			if (ImGui::ArrowButton("##fnt_right", ImGuiDir_Right)) { if (active_font < fonts_loaded-1) active_font++; }
+			if (ImGui::ArrowButton("##fnt_right", ImGuiDir_Right)) 
+			{ 
+				if (active_font < fonts_loaded-1) 
+				{
+					active_font++; 
+					TermResizeAll();
+				}
+			}
 			ImGui::PopButtonRepeat();
 			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d)", active_font, active_font); // path?

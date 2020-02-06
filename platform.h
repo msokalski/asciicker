@@ -186,10 +186,10 @@ enum KeyInfo
 	A3D_RALT,
 
 	A3D_OEM_COLON,		// ';:' for US
-	A3D_OEM_PLUS,		// '+' any country
-	A3D_OEM_COMMA,		// ',' any country
-	A3D_OEM_MINUS,		// '-' any country
-	A3D_OEM_PERIOD,		// '.' any country
+	A3D_OEM_PLUS,		// '=+' any country
+	A3D_OEM_COMMA,		// ',<' any country
+	A3D_OEM_MINUS,		// '-_' any country
+	A3D_OEM_PERIOD,		// '.>' any country
 	A3D_OEM_SLASH,		// '/?' for US
 	A3D_OEM_TILDE,		// '`~' for US
 

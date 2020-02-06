@@ -95,9 +95,8 @@ static int (* const CP437[256])(char*) =
 bool xterm_kitty = false;
 void SetScreen(bool alt)
 {
-
     // kitty kitty ...
-    const char* term = getenv("TERM");
+    const char* term = 0; // getenv("TERM");
     if (term && strcmp(term,"xterm-kitty")==0)
     {
         xterm_kitty = alt;
@@ -773,10 +772,23 @@ int main(int argc, char* argv[])
 
                 int type = 0, mods = 0;
 
-                // unescaped input can only jump
-                if (stream[i]>=' ' && stream[i]<=127)
+                if (stream[i]>=' ' && stream[i]<=127 || 
+                    stream[i]==8 || stream[i]=='\r' || stream[i]=='\n' || stream[i]=='\t')
                 {
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, stream[i]);
+                    if (stream[i] == ' ')
+                    {
+                        // we need it both as char for TalkBox and as press for Jump
+                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, ' ');
+                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_SPACE);
+                    }
+                    else
+                    if (stream[i] == '\t')
+                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_TAB);
+                    else
+                    if (stream[i] == 127) // backspace (8) is encoded as del (127)
+                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, 8);
+                    else
+                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, stream[i]);
                     i++;
                     continue;
                 }
@@ -802,7 +814,7 @@ int main(int argc, char* argv[])
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '3' && stream[i+3] == '~')
                 {
                     // DEL
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DELETE);
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, 127);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '2' && stream[i+3] == '~')
@@ -943,6 +955,13 @@ int main(int argc, char* argv[])
                                     {
                                         int but = val[0] & 0x3;
 
+                                        if (val[0] >= 32)
+                                        {
+                                            // motion
+                                            int a=0;
+                                            game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                        }
+                                        else
                                         if (c=='M')
                                         {
                                             switch(but)
@@ -973,7 +992,6 @@ int main(int argc, char* argv[])
                                                     game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
                                             }
                                         }
-                                        
                                     }
                                     break;
                                 }
@@ -1230,7 +1248,7 @@ int main(int argc, char* argv[])
         GetWH(nwh);
         if (nwh[0]!=wh[0] || nwh[1]!=wh[1])
         {
-            game->OnSize(nwh[0],nwh[1]);
+            game->OnSize(nwh[0],nwh[1], 1,1);
 
             wh[0] = nwh[0];
             wh[1] = nwh[1];

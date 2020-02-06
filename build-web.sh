@@ -26,6 +26,7 @@ rm .web/index.wasm
 rm .web/index.data
 
 emcc --emrun -O3 \
+    game.cpp \
     game_web.cpp \
     mesh.cpp \
     terrain.cpp \
@@ -36,13 +37,13 @@ emcc --emrun -O3 \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_main","_AsciickerUpdate","_AsciickerRender","_AsciickerGetYaw"]' \
+    -s EXPORTED_FUNCTIONS='["_main","_Render","_Size","_Keyb","_Mouse","_Touch"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
-    --preload-file a3d/game.a3d \
+    --preload-file a3d/game_sprites.a3d \
     --preload-file sprites/player-0000.xp \
-    --preload-file sprites/plydie-0000.xp \
-	--preload-file sprites/inventory.xp \
+    --preload-file sprites/wolfie-0011.xp \
+	--preload-file sprites/plydie-0000.xp \
     --preload-file meshes/bridge-1.ply \
     --preload-file meshes/fence.ply \
     --preload-file meshes/rock-1.ply \

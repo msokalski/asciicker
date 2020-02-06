@@ -112,6 +112,11 @@ struct Game
 	bool show_keyb; // activated together with talk_box by clicking on character
 	int keyb_hide;  // show / hide animator (vertical position)
 
+	// time relaxated KEY_UP/DOWN emulation by KEY_PRESSes
+	uint64_t PressStamp;
+	int PressKey;
+
+	int TalkBox_blink;
 	char KeybAutoRepChar;
 	uint64_t KeybAuroRepDelayStamp;
 

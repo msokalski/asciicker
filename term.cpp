@@ -572,3 +572,15 @@ void TermCloseAll()
 	term_tail = 0;
 }
 
+void TermResizeAll()
+{
+	int wh[2];
+	TERM_LIST* term = term_head;
+	while (term)
+	{
+		TERM_LIST* next = term->next;
+		a3dGetRect(term->wnd, 0, wh);
+		term_resize(term->wnd, wh[0],wh[1]);
+		term = next;
+	}
+}

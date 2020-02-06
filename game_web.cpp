@@ -2,13 +2,10 @@
 #include <stdint.h>
 
 #include "terrain.h"
-#include "physics.h"
+#include "game.h"
 #include "sprite.h"
 #include "mesh.h"
 #include "render.h"
-
-#include <math.h>
-#include "matrix.h"
 
 #include <time.h>
 uint64_t GetTime()
@@ -18,13 +15,9 @@ uint64_t GetTime()
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
-
-Physics* phys = 0;
+Game* game = 0;
 Terrain* terrain = 0;
 World* world = 0;
-Sprite* player_sprite = 0;
-Sprite* attack_sprite = 0;
-Sprite* inventory_sprite = 0;
 AnsiCell* render_buf = 0;
 
 Material mat[256];
@@ -33,38 +26,18 @@ void* GetMaterialArr()
     return mat;
 }
 
-static const float water = 55.0f;
-static const float zoom = 1.0;
-static PhysicsIO io;
-static uint64_t last_stamp;
-
 int main()
 {
-    float player_dir = 0;
-    int player_stp = -1;
+    float water = 55.0f;
     float yaw = 45;
     float dir = 0;
     float pos[3] = {0,15,0};
     uint64_t stamp;
 
-	player_sprite = LoadPlayer("./sprites/player-0000.xp");
-	attack_sprite = LoadPlayer("./sprites/plydie-0000.xp");
-	if (!player_sprite)
-    {
-        printf("failed to load player.xp\n");
-        return -1;
-    }
-
-	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory"/*, false*/);
-	for (int f = 0; f < inventory_sprite->frames; f++)
-	{
-		inventory_sprite->atlas[f].ref[0] = 0;
-		inventory_sprite->atlas[f].ref[1] = 0;
-		inventory_sprite->atlas[f].ref[2] = 0x10000;
-	}    
+    LoadSprites();
 
     {
-        FILE* f = fopen("a3d/game.a3d","rb");
+        FILE* f = fopen("a3d/game_sprites.a3d","rb");
 
         if (f)
         {
@@ -146,24 +119,7 @@ int main()
     }
 
     stamp = GetTime();
-    phys = CreatePhysics(terrain,world,pos,dir,yaw,stamp);
-    if (!phys)
-    {
-        printf("failed to create physics\n");
-        return -6;
-    }
-
-    io.jump = false;
-    io.water = water;
-    io.torque = 0;
-    io.x_force = 0;
-    io.y_force = 0;
-    io.pos[0] = pos[0];
-    io.pos[1] = pos[1];
-    io.pos[2] = pos[2];
-    io.yaw = yaw;
-    io.player_dir = 0;
-    io.player_stp = -1;
+    game = CreateGame(water,pos,yaw,dir,stamp);
 
     printf("all ok\n");
     return 0;
@@ -171,78 +127,29 @@ int main()
 
 extern "C"
 {
-    bool AsciickerUpdate(float x_force, float y_force, float torque, bool jump, float yaw)
+    void* Render(int width, int height)
     {
-        //printf("In: AsciickerUpdate(%f,%f,%f,%s)\n", x_force, y_force, torque, jump?"true":"false");
-        io.jump = jump;
-        io.water = water;
-        io.torque = torque;
-        io.x_force = x_force;
-        io.y_force = y_force;
-        io.yaw = yaw;
-
-        // return jump status
-        uint64_t stamp = GetTime();
-		last_stamp = stamp;
-        Animate(phys, stamp, &io);
-        return io.jump;
-    }
-
-    void* AsciickerRender(int width, int height)
-    {
-        float lt[4];
-        // LIGHT
-        {
-            float lit_yaw = 45;
-            float lit_pitch = 30;//90;
-            float lit_time = 12.0f;
-            float ambience = 0.5;
-
-            double noon_yaw[2] =
-            {
-                // zero is behind viewer
-                -sin(-lit_yaw*M_PI / 180),
-                -cos(-lit_yaw*M_PI / 180),
-            };
-
-            double dusk_yaw[3] =
-            {
-                -noon_yaw[1],
-                noon_yaw[0],
-                0
-            };
-
-            double noon_pos[4] =
-            {
-                noon_yaw[0]*cos(lit_pitch*M_PI / 180),
-                noon_yaw[1]*cos(lit_pitch*M_PI / 180),
-                sin(lit_pitch*M_PI / 180),
-                0
-            };
-
-            double lit_axis[3];
-
-            CrossProduct(dusk_yaw, noon_pos, lit_axis);
-
-            double time_tm[16];
-            Rotation(lit_axis, (lit_time-12)*M_PI / 12, time_tm);
-
-            double lit_pos[4];
-            Product(time_tm, noon_pos, lit_pos);
-
-            lt[0] = (float)lit_pos[0];
-            lt[1] = (float)lit_pos[1];
-            lt[2] = (float)lit_pos[2];
-            lt[3] = ambience;    
-        }
-
-        //printf("In: AsciickerRender(%d,%d)\n", width, height);
-        Render(last_stamp,terrain,world,water,zoom,io.yaw,io.pos,lt, width,height, render_buf, io.player_dir, io.player_stp, io.dt, io.xyz);
+        game->Render(GetTime(),render_buf,width,height);
         return render_buf;
     }
 
-    float AsciickerGetYaw()
+    void Size(int w, int h, int fw, int fh)
     {
-        return io.yaw;
+        game->OnSize(w,h,fw,fh);
+    }
+
+    void Keyb(int type, int val)
+    {
+        game->OnKeyb((Game::GAME_KEYB)type,val);
+    }
+
+    void Mouse(int type, int x, int y)
+    {
+        game->OnMouse((Game::GAME_MOUSE)type, x, y);
+    }
+
+    void Touch(int type, int id, int x, int y)
+    {
+        game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
     }
 }

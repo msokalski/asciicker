@@ -15,6 +15,10 @@
 			canvas
 			{
 				position: absolute;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: -webkit-crisp-edges;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;        
 			}
 			
 			html, body, canvas
@@ -136,8 +140,11 @@
 
     <script>
 
-      var AsciickerUpdate = null;
-      var AsciickerRender = null;
+      var Render = null;
+      var Size = null;
+      var Keyb = null;
+      var Mouse = null;
+      var Touch = null
 
       var ak_canvas;
       var ak_ctx;
@@ -161,7 +168,7 @@
       var ak_height=0;
 
       var ak_max_width = 160;
-      var ak_max_height = 160;
+      var ak_max_height = 90;
 
       var ak_force_x = 0;
       var ak_force_y = 0;
@@ -211,29 +218,32 @@
         }
 
         console.log("FONT="+ak_font);
+
+        var fw = ak_fonts[ak_font].width >> 4;
+        var fh = ak_fonts[ak_font].height >> 4;
+        Size(w,h, fw,fh);
       }
 
       function AsciickerLoop(tm)
       {
-        if (!AsciickerUpdate(ak_force_x,ak_force_y,ak_torque,ak_jump,ak_yaw))
-        {
-          ak_jump = false;
-        }
-
-        ak_yaw = AsciickerGetYaw();
-
 				var display_w = ak_ctx.drawingBufferWidth;// & ~1;
         var display_h = ak_ctx.drawingBufferHeight;// & ~1;
 		
 				var render_w = Math.floor( display_w / (ak_fonts[ak_font].width >> 4) );
-				var render_h = Math.floor( display_h / (ak_fonts[ak_font].height >> 4) );
-				
+        var render_h = Math.floor( display_h / (ak_fonts[ak_font].height >> 4) );
+        
 				if (render_w > ak_max_width)
           render_w = ak_max_width;
 				if (render_h > ak_max_height)
           render_h = ak_max_height;
 
-        var mem = AsciickerRender(render_w,render_h);
+        display_w = render_w * (ak_fonts[ak_font].width >> 4);
+        display_h = render_h * (ak_fonts[ak_font].height >> 4);
+
+        var display_x = (ak_ctx.drawingBufferWidth - display_w) >> 1;
+        var display_y = (ak_ctx.drawingBufferHeight - display_h) >> 1;          
+
+        var mem = Render(render_w,render_h);
         if (mem != ak_prev_mem || Module.HEAP8 != ak_prev_arr || render_w != ak_width || render_h != ak_height)
         {
           // realloc handler
@@ -248,7 +258,8 @@
 				ak_ctx.bindTexture(ak_ctx.TEXTURE_2D, ak_tex);
 				ak_ctx.texSubImage2D(ak_ctx.TEXTURE_2D, 0, 0, 0, render_w,render_h, ak_ctx.RGBA, ak_ctx.UNSIGNED_BYTE, ak_buf);
 
-				ak_ctx.viewport(0,0,display_w,display_h);
+
+				ak_ctx.viewport(display_x,display_y,display_w,display_h);
 				ak_ctx.clearColor(0,0,0,0);
 				ak_ctx.clear(ak_ctx.COLOR_BUFFER_BIT);	
 
@@ -440,263 +451,240 @@
       
       function setKeybHandlers()
       {
-        var left=0,right=0,up=0,down=0;
-        var cw=0,ccw=0,slow=0;
-
-        window.addEventListener("blur",
-        function(e)
+        var CodeMap =
         {
-          slow=0;
-          left=0;
-          right=0;
-          up=0;
-          down=0;
-          cw=0;
-          ccw=0;
-          ak_drag=0;
-          ak_force_x=0;
-          ak_force_y=0;
-          ak_torque=0;
-          ak_jump=false;
-        },{});
+          "Backspace" : 1,
+          "Tab" : 2,
+          "Enter" : 3,
+          "Pause" : 4,
+          "Escape" : 5,
+          "Space" : 6,
+          "PageUp" : 7,
+          "PageDown" : 8,
+          "End" : 9,
+          "Home" : 10,
+          "ArrowLeft"  : 11,
+          "ArrowUp"    : 12,
+          "ArrowRight" : 13,
+          "ArrowDown"  : 14,
+          "PrintScreen" : 15,
+          "Insert" : 16,
+          "Delete" : 17,
 
-		window.addEventListener("keydown", 
-		function(e) 
-		{
-		  var handled = false;
-          if (!e.repeat)
+          "Digit0" : 18,
+          "Digit1" : 19,
+          "Digit2" : 20,
+          "Digit3" : 21,
+          "Digit4" : 22,
+          "Digit5" : 23,
+          "Digit6" : 24,
+          "Digit7" : 25,
+          "Digit8" : 26,
+          "Digit9" : 27,
+
+          "KeyA"   : 28,
+          "KeyB"   : 29,
+          "KeyC"   : 30,
+          "KeyD"   : 31,
+          "KeyE"   : 32,
+          "KeyF"   : 33,
+          "KeyG"   : 34,
+          "KeyH"   : 35,
+          "KeyI"   : 36,
+          "KeyJ"   : 37,
+          "KeyK"   : 38,
+          "KeyL"   : 39,
+          "KeyM"   : 40,
+          "KeyN"   : 41,
+          "KeyO"   : 42,
+          "KeyP"   : 43,
+          "KeyQ"   : 44,
+          "KeyR"   : 45,
+          "KeyS"   : 46,
+          "KeyT"   : 47,
+          "KeyU"   : 48,
+          "KeyV"   : 49,
+          "KeyW"   : 50,
+          "KeyX"   : 51,
+          "KeyY"   : 52,
+          "KeyZ"   : 53,
+
+          "OSLeft"      : 54,
+          "OSRight"     : 55,
+          "ContextMenu" : 56,
+
+          "Numpad0" : 57,
+          "Numpad1" : 58,
+          "Numpad2" : 59,
+          "Numpad3" : 60,
+          "Numpad4" : 61,
+          "Numpad5" : 62,
+          "Numpad6" : 63,
+          "Numpad7" : 64,
+          "Numpad8" : 65,
+          "Numpad9" : 66,
+
+          "NumpadMultiply" : 67,
+          "NumpadDivide"   : 68,
+          "NumpadAdd"      : 69,
+          "NumpadSubtract" : 70,
+          "NumpadDecimal"  : 71,
+          "NumpadEnter"    : 72,
+
+          "F1"  : 73,
+          "F2"  : 74,
+          "F3"  : 75,
+          "F4"  : 76,
+          "F5"  : 77,
+          "F6"  : 78,
+          "F7"  : 79,
+          "F8"  : 80,
+          "F9"  : 81,
+          "F10" : 82,
+          "F11" : 83,
+          "F12" : 84,
+          "F13" : 85,
+          "F14" : 86,
+          "F15" : 87,
+          "F16" : 88,
+          "F17" : 89,
+          "F18" : 90,
+          "F19" : 91,
+          "F20" : 92,
+          "F21" : 93,
+          "F22" : 94,
+          "F23" : 95,
+          "F24" : 96,
+
+          "CapsLock"   : 97,
+          "NumLock"    : 98,
+          "ScrollLock" : 99,
+
+          "ShiftLeft"    : 100,
+          "ShiftRight"   : 101,
+          "ControlLeft"  : 102,
+          "ControlRight" : 103,
+          "AltLeft"      : 104,
+          "AltRight"     : 105,
+
+          "Semicolon"    : 106,
+          "Equal"        : 107,
+          "Comma"        : 108,
+          "Minus"        : 109,
+          "Period"       : 110,
+          "Slash"        : 111,
+          "BackQuote"    : 112,
+          "BracketLeft"  : 113,
+          "BracketRight" : 114,
+          "Backslash"    : 115,
+          "Quote"        : 116
+        };
+
+        window.addEventListener("keydown", 
+        function(e) 
+        {
+          //var str = "repeat=" + e.repeat + " | " + "code=" + e.code + " | " + "key=" + e.key;
+          //console.log( str );
+
+          if (e.key == "F11" || (e.key == "-" || e.key == "+" || e.key == "=" || e.key == "0") && e.ctrlKey)
+            return; // do not process / prevent 
+
+          if ( e.code )
           {
-            var code = e.code;
-            if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
+            var key = CodeMap[e.code];
+            if (key)
             {
-                ak_jump = true;
-                handled = true;
+              if (e.repeat)
+                key += 256;
+              Keyb(0/*DOWN*/,key);
             }
-
-            if (code == "F1" || code == "Delete" || code == "PageUp" || code == "KeyQ")
-            {
-                ccw = 1;
-                handled = true;
-            }
-            if (code == "F2" || code == "Insert" || code == "PageDown" || code == "KeyE")
-            {
-                cw = 1;
-                handled = true;
-            }
-
-            if (code == "ShiftLeft" || code == "ShiftRight")
-            {
-                slow = 1;
-                handled = true;
-            }
-
-            if (ak_torque<1000000)
-              ak_torque = ccw - cw;
-
-            if (code == "ArrowLeft" || code == "KeyA")
-            {
-                left = 1;
-                handled = true;
-            }
-            if (code == "ArrowRight" || code == "KeyD")
-            {
-                right = 1;
-                handled = true;
-            }
-		        if (code == "ArrowUp" || code == "KeyW")
-		        {
-		          up=1;
-              handled = true;
-            }
-            if (code == "ArrowDown" || code == "KeyS")
-            {
-                down=1;
-                handled = true;
-            }
-
-            if (ak_drag == 0 || ak_torque>=1000000)
-            {
-              var speed = slow ? 0.5 : 1.0;
-              ak_force_x = right-left;
-              ak_force_y = up-down;
-              var len = Math.sqrt(ak_force_x*ak_force_x+ak_force_y*ak_force_y);
-              if (len>0)
-                  speed /= len;
-              ak_force_x *= speed;
-              ak_force_y *= speed;
-            }
+            else
+              return; // do not process / prevent
           }
-            
-          if (handled)
-              e.preventDefault();
+          else
+            return; // do not process / prevent
 
-        },{ passive: false });
-
-		window.addEventListener("keyup", 
-		function(e) 
-		{
-          var code = e.code;
-
-          if (/*code == "AltLeft" || code == "AltRight" ||*/ code == "Space")
-            ak_jump = false;
-
-          if (code == "F1" || code == "Delete" || code == "PageUp" || code == "KeyQ")
-            ccw = 0;
-          if (code == "F2" || code == "Insert" || code == "PageDown" || code == "KeyE")
-            cw = 0;
-
-          if (code=="ShiftLeft" || code=="ShiftRight")
-            slow = 0;
-
-            if (ak_torque<1000000)
-              ak_torque = ccw - cw;
-
-          if (code == "ArrowLeft" || code == "KeyA")
-            left=0;
-          if (code == "ArrowRight" || code == "KeyD")
-            right=0;
-          if (code == "ArrowUp" || code == "KeyW")
-            up=0;
-          if (code == "ArrowDown" || code == "KeyS")
-            down=0;
-
-          if (ak_drag == 0 || ak_torque>=1000000)
+          switch (e.key)
           {
-            var speed = slow ? 0.5 : 1.0;
-            ak_force_x = right-left;
-            ak_force_y = up-down;
-            var len = Math.sqrt(ak_force_x*ak_force_x+ak_force_y*ak_force_y);
-            if (len>0)
-                speed /= len;
-            ak_force_x *= speed;
-            ak_force_y *= speed;
+            case "Tab": Keyb(2/*CHAR*/, 5); break;
+            case "Enter": Keyb(2/*CHAR*/, 10); break;
+            case "Backspace": Keyb(2/*CHAR*/, 8); break;
+            case "Delete": Keyb(2/*CHAR*/, 127); break;
+            default:
+              if (e.key.length == 1)
+                Keyb(2/*CHAR*/, e.key.charCodeAt(0));
           }
 
           e.preventDefault();
+        },{ passive: false });
 
+        window.addEventListener("keyup", 
+        function(e) 
+        {
+          if (e.key == "F11" || (e.key == "-" || e.key == "+" || e.key == "=" || e.key == "0") && e.ctrlKey)
+            return; // do not process / prevent 
+
+          if ( e.code )
+          {
+            var key = CodeMap[e.code];
+            if (key)
+            {
+              Keyb(1/*UP*/,key);
+            }
+            else
+              return; // do not process / prevent
+          }
+          else
+            return; // do not process / prevent
+
+          e.preventDefault();
         },{ passive: false });
       }
 
-	  function setMouseHandlers()
-	  {
-        var left = 0;
-        var right = 0;
-        var mouse_rot_x = 0;
-        var mouse_rot_yaw = 0;
-        var mouse_rot = false;
-
-		function preventZoom(e)
-		{
-			console.log("zoom");
-			e.preventDefault();
+      function setMouseHandlers()
+      {
+        function preventZoom(e)
+        {
+          console.log("zoom");
+          e.preventDefault();
         }
-        
+            
         function preventMenu(e)
         {
-					console.log("menu");
-					e.preventDefault();
+          console.log("menu");
+          e.preventDefault();
         }
-				
-		window.addEventListener("DOMMouseScroll", preventZoom, { passive: false });
-		window.addEventListener("mousewheel", preventZoom, { passive: false });
-		window.addEventListener("contextmenu", preventMenu, { passive: false });
-				
-		window.addEventListener("mousedown", 
-		function(e) 
-		{
-          if (e.which == 1)
-            left = 1;
-          if (e.which == 3)
-          {
-            if (!left)
-            {
-              mouse_rot = true;
-              mouse_rot_yaw = ak_yaw;
-              mouse_rot_x = e.pageX;
-              ak_torque = 1000000;
-
-            }
-            right = 1;
-          }
-
-          if (left+right == 2)
-          {
-            ak_jump = true;
-          }
-
-          if (!mouse_rot)
-          {
-            if (left!=0)
-            {
-              ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
-              ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
-            }
-            else
-            {
-              ak_force_x = 0;
-              ak_force_y = 0;
-            }
-          }
-
-          ak_drag = left + right;
-
-          e.preventDefault();
-		}, { passive: false });
-				
-		window.addEventListener("mousemove", 
-		function(e) 
-		{
-          ak_drag = left + right;
           
-          if (mouse_rot)
-          {
-            var sensitivity = 200.0 / window.innerWidth;
-            var yaw = mouse_rot_yaw - sensitivity * (e.pageX - mouse_rot_x);
-            ak_torque = 1000000;
-            ak_yaw = yaw;
-          }
-          else
-          if (left!=0)
-          {
-            ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
-            ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
-          }
-
+        window.addEventListener("DOMMouseScroll", preventZoom, { passive: false });
+        window.addEventListener("mousewheel", preventZoom, { passive: false });
+        window.addEventListener("contextmenu", preventMenu, { passive: false });
+          
+        window.addEventListener("mousedown", 
+        function(e) 
+        {
+          // e.which == 1,2,3
+          // e.pageX
+          // e.pageY
           e.preventDefault();
-		}, { passive: false });			
-				
-		window.addEventListener("mouseup",
-		function(e) 
-		{
-          if (e.which == 1)
-            left = 0;
-          if (e.which == 3)
-          {
-            ak_torque = 0;
-            mouse_rot = false;
-            right = 0;
-          }
-
-          if (!mouse_rot)
-          {
-            if (left!=0)
-            {
-              ak_force_x = (e.pageX / window.innerWidth - 0.5) * 4.0;
-              ak_force_y = (0.5 - e.pageY / window.innerHeight) * 4.0;
-            }
-            else
-            if (e.which != 3)
-            {
-              ak_force_x = 0;
-              ak_force_y = 0;
-            }
-          }
-
-          ak_drag = left + right;
-
+        }, { passive: false });
+          
+        window.addEventListener("mousemove", 
+        function(e) 
+        {
+          // e.pageX
+          // e.pageY
           e.preventDefault();
-	    }, { passive: false });
-	  }      
+        }, { passive: false });			
+          
+        window.addEventListener("mouseup",
+        function(e) 
+        {
+          // e.which == 1,2,3
+          // e.pageX
+          // e.pageY
+          e.preventDefault();
+        }, { passive: false });
+      }      
 
       function AsciickerBoot()
       {
@@ -745,10 +733,11 @@
       {
         console.log('Loaded '+fonts.length+' fonts'); 
 
-        AsciickerUpdate = Module.cwrap('AsciickerUpdate', 'number', ['number','number','number','number','number']);
-        AsciickerRender = Module.cwrap('AsciickerRender', 'number', ['number','number']);
-        AsciickerGetYaw = Module.cwrap('AsciickerGetYaw', 'number', []);
-
+        Render = Module.cwrap('Render', 'number', ['number','number']);
+        Size = Module.cwrap('Size', null, ['number','number','number','number']);
+        Keyb = Module.cwrap('Keyb', null, ['number','number']);
+        Mouse = Module.cwrap('Mouse', null, ['number','number','number']);
+        Touch = Module.cwrap('Touch', null, ['number','number','number','number']);
 
         ak_canvas = document.getElementById('asciicker_canvas');
         ak_canvas.hidden = false;

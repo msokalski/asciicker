@@ -3,8 +3,6 @@
 #include "game.h"
 #include "platform.h"
 
-int TalkBox_blink = 0;
-
 struct TalkBox
 {
 	int max_width, max_height;
@@ -183,9 +181,12 @@ struct TalkBox
 
 			for (int i = left + 2; i < right; i++)
 			{
-				row[i].bk = dk_grey;
-				row[i].fg = black;
-				row[i].gl = ' ';
+				if (i >= 0 && i < width)
+				{
+					row[i].bk = dk_grey;
+					row[i].fg = black;
+					row[i].gl = ' ';
+				}
 			}
 		}
 
@@ -223,13 +224,16 @@ struct TalkBox
 
 			for (int i = left + 2; i < right; i++)
 			{
-				row[i].bk = dk_grey;
-				row[i].fg = black;
-				row[i].gl = ' ';
+				if (i >= 0 && i < width)
+				{
+					row[i].bk = dk_grey;
+					row[i].fg = black;
+					row[i].gl = ' ';
+				}
 			}
 		}
 
-		if ((TalkBox_blink & 63) < 32)
+		if (cursor)
 		{
 			int cx = left + 2 + cursor_xy[0];
 			int cy = upper - 2 - cursor_xy[1];
@@ -245,7 +249,6 @@ struct TalkBox
 
 	void MoveCursorX(int dx)
 	{
-		TalkBox_blink = 0;
 		if (dx < 0 && cursor_pos>0 || dx > 0 && cursor_pos < len)
 		{
 			cursor_pos += dx;
@@ -281,7 +284,6 @@ struct TalkBox
 
 	void MoveCursorY(int dy)
 	{
-		TalkBox_blink = 0;
 		if (dy < 0 && cursor_xy[1]>0 || dy > 0 && cursor_xy[1] < size[1] - 1)
 		{
 			// update cursor pos
@@ -307,8 +309,6 @@ struct TalkBox
 	bool Input(int ch)
 	{
 		// insert / delete char, update size and cursor pos
-		TalkBox_blink = 0;
-
 		if (ch == 127)
 		{
 			if (cursor_pos == len)
@@ -1209,11 +1209,24 @@ void DeleteGame(Game* g)
 void Game::ScreenToCell(int p[2]) const
 {
 	p[0] = (2*p[0] - input.size[0] + render_size[0] * font_size[0]) / (2 * font_size[0]);
-	p[1] = (input.size[1] - 2*p[1] + render_size[1] * font_size[1]) / (2 * font_size[1]);
+	p[1] = (input.size[1]-1 - 2*p[1] + render_size[1] * font_size[1]) / (2 * font_size[1]);
 }
 
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
+	if (PressKey && _stamp - PressStamp > 50000 /*500000*/)
+	{
+		// in render(): 
+		// if there is stored key and time elapsed since it was pressed > thresh
+		//   then: emulate stored KEY_UP and clear stored key
+
+		char ch = KeybAutoRepChar;
+		OnKeyb(GAME_KEYB::KEYB_UP, PressKey);
+		PressKey = 0;
+		// revert it (OnKeyb nulls it)
+		KeybAutoRepChar = ch;		
+	}
+
 	int f120 = 1 + (_stamp - stamp) / 8264;
 	TalkBox_blink += f120;
 
@@ -1312,6 +1325,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
 
+	if (player.talk_box)
+		player.talk_box->Paint(ptr, width, height, width / 2, height / 2 + 8, (TalkBox_blink & 63) < 32);
+
 	if (show_keyb || keyb_hide < 1 + 5 * 5 + 1)
 	{
 		int mul, keyb_width;
@@ -1356,9 +1372,6 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	if (player.talk_box)
-		player.talk_box->Paint(ptr, width, height, width / 2, height / 2 + 8, false);
-
 	if (input.shot)
 	{
 		input.shot = false;
@@ -1382,8 +1395,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					int b_g = (bk % 6) * 51; bk /= 6;
 					int b_b = (bk % 6) * 51; bk /= 6;
 
-					uint8_t f_rgb[3] = { f_b,f_g,f_r };
-					uint8_t b_rgb[3] = { b_b,b_g,b_r };
+					uint8_t f_rgb[3] = { (uint8_t)f_b,(uint8_t)f_g,(uint8_t)f_r };
+					uint8_t b_rgb[3] = { (uint8_t)b_b,(uint8_t)b_g,(uint8_t)b_r };
 					uint32_t chr = c->gl;
 
 					fwrite(&chr, sizeof(uint32_t), 1, f);
@@ -1462,6 +1475,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			input.key[key >> 3] |= 1 << (key & 0x7);
 
 		// temp (also with auto_rep)
+		TalkBox_blink = 0;
 		if (player.talk_box)
 		{
 			if (key == A3D_LEFT)
@@ -1490,6 +1504,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			// if type box is visible pass this input to it
 			// printf("CH:%d (%c)\n", key, key);
 
+			TalkBox_blink = 0;
 			if (player.talk_box)
 				player.talk_box->Input(key);
 		}
@@ -1501,7 +1516,80 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		// main input from terminals 
 		// ....
 
-		/* code */
+		TalkBox_blink = 0;
+		if (player.talk_box)
+		{
+			if (key == A3D_LEFT)
+				player.talk_box->MoveCursorX(-1);
+			if (key == A3D_RIGHT)
+				player.talk_box->MoveCursorX(+1);
+			if (key == A3D_UP)
+				player.talk_box->MoveCursorY(-1);
+			if (key == A3D_DOWN)
+				player.talk_box->MoveCursorY(+1);
+		}
+		else
+		{
+			// simulate key down / up based on a time relaxation
+			// for: QWEASD and cursor keys
+
+			// here: 
+			// if new key is different than stored key
+			//   then: emulate stored KEY_UP and new KEY_DOWN
+			// store current stamp
+			// store new key
+
+			// in render(): 
+			// if there is stored key and time elapsed since it was pressed > thresh
+			//   then: emulate stored KEY_UP and clear stored key
+
+			if (key != PressKey)
+			{
+				OnKeyb(GAME_KEYB::KEYB_UP, PressKey);
+				PressKey = 0;
+
+				// here we can filter keys
+				if (key != A3D_TAB)
+				{
+					PressKey = key;
+					PressStamp = stamp;
+					OnKeyb(GAME_KEYB::KEYB_DOWN, PressKey);
+				}
+			}
+			else
+			{
+				PressStamp = stamp; // - 500000 + 50000;
+			}
+		}
+
+		if (key == A3D_TAB)
+		{
+			// HANDLED BY EMULATION!
+			if (!player.talk_box)
+			{
+				TalkBox_blink = 32;
+				player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+				memset(player.talk_box, 0, sizeof(TalkBox));
+				player.talk_box->max_width = 33;
+				player.talk_box->max_height = 7; // 0: off
+				player.talk_box->cache_bl = 1;
+				int s[2],p[2];
+				player.talk_box->Reflow(s,p);
+				player.talk_box->size[0] = s[0];
+				player.talk_box->size[1] = s[1];
+				player.talk_box->cursor_xy[0] = p[0];
+				player.talk_box->cursor_xy[1] = p[1];
+			}
+			else
+			{
+				free(player.talk_box);
+				player.talk_box = 0;
+				if (show_keyb)
+					memset(keyb_key, 0, 32);
+				show_keyb = false;
+				KeybAutoRepChar = 0;
+			}
+		}		
 	}
 }
 
@@ -1557,6 +1645,13 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 	// if nothing focused
 	switch (mouse)
 	{
+		// they are handled
+		// after switch !!!
+		case MOUSE_MOVE:
+		case MOUSE_WHEEL_DOWN:
+		case MOUSE_WHEEL_UP:
+			break;
+
 		case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: 
 			player_hit = false;
 			if (show_keyb && !input.drag)
