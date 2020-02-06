@@ -4,6 +4,7 @@
 #include "platform.h"
 
 int TalkBox_blink = 0;
+
 struct TalkBox
 {
 	int max_width, max_height;
@@ -228,7 +229,6 @@ struct TalkBox
 			}
 		}
 
-		TalkBox_blink++;
 		if ((TalkBox_blink & 63) < 32)
 		{
 			int cx = left + 2 + cursor_xy[0];
@@ -643,11 +643,14 @@ struct KeyCap
 		int dx_hi = width - x;
 
 		int dx = 0;
-		for (; dx < w - 1; dx++)
-			if (dx>=dx_lo && dx<dx_hi)
-				top[dx] = bevel[b][0];
-		if (dx >= dx_lo && dx < dx_hi)
-			top[dx] = bevel[b][1];
+		if (y + 3 >= 0 && y + 3 < height)
+		{
+			for (; dx < w - 1; dx++)
+				if (dx >= dx_lo && dx < dx_hi)
+					top[dx] = bevel[b][0];
+			if (dx >= dx_lo && dx < dx_hi)
+				top[dx] = bevel[b][1];
+		}
 
 		int cap_index = 0;
 		for (int i = 0; i <= width_mul; i++)
@@ -659,47 +662,56 @@ struct KeyCap
 		const char* upper_cap = cap[cap_index][0];
 		const char* lower_cap = cap[cap_index][1];
 
-		if (0 >= dx_lo && 0 < dx_hi)
-			upper[0] = bevel[b][0];
-
-		dx = 1;
-		for (; dx < w - 1 && upper_cap[dx - 1]; dx++)
+		if (y + 2 >= 0 && y + 2 < height)
 		{
-			if (dx >= dx_lo && dx < dx_hi)
-			{
-				upper[dx] = bevel[b][1];
-				upper[dx].gl = upper_cap[dx - 1];
-			}
-		}
-		for (; dx < w - 1; dx++)
-			if (dx >= dx_lo && dx < dx_hi)
-				upper[dx] = bevel[b][1];
-		if (dx >= dx_lo && dx < dx_hi)
-			upper[dx] = bevel[b][2];
+			if (0 >= dx_lo && 0 < dx_hi)
+				upper[0] = bevel[b][0];
 
-		if (0 >= dx_lo && 0 < dx_hi)
-			lower[0] = bevel[b][0];
-		dx = 1;
-		for (; dx < w - 1 && lower_cap[dx - 1]; dx++)
+			dx = 1;
+			for (; dx < w - 1 && upper_cap[dx - 1]; dx++)
+			{
+				if (dx >= dx_lo && dx < dx_hi)
+				{
+					upper[dx] = bevel[b][1];
+					upper[dx].gl = upper_cap[dx - 1];
+				}
+			}
+			for (; dx < w - 1; dx++)
+				if (dx >= dx_lo && dx < dx_hi)
+					upper[dx] = bevel[b][1];
+			if (dx >= dx_lo && dx < dx_hi)
+				upper[dx] = bevel[b][2];
+		}
+
+		if (y + 1 >= 0 && y + 1 < height)
 		{
-			if (dx >= dx_lo && dx < dx_hi)
+			if (0 >= dx_lo && 0 < dx_hi)
+				lower[0] = bevel[b][0];
+			dx = 1;
+			for (; dx < w - 1 && lower_cap[dx - 1]; dx++)
 			{
-				lower[dx] = bevel[b][1];
-				lower[dx].gl = lower_cap[dx - 1];
+				if (dx >= dx_lo && dx < dx_hi)
+				{
+					lower[dx] = bevel[b][1];
+					lower[dx].gl = lower_cap[dx - 1];
+				}
 			}
+			for (; dx < w - 1; dx++)
+				if (dx >= dx_lo && dx < dx_hi)
+					lower[dx] = bevel[b][1];
+			if (dx >= dx_lo && dx < dx_hi)
+				lower[dx] = bevel[b][2];
 		}
-		for (; dx < w - 1; dx++)
-			if (dx >= dx_lo && dx < dx_hi)
-				lower[dx] = bevel[b][1];
-		if (dx >= dx_lo && dx < dx_hi)
-			lower[dx] = bevel[b][2];
 
-		if (0 >= dx_lo && 0 < dx_hi)
-			bottom[0] = bevel[b][1];
-		dx = 1;
-		for (; dx < w; dx++)
-			if (dx >= dx_lo && dx < dx_hi)
-				bottom[dx] = bevel[b][2];
+		if (y >= 0 && y < height)
+		{
+			if (0 >= dx_lo && 0 < dx_hi)
+				bottom[0] = bevel[b][1];
+			dx = 1;
+			for (; dx < w; dx++)
+				if (dx >= dx_lo && dx < dx_hi)
+					bottom[dx] = bevel[b][2];
+		}
 
 		return w + 1;
 	}
@@ -804,6 +816,8 @@ struct Keyb
 	int add_size;
 	int mul_size;
 	KeyRow rows[5];
+
+	static const int hide = 1 + 5 * 5 + 1; // 1 cell above bottom + 5 rows x 5 cells + 1 border
 
 	int GetCap(int dx, int dy, int width_mul, char* ch, bool shift_on) const
 	{
@@ -1144,9 +1158,10 @@ Sprite* wolack_0011=0;
 
 void LoadSprites()
 {
-	player_0000 = LoadSprite("./sprites/player-0000.xp", "player_0000.xp", 0);
-	wolfie_0011 = LoadSprite("./sprites/wolfie-0011.xp", "wolfie-0011.xp", 0);
-	plydie_0000 = LoadSprite("./sprites/plydie-0000.xp", "plydie-0000.xp", 0);
+	// must be detached to do not interfere with meshprefs of asciiid
+	player_0000 = LoadSprite("./sprites/player-0000.xp", "player_0000.xp", 0, true);
+	wolfie_0011 = LoadSprite("./sprites/wolfie-0011.xp", "wolfie-0011.xp", 0, true);
+	plydie_0000 = LoadSprite("./sprites/plydie-0000.xp", "plydie-0000.xp", 0, true);
 }
 
 void FreeSprites()
@@ -1159,6 +1174,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	// load defaults
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
+
+	g->keyb_hide = keyb.hide;
 
 	g->renderer = CreateRenderer(stamp);
 	g->physics = CreatePhysics(terrain, world, pos, dir, yaw, stamp);
@@ -1197,6 +1214,21 @@ void Game::ScreenToCell(int p[2]) const
 
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
+	int f120 = 1 + (_stamp - stamp) / 8264;
+	TalkBox_blink += f120;
+
+	if (KeybAutoRepChar)
+	{
+		char ch = KeybAutoRepChar;
+		while (_stamp - KeybAuroRepDelayStamp >= 500000) // half sec delay
+		{
+			OnKeyb(GAME_KEYB::KEYB_CHAR, ch);
+			KeybAuroRepDelayStamp += 30000;
+		}
+		// revert it (OnKeyb nulls it)
+		KeybAutoRepChar = ch;
+	}
+
 	render_size[0] = width;
 	render_size[1] = height;
 
@@ -1280,7 +1312,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
 
-	if (show_keyb)
+	if (show_keyb || keyb_hide < 1 + 5 * 5 + 1)
 	{
 		int mul, keyb_width;
 		for (int mode = 1; mode <= 16; mode++)
@@ -1296,13 +1328,32 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 
 		keyb_pos[0] = (width - keyb_width) / 2;
-		keyb_pos[1] = 1;
+		keyb_pos[1] = 1 - keyb_hide;
 		keyb_mul = mul;
 
 		uint8_t key[32];
 		for (int i = 0; i < 32; i++)
 			key[i] = keyb_key[i] | input.key[i];
 		keyb.Paint(ptr, keyb_pos[0], keyb_pos[1], width, height, keyb_mul, key);
+	}
+	
+	if (show_keyb)
+	{
+		if (keyb_hide > 0)
+		{
+			keyb_hide -= f120;
+			if (keyb_hide < 0)
+				keyb_hide = 0;
+		}
+	}
+	else
+	{
+		if (keyb_hide < keyb.hide)
+		{
+			keyb_hide += f120;
+			if (keyb_hide > keyb.hide)
+				keyb_hide = keyb.hide;
+		}
 	}
 
 	if (player.talk_box)
@@ -1363,6 +1414,11 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 	// if nothing focused 
 
+	// in case it comes from the real keyboard
+	// if emulated, theoretically caller must revert it
+	// but in practice it will reset it later to emulated cap
+	KeybAutoRepChar = 0;
+
 	if (keyb == GAME_KEYB::KEYB_DOWN)
 	{
 		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
@@ -1377,10 +1433,13 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				memset(player.talk_box, 0, sizeof(TalkBox));
 				player.talk_box->max_width = 33;
 				player.talk_box->max_height = 7; // 0: off
-				int s[2];
-				player.talk_box->Reflow(s,0);
+				player.talk_box->cache_bl = 1;
+				int s[2],p[2];
+				player.talk_box->Reflow(s,p);
 				player.talk_box->size[0] = s[0];
 				player.talk_box->size[1] = s[1];
+				player.talk_box->cursor_xy[0] = p[0];
+				player.talk_box->cursor_xy[1] = p[1];
 			}
 			else
 			if (player.talk_box)
@@ -1390,6 +1449,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				if (show_keyb)
 					memset(keyb_key, 0, 32);
 				show_keyb = false;
+				KeybAutoRepChar = 0;
 			}
 		}
 
@@ -1522,8 +1582,10 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 					}
 					keyb_cap[10/*mouse_touch_id*/] = cap;
 
-					// setup autorepeat initial delay>
-					// ...
+					// setup autorepeat initial delay...
+					// not for shift
+					KeybAuroRepDelayStamp = stamp;
+					KeybAutoRepChar = ch; // must be nulled on any real keyb input!
 				}
 				else
 				// negative cap -> hit outside entire keyboard
@@ -1578,6 +1640,7 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 						if (show_keyb)
 							memset(keyb_key, 0, 32);
 						show_keyb = false;
+						KeybAutoRepChar = 0;
 					}
 					else
 					{
@@ -1587,10 +1650,13 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 						memset(player.talk_box, 0, sizeof(TalkBox));
 						player.talk_box->max_width = 33;
 						player.talk_box->max_height = 7; // 0: off
-						int s[2];
-						player.talk_box->Reflow(s, 0);
+						player.talk_box->cache_bl = 1;
+						int s[2],p[2];
+						player.talk_box->Reflow(s,p);
 						player.talk_box->size[0] = s[0];
 						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
 						show_keyb = true;
 					}
 				}
@@ -1636,6 +1702,7 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 					if (uncap!=A3D_LSHIFT)
 						keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
 					keyb_cap[10/*mouse_touch_id*/] = 0;
+					KeybAutoRepChar = 0;
 				}
 				else
 				{
@@ -1648,6 +1715,7 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 						if (uncap != A3D_LSHIFT)
 							keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
 						keyb_cap[10/*mouse_touch_id*/] = 0;
+						KeybAutoRepChar = 0;
 					}
 				}
 			}

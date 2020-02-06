@@ -110,6 +110,10 @@ struct Game
 
 	bool player_hit; // helper for detecting clicks on the player sprite
 	bool show_keyb; // activated together with talk_box by clicking on character
+	int keyb_hide;  // show / hide animator (vertical position)
+
+	char KeybAutoRepChar;
+	uint64_t KeybAuroRepDelayStamp;
 
 	int keyb_cap[11]; // cap down by 10 touches and mouse
 	int keyb_pos[2];
