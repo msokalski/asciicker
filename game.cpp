@@ -1836,9 +1836,29 @@ void Game::MoveContact(int id, int x, int y)
 	{
 		case Input::Contact::PLAYER:
 		{
-			bool hit = PlayerHit(this, x, y);
-			if (!hit)
-				con->action = Input::Contact::NONE;
+			int down[2] = { con->drag_from[0], con->drag_from[1] };
+			ScreenToCell(down);
+
+			int up[2] = { x, y };
+			ScreenToCell(up);
+
+			up[0] -= down[0];
+			up[1] -= down[1];
+
+			if (up[0] * up[0] > 1 || up[1] * up[1] > 1 || !PlayerHit(this, x, y))
+			{
+				con->action = Input::Contact::FORCE;
+				for (int i=0; i<4; i++)
+				{
+					if (i==id)
+						continue;
+					if (input.contact[i].action == Input::Contact::FORCE)
+					{
+						con->action = Input::Contact::NONE;
+						break;
+					}
+				}
+			}
 			break;
 		}
 
