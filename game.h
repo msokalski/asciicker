@@ -108,7 +108,7 @@ struct Game
 	int font_size[2];
 	int render_size[2];
 
-	bool player_hit; // helper for detecting clicks on the player sprite
+	//bool player_hit; // helper for detecting clicks on the player sprite
 	bool show_keyb; // activated together with talk_box by clicking on character
 	int keyb_hide;  // show / hide animator (vertical position)
 
@@ -117,10 +117,10 @@ struct Game
 	int PressKey;
 
 	int TalkBox_blink;
+	int KeybAutoRepCap;
 	char KeybAutoRepChar;
 	uint64_t KeybAuroRepDelayStamp;
 
-	int keyb_cap[11]; // cap down by 10 touches and mouse
 	int keyb_pos[2];
 	int keyb_mul;
 	uint8_t keyb_key[32]; // simulated key presses by touch/mouse
@@ -136,26 +136,48 @@ struct Game
 	int npcs;
 	Character* npc;
 
+	void StartContact(int id, int x, int y, int b);
+	void MoveContact(int id, int x, int y);
+	void EndContact(int id, int x, int y);
+
+	int GetContact(int id);
+
 	// accumulated input state
 	struct Input 
 	{
 		uint8_t key[32]; // keyb state
-		uint8_t but; // mouse buttons
-		int wheel;   // relative mouse wheel
-		int pos[2];  // mouse pos
-		int size[2]; // window size (in pixels)
-		int drag;    // which button initiated drag and is still down since then
-		int drag_from[2]; // where drag has started
-		bool jump;
-		bool shot;
 
-		struct Touch
+		// we split touch input to multiple separate mice with left button only
+		struct Contact
 		{
-			int pos[2];
-			bool contact;
+			enum
+			{
+				NONE,
+				KEYBCAP,
+				PLAYER,
+				TORQUE, // can be abs (right mouse but) or (timer touch on margin)
+				FORCE
+			};
+
+			int action;
+
+			int drag;    // which button initiated drag and is still down since then OR ZERO if there is no contact!!!
+			int pos[2];  // mouse pos
+			int drag_from[2]; // where drag has started
+
+			int keyb_cap; // if touch starts at some cap
+			bool player_hit; // if touch started at player/talkbox
+			int margin; // -1: if touch started at left margin, +1 : if touch started at right margin, 0 otherwise
+			float start_yaw; // absolute by mouse
 		};
 
-		Touch touch[10]; // [0] is primary touch
+		Contact contact[4]; // 0:mouse, 1:primary_touch 2:secondary_touch 3:unused
+
+		uint8_t but; // real mouse buttons currently down
+		int wheel;   // relative mouse wheel (only from real mouse)
+		int size[2]; // window size (in pixels)
+		bool jump;
+		bool shot;
 
 		bool IsKeyDown(int k)
 		{
@@ -185,6 +207,8 @@ struct Game
 		MOUSE_LEFT_BUT_UP,
 		MOUSE_RIGHT_BUT_DOWN,
 		MOUSE_RIGHT_BUT_UP,
+		MOUSE_MIDDLE_BUT_DOWN,
+		MOUSE_MIDDLE_BUT_UP,
 		MOUSE_WHEEL_DOWN,
 		MOUSE_WHEEL_UP
 	};
@@ -193,7 +217,8 @@ struct Game
 	{
 		TOUCH_MOVE,
 		TOUCH_BEGIN,
-		TOUCH_END
+		TOUCH_END,
+		TOUCH_CANCEL
 	};
 
 	// just accumulates input

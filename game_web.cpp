@@ -152,4 +152,9 @@ extern "C"
     {
         game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
     }
+
+    void Focus(int set)
+    {
+        game->OnFocus(set!=0);
+    }
 }

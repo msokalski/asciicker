@@ -2,8 +2,10 @@
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
+
+    <link rel="manifest" href="asciicker.json">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=800" />
+    <meta name="viewport" content="width=600" />
 
     <title>ASCIICKER - Let's kick some ASCII</title>
     <style>
@@ -67,6 +69,19 @@
 
     </style>
 
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('asciicker.js').then(function (registration) {
+            // Registration was successful
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          }, function (err) {
+            // registration failed :(
+            console.log('ServiceWorker registration failed: ', err);
+          });
+        });
+      }
+    </script>
 
     <script id="vs" type="x-shader/x-vertex">
     //<![CDATA[
@@ -170,17 +185,11 @@
       var ak_max_width = 160;
       var ak_max_height = 90;
 
-      var ak_force_x = 0;
-      var ak_force_y = 0;
-      var ak_torque = 0;
-      var ak_jump = false;
-      var ak_drag = 0;
-
-      var ak_yaw = 45;
+      var ak_ratio = 1;
 
       function Resize(e)
       {
-        var ak_ratio = 1;
+        ak_ratio = 1;
 				
 				if (window.screen.systemXDPI !== undefined && 
 				    window.screen.logicalXDPI !== undefined && 
@@ -221,7 +230,11 @@
 
         var fw = ak_fonts[ak_font].width >> 4;
         var fh = ak_fonts[ak_font].height >> 4;
-        Size(w,h, fw,fh);
+
+        if (ak_ratio<1.0)
+          Size(w,h, fw/ak_ratio,fh/ak_ratio);
+        else
+          Size(w*ak_ratio,h*ak_ratio, fw,fh);
       }
 
       function AsciickerLoop(tm)
@@ -282,11 +295,8 @@
 
       function setTouchHandlers()
       {
-        var touch_mask = 0;
+        var touch_mask = 0xFFFC; // upto 3 touches!
         var touches = {};
-        var tourque = 0;
-        var start_x=0.5;
-        var start_y=0.5;
 
         window.addEventListener("touchstart",
         function(e)
@@ -313,39 +323,13 @@
 			        var key = data[i].identifier;
               touches[key] = id;
 
-              if (id==1)
+              if (ak_ratio>1.0)
               {
-                // primary
-                ak_drag = 1;
-                if (x<window.innerWidth*0.1)
-                {
-                  ak_force_x = 0;
-                  ak_force_y = 0;
-                  torque = +1;
-                  ak_torque = torque;
-                }
-                else
-                if (x>window.innerWidth*0.9)
-                {
-                  ak_force_x = 0;
-                  ak_force_y = 0;
-                  torque = -1;
-                  ak_torque = torque;
-                }
-                else
-                {
-                  start_x = x / window.innerWidth;
-                  start_y = y / window.innerHeight;
-                  ak_force_x = (x / window.innerWidth - start_x) * 4.0;
-                  ak_force_y = (start_y - y / window.innerHeight) * 4.0;
-                  torque = 0;
-                  ak_torque = torque;
-                }
+                x *= ak_ratio;
+                y *= ak_ratio;
               }
-              else
-              {
-                ak_jump = true;
-              }
+
+              Touch(1/*BEGIN*/,id,x,y);
           }
 
         }, { passive: false });
@@ -366,21 +350,13 @@
             var x = data[i].pageX;
             var y = data[i].pageY;
 
-            // convert x,y from client space pixels to canvas space glyphs
-            if (id==1)
+            if (ak_ratio>1.0)
             {
-              // primary
-              if (torque)
-              {
-                ak_force_x = 0;
-                ak_force_y = 0;
-              }
-              else
-              {
-                ak_force_x = (x / window.innerWidth - start_x) * 4.0;
-                ak_force_y = (start_y - y / window.innerHeight) * 4.0;
-              }
+              x *= ak_ratio;
+              y *= ak_ratio;
             }
+
+            Touch(0/*MOVE*/,id,x,y);
           }
         }, { passive: false });
 
@@ -400,19 +376,16 @@
             touches[key] = 0;
             touch_mask &= ~(1<<(id-1));
 
-            if (id==1)
+            var x = data[i].pageX;
+            var y = data[i].pageY;
+            
+            if (ak_ratio>1.0)
             {
-              // primary
-              ak_drag = 0;
-              ak_force_x = 0;
-              ak_force_y = 0;
-              torque = 0;
-              ak_torque = torque;
-              start_x=0.5;
-              start_y=0.5;
+              x *= ak_ratio;
+              y *= ak_ratio;
             }
-            else
-              ak_jump = false;
+
+            Touch(2/*END*/,id,x,y);
           }
         }, { passive: false });
 
@@ -432,19 +405,16 @@
             touches[key] = 0;
             touch_mask &= ~(1<<(id-1));
 
-            if (id==1)
+            var x = data[i].pageX;
+            var y = data[i].pageY;
+            
+            if (ak_ratio>1.0)
             {
-              // primary
-              ak_drag = 0;
-              ak_force_x = 0;
-              ak_force_y = 0;
-              torque = 0;
-              ak_torque = torque;
-              start_x=0.5;
-              start_y=0.5;              
+              x *= ak_ratio;
+              y *= ak_ratio;
             }
-            else
-              ak_jump = false;
+                        
+            Touch(3/*CANCEL*/,id,x,y);
           }
         }, { passive: false });        
       }
@@ -662,29 +632,80 @@
         window.addEventListener("mousedown", 
         function(e) 
         {
-          // e.which == 1,2,3
-          // e.pageX
-          // e.pageY
+          var x = e.pageX;
+          var y = e.pageY;
+          if (ak_ratio>1.0)
+          {
+            x *= ak_ratio;
+            y *= ak_ratio;
+          }
+
+          if (e.button==0)
+            Mouse(1/*LEFT_DN*/,x,y);
+          else
+          if (e.button==2)
+            Mouse(3/*RIGHT_DN*/,x,y);
+          else
+          if (e.button==1)
+            Mouse(5/*MID_DN*/,x,y);
+
           e.preventDefault();
         }, { passive: false });
           
         window.addEventListener("mousemove", 
         function(e) 
         {
-          // e.pageX
-          // e.pageY
+          var x = e.pageX;
+          var y = e.pageY;
+          if (ak_ratio>1.0)
+          {
+            x *= ak_ratio;
+            y *= ak_ratio;
+          }
+
+          Mouse(0/*MOVE*/,x,y);
           e.preventDefault();
         }, { passive: false });			
           
         window.addEventListener("mouseup",
         function(e) 
         {
-          // e.which == 1,2,3
-          // e.pageX
-          // e.pageY
+          var x = e.pageX;
+          var y = e.pageY;
+          if (ak_ratio>1.0)
+          {
+            x *= ak_ratio;
+            y *= ak_ratio;
+          }
+
+          if (e.button==0)
+            Mouse(2/*LEFT_UP*/,x,y);
+          else
+          if (e.button==2)
+            Mouse(4/*RIGHT_UP*/,x,y);
+          else
+          if (e.button==1)
+            Mouse(6/*MID_UP*/,x,y);
           e.preventDefault();
         }, { passive: false });
-      }      
+      }
+
+      function setFocusHandlers()
+      {
+        window.addEventListener("focus", 
+        function(e)
+        {
+          Focus(1);
+          e.preventDefault();
+        }, { passive: false });
+
+        window.addEventListener("blur", 
+        function(e)
+        {
+          Focus(0);
+          e.preventDefault();
+        }, { passive: false });
+      }
 
       function AsciickerBoot()
       {
@@ -845,6 +866,7 @@
         setMouseHandlers();
         setKeybHandlers();
         setTouchHandlers();
+        setFocusHandlers();
 
         window.addEventListener("resize",Resize); 
         Resize(null);

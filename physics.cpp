@@ -750,6 +750,12 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
 	static const int interval = 15000; // update physics step in [us]
 
 	io->dt = stamp - phys->stamp;
+	if (io->dt > 500000)
+	{
+		// stall
+		io->dt = 0;
+		phys->stamp = stamp;
+	}
 
 	int steps_handled = 0;
 

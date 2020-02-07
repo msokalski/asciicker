@@ -1215,6 +1215,9 @@ void Game::ScreenToCell(int p[2]) const
 
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
+	if (_stamp-stamp > 500000) // treat lags longer than 0.5s as stall
+		stamp = _stamp;
+
 	if (PressKey && _stamp - PressStamp > 50000 /*500000*/)
 	{
 		// in render(): 
@@ -1255,42 +1258,78 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	io.water = water;
 	io.jump = false;
 
-	if (input.drag == 1 && input.size[0]>0 && input.size[1]>0)
-	{
-		int x = (float)input.pos[0] / input.size[0];
-		int y = (float)input.pos[1] / input.size[1];
+	bool force_handled = false;
+	int  torque_handled = 0; // 0 unhandled, 1 touch, 2 mouse
+	int  torque_sign = 0;
 
-		io.x_force = 2 * (input.pos[0] * 2 - input.size[0]) / (float)input.size[0];
-		io.y_force = 2 * (input.size[1] - input.pos[1] * 2) / (float)input.size[1];
-	}
-	else
-	if (!player.talk_box)
+	for (int i=0; i<4; i++)
 	{
-		float speed = 1;
-		if (input.IsKeyDown(A3D_LSHIFT) || input.IsKeyDown(A3D_RSHIFT))
-			speed *= 0.5;
-		io.x_force = (int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A));
-		io.y_force = (int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S));
+		switch (input.contact[i].action)
+		{
+			case Input::Contact::FORCE:
+				assert(!force_handled);
+				force_handled = true;
+				if (i==0)
+				{
+					// relative to center
+					io.x_force = 2 * (input.contact[i].pos[0] * 2 - input.size[0]) / (float)input.size[0];
+					io.y_force = 2 * (input.size[1] - input.contact[i].pos[1] * 2) / (float)input.size[1];					
+				}
+				else
+				{
+					// relatice to drag start
+					io.x_force = 4 * (input.contact[i].pos[0] - input.contact[i].drag_from[0]) / (float)input.size[0];
+					io.y_force = 4 * (input.contact[i].drag_from[1] - input.contact[i].pos[1]) / (float)input.size[0];
+				}
+				break;
+			
+			case Input::Contact::TORQUE:
+				if (i==0)
+				{
+					assert(torque_handled==0);
+					// mouse absolute
+					torque_handled = 2;
+					float sensitivity = 200.0f / input.size[0];
+					float yaw = input.contact[i].start_yaw - sensitivity * (input.contact[i].pos[0] - input.contact[i].drag_from[0]);
+					io.torque = 0;
+					SetPhysicsYaw(physics, yaw, 0);
 
-		float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
-		if (len > 0)
-			speed /= len;
-		io.x_force *= speed;
-		io.y_force *= speed;
+				}
+				else
+				{
+					assert(torque_handled!=2);
+					torque_handled = 1;
+					// physics timer
+					torque_sign -= input.contact[i].margin; // -1 | +1
+				}
+				break;
+		}
 	}
 
-	if (input.drag == 2 && input.size[0] > 0)
+	io.torque = torque_sign < 0 ? -1 : torque_sign > 0 ? +1 : 0;
+
+	if (!player.talk_box) // force & torque with keyboard
 	{
-		float sensitivity = 200.0f / input.size[0];
-		float yaw = prev_yaw - sensitivity * (input.pos[0] - input.drag_from[0]);
-		io.torque = 0;
-		SetPhysicsYaw(physics, yaw, 0);
-	}
-	else
-	if (!player.talk_box)
-	{
-		io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
-			(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E));
+		if (!force_handled)
+		{
+			float speed = 1;
+			if (input.IsKeyDown(A3D_LSHIFT) || input.IsKeyDown(A3D_RSHIFT))
+				speed *= 0.5;
+			io.x_force = (int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A));
+			io.y_force = (int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S));
+
+			float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
+			if (len > 0)
+				speed /= len;
+			io.x_force *= speed;
+			io.y_force *= speed;
+		}
+
+		if (!torque_handled)
+		{
+			io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
+				(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E));
+		}
 	}
 
 	io.jump = input.jump;
@@ -1298,8 +1337,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (steps > 0)
 		input.jump = false;
 
-	if (!(input.drag == 2 && input.size[0] > 0))
-		prev_yaw = io.yaw; // readback yaw if not dragged
+	prev_yaw = io.yaw;
 
 	player.pos[0] = io.pos[0];
 	player.pos[1] = io.pos[1];
@@ -1464,6 +1502,12 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					memset(keyb_key, 0, 32);
 				show_keyb = false;
 				KeybAutoRepChar = 0;
+				KeybAutoRepCap = 0;
+				for (int i=0; i<4; i++)
+				{
+					if (input.contact[i].action == Input::Contact::KEYBCAP)
+						input.contact[i].action = Input::Contact::NONE;
+				}
 			}
 		}
 
@@ -1589,6 +1633,12 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					memset(keyb_key, 0, 32);
 				show_keyb = false;
 				KeybAutoRepChar = 0;
+				KeybAutoRepCap = 0;
+				for (int i=0; i<4; i++)
+				{
+					if (input.contact[i].action == Input::Contact::KEYBCAP)
+						input.contact[i].action = Input::Contact::NONE;
+				}
 			}
 		}		
 	}
@@ -1639,209 +1689,440 @@ static bool PlayerHit(Game* g, int x, int y)
 	return false;
 }
 
+void Game::StartContact(int id, int x, int y, int b)
+{
+	Input::Contact* con = input.contact + id;
+
+	int cp[2] = { x,y };
+	ScreenToCell(cp);
+
+	bool hit = false;
+	int mrg = 0;
+	int cap = -1;
+	float yaw = 0;
+
+	if (show_keyb)
+	{
+		bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+		char ch=0;
+		cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, &ch, shift_on);
+
+		if (b!=1 && cap > 0)
+			cap = 0;
+
+		if (cap>0)
+		{
+			// ensure one contact per keycap
+			for (int i=0; i<4; i++)
+			{
+				if (i==id)
+					continue;
+				if (input.contact[i].action == Input::Contact::KEYBCAP && input.contact[i].keyb_cap == cap)
+					cap = 0;
+			}
+		}
+
+		if (cap > 0)
+		{
+			if (cap == A3D_LSHIFT)
+			{
+				keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
+			}
+			else
+			{
+				if (ch)
+					OnKeyb(GAME_KEYB::KEYB_CHAR, ch); // like from terminal!
+				keyb_key[cap >> 3] |= 1 << (cap & 7);  // just to hilight keycap
+			}
+			con->keyb_cap = cap;
+
+			// setup autorepeat initial delay...
+			// not for shift
+			KeybAutoRepCap = cap;
+			KeybAuroRepDelayStamp = stamp;
+			KeybAutoRepChar = ch; // must be nulled on any real keyb input!
+
+			con->action = Input::Contact::KEYBCAP;
+		}
+
+		if (cap == 0)
+			con->action = Input::Contact::NONE;
+	}
+
+	if (cap<0)
+	{
+		if (id==0 && b==2)
+		{
+			// absolute mouse torque (mrg=0)
+			con->action = Input::Contact::TORQUE;
+			yaw = prev_yaw;
+
+			// ensure no timer torque is pending
+			for (int i=1; i<4; i++)
+			{
+				if (input.contact[i].action == Input::Contact::TORQUE)
+				{
+					con->action = Input::Contact::NONE;
+					yaw = 0;
+					break;
+				}
+			}
+		}
+		else
+		{
+			// check if on player / talkbox
+			hit = PlayerHit(this, x, y);
+			if (hit)
+				con->action = Input::Contact::PLAYER;
+			else
+			if (id>0 && cp[0] < 5 &&
+				input.contact[0].action != Input::Contact::TORQUE)
+			{
+				mrg = -1;
+				con->action = Input::Contact::TORQUE;
+			}
+			else
+			if (id>0 && cp[0] >= render_size[0]-5 && 
+				input.contact[0].action != Input::Contact::TORQUE)
+			{
+				mrg = +1;
+				con->action = Input::Contact::TORQUE;
+			}
+			else
+			if (b==1)
+			{
+				con->action = Input::Contact::FORCE;
+
+				// ensure no other contact is in force mode
+				for (int i=0; i<4; i++)
+				{
+					if (i==id)
+						continue;
+					if (input.contact[i].action == Input::Contact::FORCE)
+					{
+						input.jump = true;
+						con->action = Input::Contact::NONE;
+						break;
+					}
+				}
+			}
+			else
+			{
+				con->action = Input::Contact::NONE;				
+			}
+		}
+	}
+
+	con->drag = b;
+
+	con->pos[0] = x;
+	con->pos[1] = y;
+	con->drag_from[0] = x;
+	con->drag_from[1] = y;
+
+	con->keyb_cap = cap;
+	con->margin = mrg;
+	con->player_hit = hit;
+	con->start_yaw = yaw;
+}
+
+void Game::MoveContact(int id, int x, int y)
+{
+	Input::Contact* con = input.contact + id;	
+	con->pos[0] = x;
+	con->pos[1] = y;
+
+	switch (con->action)
+	{
+		case Input::Contact::PLAYER:
+		{
+			bool hit = PlayerHit(this, x, y);
+			if (!hit)
+				con->action = Input::Contact::NONE;
+			break;
+		}
+
+		case Input::Contact::KEYBCAP:
+		{			
+			int cp[2] = { x,y };
+			ScreenToCell(cp);
+			int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, 0,false);
+			if (cap != con->keyb_cap)
+			{
+				con->action = Input::Contact::NONE;
+				
+				int uncap = con->keyb_cap;
+				if (uncap != A3D_LSHIFT)
+					keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
+
+				if (uncap == KeybAutoRepCap)
+				{
+					KeybAutoRepCap = 0;
+					KeybAutoRepChar = 0;
+				}
+			}
+			break;
+		}
+	}
+}
+
+void Game::EndContact(int id, int x, int y)
+{
+	Input::Contact* con = input.contact + id;
+
+	// any contact end must cancel autorep
+
+	switch (con->action)
+	{
+		case Input::Contact::KEYBCAP:
+		{
+			// maybe we should clear it also when another cap is pressed?
+			if (con->keyb_cap!=A3D_LSHIFT)
+				keyb_key[con->keyb_cap >> 3] &= ~(1 << (con->keyb_cap & 7));  // un-hilight keycap
+
+			if (KeybAutoRepCap == con->keyb_cap)
+			{
+				KeybAutoRepCap = 0;
+				KeybAutoRepChar = 0;
+			}
+			break;
+		}
+
+		case Input::Contact::PLAYER:
+		{
+			int down[2] = { con->drag_from[0], con->drag_from[1] };
+			ScreenToCell(down);
+
+			int up[2] = { x, y };
+			ScreenToCell(up);
+
+			up[0] -= down[0];
+			up[1] -= down[1];
+
+			if (up[0] * up[0] <= 1 && up[1] * up[1] <= 1)
+			{
+				if (player.talk_box)
+				{
+					// close talk_box (and keyb if also open)
+					free(player.talk_box);
+					player.talk_box = 0;
+					if (show_keyb)
+						memset(keyb_key, 0, 32);
+					show_keyb = false;
+					KeybAutoRepChar = 0;
+					KeybAutoRepCap = 0;
+					for (int i=0; i<4; i++)
+					{
+						if (input.contact[i].action == Input::Contact::KEYBCAP)
+							input.contact[i].action = Input::Contact::NONE;
+					}
+				}
+				else
+				{
+					// open talk_box (and keyb if not open)
+					TalkBox_blink = 32;
+					player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+					memset(player.talk_box, 0, sizeof(TalkBox));
+					player.talk_box->max_width = 33;
+					player.talk_box->max_height = 7; // 0: off
+					player.talk_box->cache_bl = 1;
+					int s[2],p[2];
+					player.talk_box->Reflow(s,p);
+					player.talk_box->size[0] = s[0];
+					player.talk_box->size[1] = s[1];
+					player.talk_box->cursor_xy[0] = p[0];
+					player.talk_box->cursor_xy[1] = p[1];
+				
+					show_keyb = true;
+				}
+			}
+
+			break;
+		}
+	}
+
+	con->action = Input::Contact::NONE;
+	con->drag = 0;
+}
+
+int Game::GetContact(int id)
+{
+	Input::Contact* con = input.contact + id;
+	return con->drag;
+}
+
+
+// note:
+//   only left-button is moved with mouse, 
+//   other emu-touches remains on their initial pos
+
+// #define TOUCH_EMU
+
+
+#ifdef TOUCH_EMU
+int FirstFree(int size, int* arr)
+{
+	for (int id=1; id<=size; id++)
+	{
+		int i = 0;
+		for (; i<size; i++)
+			if (arr[i] == id)
+				break;
+		if (i==size)
+			return id;
+	}
+
+	return -1;
+}
+#endif
+
 void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 {
-	// handle layers first ...
+	#ifdef TOUCH_EMU
+	static int buts_id[3] = {-1,-1,-1}; // L,R,M
+	// emulate touches for easier testing
+	switch (mouse)
+	{
+		case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: 
+		case GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN: 
+		case GAME_MOUSE::MOUSE_MIDDLE_BUT_DOWN: 
+		{
+			int idx = ((int)mouse-1) >> 1;
+			assert(buts_id[idx]<0);
+			buts_id[idx] = FirstFree(3,buts_id);
+			OnTouch(GAME_TOUCH::TOUCH_BEGIN,buts_id[idx],x,y);
 
-	// if nothing focused
+			for (int i = 0; i < 1; i++)
+				if (i != idx && buts_id[i]>0)
+					OnTouch(GAME_TOUCH::TOUCH_MOVE,buts_id[i],x,y);
+			
+			break;
+		}
+
+		case GAME_MOUSE::MOUSE_LEFT_BUT_UP: 
+		case GAME_MOUSE::MOUSE_RIGHT_BUT_UP: 
+		case GAME_MOUSE::MOUSE_MIDDLE_BUT_UP: 
+		{
+			int idx = ((int)mouse-2) >> 1;
+			if (buts_id[idx]>0)
+			{
+				OnTouch(GAME_TOUCH::TOUCH_END,buts_id[idx],x,y);
+				buts_id[idx] = -1;
+
+				for (int i = 0; i < 1; i++)
+					if (i != idx && buts_id[i]>0)
+						OnTouch(GAME_TOUCH::TOUCH_MOVE,buts_id[i],x,y);
+			}
+
+			break;
+		}
+
+		case GAME_MOUSE::MOUSE_MOVE: 
+			for (int i = 0; i < 1; i++)
+				if (buts_id[i]>0)
+					OnTouch(GAME_TOUCH::TOUCH_MOVE,buts_id[i],x,y);
+			break;
+	}
+	return;
+	#endif
+
 	switch (mouse)
 	{
 		// they are handled
 		// after switch !!!
-		case MOUSE_MOVE:
 		case MOUSE_WHEEL_DOWN:
 		case MOUSE_WHEEL_UP:
 			break;
 
 		case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: 
-			player_hit = false;
-			if (show_keyb && !input.drag)
-			{
-				int cp[2] = { x,y };
-				ScreenToCell(cp);
-
-				bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
-				char ch=0;
-				int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, &ch, shift_on);
-
-				if (cap > 0)
-				{
-					if (cap == A3D_LSHIFT)
-					{
-						keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
-					}
-					else
-					{
-						if (ch)
-							OnKeyb(GAME_KEYB::KEYB_CHAR, ch); // like from terminal!
-						keyb_key[cap >> 3] |= 1 << (cap & 7);  // just to hilight keycap
-					}
-					keyb_cap[10/*mouse_touch_id*/] = cap;
-
-					// setup autorepeat initial delay...
-					// not for shift
-					KeybAuroRepDelayStamp = stamp;
-					KeybAutoRepChar = ch; // must be nulled on any real keyb input!
-				}
-				else
-				// negative cap -> hit outside entire keyboard
-				if (cap < 0)
-				{
-					if (input.but == 0)
-					{
-						input.drag = 1;
-						input.drag_from[0] = x;
-						input.drag_from[1] = y;
-
-						// check player hit
-						player_hit = PlayerHit(this, x, y);
-					}
-				}
-			}
+			if (input.but == 0x0)
+				StartContact(0, x,y, 1);
 			else
-			if (input.but == 0)
-			{
-				input.drag = 1;
-				input.drag_from[0] = x;
-				input.drag_from[1] = y;
-
-				// check player hit
-				player_hit = PlayerHit(this, x, y);
-			}
-
-			input.but |= 1; 
+				MoveContact(0, x,y);
+			input.but |= 0x1;
 			break;
 
 		case GAME_MOUSE::MOUSE_LEFT_BUT_UP: 
-
-			if (player_hit)
-			{
-				player_hit = false;
-				int down[2] = { input.drag_from[0], input.drag_from[1] };
-				ScreenToCell(down);
-
-				int up[2] = { x, y };
-				ScreenToCell(up);
-
-				up[0] -= down[0];
-				up[1] -= down[1];
-
-				if (up[0] * up[0] <= 1 && up[1] * up[1] <= 1)
-				{
-					if (player.talk_box)
-					{
-						// close talk_box (and keyb if also open)
-						free(player.talk_box);
-						player.talk_box = 0;
-						if (show_keyb)
-							memset(keyb_key, 0, 32);
-						show_keyb = false;
-						KeybAutoRepChar = 0;
-					}
-					else
-					{
-						// open talk_box (and keyb if not open)
-						TalkBox_blink = 32;
-						player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
-						memset(player.talk_box, 0, sizeof(TalkBox));
-						player.talk_box->max_width = 33;
-						player.talk_box->max_height = 7; // 0: off
-						player.talk_box->cache_bl = 1;
-						int s[2],p[2];
-						player.talk_box->Reflow(s,p);
-						player.talk_box->size[0] = s[0];
-						player.talk_box->size[1] = s[1];
-						player.talk_box->cursor_xy[0] = p[0];
-						player.talk_box->cursor_xy[1] = p[1];
-						show_keyb = true;
-					}
-				}
-			}
-
-			// if released at same pos as but_down, it is click. then:
-			//   if pos is on player:
-			//      if talkbox is open: hide talkbox ( & keyb if open )
-			//         otherwise:       show talkbox ( & keyb if not open )
-			//      (keyb cannot be open without talkbox... at the moment)
-
-			if (input.drag == 1) 
-				input.drag = 0; 
-			input.but &= ~1; 
+			if (GetContact(0) == 1)
+				EndContact(0, x,y);
+			input.but &= ~0x1;
 			break;
+
 		case GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN: 
 			if (input.but == 0)
+				StartContact(0, x,y, 2);
+			else
 			{
-				input.drag = 2;
-				input.drag_from[0] = x;
-				input.drag_from[1] = y;
+				if (input.contact[0].action == Input::Contact::FORCE)
+					input.jump = true;
+				MoveContact(0, x,y);
 			}
-			if (input.drag == 1)
-				input.jump = true;
-			input.but |= 2; 
+			input.but |= 0x2;
 			break;
-		case GAME_MOUSE::MOUSE_RIGHT_BUT_UP:   
-			if (input.drag == 2) 
-				input.drag = 0; 
-			input.but &= ~2; 
+
+		case GAME_MOUSE::MOUSE_RIGHT_BUT_UP: 
+			if (GetContact(0) == 2)
+				EndContact(0, x,y);
+			input.but &= ~0x2;
 			break;
-	}
 
-	if (mouse != MOUSE_LEFT_BUT_DOWN)
-	{
-		if (show_keyb)
-		{
-			if (keyb_cap[10/*mouse_touch_id*/])
-			{
-				if (mouse == MOUSE_LEFT_BUT_UP)
-				{
-					int uncap = keyb_cap[10/*mouse_touch_id*/];
-					if (uncap!=A3D_LSHIFT)
-						keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
-					keyb_cap[10/*mouse_touch_id*/] = 0;
-					KeybAutoRepChar = 0;
-				}
-				else
-				{
-					int cp[2] = { x,y };
-					ScreenToCell(cp);
-					int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, 0,false);
-					if (cap != keyb_cap[10/*mouse_touch_id*/])
-					{
-						int uncap = keyb_cap[10/*mouse_touch_id*/];
-						if (uncap != A3D_LSHIFT)
-							keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
-						keyb_cap[10/*mouse_touch_id*/] = 0;
-						KeybAutoRepChar = 0;
-					}
-				}
-			}
-		}
-	}
+		case GAME_MOUSE::MOUSE_MIDDLE_BUT_DOWN: 
+			if (input.but == 0)
+				StartContact(0, x,y, 3);
+			else
+				MoveContact(0, x,y);
+			input.but |= 0x4;
+			break;
 
-	input.pos[0] = x;
-	input.pos[1] = y;
+		case GAME_MOUSE::MOUSE_MIDDLE_BUT_UP: 
+			if (GetContact(0) == 3)
+				EndContact(0, x,y);
+			input.but &= ~0x4;
+			break;
 
-	if (player_hit)
-	{
-		int down[2] = { input.drag_from[0], input.drag_from[1] };
-		ScreenToCell(down);
-
-		int up[2] = { x, y };
-		ScreenToCell(up);
-
-		up[0] -= down[0];
-		up[1] -= down[1];
-
-		if (up[0] * up[0] > 1 || up[1] * up[1] > 1)
-		{
-			player_hit = false;
-		}
+		case GAME_MOUSE::MOUSE_MOVE: 
+			if (GetContact(0))
+				MoveContact(0, x,y);
+			break;
 	}
 }
 
 void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 {
-	// handle layers first ...
+	if (id<1 || id>3)
+		return;
+
+	switch (touch)
+	{
+		case TOUCH_BEGIN:
+			StartContact(id, x,y, 1);
+			break;
+
+			break;
+		case TOUCH_MOVE:
+			MoveContact(id, x,y);
+			break;
+
+		case TOUCH_END:
+			EndContact(id, x,y);
+			break;
+
+		case TOUCH_CANCEL:
+			if (input.contact[id].action == Input::Contact::KEYBCAP)
+			{
+				if (input.contact[id].keyb_cap!=A3D_LSHIFT)
+					keyb_key[input.contact[id].keyb_cap >> 3] &= ~(1 << (input.contact[id].keyb_cap & 7));  // un-hilight keycap
+			 
+				if (input.contact[id].keyb_cap == KeybAutoRepCap)
+				{
+					KeybAutoRepCap = 0;
+					KeybAutoRepChar = 0;
+				}
+			}
+			input.contact[id].drag = 0;
+			input.contact[id].action = Input::Contact::NONE;
+			break;
+	}
 }
 
 void Game::OnFocus(bool set)
@@ -1849,6 +2130,14 @@ void Game::OnFocus(bool set)
 	// if loosing focus, clear all tracking / dragging / keyboard states
 	if (!set)
 	{
+		KeybAutoRepCap = 0;
+		KeybAutoRepChar = 0;
+		for (int i=0; i<4; i++)
+		{
+			input.contact[i].action = Input::Contact::NONE;
+			input.contact[i].drag = 0;
+		}
+
 		int w = input.size[0], h = input.size[1];
 		memset(&input, 0, sizeof(Input));
 		input.size[0] = w;

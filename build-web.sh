@@ -25,6 +25,10 @@ rm .web/index.js
 rm .web/index.wasm
 rm .web/index.data
 
+cp asciicker.png .web/asciicker.png
+cp asciicker.json .web/asciicker.json
+cp asciicker.js .web/asciicker.js
+
 emcc --emrun -O3 \
     game.cpp \
     game_web.cpp \
@@ -37,7 +41,7 @@ emcc --emrun -O3 \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_main","_Render","_Size","_Keyb","_Mouse","_Touch"]' \
+    -s EXPORTED_FUNCTIONS='["_main","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --preload-file a3d/game_sprites.a3d \
