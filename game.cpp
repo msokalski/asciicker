@@ -11,8 +11,6 @@ struct TalkBox
 	int cursor_pos;
 	int len;
 
-	int cache_bl; // cache cursor's line offset and length
-
 	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor) const
 	{
 		// x,y is at smoke spot, box will be centered above it
@@ -49,8 +47,7 @@ struct TalkBox
 								continue;
 
 							AnsiCell* ac = ar + x;
-							ac->fg = white;
-							ac->bk = dk_grey;
+							ac->fg = white;							ac->bk = dk_grey;
 							ac->gl = ' ';
 							ac->spare = 0;
 						}
@@ -82,7 +79,6 @@ struct TalkBox
 		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		assert(bl >= 0);
-		assert(bl == cache_bl);
 
 		AnsiCell* ll = ptr + left + lower * width;
 		AnsiCell* bc = ptr + center + bottom * width;
@@ -257,28 +253,13 @@ struct TalkBox
 			if (cursor_pos > len)
 				cursor_pos = len;
 
-			// if jumped to another line then reflow
-			if (cursor_pos < (cache_bl >> 8) || cursor_pos >= (cache_bl & 0xFF))
-			{
-				int _pos[2];
-				int bl = Reflow(0, _pos); // pos is given -> calc bl for cursor_pos instead of cursor_xy[1]
+			int _pos[2];
+			int bl = Reflow(0, _pos);
 
-				assert(bl >= 0);
-				cache_bl = bl; // problem: bl is calculated for OLD cursor_xy[1]! it should be calculated for cursor_pos!
+			assert(bl >= 0);
 
-				cursor_xy[0] = _pos[0];
-				cursor_xy[1] = _pos[1];
-
-				/*
-				// work around: update it once again after setting NEW cursor_xy[1]
-				bl = Reflow(0, _pos);
-				cache_bl = bl;
-				*/
-			}
-			else
-			{
-				cursor_xy[0] += dx;
-			}
+			cursor_xy[0] = _pos[0];
+			cursor_xy[1] = _pos[1];
 		}
 	}
 
@@ -286,23 +267,13 @@ struct TalkBox
 	{
 		if (dy < 0 && cursor_xy[1]>0 || dy > 0 && cursor_xy[1] < size[1] - 1)
 		{
-			// update cursor pos
 			cursor_xy[1] += dy;
-
-			if (cursor_xy[1] < 0)
-				cursor_xy[1] = 0;
-
-			if (cursor_xy[1] >= size[1])
-				cursor_xy[1] = size[1] - 1;
+			assert(cursor_xy[1]>=0 && cursor_xy[1] < size[1]);
 
 			int bl = Reflow(0, 0);
-			assert(bl >= 0);
-			cache_bl = bl; // here it is ok ( no pos is given )
-
-			if (cursor_xy[0] >= (bl & 0xFF))
-				cursor_xy[0] = (bl & 0xFF) - 1;
-
-			cursor_pos = (bl >> 8) + cursor_xy[0];
+			assert(bl>=0);
+			cursor_pos = bl>>8;
+			cursor_xy[0] = bl&0xFF;
 		}
 	}
 	
@@ -321,7 +292,6 @@ struct TalkBox
 			int bl = Reflow(_size, _pos);
 
 			assert(bl >= 0);
-			cache_bl = bl;
 
 			size[0] = _size[0];
 			size[1] = _size[1];
@@ -341,8 +311,9 @@ struct TalkBox
 				int _size[2], _pos[2];
 				int bl = Reflow(_size, _pos);
 
-				assert(bl >= 0);
-				cache_bl = bl;
+				// detect nasty case when deleting first char in last line
+				// resulting in original cursor_xy[1] is out of nuber of lines range (after modification)
+				assert(bl >= 0 || bl==-2 && cursor_xy[0]==0 && cursor_xy[1]==size[1]);
 
 				size[0] = _size[0];
 				size[1] = _size[1];
@@ -370,7 +341,6 @@ struct TalkBox
 					size[1] = _size[1];
 					cursor_xy[0] = _pos[0];
 					cursor_xy[1] = _pos[1];
-					cache_bl = bl;
 				}
 				else
 				{
@@ -393,41 +363,38 @@ struct TalkBox
 	// returns -1 on overflow, otherwise (b<<8) | l 
 	// where l = 'current line' length and b = buffer offset at 'current line' begining
 	// if _pos is null 'current line' is given directly by cursor_xy[1] otherwise indirectly by cursor_pos
-	int Reflow(int* _size, int* _pos, void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
+	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
 	{
+		// ALWAYS cursor_pos -> _xy={x,y} and _pos={prevline_pos,nextline_pos}
+
+		dbg_retry:
+
 		int x = 0, y = 0;
-		int cx = 0, cy = 0;
+		int cx = -1, cy = -1;
 		int wordlen = 0;
-					
-		int w = 2, l = 0, b = 0;
+
+		int ret = -2; // reflow ok but cursor_xy[1] too big
+
+		int w = 2;
 
 		// todo:
 		// actually we need to call print() only on y++ and last line!
-
-		int temp_b = 0;
-		int current_line = _pos ? -1 : cursor_xy[1];
 
 		for (int c = 0; c < len; c++)
 		{
 			assert(x < max_width);
 
-			if (x == 0)
-				temp_b = c;
-
 			if (c == cursor_pos)
 			{
 				cx = x;
 				cy = y;
-
-				if (current_line < 0)
-					current_line = y;
 			}
 
-			if (y == current_line)
+			if (y==cursor_xy[1])
 			{
-				b = temp_b;
-				l = x;
-			}
+				if (x<=cursor_xy[0])
+					ret = (c << 8) | x;
+			}				
 
 			if (buf[c] == ' ')
 			{
@@ -441,10 +408,6 @@ struct TalkBox
 
 				if (x > w)
 					w = x;
-
-				if (y == current_line)
-					l = x;
-
 
 				if (x == max_width)
 				{
@@ -469,8 +432,6 @@ struct TalkBox
 
 				if (x >= w) // moved
 					w = x+1;
-				if (y == current_line)
-					l = x+1;
 
 				wordlen = 0;
 				x = 0;
@@ -484,15 +445,21 @@ struct TalkBox
 				{
 					if (x == wordlen) // break the word!
 					{
+						if (y==cursor_xy[1])
+						{
+							// overwrite possibly bigger ret!
+							if ((x-1)<=cursor_xy[0])
+								ret = ((c-1) << 8) | (x-1);
+						}
+
 						w = max_width;
-						if (y == current_line)
-							l = max_width;
 
 						if (print)
 						{
 							print(0, y, buf+c-wordlen, wordlen, cookie);
 							print(x, y, "\n", 1, cookie);
 						}
+
 						wordlen = 0;
 						y++;
 						x = 0;
@@ -505,6 +472,13 @@ struct TalkBox
 					}
 					else // try wrapping the word
 					{
+						if (y==cursor_xy[1])
+						{
+							// overwrite possibly bigger ret!
+							if ((x - wordlen - 1)<=cursor_xy[0])
+								ret = ((c-wordlen-1) << 8) | (x-wordlen-1);
+						}
+
 						if (print)
 						{
 							print(x - wordlen, y, "\n", 1, cookie);
@@ -521,9 +495,16 @@ struct TalkBox
 						continue;
 					}
 				}
+
 				x++;
 				wordlen++;
 			}
+		}
+
+		if (y==cursor_xy[1])
+		{
+			if (x<=cursor_xy[0])
+				ret = (len << 8) | x;		
 		}
 
 		if (print)
@@ -539,23 +520,17 @@ struct TalkBox
 
 		// terminator handler
 		{
-			if (x == 0)
-				temp_b = len;
-
 			if (len == cursor_pos)
 			{
 				cx = x;
 				cy = y;
-
-				if (current_line < 0)
-					current_line = y;
 			}
 
-			if (y == current_line)
+			if (y==cursor_xy[1])
 			{
-				b = temp_b;
-				l = x + 1; // like w
-			}
+				if (x<=cursor_xy[0])
+					ret = (len << 8) | x;
+			}			
 		}
 
 		if (_size)
@@ -578,7 +553,12 @@ struct TalkBox
 			}
 		}
 
-		return (b<<8) | l;
+		// this is possible that when pressing backspace
+		// when x=0 and y>0 in last line, we will not reach current line (1)
+		// fix it so caller won't blame us.
+		assert(ret>=0 || y<cursor_xy[1]);
+
+		return ret;
 	}
 
 	char buf[256];
@@ -1485,7 +1465,6 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				memset(player.talk_box, 0, sizeof(TalkBox));
 				player.talk_box->max_width = 33;
 				player.talk_box->max_height = 7; // 0: off
-				player.talk_box->cache_bl = 1;
 				int s[2],p[2];
 				player.talk_box->Reflow(s,p);
 				player.talk_box->size[0] = s[0];
@@ -1617,7 +1596,6 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				memset(player.talk_box, 0, sizeof(TalkBox));
 				player.talk_box->max_width = 33;
 				player.talk_box->max_height = 7; // 0: off
-				player.talk_box->cache_bl = 1;
 				int s[2],p[2];
 				player.talk_box->Reflow(s,p);
 				player.talk_box->size[0] = s[0];
@@ -1945,7 +1923,6 @@ void Game::EndContact(int id, int x, int y)
 					memset(player.talk_box, 0, sizeof(TalkBox));
 					player.talk_box->max_width = 33;
 					player.talk_box->max_height = 7; // 0: off
-					player.talk_box->cache_bl = 1;
 					int s[2],p[2];
 					player.talk_box->Reflow(s,p);
 					player.talk_box->size[0] = s[0];
