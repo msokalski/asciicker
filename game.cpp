@@ -291,7 +291,7 @@ struct TalkBox
 			int _size[2], _pos[2];
 			int bl = Reflow(_size, _pos);
 
-			assert(bl >= 0);
+			assert(bl >= 0 || bl == -2 && cursor_xy[1] == size[1] - 1 && _size[1] == cursor_xy[1]);
 
 			size[0] = _size[0];
 			size[1] = _size[1];
@@ -311,9 +311,9 @@ struct TalkBox
 				int _size[2], _pos[2];
 				int bl = Reflow(_size, _pos);
 
-				// detect nasty case when deleting first char in last line
+				// detect nasty case when deleting char in last line causes num of lines to decrease
 				// resulting in original cursor_xy[1] is out of nuber of lines range (after modification)
-				assert(bl >= 0 || bl==-2 && cursor_xy[0]==0 && cursor_xy[1]==size[1]-1);
+				assert(bl >= 0 || bl==-2 && cursor_xy[1]==size[1]-1 && _size[1]==cursor_xy[1]);
 
 				size[0] = _size[0];
 				size[1] = _size[1];
