@@ -3,6 +3,10 @@
 #include "game.h"
 #include "platform.h"
 
+static const int stand_us_per_frame = 30000;
+static const int fall_us_per_frame = 30000;
+static const int attack_us_per_frame = 20000;
+
 struct TalkBox
 {
 	int max_width, max_height;
@@ -243,6 +247,50 @@ struct TalkBox
 		}
 	}
 
+	void MoveCursorHead()
+	{
+		cursor_pos = 0;
+		int _pos[2];
+		int bl = Reflow(0, _pos);
+
+		assert(bl >= 0);
+
+		cursor_xy[0] = _pos[0];
+		cursor_xy[1] = _pos[1];
+	}
+
+	void MoveCursorTail()
+	{
+		cursor_pos = len;
+		int _pos[2];
+		int bl = Reflow(0, _pos);
+
+		assert(bl >= 0);
+
+		cursor_xy[0] = _pos[0];
+		cursor_xy[1] = _pos[1];
+	}
+
+	void MoveCursorHome()
+	{
+		cursor_xy[0] = 0;
+		int _pos[2];
+		int bl = Reflow(0, _pos);
+		assert(bl >= 0);
+		cursor_xy[0] = bl & 0xFF;
+		cursor_pos = bl >> 8;
+	}
+
+	void MoveCursorEnd()
+	{
+		cursor_xy[0] = max_width;
+		int _pos[2];
+		int bl = Reflow(0, _pos);
+		assert(bl >= 0);
+		cursor_xy[0] = bl & 0xFF;
+		cursor_pos = bl >> 8;
+	}
+
 	void MoveCursorX(int dx)
 	{
 		if (dx < 0 && cursor_pos>0 || dx > 0 && cursor_pos < len)
@@ -366,8 +414,6 @@ struct TalkBox
 	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
 	{
 		// ALWAYS cursor_pos -> _xy={x,y} and _pos={prevline_pos,nextline_pos}
-
-		dbg_retry:
 
 		int x = 0, y = 0;
 		int cx = -1, cy = -1;
@@ -1108,46 +1154,206 @@ static const Keyb keyb =
 extern Terrain* terrain;
 extern World* world;
 
-struct KeyConfig
+struct ACTION { enum
 {
-};
+	NONE = 0, // IDLE/MOVE
+	ATTACK,
+	/*HIT,*/
+	FALL,
+	DEAD,
+	STAND,
+	SIZE
+};};
 
-Sprite* player_0000=0;
-Sprite* player_0001=0;
-Sprite* player_0010=0;
-Sprite* player_0011=0;
+struct WEAPON { enum
+{
+	NONE = 0,
+	REGULAR_SWORD,
+	SIZE
+};};
 
-Sprite* plydie_0000=0;
-Sprite* plydie_0001=0;
-Sprite* plydie_0010=0;
-Sprite* plydie_0011=0;
+struct SHIELD { enum
+{
+	NONE = 0,
+	REGULAR_SHIELD,
+	SIZE
+};};
 
-Sprite* attack_0001=0;
-Sprite* attack_0011=0;
+struct HELMET { enum
+{
+	NONE = 0,
+	SIZE
+};};
 
-Sprite* wolfie=0;
-Sprite* woldie=0;
+struct ARMOR { enum
+{
+	NONE = 0,
+	SIZE
+};};
 
-Sprite* wolfie_0000=0;
-Sprite* wolfie_0001=0;
-Sprite* wolfie_0010=0;
-Sprite* wolfie_0011=0;
+struct MOUNT { enum
+{
+	NONE = 0,
+	WOLF,
+	SIZE
+};};
 
-Sprite* wolack_0001=0;
-Sprite* wolack_0011=0;
+Sprite* player[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* player_fall[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* player_attack[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* wolfie[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* wolfie_attack[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* wolfie_fall[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 }; // todo
+
+Sprite* wolf = 0;
+Sprite* wolf_attack = 0; // todo
+Sprite* wolf_fall = 0;   // todo
+
+Sprite* player_naked = 0; // what to do?
 
 void LoadSprites()
 {
-	player_0000 = LoadSprite("./sprites/player-0000.xp", "player-0000.xp", 0, false);
-	wolfie_0011 = LoadSprite("./sprites/wolfie-0011.xp", "wolfie-0011.xp", 0, false);
-	plydie_0000 = LoadSprite("./sprites/plydie-0000.xp", "plydie-0000.xp", 0, false);
+#ifdef _WIN32
+	_set_printf_count_output(1);
+#endif
+
+	for (int a = 0; a < ARMOR::SIZE; a++)
+	{
+		for (int h = 0; h < HELMET::SIZE; h++)
+		{
+			for (int s = 0; s < SHIELD::SIZE; s++)
+			{
+				int name = 0;
+				char path[64];
+
+				for (int w = 0; w < WEAPON::SIZE; w++)
+				{
+					sprintf(path, "./sprites/%nplayer-%x%x%x%x.xp", &name, a, h, s, w);
+					player[a][h][s][w] = LoadSprite(path, path+name, 0, false);
+
+					sprintf(path, "./sprites/%nplydie-%x%x%x%x.xp", &name, a, h, s, w);
+					player_fall[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+
+					sprintf(path, "./sprites/%nwolfie-%x%x%x%x.xp", &name, a, h, s, w);
+					wolfie[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+
+					wolfie_fall[a][h][s][w] = 0;
+				}
+
+				player_attack[a][h][s][WEAPON::NONE] = 0;
+				wolfie_attack[a][h][s][WEAPON::NONE] = 0;
+				for (int w = 1; w < WEAPON::SIZE; w++)
+				{
+					sprintf(path, "./sprites/%nattack-%x%x%x%x.xp", &name, a, h, s, w);
+					player_attack[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+
+					sprintf(path, "./sprites/%nwolack-%x%x%x%x.xp", &name, a, h, s, w);
+					wolfie_attack[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+				}
+			}
+		}
+	}
+}
+
+Sprite* GetSprite(const SpriteReq* req)
+{
+	assert(req);
+
+	if (req->action < 0 || req->action >= ACTION::SIZE)
+		return 0;
+
+	if (req->weapon < 0 || req->weapon >= WEAPON::SIZE)
+		return 0;
+
+	if (req->shield < 0 || req->shield >= SHIELD::SIZE)
+		return 0;
+
+	if (req->helmet < 0 || req->helmet >= HELMET::SIZE)
+		return 0;
+
+	if (req->armor < 0 || req->armor >= ARMOR::SIZE)
+		return 0;
+
+	switch (req->mount)
+	{
+		case MOUNT::NONE:
+		{
+			switch (req->action)
+			{
+				case ACTION::NONE:
+					return player[req->armor][req->helmet][req->shield][req->weapon];
+
+				case ACTION::ATTACK:
+					return player_attack[req->armor][req->helmet][req->shield][req->weapon];
+
+				case ACTION::FALL:
+				case ACTION::DEAD:
+				case ACTION::STAND:
+					return player_fall[req->armor][req->helmet][req->shield][req->weapon];
+			}
+			return 0;
+		}
+
+		case MOUNT::WOLF:
+		{
+			switch (req->action)
+			{
+				case ACTION::NONE:
+					return wolfie[req->armor][req->helmet][req->shield][req->weapon];
+
+				case ACTION::ATTACK:
+					return wolfie_attack[req->armor][req->helmet][req->shield][req->weapon];
+
+				case ACTION::FALL:
+				case ACTION::DEAD:
+				case ACTION::STAND:
+					return wolfie_fall[req->armor][req->helmet][req->shield][req->weapon];
+			}	
+			return 0;
+		}
+	}
+
+	return 0;
 }
 
 void FreeSprites()
 {
-	FreeSprite(player_0000);
-	FreeSprite(wolfie_0011);
-	FreeSprite(plydie_0000);
+	if (wolf)
+		FreeSprite(wolf);
+
+	if (wolf_attack)
+		FreeSprite(wolf_attack);
+
+	if (wolf_fall)
+		FreeSprite(wolf_fall);
+
+	if (player_naked)
+		FreeSprite(player_naked);
+
+	for (int a = 0; a < ARMOR::SIZE; a++)
+	{
+		for (int h = 0; h < HELMET::SIZE; h++)
+		{
+			for (int s = 0; s < SHIELD::SIZE; s++)
+			{
+				for (int w = 0; w < WEAPON::SIZE; w++)
+				{
+					if (player[a][h][s][w])
+						FreeSprite(player[a][h][s][w]);
+					if (player_fall[a][h][s][w])
+						FreeSprite(player_fall[a][h][s][w]);
+					if (wolfie[a][h][s][w])
+						FreeSprite(wolfie[a][h][s][w]);
+					if (wolfie_fall[a][h][s][w])
+						FreeSprite(wolfie_fall[a][h][s][w]);
+					if (player_attack[a][h][s][w])
+						FreeSprite(player_attack[a][h][s][w]);
+					if (wolfie_attack[a][h][s][w])
+						FreeSprite(wolfie_attack[a][h][s][w]);
+				}
+			}
+		}
+	}
 }
 
 Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
@@ -1163,8 +1369,16 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->stamp = stamp;
 
 	// init player!
-	g->player.sprite = player_0000;
-	g->player.anim = 0;
+	g->player.req.mount = MOUNT::WOLF;
+	g->player.req.armor = ARMOR::NONE;
+	g->player.req.helmet = HELMET::NONE;
+	g->player.req.shield = SHIELD::REGULAR_SHIELD;
+	g->player.req.weapon = WEAPON::REGULAR_SWORD;
+	g->player.req.action = ACTION::NONE;
+
+	g->player.sprite = GetSprite(&g->player.req);
+	g->player.anim = 0; // ???
+
 	g->player.frame = 0;
 
 	g->water = water;
@@ -1191,6 +1405,215 @@ void Game::ScreenToCell(int p[2]) const
 {
 	p[0] = (2*p[0] - input.size[0] + render_size[0] * font_size[0]) / (2 * font_size[0]);
 	p[1] = (input.size[1]-1 - 2*p[1] + render_size[1] * font_size[1]) / (2 * font_size[1]);
+}
+
+bool Human::SetActionNone(uint64_t stamp)
+{
+	if (req.action == ACTION::NONE)
+		return true;
+	int old = req.action;
+	req.action = ACTION::NONE;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.action = old;
+		return false;
+	}
+	sprite = spr;
+
+	anim = 0;
+	frame = 0;
+	action_stamp = stamp;
+	return true;
+}
+
+bool Human::SetActionAttack(uint64_t stamp)
+{
+	if (req.action == ACTION::ATTACK)
+		return true;
+	int old = req.action;
+	req.action = ACTION::ATTACK;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.action = old;
+		return false;
+	}
+	sprite = spr;
+
+	anim = 0;
+	frame = 2;
+	action_stamp = stamp;
+	return true;
+}
+
+bool Human::SetActionStand(uint64_t stamp)
+{
+	if (req.action == ACTION::STAND)
+		return true;
+	int old = req.action;
+	req.action = ACTION::STAND;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.action = old;
+		return false;
+	}
+	sprite = spr;
+
+	if (old == ACTION::FALL)
+	{
+		// recalc stamp to match current frame
+		action_stamp = stamp - frame * stand_us_per_frame;
+	}
+	else
+	{
+		action_stamp = stamp;
+		anim = 0;
+		frame = 0;
+	}
+
+	return true;
+}
+
+bool Human::SetActionFall(uint64_t stamp)
+{
+	int old = req.action;
+	req.action = ACTION::FALL;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.action = old;
+		return false;
+	}
+	sprite = spr;
+
+	if (old == ACTION::STAND)
+	{
+		// recalc stamp to match current frame
+		action_stamp = stamp - (sprite->anim[anim].length - frame) * fall_us_per_frame;
+	}
+	else
+	{
+		action_stamp = stamp;
+		anim = 0;
+		frame = sprite->anim[anim].length - 1;
+	}
+
+	return true;
+}
+
+bool Human::SetActionDead(uint64_t stamp)
+{
+	int old = req.action;
+	req.action = ACTION::DEAD;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.action = old;
+		return false;
+	}
+	sprite = spr;
+
+	action_stamp = stamp;
+	anim = 0;
+	frame = 0;
+
+	return true;
+}
+
+bool Human::SetWeapon(int w)
+{
+	if (req.action == ACTION::ATTACK)
+		return false; 
+	if (w == req.weapon)
+		return true;
+
+	int old = req.weapon;
+	req.weapon = w;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.weapon = old;
+		return false;
+	}
+	sprite = spr;
+}
+
+bool Human::SetShield(int s)
+{
+	if (s == req.shield)
+		return true;
+
+	int old = req.shield;
+	req.shield = s;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.shield = old;
+		return false;
+	}
+	sprite = spr;
+}
+
+bool Human::SetHelmet(int h)
+{
+	if (h == req.helmet)
+		return true;
+
+	int old = req.helmet;
+	req.helmet = h;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.helmet = old;
+		return false;
+	}
+	sprite = spr;
+}
+
+bool Human::SetArmor(int a)
+{
+	if (a == req.armor)
+		return true;
+
+	int old = req.armor;
+	req.armor = a;
+
+	Sprite* spr = GetSprite(&req);
+	if (!spr)
+	{
+		req.armor = old;
+		return false;
+	}
+	sprite = spr;
+}
+
+bool Human::SetMount(int m)
+{
+	if (req.action != ACTION::NONE)
+		return false;
+
+	if (m == req.mount)
+		return true;
+	int old = req.mount;
+	req.mount = m;
+
+	Sprite* s = GetSprite(&req);
+	if (!s)
+	{
+		req.mount = old;
+		return false;
+	}
+	sprite = s;
 }
 
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
@@ -1321,6 +1744,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	}
 
 	io.jump = input.jump;
+
+	/*
+	if (player.req.action != ACTION::NONE)
+	{
+		io.x_force = 0;
+		io.y_force = 0;
+		io.jump = false;
+	}
+	*/
+
 	int steps = Animate(physics, _stamp, &io);
 	if (steps > 0)
 		input.jump = false;
@@ -1331,23 +1764,71 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	player.pos[1] = io.pos[1];
 	player.pos[2] = io.pos[2];
 
+	switch (player.req.action)
+	{
+		case ACTION::ATTACK:
+		{
+			static const int frames[] = { 2,2,2,1,1,1,0,0,0,0, 0,1,1,2,2,3,3,4,4,4,4,4,4, 3,3,3, 2,2,2 };
+			int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
+			assert(frame_index >= 0);
+			if (frame_index >= sizeof(frames) / sizeof(int))
+				player.SetActionNone(_stamp);
+			else
+				player.frame = frames[frame_index];
+			break;
+		}
+
+		case ACTION::FALL:
+		{
+			// animate, check if finished -> stay at last frame
+			int frame = (_stamp - player.action_stamp) / stand_us_per_frame;
+			assert(frame >= 0);
+			if (frame >= player.sprite->anim[player.anim].length)
+				player.SetActionNone(_stamp);
+			else
+				player.frame = player.sprite->anim[player.anim].length-1 - frame;
+			break;
+		}
+
+		case ACTION::STAND:
+		{
+			// animate, check if finished -> switch to NONE
+			int frame = (_stamp - player.action_stamp) / stand_us_per_frame;
+			assert(frame >= 0);
+			if (frame >= player.sprite->anim[player.anim].length)
+				player.SetActionNone(_stamp);
+			else
+				player.frame = frame;
+			break;
+		}
+
+		case ACTION::DEAD:
+		{
+			// nutting
+			break;
+		}
+
+		case ACTION::NONE:
+		{
+			// animate / idle depending on physics output
+			if (io.player_stp < 0)
+			{
+				// choose sprite by active items
+				player.anim = 0;
+				player.frame = 0;
+			}
+			else
+			{
+				// choose sprite by active items
+				player.anim = 1;
+				player.frame = io.player_stp / 1024 % player.sprite->anim[player.anim].length;
+			}
+			break;
+		}
+	}
+
 	// update / animate:
 	player.dir = io.player_dir;
-
-	if (io.player_stp < 0)
-	{
-		// choose sprite by active items
-		player.sprite = player_0000;
-		player.anim = 0;
-		player.frame = 0;
-	}
-	else
-	{
-		// choose sprite by active items
-		player.sprite = player_0000;
-		player.anim = 1;
-		player.frame = io.player_stp / 1024 % player_0000->anim[player.anim].length;
-	}
 
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
@@ -1502,6 +1983,8 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			input.shot = true;
 		if (key == A3D_SPACE && !player.talk_box && !auto_rep)
 			input.jump = true;
+		if (key == A3D_ENTER && !player.talk_box && !auto_rep)
+			player.SetActionAttack(stamp);
 
 		if (!auto_rep)
 			input.key[key >> 3] |= 1 << (key & 0x7);
@@ -1510,6 +1993,14 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		TalkBox_blink = 0;
 		if (player.talk_box)
 		{
+			if (key == A3D_PAGEUP)
+				player.talk_box->MoveCursorHead();
+			if (key == A3D_PAGEDOWN)
+				player.talk_box->MoveCursorTail();
+			if (key == A3D_HOME)
+				player.talk_box->MoveCursorHome();
+			if (key == A3D_END)
+				player.talk_box->MoveCursorEnd();
 			if (key == A3D_LEFT)
 				player.talk_box->MoveCursorX(-1);
 			if (key == A3D_RIGHT)

@@ -73,11 +73,45 @@ struct Character
 
 struct TalkBox;
 
+struct AnimScript
+{
+	int anim; // terminate with Sequence::anim = -1
+	int frame_from;
+	int frame_to;
+	int first_rep;
+	int every_rep;
+	int last_rep;
+};
+
+struct SpriteReq
+{
+	int mount;
+	int action;
+	int armor;
+	int helmet;
+	int shield;
+	int weapon;
+};
+
 struct Human : Character
 {
+	uint64_t action_stamp;
+
+	bool SetActionNone(uint64_t stamp);
+	bool SetActionAttack(uint64_t stamp);
+	bool SetActionFall(uint64_t stamp);
+	bool SetActionStand(uint64_t stamp);
+	bool SetActionDead(uint64_t stamp);
+
+	bool SetWeapon(int w);
+	bool SetShield(int s);
+	bool SetHelmet(int h);
+	bool SetArmor(int a);
+	bool SetMount(int m);
+
 	TalkBox* talk_box;
 
-	bool wolf_mount;
+	SpriteReq req;
 
 	// inventory
 	Item* first_item;
