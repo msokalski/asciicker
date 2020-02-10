@@ -313,7 +313,7 @@ struct TalkBox
 
 				// detect nasty case when deleting first char in last line
 				// resulting in original cursor_xy[1] is out of nuber of lines range (after modification)
-				assert(bl >= 0 || bl==-2 && cursor_xy[0]==0 && cursor_xy[1]==size[1]);
+				assert(bl >= 0 || bl==-2 && cursor_xy[0]==0 && cursor_xy[1]==size[1]-1);
 
 				size[0] = _size[0];
 				size[1] = _size[1];
@@ -1230,6 +1230,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	render_size[1] = height;
 
 	float lt[4] = { 1,0,1,0.5 };
+	float n = lt[0] * lt[0] + lt[1] * lt[1] + lt[2] * lt[2];
+	if (n > 0.001)
+	{
+		lt[0] /= n;
+		lt[1] /= n;
+		lt[2] /= n;
+	}
+
 
 	PhysicsIO io;
 	io.x_force = 0;
