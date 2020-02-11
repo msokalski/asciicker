@@ -1369,7 +1369,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->stamp = stamp;
 
 	// init player!
-	g->player.req.mount = MOUNT::WOLF;
+	g->player.req.mount = MOUNT::NONE;
 	g->player.req.armor = ARMOR::NONE;
 	g->player.req.helmet = HELMET::NONE;
 	g->player.req.shield = SHIELD::REGULAR_SHIELD;
@@ -1432,6 +1432,11 @@ bool Human::SetActionAttack(uint64_t stamp)
 {
 	if (req.action == ACTION::ATTACK)
 		return true;
+	if (req.action == ACTION::FALL || 
+		req.action == ACTION::STAND || 
+		req.action == ACTION::DEAD)
+		return false;
+
 	int old = req.action;
 	req.action = ACTION::ATTACK;
 
@@ -1453,6 +1458,10 @@ bool Human::SetActionStand(uint64_t stamp)
 {
 	if (req.action == ACTION::STAND)
 		return true;
+
+	if (req.action != ACTION::FALL && req.action != ACTION::DEAD)
+		return false;
+
 	int old = req.action;
 	req.action = ACTION::STAND;
 
@@ -1481,6 +1490,12 @@ bool Human::SetActionStand(uint64_t stamp)
 
 bool Human::SetActionFall(uint64_t stamp)
 {
+	if (req.action == ACTION::FALL)
+		return true;
+
+	if (req.action == ACTION::DEAD)
+		return false;
+
 	int old = req.action;
 	req.action = ACTION::FALL;
 
@@ -1745,14 +1760,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	io.jump = input.jump;
 
-	/*
-	if (player.req.action != ACTION::NONE)
+	if (player.req.action == ACTION::FALL || 
+		player.req.action == ACTION::STAND ||
+		player.req.action == ACTION::DEAD)
 	{
 		io.x_force = 0;
 		io.y_force = 0;
 		io.jump = false;
 	}
-	*/
 
 	int steps = Animate(physics, _stamp, &io);
 	if (steps > 0)
@@ -1784,7 +1799,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			int frame = (_stamp - player.action_stamp) / stand_us_per_frame;
 			assert(frame >= 0);
 			if (frame >= player.sprite->anim[player.anim].length)
-				player.SetActionNone(_stamp);
+				player.SetActionDead(_stamp);
 			else
 				player.frame = player.sprite->anim[player.anim].length-1 - frame;
 			break;
@@ -1981,10 +1996,24 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 		if (key == A3D_F10 && !auto_rep)
 			input.shot = true;
-		if (key == A3D_SPACE && !player.talk_box && !auto_rep)
-			input.jump = true;
-		if (key == A3D_ENTER && !player.talk_box && !auto_rep)
-			player.SetActionAttack(stamp);
+
+		if (!player.talk_box && !auto_rep)
+		{
+			if (key == A3D_SPACE)
+				input.jump = true;
+			if (key == A3D_ENTER)
+				player.SetActionAttack(stamp);
+			if (key == A3D_HOME)
+				player.SetActionStand(stamp);
+			if (key == A3D_END)
+				player.SetActionFall(stamp);
+			if (key == A3D_1)
+				player.SetMount(!player.req.mount);
+			if (key == A3D_2)
+				player.SetWeapon(!player.req.weapon);
+			if (key == A3D_3)
+				player.SetShield(!player.req.shield);
+		}
 
 		if (!auto_rep)
 			input.key[key >> 3] |= 1 << (key & 0x7);
