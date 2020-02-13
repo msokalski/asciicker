@@ -82,19 +82,12 @@ struct HPBar
 
 		int x_thresh = pos[0] + dx * (1 + (int)(val * (size - 2) + 0.5f));
 		int perc = (int)(val * 100 + 0.5f);
-		char str[8]="       ";
+		char str[]="           ";
 
 		if (perc<100)
-			itoa(perc, str+1, 10);
+			sprintf(str+1,"%d%%",perc);
 		else
-			itoa(perc, str, 10);
-
-		for (int i = 0; i < 8; i++)
-			if (!str[i])
-			{
-				str[i] = '%';
-				break;
-			}
+			sprintf(str,"%d%%",perc);
 
 		int str_len = 4;
 

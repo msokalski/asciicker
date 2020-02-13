@@ -45,9 +45,23 @@ emcc --emrun -O3 \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --preload-file a3d/game_sprites.a3d \
+    --preload-file sprites/character.xp \
     --preload-file sprites/player-0000.xp \
+    --preload-file sprites/player-0001.xp \
+    --preload-file sprites/player-0010.xp \
+    --preload-file sprites/player-0011.xp \
+    --preload-file sprites/plydie-0000.xp \
+    --preload-file sprites/plydie-0001.xp \
+    --preload-file sprites/plydie-0010.xp \
+    --preload-file sprites/plydie-0011.xp \
+    --preload-file sprites/wolfie-0000.xp \
+    --preload-file sprites/wolfie-0001.xp \
+    --preload-file sprites/wolfie-0010.xp \
     --preload-file sprites/wolfie-0011.xp \
-	--preload-file sprites/plydie-0000.xp \
+    --preload-file sprites/attack-0001.xp \
+    --preload-file sprites/attack-0011.xp \
+    --preload-file sprites/wolack-0001.xp \
+    --preload-file sprites/wolack-0011.xp \
     --preload-file meshes/bridge-1.ply \
     --preload-file meshes/fence.ply \
     --preload-file meshes/rock-1.ply \
