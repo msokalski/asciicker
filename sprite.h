@@ -48,3 +48,5 @@ void* GetSpriteCookie(Sprite* s);
 
 Sprite* LoadPlayer(const char* path);
 void FreeSprite(Sprite* spr);
+
+void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y);

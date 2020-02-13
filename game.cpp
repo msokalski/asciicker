@@ -7,6 +7,409 @@ static const int stand_us_per_frame = 30000;
 static const int fall_us_per_frame = 30000;
 static const int attack_us_per_frame = 20000;
 
+struct HPBar
+{
+	static const int height = 4;
+
+	void Paint(AnsiCell* ptr, int width, int height, float val, int xyw[3], bool flip) const
+	{
+		static const uint8_t black = 16;
+		static const uint8_t white =   16 + 5 * 1 + 5 * 6 + 5 * 36;
+		static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
+		static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
+
+		static const uint8_t lt_red = 16 + 1 * 1 + 1 * 6 + 5 * 36;
+		static const uint8_t dk_red = 16 + 0 * 1 + 0 * 6 + 3 * 36;
+
+		static const uint8_t yellow = 16 + 1 * 1 + 5 * 6 + 5 * 36;
+
+		static const uint8_t lt_blue = 16 + 5 * 1 + 1 * 6 + 1 * 36;
+		static const uint8_t dk_blue = 16 + 3 * 1 + 0 * 6 + 0 * 36;
+
+		static const uint8_t cyan = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+
+		int pos[2] = { xyw[0], xyw[1] };
+		int size = xyw[2];
+
+		int dx = 1;
+		uint8_t left = 221;
+		uint8_t right = 222;
+		uint8_t lt = lt_red;
+		uint8_t dk = dk_red;
+		uint8_t ul = yellow;
+		uint8_t left_line = 218;
+		uint8_t right_line = 191;
+
+		if (flip)
+		{
+			dx = -1;
+			pos[0] += size - 1;
+			left = 222;
+			right = 221;
+			lt = lt_blue;
+			dk = dk_blue;
+			ul = cyan;
+			left_line = 191;
+			right_line = 218;
+		}
+
+		AnsiCell* row[4]=
+		{
+			pos[1] >= 0 && pos[1] < height ? ptr + pos[1]*width : 0,
+			pos[1] + 1 >= 0 && pos[1] + 1 < height ? ptr + (pos[1] + 1) * width : 0,
+			pos[1] + 2 >= 0 && pos[1] + 2 < height ? ptr + (pos[1] + 2) * width : 0,
+			pos[1] + 3 >= 0 && pos[1] + 3 < height ? ptr + (pos[1] + 3) * width : 0,
+		};
+
+		int cols[] = { 1,1,4,1,1,1,1 };
+
+		int dw = (size < 10 ? 10 : size) - 10;
+		int d = dw / 4;
+		dw -= 4 * d;
+
+		// todo: first try to distribute d for cols[3,4,5] then after all are 3 cells wide, distribute for cols[2] too
+
+		cols[2] += d;
+		cols[3] += d;
+		cols[4] += d;
+		cols[5] += d;
+
+		for (int c = 5; dw > 0; c--)
+		{
+			dw--;
+			cols[c]++;
+		}
+
+		int x_thresh = pos[0] + dx * (1 + (int)(val * (size - 2) + 0.5f));
+		int perc = (int)(val * 100 + 0.5f);
+		char str[8]="       ";
+
+		if (perc<100)
+			itoa(perc, str+1, 10);
+		else
+			itoa(perc, str, 10);
+
+		for (int i = 0; i < 8; i++)
+			if (!str[i])
+			{
+				str[i] = '%';
+				break;
+			}
+
+		int str_len = 4;
+
+		if (flip)
+		{
+			for (int i = 0; i < str_len / 2; i++)
+			{
+				char swp = str[i];
+				str[i] = str[str_len - 1 - i];
+				str[str_len - 1 - i] = swp;
+			}
+		}
+
+		// bottom
+		if (row[0])
+		{
+			int x = pos[0] + dx; // cols[1]
+			if (x >= 0 && x < width)
+			{
+				AnsiCell* ac = row[0] + x;
+				ac->bk = AverageGlyph(ac, 0x3);
+				ac->fg = black;
+				ac->gl = 223;
+			}
+			x += dx;
+
+			for (int i = 0; i < cols[2]; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[0] + x;
+					ac->bk = x*dx < x_thresh*dx ? dk : dk_grey;
+					ac->fg = black;
+					ac->gl = 220;
+				}
+				x += dx;
+			}
+
+			for (int i = 0; i < cols[3]; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[0] + x;
+					ac->bk = AverageGlyph(ac, 0x3);
+					ac->fg = black;
+					ac->gl = 223;
+				}
+				x += dx;
+			}
+		}
+
+		if (row[1])
+		{
+			int x = pos[0];
+			if (x >= 0 && x < width)
+			{
+				AnsiCell* ac = row[1] + x;
+				ac->bk = AverageGlyph(ac, 0x5);
+				ac->fg = black;
+				ac->gl = right;
+			}
+			x += dx;
+
+			if (x >= 0 && x < width)
+			{
+				AnsiCell* ac = row[1] + x;
+				if (x*dx < x_thresh*dx)
+				{
+					ac->bk = dk;
+					ac->fg = black;
+					ac->gl = 32;
+				}
+				else
+				{
+					ac->bk = dk_grey;
+					ac->fg = black;
+					ac->gl = 177;
+				}
+			}
+			x += dx;
+
+			for (int i = 0; i < cols[2]; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[1] + x;
+					if (x*dx < x_thresh*dx)
+					{
+						ac->bk = dk;
+						ac->fg = white;
+						ac->gl = i<str_len ? str[i] : 32;
+					}
+					else
+					{
+						if (i == 0)
+						{
+							if (perc >= 100)
+							{
+								ac->bk = dk_grey;
+								ac->fg = white;
+								ac->gl = str[i];
+							}
+							else
+							{
+								ac->bk = dk_grey;
+								ac->fg = black;
+								ac->gl = 176;
+							}
+						}
+						else
+						{
+							ac->bk = dk_grey;
+							ac->fg = white;
+							ac->gl = i < str_len ? str[i] : 32;
+						}
+					}
+				}
+				x += dx;
+			}
+
+			for (int i = 0; i < cols[3]; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[1] + x;
+					ac->bk = (x*dx < x_thresh*dx) ? dk : dk_grey;
+					ac->fg = white;
+					ac->gl = 32;
+				}
+				x += dx;
+			}
+
+			for (int i = 0; i < cols[4]; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[1] + x;
+					ac->bk = (x*dx < x_thresh*dx) ? dk : dk_grey;
+					ac->fg = black;
+					ac->gl = 220;
+				}
+				x += dx;
+			}
+
+			for (int i = 0; i < cols[5]; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[1] + x;
+					ac->bk = AverageGlyph(ac,0x3);
+					ac->fg = black;
+					ac->gl = 223;
+				}
+				x += dx;
+			}
+		}
+
+		if (row[2])
+		{
+			int x = pos[0];
+			if (x >= 0 && x < width)
+			{
+				AnsiCell* ac = row[2] + x;
+				ac->bk = AverageGlyph(ac, 0x5);
+				ac->fg = black;
+				ac->gl = right;
+			}
+			x += dx;
+
+			if (x >= 0 && x < width)
+			{
+				AnsiCell* ac = row[2] + x;
+				if (x*dx < x_thresh*dx)
+				{
+					ac->bk = dk;
+					if ((x + dx)*dx < x_thresh*dx)
+					{
+						ac->fg = flip ? lt : ul;
+						ac->gl = left_line;
+					}
+					else
+					{
+						ac->fg = lt;
+						ac->gl = 44;
+					}
+				}
+				else
+				{
+					ac->bk = dk_grey;
+					ac->fg = black;
+					ac->gl = 178;
+				}
+			}
+			x += dx;
+
+			if (x >= 0 && x < width)
+			{
+				AnsiCell* ac = row[2] + x;
+				if (x*dx < x_thresh*dx)
+				{
+					ac->bk = dk;
+					if ((x + dx)*dx < x_thresh*dx)
+					{
+						ac->fg = lt;
+						ac->gl = 196;
+					}
+					else
+					{
+						ac->fg = flip ? ul : lt;
+						ac->gl = right_line;
+					}
+				}
+				else
+				{
+					ac->bk = dk_grey;
+					ac->fg = black;
+					ac->gl = 177;
+				}
+			}
+			x += dx;
+
+			int j = cols[2] + cols[3] + cols[4];
+			for (int i = 1; i < j; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[2] + x;
+					if (x*dx < x_thresh*dx)
+					{
+						ac->bk = dk;
+						if ((x + dx)*dx < x_thresh*dx)
+						{
+							ac->fg = lt;
+							ac->gl = 196;
+						}
+						else
+						{
+							ac->fg = flip ? ul : lt;
+							ac->gl = right_line;
+						}
+					}
+					else
+					{
+						ac->bk = dk_grey;
+						ac->fg = black;
+						ac->gl = 176;
+					}
+				}
+				x += dx;
+			}
+
+			for (int i = 0; i < cols[5]; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[2] + x;
+					if (x*dx < x_thresh*dx)
+					{
+						ac->bk = dk;
+						if ((x + dx)*dx < x_thresh*dx)
+						{
+							ac->fg = lt;
+							ac->gl = 196;
+						}
+						else
+						{
+							ac->fg = flip ? ul : lt;
+							ac->gl = right_line;
+						}
+					}
+					else
+					{
+						ac->bk = dk_grey;
+						ac->fg = black;
+						if (i < cols[5] - 2)
+							ac->gl = 176;
+						else
+						if (i < cols[5] - 1)
+							ac->gl = 177;
+						else
+							ac->gl = 178;
+					}
+				}
+				x += dx;
+			}
+
+			if (x >= 0 && x < width)
+			{
+				AnsiCell* ac = row[2] + x;
+				ac->bk = AverageGlyph(ac, 0xA);
+				ac->fg = black;
+				ac->gl = left;
+			}
+			x += dx;
+		}
+
+		if (row[3])
+		{
+			int x = pos[0] + dx;
+			int j = cols[1] + cols[2] + cols[3] + cols[4] + cols[5];
+			for (int i = 0; i < j; i++)
+			{
+				if (x >= 0 && x < width)
+				{
+					AnsiCell* ac = row[3] + x;
+					ac->bk = AverageGlyph(ac, 0xC);
+					ac->fg = black;
+					ac->gl = 220;
+				}
+				x += dx;
+			}
+		}
+	}
+};
+
 struct TalkBox
 {
 	int max_width, max_height;
@@ -1211,11 +1614,15 @@ Sprite* wolf_fall = 0;   // todo
 
 Sprite* player_naked = 0; // what to do?
 
+Sprite* character_button = 0;
+
 void LoadSprites()
 {
 #ifdef _WIN32
 	_set_printf_count_output(1);
 #endif
+
+	character_button = LoadSprite("./sprites/character.xp", "character.xp", 0, false);
 
 	for (int a = 0; a < ARMOR::SIZE; a++)
 	{
@@ -1330,6 +1737,9 @@ void FreeSprites()
 	if (player_naked)
 		FreeSprite(player_naked);
 
+	if (character_button)
+		FreeSprite(character_button);
+
 	for (int a = 0; a < ARMOR::SIZE; a++)
 	{
 		for (int h = 0; h < HELMET::SIZE; h++)
@@ -1361,6 +1771,9 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	// load defaults
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
+
+	g->show_buts = true;
+	g->bars_pos = 7;
 
 	g->keyb_hide = keyb.hide;
 
@@ -1559,6 +1972,8 @@ bool Human::SetWeapon(int w)
 		return false;
 	}
 	sprite = spr;
+
+	return true;
 }
 
 bool Human::SetShield(int s)
@@ -1576,6 +1991,8 @@ bool Human::SetShield(int s)
 		return false;
 	}
 	sprite = spr;
+
+	return true;
 }
 
 bool Human::SetHelmet(int h)
@@ -1593,6 +2010,8 @@ bool Human::SetHelmet(int h)
 		return false;
 	}
 	sprite = spr;
+
+	return true;
 }
 
 bool Human::SetArmor(int a)
@@ -1610,6 +2029,8 @@ bool Human::SetArmor(int a)
 		return false;
 	}
 	sprite = spr;
+
+	return true;
 }
 
 bool Human::SetMount(int m)
@@ -1629,6 +2050,8 @@ bool Human::SetMount(int m)
 		return false;
 	}
 	sprite = s;
+
+	return true;
 }
 
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
@@ -1848,8 +2271,31 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
 
+	{
+		HPBar bar;
+
+		int bar_w = (width - 2 * 7) / 3;
+		int hp_xyw[] = { bars_pos, height - bar.height, bar_w };
+		int mp_xyw[] = { width - bars_pos - bar_w, height - bar.height, bar_w };
+
+		static int f = 0;
+		f++;
+
+		float val = 0.5*(1.0 + sinf(f*0.02));
+		bar.Paint(ptr, width, height, val, hp_xyw, false);
+		bar.Paint(ptr, width, height, val, mp_xyw, true);
+
+		BlitSprite(ptr, width, height, character_button->atlas + 0, bars_pos-7, height - character_button->atlas[0].height);
+		BlitSprite(ptr, width, height, character_button->atlas + 1, 7-bars_pos + width - character_button->atlas[1].width, height - character_button->atlas[1].height);
+	}
+
 	if (player.talk_box)
 		player.talk_box->Paint(ptr, width, height, width / 2, height / 2 + 8, (TalkBox_blink & 63) < 32);
+
+	if (show_buts && bars_pos < 7)
+		bars_pos++;
+	if (!show_buts && bars_pos > 0)
+		bars_pos--;
 
 	if (show_keyb || keyb_hide < 1 + 5 * 5 + 1)
 	{
@@ -1964,6 +2410,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		{
 			if (!player.talk_box && key == A3D_TAB)
 			{
+				show_buts = false;
 				TalkBox_blink = 32;
 				player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
 				memset(player.talk_box, 0, sizeof(TalkBox));
@@ -1979,6 +2426,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			else
 			if (player.talk_box)
 			{
+				show_buts = true;
 				free(player.talk_box);
 				player.talk_box = 0;
 				if (show_keyb)
@@ -2003,6 +2451,8 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				input.jump = true;
 			if (key == A3D_ENTER)
 				player.SetActionAttack(stamp);
+
+			// god mode
 			if (key == A3D_HOME)
 				player.SetActionStand(stamp);
 			if (key == A3D_END)
@@ -2119,6 +2569,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			// HANDLED BY EMULATION!
 			if (!player.talk_box)
 			{
+				show_buts = false;
 				TalkBox_blink = 32;
 				player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
 				memset(player.talk_box, 0, sizeof(TalkBox));
@@ -2133,6 +2584,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			}
 			else
 			{
+				show_buts = true;
 				free(player.talk_box);
 				player.talk_box = 0;
 				if (show_keyb)
@@ -2207,114 +2659,126 @@ void Game::StartContact(int id, int x, int y, int b)
 	int cap = -1;
 	float yaw = 0;
 
-	if (show_keyb)
+	if (show_buts && cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0]>= render_size[0] - bars_pos))
 	{
-		bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
-		char ch=0;
-		cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, &ch, shift_on);
+		// main but
+		// perform action immediately
+		// ...
 
-		if (b!=1 && cap > 0)
-			cap = 0;
-
-		if (cap>0)
-		{
-			// ensure one contact per keycap
-			for (int i=0; i<4; i++)
-			{
-				if (i==id)
-					continue;
-				if (input.contact[i].action == Input::Contact::KEYBCAP && input.contact[i].keyb_cap == cap)
-					cap = 0;
-			}
-		}
-
-		if (cap > 0)
-		{
-			if (cap == A3D_LSHIFT)
-			{
-				keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
-			}
-			else
-			{
-				if (ch)
-					OnKeyb(GAME_KEYB::KEYB_CHAR, ch); // like from terminal!
-				keyb_key[cap >> 3] |= 1 << (cap & 7);  // just to hilight keycap
-			}
-			con->keyb_cap = cap;
-
-			// setup autorepeat initial delay...
-			// not for shift
-			KeybAutoRepCap = cap;
-			KeybAuroRepDelayStamp = stamp;
-			KeybAutoRepChar = ch; // must be nulled on any real keyb input!
-
-			con->action = Input::Contact::KEYBCAP;
-		}
-
-		if (cap == 0)
-			con->action = Input::Contact::NONE;
+		// make contact dead
+		con->action = Input::Contact::NONE;
 	}
-
-	if (cap<0)
+	else
 	{
-		if (id==0 && b==2)
+		if (show_keyb)
 		{
-			// absolute mouse torque (mrg=0)
-			con->action = Input::Contact::TORQUE;
-			yaw = prev_yaw;
+			bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+			char ch=0;
+			cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, &ch, shift_on);
 
-			// ensure no timer torque is pending
-			for (int i=1; i<4; i++)
-			{
-				if (input.contact[i].action == Input::Contact::TORQUE)
-				{
-					con->action = Input::Contact::NONE;
-					yaw = 0;
-					break;
-				}
-			}
-		}
-		else
-		{
-			// check if on player / talkbox
-			hit = PlayerHit(this, x, y);
-			if (hit)
-				con->action = Input::Contact::PLAYER;
-			else
-			if (id>0 && cp[0] < 5 &&
-				input.contact[0].action != Input::Contact::TORQUE)
-			{
-				mrg = -1;
-				con->action = Input::Contact::TORQUE;
-			}
-			else
-			if (id>0 && cp[0] >= render_size[0]-5 && 
-				input.contact[0].action != Input::Contact::TORQUE)
-			{
-				mrg = +1;
-				con->action = Input::Contact::TORQUE;
-			}
-			else
-			if (b==1)
-			{
-				con->action = Input::Contact::FORCE;
+			if (b!=1 && cap > 0)
+				cap = 0;
 
-				// ensure no other contact is in force mode
+			if (cap>0)
+			{
+				// ensure one contact per keycap
 				for (int i=0; i<4; i++)
 				{
 					if (i==id)
 						continue;
-					if (input.contact[i].action == Input::Contact::FORCE)
+					if (input.contact[i].action == Input::Contact::KEYBCAP && input.contact[i].keyb_cap == cap)
+						cap = 0;
+				}
+			}
+
+			if (cap > 0)
+			{
+				if (cap == A3D_LSHIFT)
+				{
+					keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
+				}
+				else
+				{
+					if (ch)
+						OnKeyb(GAME_KEYB::KEYB_CHAR, ch); // like from terminal!
+					keyb_key[cap >> 3] |= 1 << (cap & 7);  // just to hilight keycap
+				}
+				con->keyb_cap = cap;
+
+				// setup autorepeat initial delay...
+				// not for shift
+				KeybAutoRepCap = cap;
+				KeybAuroRepDelayStamp = stamp;
+				KeybAutoRepChar = ch; // must be nulled on any real keyb input!
+
+				con->action = Input::Contact::KEYBCAP;
+			}
+
+			if (cap == 0)
+				con->action = Input::Contact::NONE;
+		}
+
+		if (cap<0)
+		{
+			if (id==0 && b==2)
+			{
+				// absolute mouse torque (mrg=0)
+				con->action = Input::Contact::TORQUE;
+				yaw = prev_yaw;
+
+				// ensure no timer torque is pending
+				for (int i=1; i<4; i++)
+				{
+					if (input.contact[i].action == Input::Contact::TORQUE)
 					{
-						input.jump = true;
 						con->action = Input::Contact::NONE;
+						yaw = 0;
 						break;
 					}
 				}
 			}
 			else
 			{
-				con->action = Input::Contact::NONE;				
+				// check if on player / talkbox
+				hit = PlayerHit(this, x, y);
+				if (hit)
+					con->action = Input::Contact::PLAYER;
+				else
+				if (id>0 && cp[0] < 5 &&
+					input.contact[0].action != Input::Contact::TORQUE)
+				{
+					mrg = -1;
+					con->action = Input::Contact::TORQUE;
+				}
+				else
+				if (id>0 && cp[0] >= render_size[0]-5 && 
+					input.contact[0].action != Input::Contact::TORQUE)
+				{
+					mrg = +1;
+					con->action = Input::Contact::TORQUE;
+				}
+				else
+				if (b==1)
+				{
+					con->action = Input::Contact::FORCE;
+
+					// ensure no other contact is in force mode
+					for (int i=0; i<4; i++)
+					{
+						if (i==id)
+							continue;
+						if (input.contact[i].action == Input::Contact::FORCE)
+						{
+							input.jump = true;
+							con->action = Input::Contact::NONE;
+							break;
+						}
+					}
+				}
+				else
+				{
+					con->action = Input::Contact::NONE;				
+				}
 			}
 		}
 	}
@@ -2429,6 +2893,9 @@ void Game::EndContact(int id, int x, int y)
 			{
 				if (player.talk_box)
 				{
+					// start showing main buts
+					show_buts = true;
+
 					// close talk_box (and keyb if also open)
 					free(player.talk_box);
 					player.talk_box = 0;
@@ -2445,6 +2912,7 @@ void Game::EndContact(int id, int x, int y)
 				}
 				else
 				{
+					show_buts = false;
 					// open talk_box (and keyb if not open)
 					TalkBox_blink = 32;
 					player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));

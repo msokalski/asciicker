@@ -360,6 +360,27 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	else
 	{
 		angles = 1;
+
+		anim_sum = 0;
+		anims = 0;
+		for (int a = 1; a < width; a++)
+		{
+			int len = layer0[height*a].GetDigit();
+			if (len > 0)
+			{
+				anim_sum += len;
+				anim_len[anims] = len;
+				anims++;
+			}
+			else
+				break;
+		}
+
+		if (!anims)
+		{
+			anims = 1;
+			anim_sum = 1;
+		}
 	}
 
 	int fr_num_x = (projs * anim_sum);
@@ -414,7 +435,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 
 			int rgb_div;
 
-			if (2 * fr_x < fr_num_x)
+			if (projs<2 || 2 * fr_x < fr_num_x)
 			{
 				// proj:
 
@@ -621,3 +642,102 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 
 	return sprite;
 }
+
+void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y)
+{
+	// calc clip rect
+	int sx = x < 0 ? -x : 0;
+	int sy = y < 0 ? -y : 0;
+
+	int x1 = x > 0 ? x : 0;
+	int x2 = x + sf->width < width ? x + sf->width : width;
+
+	int y1 = y > 0 ? y : 0;
+	int y2 = y + sf->height < height ? y + sf->height : height;
+
+	if (x2 <= x1)
+		return;
+
+	int w = x2 - x1;
+
+	AnsiCell* dst = ptr + x1 + y1 * width;
+	const AnsiCell* src = sf->cell + sx + sy * sf->width;
+
+	for (y = y1; y < y2; y++)
+	{
+		for (int i = 0; i < w; i++)
+		{
+			if (src[i].bk == 255)
+			{
+				// if both bk and fg are transparent -> ignore
+				// if bk is transparent and gl is <space> -> ignore
+				if (src[i].fg == 255 || src[i].gl == 32)
+					continue;
+				
+				switch (src[i].gl)
+				{
+					case 220: // fg-lower
+						dst[i].bk = AverageGlyph(dst + i, 0xC);
+						break;
+
+					case 221: // fg-left
+						dst[i].bk = AverageGlyph(dst + i, 0xA);
+						break;
+
+					case 222: // fg-right
+						dst[i].bk = AverageGlyph(dst + i, 0x5);
+						break;
+
+					case 223: // fg-upper
+						dst[i].bk = AverageGlyph(dst + i, 0x3);
+						break;
+
+					default:
+						dst[i].bk = AverageGlyph(dst + i, 0xF);
+				}
+
+				dst[i].fg = src[i].fg;
+				dst[i].gl = src[i].gl;
+			}
+			else
+			{
+				if (src[i].fg == 255)
+				{
+					// if fg is transparent and gl is <full-blk> -> ignore
+					if (src[i].gl == 219)
+						continue;
+
+					switch (src[i].gl)
+					{
+						case 220: // fg-lower
+							dst[i].fg = AverageGlyph(dst + i, 0x3);
+							break;
+
+						case 221: // fg-left
+							dst[i].fg = AverageGlyph(dst + i, 0x5);
+							break;
+
+						case 222: // fg-right
+							dst[i].fg = AverageGlyph(dst + i, 0xA);
+							break;
+
+						case 223: // fg-upper
+							dst[i].fg = AverageGlyph(dst + i, 0xC);
+							break;
+
+						default:
+							dst[i].fg = AverageGlyph(dst + i, 0xF);
+					}
+
+					dst[i].bk = src[i].bk;
+					dst[i].gl = src[i].gl;
+				}
+				else // if none of fg and bk is transparent -> replace
+					dst[i] = src[i];
+			}
+		}
+		dst += width;
+		src += sf->width;
+	}
+}
+

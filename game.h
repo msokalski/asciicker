@@ -66,22 +66,9 @@ struct Character
 	int frame;
 	float pos[3];
 	float dir;
-
-	int max_hp;
-	int cur_hp;
 };
 
 struct TalkBox;
-
-struct AnimScript
-{
-	int anim; // terminate with Sequence::anim = -1
-	int frame_from;
-	int frame_to;
-	int first_rep;
-	int every_rep;
-	int last_rep;
-};
 
 struct SpriteReq
 {
@@ -95,6 +82,40 @@ struct SpriteReq
 
 struct Human : Character
 {
+	char name[16];
+	char desc[16];
+
+	int level;
+
+	int max_xp; // to next level = C1 * pow(C2,C3*level)
+	int cur_xp; // 0..max_xp-1
+
+	int pr; // 0-transparent <0-evil >0-good ...
+
+	int max_hp;
+	int cur_hp;
+
+	int max_mp;
+	int cur_mp;
+
+	int max_speed;
+	int cur_speed;
+
+	int max_power;
+	int cur_power;
+
+	// 0-6
+	int prot_hit;
+	int prot_fire;
+	int nutr_vits; 
+	int nutr_mins;
+	int nutr_prots;
+	int nutr_fats;
+	int nutr_carbs;
+	int nutr_water;
+
+	// -------------
+
 	uint64_t action_stamp;
 
 	bool SetActionNone(uint64_t stamp);
@@ -121,14 +142,6 @@ struct Human : Character
 
 	// abilities & magic
 	// ...
-
-	// character
-	int max_hp;
-	int max_mp;
-
-	// current
-	int cur_hp;
-	int cur_mp;
 };
 
 struct Game
@@ -145,6 +158,9 @@ struct Game
 	//bool player_hit; // helper for detecting clicks on the player sprite
 	bool show_keyb; // activated together with talk_box by clicking on character
 	int keyb_hide;  // show / hide animator (vertical position)
+
+	bool show_buts; // true only if no popup is visible
+	int bars_pos; // used to hide buts (0..7)
 
 	// time relaxated KEY_UP/DOWN emulation by KEY_PRESSes
 	uint64_t PressStamp;

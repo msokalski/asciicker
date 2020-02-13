@@ -46,3 +46,5 @@ bool Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		//
 			float zoom, float yaw, const float pos[3], const float lt[4],	// view
 			int width, int height, AnsiCell* ptr,  // target
 			Sprite* sprite, int anim, int frame, float dir);	// player
+
+int AverageGlyph(const AnsiCell* ptr, int mask);
