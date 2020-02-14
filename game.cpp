@@ -2264,6 +2264,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
 
+	if (0)
 	{
 		HPBar bar;
 
@@ -2442,6 +2443,8 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		{
 			if (key == A3D_SPACE)
 				input.jump = true;
+
+			/*
 			if (key == A3D_ENTER)
 				player.SetActionAttack(stamp);
 
@@ -2456,6 +2459,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				player.SetWeapon(!player.req.weapon);
 			if (key == A3D_3)
 				player.SetShield(!player.req.shield);
+			*/
 		}
 
 		if (!auto_rep)
