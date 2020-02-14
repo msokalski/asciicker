@@ -178,6 +178,7 @@
     <ClInclude Include="game.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
+    <ClInclude Include="inventory.h" />
     <ClInclude Include="matrix.h" />
     <ClInclude Include="mesh.h" />
     <ClInclude Include="physics.h" />
@@ -194,6 +195,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="game.cpp" />
+    <ClCompile Include="inventory.cpp" />
     <ClCompile Include="render.cpp" />
     <ClCompile Include="screen.cpp" />
     <ClCompile Include="term.cpp" />

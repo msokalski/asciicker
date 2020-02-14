@@ -1609,12 +1609,17 @@ Sprite* player_naked = 0; // what to do?
 
 Sprite* character_button = 0;
 
+const ItemProto* item_proto_lib = 0;
+
+#define LOAD_SPRITE(n) LoadSprite("./sprites/" n, n, 0, false);
+
 void LoadSprites()
 {
 #ifdef _WIN32
 	_set_printf_count_output(1);
 #endif
 
+	// main buts
 	character_button = LoadSprite("./sprites/character.xp", "character.xp", 0, false);
 
 	for (int a = 0; a < ARMOR::SIZE; a++)
@@ -1653,6 +1658,160 @@ void LoadSprites()
 			}
 		}
 	}
+
+	// world sprites
+	Sprite* item_sword =  LOAD_SPRITE("item-sword.xp");
+	Sprite* item_shield = LOAD_SPRITE("item-shield.xp");
+	Sprite* item_hammer = LOAD_SPRITE("item-hammer.xp");
+	Sprite* item_helmet = LOAD_SPRITE("item-helmet.xp");
+	Sprite* item_mace =   LOAD_SPRITE("item-mace.xp");
+	Sprite* item_axe =    LOAD_SPRITE("item-axe.xp");
+	Sprite* item_armor =  LOAD_SPRITE("item-armor.xp");
+	Sprite* item_crossbow  = LOAD_SPRITE("item-crossbow.xp");
+	Sprite* item_flail =  LOAD_SPRITE("item-flail.xp");
+
+	Sprite* item_white_ring = LOAD_SPRITE("item-white-ring.xp");
+	Sprite* item_cyan_ring = LOAD_SPRITE("item-cyan-ring.xp");
+	Sprite* item_gold_ring = LOAD_SPRITE("item-gold-ring.xp");
+	Sprite* item_pink_ring = LOAD_SPRITE("item-pink-ring.xp");
+
+	Sprite* item_meat =   LOAD_SPRITE("item-meat.xp");
+	Sprite* item_egg =    LOAD_SPRITE("item-egg.xp");
+	Sprite* item_cheese = LOAD_SPRITE("item-cheese.xp");
+	Sprite* item_bread =  LOAD_SPRITE("item-bread.xp");
+	Sprite* item_beet =   LOAD_SPRITE("item-beet.xp");
+	Sprite* item_cucumber = LOAD_SPRITE("item-cucumber.xp");
+	Sprite* item_carrot = LOAD_SPRITE("item-carrot.xp");
+	Sprite* item_apple =  LOAD_SPRITE("item-apple.xp");
+	Sprite* item_cherry = LOAD_SPRITE("item-cherry.xp");
+	Sprite* item_plum =   LOAD_SPRITE("item-plum.xp");
+	Sprite* item_milk =   LOAD_SPRITE("item-milk.xp");
+	Sprite* item_water =  LOAD_SPRITE("item-water.xp");
+	Sprite* item_wine =   LOAD_SPRITE("item-wine.xp");
+	Sprite* item_red_potion = LOAD_SPRITE("item-red-potion.xp");
+	Sprite* item_blue_potion = LOAD_SPRITE("item-blue-potion.xp");
+	Sprite* item_green_potion = LOAD_SPRITE("item-green-potion.xp");
+	Sprite* item_pink_potion = LOAD_SPRITE("item-pink-potion.xp");
+	Sprite* item_cyan_potion = LOAD_SPRITE("item-cyan-potion.xp");
+	Sprite* item_gold_potion = LOAD_SPRITE("item-gold-potion.xp");
+	Sprite* item_grey_potion = LOAD_SPRITE("item-grey-potion.xp");
+
+	// inventory sprites
+	// weapons_2x3
+	Sprite* grid_big_mace = LOAD_SPRITE("grid-big-mace.xp");
+	Sprite* grid_big_hammer = LOAD_SPRITE("grid-big-hammer.xp");
+	Sprite* grid_big_axe = LOAD_SPRITE("grid-big-axe.xp");
+
+	// weapons_1x3
+	Sprite* grid_alpha_sword = LOAD_SPRITE("grid-alpha-sword.xp");
+	Sprite* grid_plus_sword = LOAD_SPRITE("grid-plus-sword.xp");
+	Sprite* grid_small_mace = LOAD_SPRITE("grid-small-mace.xp");
+
+	// weapons_1x2
+	Sprite* grid_small_sword = LOAD_SPRITE("grid-small-sword.xp");
+	Sprite* grid_small_saber = LOAD_SPRITE("grid-small-saber.xp");
+	Sprite* grid_lumber_axe = LOAD_SPRITE("grid-lumber-axe.xp");
+
+	// armory_2x2
+	Sprite* grid_light_helmet = LOAD_SPRITE("grid-light-helmet.xp");
+	Sprite* grid_heavy_helmet = LOAD_SPRITE("grid-heavy-helmet.xp");
+	Sprite* grid_light_shield = LOAD_SPRITE("grid-light-shield.xp");
+	Sprite* grid_heavy_shield = LOAD_SPRITE("grid-heavy-shield.xp");
+	Sprite* grid_light_armor = LOAD_SPRITE("grid-light-armor.xp");
+	Sprite* grid_heavy_armor = LOAD_SPRITE("grid-heavy-armor.xp");
+
+	// weapons_2x2
+	Sprite* grid_crossbow = LOAD_SPRITE("grid-crossbow.xp");
+	Sprite* grid_flail = LOAD_SPRITE("grid-flail.xp");
+
+	// rings_1x1
+	Sprite* grid_white_ring = LOAD_SPRITE("grid-white-ring.xp");
+	Sprite* grid_cyan_ring = LOAD_SPRITE("grid-cyan-ring.xp");
+	Sprite* grid_gold_ring = LOAD_SPRITE("grid-gold-ring.xp");
+	Sprite* grid_pink_ring = LOAD_SPRITE("grid-pink-ring.xp");
+
+	// food_2x2
+	Sprite* grid_meat = LOAD_SPRITE("grid-meat.xp");
+	Sprite* grid_egg = LOAD_SPRITE("grid-egg.xp");
+	Sprite* grid_cheese = LOAD_SPRITE("grid-cheese.xp");
+	Sprite* grid_bread = LOAD_SPRITE("grid-bread.xp");
+	Sprite* grid_beet = LOAD_SPRITE("grid-beet.xp");
+	Sprite* grid_cucumber = LOAD_SPRITE("grid-cucumber.xp");
+	Sprite* grid_carrot = LOAD_SPRITE("grid-carrot.xp");
+	Sprite* grid_apple = LOAD_SPRITE("grid-apple.xp");
+	Sprite* grid_cherry = LOAD_SPRITE("grid-cherry.xp");
+	Sprite* grid_plum = LOAD_SPRITE("grid-plum.xp");
+
+	// drinks_2x2
+	Sprite* grid_milk = LOAD_SPRITE("grid-milk.xp");
+	Sprite* grid_water = LOAD_SPRITE("grid-water.xp");
+	Sprite* grid_wine = LOAD_SPRITE("grid-wine.xp");
+
+	// potions_2x2
+	Sprite* grid_red_potion = LOAD_SPRITE("grid-red-potion.xp");
+	Sprite* grid_blue_potion = LOAD_SPRITE("grid-blue-potion.xp");
+	Sprite* grid_green_potion = LOAD_SPRITE("grid-green-potion.xp");
+	Sprite* grid_pink_potion = LOAD_SPRITE("grid-pink-potion.xp");
+	Sprite* grid_cyan_potion = LOAD_SPRITE("grid-cyan-potion.xp");
+	Sprite* grid_gold_potion = LOAD_SPRITE("grid-gold-potion.xp");
+	Sprite* grid_grey_potion = LOAD_SPRITE("grid-grey-potion.xp");
+
+	static const ItemProto item_proto[] = 
+	{
+	//  {kind, sub,                        weight, 3d_sprite,    2d_sprite,   desc}
+		{ 'W', PLAYER_WEAPON_INDEX::MACE,     20000, item_mace,     grid_big_mace,        "Giant's Mace" },
+		{ 'W', PLAYER_WEAPON_INDEX::HAMMER,   20000, item_hammer,   grid_big_hammer,      "Giant's Hammer" },
+		{ 'W', PLAYER_WEAPON_INDEX::HAMMER,   20000, item_hammer,   grid_big_axe,         "Giant's Axe" },
+		{ 'W', PLAYER_WEAPON_INDEX::SWORD,    5000,  item_sword,    grid_alpha_sword,     "Alpha Sword" },
+		{ 'W', PLAYER_WEAPON_INDEX::SWORD,    5000,  item_sword,    grid_plus_sword,      "Plus Sword" },
+		{ 'W', PLAYER_WEAPON_INDEX::MACE,     6000,  item_mace,     grid_small_mace,      "Small Mace" },
+		{ 'W', PLAYER_WEAPON_INDEX::SWORD,    3000,  item_sword,    grid_small_sword,     "Small Sword" },
+		{ 'W', PLAYER_WEAPON_INDEX::SWORD,    3000,  item_sword,    grid_small_saber,     "Small Saber" },
+		{ 'W', PLAYER_WEAPON_INDEX::AXE,      3000,  item_axe,      grid_lumber_axe,      "Lumber Axe" },
+		{ 'W', PLAYER_WEAPON_INDEX::CROSSBOW, 4000,  item_crossbow, grid_crossbow,        "Crossbow" },
+		{ 'W', PLAYER_WEAPON_INDEX::FLAIL,    5000,  item_flail,    grid_flail,	          "Flail" },
+
+		{ 'R', PLAYER_RING_INDEX::RING_WHITE, 10, item_white_ring, grid_white_ring,  "Unidentified White Ring" },
+		{ 'R', PLAYER_RING_INDEX::RING_CYAN,  10, item_cyan_ring,  grid_cyan_ring,   "Unidentified Cyan Ring" },
+		{ 'R', PLAYER_RING_INDEX::RING_GOLD,  10, item_gold_ring,  grid_gold_ring,   "Unidentified Gold Ring" },
+		{ 'R', PLAYER_RING_INDEX::RING_PINK,  10, item_pink_ring,  grid_pink_ring,   "Unidentified Pink Ring" },
+
+		{ 'H', PLAYER_HELMET_INDEX::HELMET_NORMAL, 1000, item_helmet, grid_light_helmet, "Light Helmet" },
+		{ 'H', PLAYER_HELMET_INDEX::HELMET_NORMAL, 2000, item_helmet, grid_heavy_helmet, "Heavy Helmet" },
+
+		{ 'S', PLAYER_SHIELD_INDEX::SHIELD_NORMAL, 4000, item_shield, grid_light_shield, "Light Shield" },
+		{ 'S', PLAYER_SHIELD_INDEX::SHIELD_NORMAL, 6000, item_shield, grid_heavy_shield, "Heavy Shield" },
+
+		{ 'A', PLAYER_ARMOR_INDEX::ARMOR_NORMAL,   5000, item_armor, grid_light_armor,   "Light Armor" },
+		{ 'A', PLAYER_ARMOR_INDEX::ARMOR_NORMAL,  10000, item_armor, grid_heavy_armor,   "Heavy Armor" },
+
+		{ 'F', PLAYER_FOOD_INDEX::MEAT,     500, item_meat,     grid_meat,     "Meat" },
+		{ 'F', PLAYER_FOOD_INDEX::EGG,      250, item_egg,      grid_egg,      "Egg" },
+		{ 'F', PLAYER_FOOD_INDEX::CHEESE,   300, item_cheese,   grid_cheese,   "Cheese" },
+		{ 'F', PLAYER_FOOD_INDEX::BREAD,    500, item_bread,    grid_bread,    "Bread" },
+		{ 'F', PLAYER_FOOD_INDEX::BEET,     500, item_beet,     grid_beet,     "Beet" },
+		{ 'F', PLAYER_FOOD_INDEX::CUCUMBER, 250, item_cucumber, grid_cucumber, "Cucumber" },
+		{ 'F', PLAYER_FOOD_INDEX::CARROT,   250, item_carrot,   grid_carrot,   "Carrot" },
+		{ 'F', PLAYER_FOOD_INDEX::APPLE,    200, item_apple,    grid_apple,    "Apple" },
+		{ 'F', PLAYER_FOOD_INDEX::CHERRY,   100, item_cherry,   grid_cherry,   "Cherry" },
+		{ 'F', PLAYER_FOOD_INDEX::PLUM,     100, item_plum,     grid_plum,     "Plum" },
+
+		{ 'D', PLAYER_DRINK_INDEX::MILK,    250, item_milk,     grid_milk,    "Milk" },
+		{ 'D', PLAYER_DRINK_INDEX::WATER,   250, item_water,    grid_water,   "Water" },
+		{ 'D', PLAYER_DRINK_INDEX::WINE,    250, item_wine,     grid_wine,    "Wine" },
+
+		{ 'P', PLAYER_POTION_INDEX::RED,    150, item_red_potion,    grid_red_potion,   "Healing Potion" },
+		{ 'P', PLAYER_POTION_INDEX::BLUE,   150, item_blue_potion,   grid_blue_potion,  "Mana Potion" },
+		{ 'P', PLAYER_POTION_INDEX::GREEN,  150, item_green_potion,  grid_green_potion, "Unidentified Green Potion" },
+		{ 'P', PLAYER_POTION_INDEX::PINK,   150, item_pink_potion,   grid_pink_potion,  "Unidentified Pink Potion" },
+		{ 'P', PLAYER_POTION_INDEX::CYAN,   150, item_cyan_potion,   grid_cyan_potion,  "Unidentified Cyan Potion" },
+		{ 'P', PLAYER_POTION_INDEX::GOLD,   150, item_gold_potion,   grid_gold_potion,  "Unidentified Gold Potion" },
+		{ 'P', PLAYER_POTION_INDEX::GREY,   150, item_grey_potion,   grid_grey_potion,  "Unidentified Grey Potion" },
+
+		{ 0 }
+	};
+
+	item_proto_lib = item_proto;
 }
 
 Sprite* GetSprite(const SpriteReq* req)
