@@ -190,7 +190,7 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
     <ClInclude Include="matrix.h" />
-    <ClInclude Include="mesh.h" />
+    <ClInclude Include="world.h" />
     <ClInclude Include="rgba8.h" />
     <ClInclude Include="sprite.h" />
     <ClInclude Include="stdafx.h" />
@@ -209,7 +209,7 @@
     <ClCompile Include="tinfl.c" />
     <ClCompile Include="urdo.cpp" />
     <ClCompile Include="gl.c" />
-    <ClCompile Include="mesh.cpp" />
+    <ClCompile Include="world.cpp" />
     <ClCompile Include="physics.cpp" />
     <ClCompile Include="rgba8.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />

@@ -180,7 +180,6 @@
     <ClInclude Include="imgui_impl_opengl3.h" />
     <ClInclude Include="inventory.h" />
     <ClInclude Include="matrix.h" />
-    <ClInclude Include="mesh.h" />
     <ClInclude Include="physics.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="render.h" />
@@ -192,6 +191,7 @@
     <ClInclude Include="terrain.h" />
     <ClInclude Include="texheap.h" />
     <ClInclude Include="upng.h" />
+    <ClInclude Include="world.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="game.cpp" />
@@ -201,11 +201,11 @@
     <ClCompile Include="term.cpp" />
     <ClCompile Include="mswin.cpp" />
     <ClCompile Include="tinfl.c" />
+    <ClCompile Include="world.cpp" />
     <ClCompile Include="x11.cpp" />
     <ClCompile Include="xterm.cpp" />
     <ClCompile Include="gl.c" />
     <ClCompile Include="input.cpp" />
-    <ClCompile Include="mesh.cpp" />
     <ClCompile Include="physics.cpp" />
     <ClCompile Include="rgba8.cpp" />
     <ClCompile Include="sprite.cpp" />

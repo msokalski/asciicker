@@ -5,7 +5,7 @@
 #include <algorithm> // std::min/max
 
 #include "terrain.h"
-#include "mesh.h"
+#include "world.h"
 
 struct AnsiCell
 {

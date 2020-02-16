@@ -13,6 +13,15 @@ struct AudioDesc
 
 struct A3D_WND;
 
+struct A3D_PUSH_CONTEXT
+{
+	void* data[3];
+};
+
+void a3dPushContext(A3D_PUSH_CONTEXT* ctx);
+void a3dPopContext(const A3D_PUSH_CONTEXT* ctx);
+void a3dSwitchContext(const A3D_WND* wnd);
+
 enum WndMode
 {
 	A3D_WND_CURRENT = 0,

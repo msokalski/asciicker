@@ -2,7 +2,8 @@
 
 #include  <stdint.h>
 #include "terrain.h"
-#include "mesh.h"
+#include "world.h"
+#include "inventory.h"
 
 bool URDO_CanUndo();
 bool URDO_CanRedo();
@@ -26,8 +27,9 @@ void URDO_Delete(Terrain* t, Patch* p); // replacement for DelTerrainPatch
 void URDO_Patch(Patch* p, bool visual = false); // call before changing height map
 void URDO_Diag(Patch* p); // call before flipping diag
 
-// meshes
+// meshes & sprites (instances)
 
+Inst* URDO_Create(World* w, Item* item, int flags, float pos[3], float yaw);
 Inst* URDO_Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4]); // replacement for CreateInst
 Inst* URDO_Create(Mesh* m, int flags, double tm[16]); // replacement for CreateInst
 void URDO_Delete(Inst* i); // replacement for DeleteInst

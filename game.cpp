@@ -1609,8 +1609,6 @@ Sprite* player_naked = 0; // what to do?
 
 Sprite* character_button = 0;
 
-const ItemProto* item_proto_lib = 0;
-
 #define LOAD_SPRITE(n) LoadSprite("./sprites/" n, n, 0, false);
 
 void LoadSprites()
@@ -1800,13 +1798,13 @@ void LoadSprites()
 		{ 'D', PLAYER_DRINK_INDEX::WATER,   250, item_water,    grid_water,   "Water" },
 		{ 'D', PLAYER_DRINK_INDEX::WINE,    250, item_wine,     grid_wine,    "Wine" },
 
-		{ 'P', PLAYER_POTION_INDEX::RED,    150, item_red_potion,    grid_red_potion,   "Healing Potion" },
-		{ 'P', PLAYER_POTION_INDEX::BLUE,   150, item_blue_potion,   grid_blue_potion,  "Mana Potion" },
-		{ 'P', PLAYER_POTION_INDEX::GREEN,  150, item_green_potion,  grid_green_potion, "Unidentified Green Potion" },
-		{ 'P', PLAYER_POTION_INDEX::PINK,   150, item_pink_potion,   grid_pink_potion,  "Unidentified Pink Potion" },
-		{ 'P', PLAYER_POTION_INDEX::CYAN,   150, item_cyan_potion,   grid_cyan_potion,  "Unidentified Cyan Potion" },
-		{ 'P', PLAYER_POTION_INDEX::GOLD,   150, item_gold_potion,   grid_gold_potion,  "Unidentified Gold Potion" },
-		{ 'P', PLAYER_POTION_INDEX::GREY,   150, item_grey_potion,   grid_grey_potion,  "Unidentified Grey Potion" },
+		{ 'P', PLAYER_POTION_INDEX::POTION_RED,    150, item_red_potion,    grid_red_potion,   "Healing Potion" },
+		{ 'P', PLAYER_POTION_INDEX::POTION_BLUE,   150, item_blue_potion,   grid_blue_potion,  "Mana Potion" },
+		{ 'P', PLAYER_POTION_INDEX::POTION_GREEN,  150, item_green_potion,  grid_green_potion, "Unidentified Green Potion" },
+		{ 'P', PLAYER_POTION_INDEX::POTION_PINK,   150, item_pink_potion,   grid_pink_potion,  "Unidentified Pink Potion" },
+		{ 'P', PLAYER_POTION_INDEX::POTION_CYAN,   150, item_cyan_potion,   grid_cyan_potion,  "Unidentified Cyan Potion" },
+		{ 'P', PLAYER_POTION_INDEX::POTION_GOLD,   150, item_gold_potion,   grid_gold_potion,  "Unidentified Gold Potion" },
+		{ 'P', PLAYER_POTION_INDEX::POTION_GREY,   150, item_grey_potion,   grid_grey_potion,  "Unidentified Grey Potion" },
 
 		{ 0 }
 	};
@@ -1948,6 +1946,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 	g->water = water;
 	g->prev_yaw = yaw;
+
 
 	return g;
 }

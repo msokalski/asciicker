@@ -1,18 +1,22 @@
 
 #include "game.h"
 
-Item* CreateItem(ItemProto* proto, size_t size)
+const ItemProto* item_proto_lib;
+
+Item* CreateItem()
 {
-	assert(size >= sizeof(Item) && proto);
-
-	Item* item = (Item*)malloc(size);
-
-	memset(item, 0, size);
-
-	item->proto = proto;
-
-	item->prev = 0;
-	item->next = 0;
-
+	Item* item = (Item*)malloc(sizeof(Item));
+	memset(item, 0, sizeof(Item));
 	return item;
 }
+
+void DestroyItem(Item* item)
+{
+	if (item->inst)
+		DeleteInst(item->inst);
+	free(item);
+}
+
+
+bool InsertItem(Item* item, const int xy[2]);
+bool RemoveItem(int index, const float pos[3], float yaw);

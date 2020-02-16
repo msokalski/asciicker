@@ -487,6 +487,25 @@ static const unsigned char kc_to_ki[128]=
 	A3D_PAUSE,				// 127
 };
 
+void a3dPushContext(A3D_PUSH_CONTEXT* ctx)
+{
+	ctx->data[0] = dpy;
+	ctx->data[1] = glXGetCurrentDrawable();
+	ctx->data[2] = glXGetCurrentContext();
+}
+
+void a3dPopContext(const A3D_PUSH_CONTEXT* ctx)
+{
+	if (dpy)
+		glXMakeCurrent((Display*)ctx->data[0], ctx->data[1], ctx->data[2]);
+}
+
+void a3dSwitchContext(const A3D_WND* wnd)
+{
+	if (dpy)
+		glXMakeCurrent(dpy, wnd->win, wnd->rc);
+}
+
 // creates window & initialized GL
 A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* share)
 {

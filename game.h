@@ -3,7 +3,7 @@
 #include "physics.h"
 #include "render.h"
 #include "sprite.h"
-#include "mesh.h"
+#include "world.h"
 #include "terrain.h"
 
 #include "inventory.h"

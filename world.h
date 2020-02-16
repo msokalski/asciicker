@@ -5,6 +5,7 @@ struct World;
 struct Mesh;
 struct Inst;
 struct Sprite;
+struct Item;
 
 World* CreateWorld();
 void DeleteWorld(World* w);
@@ -30,6 +31,7 @@ void GetMeshBBox(Mesh* m, float bbox[6]);
 int GetMeshFaces(Mesh* m);
 void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie), void* cookie);
 
+Inst* CreateInst(World* w, Item* item, int flags, float pos[3], float yaw);
 Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name = 0);
 Inst* CreateInst(Mesh* m, int flags, const double tm[16] = 0, const char* name = 0);
 void DeleteInst(Inst* i);
@@ -40,6 +42,7 @@ bool GetInstTM(Inst* i, double tm[16]);
 void GetInstBBox(Inst* i, double bbox[6]);
 
 Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, int reps[4]);
+Item* GetInstItem(Inst* i, float pos[3], float* yaw);
 
 enum INST_FLAGS
 {
@@ -62,8 +65,12 @@ void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level
 Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only = false);
 
 void SaveWorld(World* w, FILE* f);
-World* LoadWorld(FILE* f);
 
+// editor==true  clones items for test-players
+// editor==false changes items purpose directly for player(s)
+World* LoadWorld(FILE* f, bool editor); 
+
+void PurgeItemInstCache();
 
 /*
 int AddInstDataProvider(World* w, void (*on_newinst)(Inst* i), void (*on_delinst)(Inst* i));

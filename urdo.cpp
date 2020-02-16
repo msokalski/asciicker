@@ -3,97 +3,6 @@
 #include <assert.h>
 #include "urdo.h"
 
-#if 0
-// todo: switch to file storage
-// - each command record: {[cmd_id][DATA][rec_size]}
-// - stream contains group open/close:  ....{open}{}{}{open}{}{}{}<-undo|redo->{}{}{close}{}{close}....
-// - we just need to track current stack depth
-
-struct URDO
-{
-	enum CMD
-	{
-		CMD_GROUP_OPEN,
-		CMD_GROUP_CLOSE,
-		CMD_PATCH_UPDATE,
-		CMD_PATCH_DIAG
-	} cmd;
-
-	// followed by data and record size in bytes (int)
-
-	void Do(bool un);
-	static URDO* Alloc(CMD c);
-	void Free();
-};
-
-// note: no need to have PurgeUndo()
-
-static void PurgeRedo()
-{
-	// truncate file at current pos
-	// write 'closes' for all open groups
-}
-
-void URDO_Purge()
-{
-	// reset stack & file size
-	// move file pointer to 0 and flush
-}
-
-bool URDO_CanUndo()
-{
-	// true if we're not at the file head
-}
-
-bool URDO_CanRedo()
-{
-	// true if we're not at the file tail
-}
-
-size_t URDO_Bytes()
-{
-	// file size (keep track)
-}
-
-void URDO_Undo(int max_depth)
-{
-}
-
-void URDO_Redo(int max_depth)
-{
-}
-
-void URDO_Open()
-{
-	// write CMD
-	// write sizeof(REC)
-}
-
-void URDO_Close()
-{
-	// write CMD
-	// write sizeof(REC)
-}
-
-void URDO_Patch(Patch* p)
-{
-	// write CMD
-	// write Patch*
-	// write GetTerrainHeightMap(p)
-	// write GetTerrainDiag(p)
-	// write sizeof(REC)
-}
-
-void URDO_Diag(Patch* p)
-{
-	// write CMD
-	// write Patch*
-	// write GetTerrainDiag(p)
-	// write sizeof(REC)
-}
-
-#endif
-
 struct URDO
 {
 	URDO* next;
@@ -180,11 +89,19 @@ struct URDO_InstCreate : URDO
 			double tm[16];
 		};
 
+
+
 		struct
 		{
 			World* w;
-			Sprite* s;
 			float pos[3];
+
+			union
+			{
+				Sprite* s; // anim >=0
+				Item* item; // anim < 0
+			};
+
 			float yaw;
 			int anim;
 			int frame;
@@ -195,6 +112,7 @@ struct URDO_InstCreate : URDO
 	static void Delete(Inst* i);
 	static Inst* Create(Mesh* m, int flags, double tm[16]);
 	static Inst* Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4]);
+	static Inst* Create(World* w, Item* item, int flags, float pos[3], float yaw);
 
 	void Do(bool un);
 };
@@ -543,6 +461,12 @@ Inst* URDO_Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int a
 	return URDO_InstCreate::Create(w,s,flags,pos,yaw,anim,frame,reps);
 }
 
+Inst* URDO_Create(World* w, Item* item, int flags, float pos[3], float yaw)
+{
+	assert(group_open < 64);
+
+	return URDO_InstCreate::Create(w, item, flags, pos, yaw);
+}
 
 void URDO_Delete(Inst* i)
 {
@@ -760,9 +684,12 @@ void URDO_InstCreate::Delete(Inst* i)
 
 	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
 
-	urdo->mesh = GetInstMesh(i);
+	urdo->mesh = GetInstMesh(i); // needed?
 	urdo->flags = GetInstFlags(i);
 	GetInstTM(i, urdo->tm);
+
+	// if this is item, we need to remove it from someones inventory!
+	// !!!
 
 	DeleteInst(i);
 	urdo->inst = 0;
@@ -799,6 +726,21 @@ Inst* URDO_InstCreate::Create(World* w, Sprite* s, int flags, float pos[3], floa
 	return urdo->inst;
 }
 
+Inst* URDO_InstCreate::Create(World* w, Item* item, int flags, float pos[3], float yaw)
+{
+	if (!group_open)
+		PurgeRedo();
+
+	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
+
+	urdo->mode = 2; // item
+	urdo->w = w;
+	urdo->flags = 0;
+	urdo->inst = CreateInst(w, item, flags, pos, yaw);
+
+	return urdo->inst;
+}
+
 
 void URDO_InstCreate::Do(bool un)
 {
@@ -820,6 +762,7 @@ void URDO_InstCreate::Do(bool un)
 		RebuildWorld(GetMeshWorld(mesh));
 	}
 	else
+	if (mode == 1)
 	{
 		if (!inst)
 		{
@@ -828,6 +771,23 @@ void URDO_InstCreate::Do(bool un)
 		else
 		{
 			s = GetInstSprite(inst, pos,&yaw,&anim,&frame,reps);
+			flags = GetInstFlags(inst);
+			DeleteInst(inst);
+			inst = 0;
+		}
+
+		RebuildWorld(w);
+	}
+	else
+	if (mode == 2)
+	{
+		if (!inst)
+		{
+			inst = CreateInst(w, item, flags, pos, yaw);
+		}
+		else
+		{
+			item = GetInstItem(inst, pos, &yaw);
 			flags = GetInstFlags(inst);
 			DeleteInst(inst);
 			inst = 0;

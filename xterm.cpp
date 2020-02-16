@@ -512,7 +512,7 @@ int main(int argc, char* argv[])
                             break;
                     }
 
-                    world = LoadWorld(f);
+                    world = LoadWorld(f,false);
                     if (world)
                     {
                         // reload meshes too
@@ -568,6 +568,8 @@ int main(int argc, char* argv[])
 
         if (world)
             DeleteWorld(world);
+
+		PurgeItemInstCache();
 
         return 0;
     }
@@ -1301,6 +1303,8 @@ int main(int argc, char* argv[])
     printf("Currently -term parameter is unsupported on Windows\n");
 
 #endif
+
+	PurgeItemInstCache();
 
 	return 0;
 }

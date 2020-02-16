@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include "terrain.h"
-#include "mesh.h"
+#include "world.h"
 
 struct PhysicsIO
 {

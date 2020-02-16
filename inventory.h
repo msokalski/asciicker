@@ -3,14 +3,31 @@
 struct ItemProto;
 struct Item;
 
+extern const ItemProto* item_proto_lib;
+
+Item* CreateItem();
+void DestroyItem(Item* item);
+
 struct Inventory
 {
 	// max inventory dims as 4x4 cells blocks (incl. 1 border)
 	static const int width = 8;   // fit upto 4 7x7 cells items
 	static const int height = 20; // fit upto 10 7x7 cells items
+	static const int max_items = 256;
 
-	Item* first;
-	Item* last;
+	struct MyItem
+	{
+		Item* item;
+		int xy[2];
+		// some ui states if needed
+		// ...
+	};
+
+	int items;
+	MyItem item[max_items];
+
+	bool InsertItem(Item* item, const int xy[2]); 
+	bool RemoveItem(int index, const float pos[3], float yaw);
 
 	int weight; // sum(Item* i=first..last) { i.count * i.proto->weight }
 	int area; // sum(Item* i=first..last) { (i.proto->sprite_2d.width+1)*(i.proto->sprite_2d.height+1) / 16 }
@@ -49,13 +66,41 @@ struct ItemProto // loaded from items.txt file
 
 struct Item
 {
-	ItemProto* proto;
+	const ItemProto* proto;
 
-	Item* prev;
-	Item* next;
+	Inst* inst;  // EDIT / WORLD : instance (OWNED has it NULL)
 
 	int count;
-	int xy[2];
+
+	// item instances:
+	// - if process is editor: private items for editor (saved/loaded with a3d file)
+	// - items for players (just 1 clone from a3d items for all players execpt below)
+	// - items created for each player inventory individually (if a3d item has seed flag)
+
+	enum PURPOSE
+	{
+		// when created, item purpose is unspecified
+		UNSPECIFIED = 0,
+
+		// EDITOR / FILE only, 
+		// render in editor only
+		// note: loding world by game (without editor) will switch it immediately to WORLD
+		//       loading by editor will make this item clone (with WORLD , available to test-players)
+		// item must be attached to BHV (for editor)
+		EDIT = 1,
+
+		// game item, inside someone's inventory
+		// dont't render in game (owner's inventory only)
+		// item must be detached from BHV (travels with player) inst=0
+		OWNED = 2,
+
+		// game item, no owner, render it in game for all players
+		// item must be attached to BHV (for players)
+		WORLD = 3, 
+	};
+
+	// note: changing purpose may need adjusting World::insts counter!
+	PURPOSE purpose;
 };
 
 enum PLAYER_WEAPON_INDEX
@@ -116,13 +161,13 @@ enum PLAYER_DRINK_INDEX
 enum PLAYER_POTION_INDEX
 {
 	POTION_NONE = 0,
-	RED,  // HP
-	BLUE, // MP
-	GREEN,
-	PINK,
-	CYAN,
-	GOLD,
-	GREY
+	POTION_RED,  // HP
+	POTION_BLUE, // MP
+	POTION_GREEN,
+	POTION_PINK,
+	POTION_CYAN,
+	POTION_GOLD,
+	POTION_GREY
 };
 
 enum PLAYER_RING_INDEX

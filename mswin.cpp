@@ -15,6 +15,7 @@
 
 #include "platform.h"
 
+
 A3D_PTY* head_pty = 0;
 A3D_PTY* tail_pty = 0;
 
@@ -55,6 +56,23 @@ struct A3D_WND
 	WndMode wndmode = A3D_WND_NORMAL;
 	int exit_full_xywh[4] = { 0,0,0,0 }; // always a3dGetRect
 };
+
+void a3dPushContext(A3D_PUSH_CONTEXT* ctx)
+{
+	ctx->data[0] = 0;
+	ctx->data[1] = wglGetCurrentDC();
+	ctx->data[2] = wglGetCurrentContext();
+}
+
+void a3dPopContext(const A3D_PUSH_CONTEXT* ctx)
+{
+	wglMakeCurrent((HDC)ctx->data[1], (HGLRC)ctx->data[2]);
+}
+
+void a3dSwitchContext(const A3D_WND* wnd)
+{
+	wglMakeCurrent(wnd->dc, wnd->rc);
+}
 
 static const unsigned char ki_to_vk[256] =
 {

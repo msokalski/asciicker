@@ -7,7 +7,7 @@
 #include <malloc.h>
 #include <stdio.h>
 #include "terrain.h"
-#include "mesh.h"
+#include "world.h"
 #include "matrix.h"
 #include "fast_rand.h"
 // #include "sprite.h"
@@ -1800,6 +1800,12 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					}
 				}
 			}
+
+			if (dst->bk == 255 || dst->fg == 255)
+			{
+				int a = 0;
+			}
+			
 			///////////////////////////
 
 			/*

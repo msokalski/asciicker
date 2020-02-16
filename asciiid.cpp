@@ -28,7 +28,7 @@
 
 #include "texheap.h"
 #include "terrain.h"
-#include "mesh.h"
+#include "world.h"
 #include "sprite.h"
 
 #include "urdo.h"
@@ -236,7 +236,7 @@ void MergeOpen(const char* path)
 					break;
 			}
 
-			merge._world = LoadWorld(f);
+			merge._world = LoadWorld(f, true);
 
 			if (merge._world)
 			{
@@ -3567,6 +3567,9 @@ void Load(const char* path)
 {
 	// load
 
+	// close all terms
+	TermCloseAll();
+
 	// free mesh prefs !!!
 	Mesh* m = GetFirstMesh(world);
 	while (m)
@@ -3596,7 +3599,7 @@ void Load(const char* path)
 				mat[i].Update();
 			}
 
-			world = LoadWorld(f);
+			world = LoadWorld(f, true);
 			if (world)
 			{
 				// reload meshes too
@@ -7517,6 +7520,7 @@ int main(int argc, char *argv[])
 #endif
 
 	FreeSprites();
+	PurgeItemInstCache();
 
 
 	return 0;

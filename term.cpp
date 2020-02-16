@@ -560,13 +560,20 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3])
 
 void TermCloseAll()
 {
+	A3D_PUSH_CONTEXT push;
+	a3dPushContext(&push);
+
 	TERM_LIST* term = term_head;
 	while (term)
 	{
 		TERM_LIST* next = term->next;
+
+		a3dSwitchContext(term->wnd);
 		term_close(term->wnd);
 		term = next;
 	}
+
+	a3dPopContext(&push);
 
 	term_head = 0;
 	term_tail = 0;
