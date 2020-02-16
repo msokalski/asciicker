@@ -9,7 +9,8 @@ BIN := .run/game
 #		game.cpp \
 # 		render.cpp \
 # 		terrain.cpp \
-# 		mesh.cpp \
+#		world.cpp \
+#		inventory.cpp \
 # 		physics.cpp \
 # 		sprite.cpp \
 # 		upng.c \
@@ -25,7 +26,8 @@ SRCS :=	gl.c \
 		game.cpp \
 		render.cpp \
 		terrain.cpp \
-		mesh.cpp \
+		world.cpp \
+		inventory.cpp \
 		physics.cpp \
 		sprite.cpp \
 		upng.c \

@@ -490,14 +490,14 @@ static const unsigned char kc_to_ki[128]=
 void a3dPushContext(A3D_PUSH_CONTEXT* ctx)
 {
 	ctx->data[0] = dpy;
-	ctx->data[1] = glXGetCurrentDrawable();
+	ctx->data[1] = (void*)glXGetCurrentDrawable();
 	ctx->data[2] = glXGetCurrentContext();
 }
 
 void a3dPopContext(const A3D_PUSH_CONTEXT* ctx)
 {
 	if (dpy)
-		glXMakeCurrent((Display*)ctx->data[0], ctx->data[1], ctx->data[2]);
+		glXMakeCurrent((Display*)ctx->data[0], (GLXDrawable)ctx->data[1], (GLXContext)ctx->data[2]);
 }
 
 void a3dSwitchContext(const A3D_WND* wnd)

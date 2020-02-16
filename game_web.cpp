@@ -4,7 +4,7 @@
 #include "terrain.h"
 #include "game.h"
 #include "sprite.h"
-#include "mesh.h"
+#include "world.h"
 #include "render.h"
 
 #include <time.h>
@@ -51,7 +51,7 @@ int main()
                         break;
                 }
 
-                world = LoadWorld(f);
+                world = LoadWorld(f,false);
                 if (world)
                 {
                     // reload meshes too

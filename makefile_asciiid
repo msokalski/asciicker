@@ -12,7 +12,8 @@ SRCS :=	asciiid.cpp \
 		game.cpp \
 		render.cpp \
 		terrain.cpp \
-		mesh.cpp \
+		world.cpp \
+		inventory.cpp \
 		physics.cpp \
 		sprite.cpp \
 		texheap.cpp \

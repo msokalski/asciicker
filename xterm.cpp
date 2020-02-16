@@ -614,7 +614,7 @@ int main(int argc, char* argv[])
     uint64_t frames = 0;
 
     {
-        FILE* f = fopen("a3d/game.a3d","rb");
+        FILE* f = fopen("a3d/game_sprites.a3d","rb");
 
         if (f)
         {
@@ -628,7 +628,7 @@ int main(int argc, char* argv[])
                         break;
                 }
 
-                world = LoadWorld(f);
+                world = LoadWorld(f,false);
                 if (world)
                 {
                     // reload meshes too

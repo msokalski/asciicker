@@ -1,5 +1,6 @@
 
 #include "game.h"
+#include <string.h>
 
 const ItemProto* item_proto_lib;
 
