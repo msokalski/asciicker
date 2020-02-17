@@ -395,8 +395,8 @@ struct World
         return true;
     }
 
-    // all insts EXCLUDING cloned items!
-    int insts;
+    int insts; // all (meshes, sprites, edit items, world items)
+	int temp_insts; // only world items
 
     // only non-bsp
     Inst* head_inst; 
@@ -405,6 +405,7 @@ struct World
 	Inst* AddInst(Item* item, int flags, float pos[3], float yaw)
 	{
 		ItemInst* i = AllocItemInst();
+		i->name = 0;
 		i->inst_type = Inst::INST_TYPE::ITEM;
 		i->w = this;
 		i->item = item;
@@ -435,8 +436,10 @@ struct World
 			head_inst = i;
 		tail_inst = i;
 
-		if (item->purpose == Item::EDIT)
-			insts++;
+		if (item->purpose == Item::WORLD)
+			temp_insts++;
+
+		insts++;
 
 		return i;
 	}
@@ -871,8 +874,10 @@ struct World
 		if (root == i)
 			root = 0;
 
-		if (i->item->purpose == Item::EDIT)
-			insts--;
+		if (i->item->purpose == Item::WORLD)
+			temp_insts--;
+
+		insts--;
 
 		// item insts are frequently allocated and freed
 		// cache em!
@@ -1859,6 +1864,12 @@ struct World
 				SpriteInst* si = (SpriteInst*)i;
 				cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
 			}
+			else
+			if (i->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				ItemInst* si = (ItemInst*)i;
+				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, 0, si->item->purpose,0, cookie);
+			}
         }
         else
         if (bsp->type == BSP::BSP_TYPE_NODE)
@@ -1956,6 +1967,12 @@ struct World
 			{
 				SpriteInst* si = (SpriteInst*)i;
 				cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
+			}
+			else
+			if (i->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				ItemInst* si = (ItemInst*)i;
+				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, 0, si->item->purpose, 0, cookie);
 			}
 		}
         else
@@ -2089,6 +2106,242 @@ struct World
 	}
 };
 
+Item* delete_item_list = 0;
+SpriteInst* delete_sprite_list = 0;
+
+static void DeleteItemInsts(BSP* bsp, bool all) 
+{
+    if (bsp->type == BSP::BSP_TYPE_LEAF)
+    {
+        Inst* i = ((BSP_Leaf*)bsp)->head;
+        while (i)
+        {
+			if (i->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				Item* item = ((ItemInst*)i)->item;
+				if (all || item->purpose == Item::WORLD)
+				{
+					item->proto = (ItemProto*)delete_item_list;
+					delete_item_list = item;
+				}
+			}
+            i=i->next;
+        }
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_INST)
+    {
+        Inst* i = (Inst*)bsp;
+		if (i->inst_type == Inst::INST_TYPE::ITEM)
+		{
+			Item* item = ((ItemInst*)i)->item;
+			if (all || item->purpose == Item::WORLD)
+			{
+				item->proto = (ItemProto*)delete_item_list;
+				delete_item_list = item;
+			}
+		}
+	}
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE)
+    {
+        BSP_Node* n = (BSP_Node*)bsp;
+        if (n->bsp_child[0])
+			DeleteItemInsts(n->bsp_child[0],all);
+        if (n->bsp_child[1])
+			DeleteItemInsts(n->bsp_child[1],all);
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+    {
+        BSP_NodeShare* s = (BSP_NodeShare*)bsp;
+        if (s->bsp_child[0])
+			DeleteItemInsts(s->bsp_child[0],all);
+        if (s->bsp_child[1])
+			DeleteItemInsts(s->bsp_child[1],all);
+        Inst* i = s->head;
+        while (i)
+        {
+			if (i->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				Item* item = ((ItemInst*)i)->item;
+				if (all || item->purpose == Item::WORLD)
+				{
+					item->proto = (ItemProto*)delete_item_list;
+					delete_item_list = item;
+				}
+			}
+			i=i->next;
+        }                
+    }
+    else
+    {
+        assert(0);
+    }
+}
+
+static void DeleteSpriteInsts(BSP* bsp) 
+{
+    if (bsp->type == BSP::BSP_TYPE_LEAF)
+    {
+        Inst* i = ((BSP_Leaf*)bsp)->head;
+        while (i)
+        {
+			if (i->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				SpriteInst* si = (SpriteInst*)i;
+				si->sprite = (Sprite*)delete_sprite_list;
+				delete_sprite_list = si;
+			}
+            i=i->next;
+        }
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_INST)
+    {
+        Inst* i = (Inst*)bsp;
+		if (i->inst_type == Inst::INST_TYPE::SPRITE)
+		{
+			SpriteInst* si = (SpriteInst*)i;
+			si->sprite = (Sprite*)delete_sprite_list;
+			delete_sprite_list = si;
+		}
+	}
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE)
+    {
+        BSP_Node* n = (BSP_Node*)bsp;
+        if (n->bsp_child[0])
+			DeleteSpriteInsts(n->bsp_child[0]);
+        if (n->bsp_child[1])
+			DeleteSpriteInsts(n->bsp_child[1]);
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+    {
+        BSP_NodeShare* s = (BSP_NodeShare*)bsp;
+        if (s->bsp_child[0])
+			DeleteSpriteInsts(s->bsp_child[0]);
+        if (s->bsp_child[1])
+			DeleteSpriteInsts(s->bsp_child[1]);
+        Inst* i = s->head;
+        while (i)
+        {
+			if (i->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				SpriteInst* si = (SpriteInst*)i;
+				si->sprite = (Sprite*)delete_sprite_list;
+				delete_sprite_list = si;
+			}
+			i=i->next;
+        }                
+    }
+    else
+    {
+        assert(0);
+    }
+}
+
+static void CloneItemInsts(World* w, BSP* bsp)
+{
+    if (bsp->type == BSP::BSP_TYPE_LEAF)
+    {
+        Inst* i = ((BSP_Leaf*)bsp)->head;
+        while (i)
+        {
+			if (i->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				Item* item = ((ItemInst*)i)->item;
+				if (item->purpose == Item::EDIT)
+				{
+					Item* clone = CreateItem();
+					memcpy(clone, item, sizeof(Item));
+					clone->purpose = Item::WORLD;
+					clone->inst = 0;
+					clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw);
+				}
+			}
+            i=i->next;
+        }
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_INST)
+    {
+        Inst* i = (Inst*)bsp;
+		if (i->inst_type == Inst::INST_TYPE::ITEM)
+		{
+			Item* item = ((ItemInst*)i)->item;
+			if (item->purpose == Item::EDIT)
+			{
+				Item* clone = CreateItem();
+				memcpy(clone, item, sizeof(Item));
+				clone->purpose = Item::WORLD;
+				clone->inst = 0;
+				clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw);
+			}
+		}
+	}
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE)
+    {
+        BSP_Node* n = (BSP_Node*)bsp;
+        if (n->bsp_child[0])
+			CloneItemInsts(w,n->bsp_child[0]);
+        if (n->bsp_child[1])
+			CloneItemInsts(w,n->bsp_child[1]);
+    }
+    else
+    if (bsp->type == BSP::BSP_TYPE_NODE_SHARE)
+    {
+        BSP_NodeShare* s = (BSP_NodeShare*)bsp;
+        if (s->bsp_child[0])
+			CloneItemInsts(w,s->bsp_child[0]);
+        if (s->bsp_child[1])
+			CloneItemInsts(w,s->bsp_child[1]);
+        Inst* i = s->head;
+        while (i)
+        {
+			if (i->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				Item* item = ((ItemInst*)i)->item;
+				if (item->purpose == Item::EDIT)
+				{
+					Item* clone = CreateItem();
+					memcpy(clone, item, sizeof(Item));
+					clone->purpose = Item::WORLD;
+					clone->inst = 0;
+					clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw);
+				}
+			}
+			i=i->next;
+        }                
+    }
+    else
+    {
+        assert(0);
+    }
+}
+
+void ResetItemInsts(World* w)
+{
+	if (w && w->root)
+	{
+		delete_item_list = 0;
+		DeleteItemInsts(w->root, false); // prepares list only
+
+		Item* item = delete_item_list;
+		while (item)
+		{
+			Item* n = (Item*)item->proto;
+			DestroyItem(item); // destroys inst too!!!
+			item = n;
+		}
+
+		if (w->root)
+			CloneItemInsts(w,w->root); // clones immediately
+		RebuildWorld(w);
+	}
+}
 
 bool Mesh::Update(const char* path)
 {
@@ -2773,6 +3026,7 @@ World* CreateWorld()
     w->head_mesh = 0;
     w->tail_mesh = 0;
     w->insts = 0;
+	w->temp_insts = 0;
     w->head_inst = 0;
     w->tail_inst = 0;
     w->editable = 0;
@@ -2789,7 +3043,38 @@ void DeleteWorld(World* w)
     // killing bsp brings all instances to world list
 	if (w->root)
 	{
-		w->DeleteBSP(w->root);
+		////////////////////////////////////////////////
+		// items & their insts
+
+		delete_item_list = 0;
+		DeleteItemInsts(w->root, true); // prepares list only
+
+		Item* item = delete_item_list;
+		while (item)
+		{
+			Item* n = (Item*)item->proto;
+			DestroyItem(item); // destroys inst too!!!
+			item = n;
+		}
+
+		////////////////////////////////////////////////
+		// sprite insts
+
+		delete_sprite_list = 0;
+		if (w->root)
+			DeleteSpriteInsts(w->root);
+
+		SpriteInst* si = delete_sprite_list;
+		while (si)
+		{
+			SpriteInst* n = (SpriteInst*)si->sprite;
+			DeleteInst(si);
+			si = n;
+		}
+
+		if (w->root)
+			w->DeleteBSP(w->root);
+
 		w->root = 0;
 	}
 
@@ -3130,7 +3415,7 @@ void SaveWorld(World* w, FILE* f)
     } [num_of_instances];
     */
 
-    int num_of_instances = w->insts;
+    int num_of_instances = w->insts - w->temp_insts;
     fwrite(&num_of_instances,1,4,f);
 
     // non bsp first

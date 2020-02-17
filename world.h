@@ -71,6 +71,7 @@ void SaveWorld(World* w, FILE* f);
 World* LoadWorld(FILE* f, bool editor); 
 
 void PurgeItemInstCache();
+void ResetItemInsts(World* w);
 
 /*
 int AddInstDataProvider(World* w, void (*on_newinst)(Inst* i), void (*on_delinst)(Inst* i));

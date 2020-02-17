@@ -12,6 +12,8 @@
 #include "fast_rand.h"
 // #include "sprite.h"
 
+#include "inventory.h"
+
 #include "PerlinNoise.hpp"
 
 #define _USE_MATH_DEFINES
@@ -660,6 +662,17 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 
 void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/)
 {
+	if (!reps)
+	{
+		// item! frame contains purpose!
+		if (frame != Item::WORLD)
+			return;
+		anim = frame = 0;
+
+		static int _reps[4] = { -1,-1,-1,-1 };
+		reps = _reps;
+	}
+
 	if (global_refl_mode && s->projs == 1)
 		return;
 

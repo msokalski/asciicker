@@ -75,6 +75,8 @@ Terrain* terrain = 0;
 World* world = 0;
 Mesh* active_mesh = 0;
 Sprite* active_sprite = 0;
+Sprite* item_preview_sprite = 0; 
+int active_item = 0;
 
 struct SpritePrefs
 {
@@ -1880,6 +1882,8 @@ struct RenderContext
 		glDeleteBuffers(1, &ghost_vbo);
 		glDeleteProgram(ghost_prg);
 
+		if (ansi_buf)
+			free(ansi_buf);
 	}
 
 	void PaintGhost(const double* tm, int px, int py, int pz, uint16_t ghost[4 * HEIGHT_CELLS])
@@ -2081,6 +2085,13 @@ struct RenderContext
 
 	static void RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
 	{
+		if (!reps)
+		{
+			// item! frame contains purpose!
+			if (frame != Item::EDIT)
+				return;
+			anim = frame = 0;
+		}
 
 		RenderContext* rc = (RenderContext*)cookie;
 
@@ -3226,21 +3237,6 @@ static bool SpriteScan(A3D_DirItem item, const char* name, void* cookie)
 	buf[4095] = 0;
 
 	Sprite* s = 0;
-	/*
-	Sprite* s = GetFirstSprite();
-	while (s)
-	{
-		char sprite_name[256];
-		GetSpriteName(s, sprite_name, 256);
-
-		if (strcmp(name, sprite_name) == 0)
-			break;
-
-		s = GetNextSprite(s);
-	}
-
-	if (!s)
-	*/
 	{
 		s = LoadSprite(/*world,*/ buf, name);
 		if (s)
@@ -5072,7 +5068,7 @@ void my_render(A3D_WND* wnd)
 					add_verts = false;
 					build_poly = false;
 				}
-				if (active_mesh && ImGui::BeginTabItem("SPRITE"))
+				if (active_sprite && ImGui::BeginTabItem("SPRITE"))
 				{
 					edit_mode = 4;
 
@@ -5118,6 +5114,87 @@ void my_render(A3D_WND* wnd)
 					ImGui::EndTabItem();
 				}
 				if (active_sprite && pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
+				if (item_proto_lib && edit_mode != 5)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
+					add_verts = false;
+					build_poly = false;
+
+					item_preview_sprite = 0;
+				}
+				if (item_proto_lib && ImGui::BeginTabItem("ITEM"))
+				{
+					edit_mode = 5;
+
+					// when putting new instance we do:
+					// 1. pretranslate (to have 0 in rot/scale center)
+					// 2. scale by constant_xyz * random_xyz 
+					// 2. rotate around z by given angle + random_z
+					// 3. rotate by given world's xy axis + random_xy (length is angle)
+					// 4. rotate toward terrain normal by given weight
+					// 5. post translate by constant xyz + random xyz
+
+					extern int bsp_insts, bsp_nodes, bsp_tests;
+					ImGui::Text("INSTS:%d, NODES:%d, TESTS:%d \n ", bsp_insts, bsp_nodes, bsp_tests);
+
+					const char* mode = "";
+
+					if (io.KeyAlt)
+						mode = "ADD/REMOVE TILES";
+					else
+						if (io.KeyCtrl)
+							mode = "DELETE SPRITE";
+						else
+							mode = "INSERT SPRITE";
+
+					ImGui::Text("MODE (ctrl): %s", mode);
+
+
+					// TODO: 
+					// add count
+
+					// TODO:
+					// add reset WORLD items 
+					// (delete all WORLD items, rescan all EDIT items and create WORLD clones)
+
+					if (ImGui::Button("RESET items"))
+					{
+						ResetItemInsts(world);
+					}
+
+					struct StaticNames
+					{
+						StaticNames()
+						{
+							items = 0;
+							while (item_proto_lib[items].desc)
+							{
+								names[items] = item_proto_lib[items].desc;
+								items++;
+							}
+						}
+
+						int items;
+						const char* names[256];
+					};
+
+					static StaticNames names;
+					ImGui::ListBox("Item", &active_item, names.names, names.items);
+
+					// for preview in widget
+					active_sprite = item_proto_lib[active_item].sprite_2d;
+					item_preview_sprite = item_proto_lib[active_item].sprite_3d;
+
+					ImGui::EndTabItem();
+				}
+				if (item_proto_lib && pushed)
 				{
 					pushed = false;
 					ImGui::PopStyleVar();
@@ -5741,7 +5818,6 @@ void my_render(A3D_WND* wnd)
 
 	bool sprite_preview = false;
 	float sprite_preview_pos[3] = { 0,0,0 };
-
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -6524,6 +6600,95 @@ void my_render(A3D_WND* wnd)
 						}
 					}
 				}
+				else
+				if (edit_mode == 5)
+				{
+					if (!inst_added || !io.MouseDown[0])
+					{
+						Inst* inst = 0;
+						if (io.KeyCtrl || io.KeyShift)
+						{
+							// HITTEST!
+							inst = HitWorld(world, ray_p, ray_v, hit, hit_nrm);
+
+							if (inst)
+								printf("HIT !!!\n");
+							else
+								printf("miss\n");
+
+							// and set this inst for hover hilight
+							hover_inst = inst;
+						}
+
+						if (io.KeyShift)
+						{
+							// pick, works also with CTRL (delete)
+							inst_preview = 0;
+
+							if (inst && !inst_added && io.MouseDown[0])
+							{
+								active_mesh = GetInstMesh(inst);
+								inst_added = true;
+							}
+						}
+						else
+						if (!io.KeyCtrl)
+						{
+							if (!inst_added && io.MouseDown[0])
+							{
+								int flags = INST_USE_TREE | INST_VISIBLE;
+								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
+
+								float pos[3] = { hit[0], hit[1], hit[2] };
+
+								Item* item = CreateItem();
+								item->proto = item_proto_lib + active_item;
+								item->count = 1;
+								item->purpose = Item::EDIT;
+								item->inst = 0;
+								item->inst = URDO_Create(world, item, flags, pos, 0);
+
+								// and world clone
+								Item* clone = CreateItem();
+								clone->proto = item_proto_lib + active_item;
+								clone->count = 1;
+								clone->purpose = Item::WORLD;
+								clone->inst = 0;
+								clone->inst = CreateInst(world, clone, flags, pos, 0);
+
+								inst_added = true;
+								RebuildWorld(world);
+							}
+							else
+							{
+								// we'll need to paint active_mesh with inst_tm
+								sprite_preview = true;
+								sprite_preview_pos[0] = hit[0];
+								sprite_preview_pos[1] = hit[1];
+								sprite_preview_pos[2] = hit[2];
+							}
+						}
+
+						if (io.KeyCtrl)
+						{
+							inst_preview = 0;
+
+							if (inst)
+							{
+								if (!inst_added && io.MouseDown[0])
+								{
+									// delete this inst (clear hilight too)
+									hover_inst = 0;
+
+									//DeleteInst(inst);
+									URDO_Delete(inst);
+
+									inst_added = true;
+								}
+							}
+						}
+					}
+				}
 			}
 			else
 			{
@@ -6681,11 +6846,18 @@ void my_render(A3D_WND* wnd)
 
 	if (sprite_preview)
 	{
-		SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
-		int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
-		int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
-		float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
-		RenderContext::RenderSprite(active_sprite, sprite_preview_pos, _yaw, _anim, _frame, sp->t, rc);
+		if (item_preview_sprite)
+		{
+			RenderContext::RenderSprite(item_preview_sprite, sprite_preview_pos, 0, 0, Item::EDIT, 0, rc);
+		}
+		else
+		{
+			SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
+			int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
+			int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
+			float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
+			RenderContext::RenderSprite(active_sprite, sprite_preview_pos, _yaw, _anim, _frame, sp->t, rc);
+		}
 	}
 
 //	if (sprite_preview)
@@ -7373,6 +7545,9 @@ void my_close(A3D_WND* wnd)
 	
 	URDO_Purge();
 	DeleteTerrain(terrain);
+
+	PurgeItemInstCache();
+
 	MyFont::Free();
 	MyMaterial::Free();
 
@@ -7452,6 +7627,9 @@ void my_ptydata(A3D_PTY* pty)
 
 int main(int argc, char *argv[]) 
 {
+#ifdef _WIN32
+	// _CrtSetBreakAlloc(17113);
+#endif
 	LoadSprites();
 
 #if 0
@@ -7513,14 +7691,21 @@ int main(int argc, char *argv[])
 	a3dOpen(&pi, &gd, 0);
 	a3dLoop();
 
-#if 0
-	FreeSprite(player_sprite);
-	FreeSprite(attack_sprite);
-	FreeSprite(inventory_sprite);
-#endif
+	// FreeSprites();
 
-	FreeSprites();
-	PurgeItemInstCache();
+	// handle double refs
+	while (Sprite* s = GetFirstSprite())
+	{
+		SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(s);
+		SetSpriteCookie(s,0);
+		if (sp)
+			free(sp);
+		FreeSprite(s);
+	}
+
+#ifdef _WIN32
+	_CrtDumpMemoryLeaks();
+#endif
 
 
 	return 0;
