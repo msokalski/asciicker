@@ -37,7 +37,7 @@ int main()
     LoadSprites();
 
     {
-        FILE* f = fopen("a3d/game_sprites.a3d","rb");
+        FILE* f = fopen("a3d/game_items.a3d","rb");
 
         if (f)
         {

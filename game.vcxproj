@@ -203,7 +203,7 @@
     <ClCompile Include="tinfl.c" />
     <ClCompile Include="world.cpp" />
     <ClCompile Include="x11.cpp" />
-    <ClCompile Include="xterm.cpp" />
+    <ClCompile Include="game_app.cpp" />
     <ClCompile Include="gl.c" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="physics.cpp" />

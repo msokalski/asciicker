@@ -110,9 +110,6 @@
     <ClCompile Include="x11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="xterm.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="screen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -126,6 +123,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="world.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="game_app.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

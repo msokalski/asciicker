@@ -176,8 +176,20 @@ void URDO::Free()
 			break;
 
 		case CMD_INST_CREATE:
+		{
+			URDO_InstCreate* ic = (URDO_InstCreate*)this;
+			if (ic->mode == 2) // item
+			{
+				if (ic->item)
+				{
+					int a=0;
+					ic->item->inst = 0;
+					DestroyItem(ic->item);
+				}
+			}
 			bytes -= sizeof(URDO_InstCreate);
 			break;
+		}
 
 		default:
 			assert(0);
@@ -202,6 +214,8 @@ URDO* URDO::Alloc(CMD c)
 	}
 
 	URDO* urdo = (URDO*)malloc(s);
+	memset(urdo, 0, s);
+
 	bytes += s;
 
 	if (stack_depth)

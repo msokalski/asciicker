@@ -452,6 +452,10 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 
 int main(int argc, char* argv[])
 {
+#ifdef _WIN32
+	//_CrtSetBreakAlloc(2239);
+#endif
+
     // if there is no '-term' arg given run A3D (GL) term
     // ...
 
@@ -498,7 +502,7 @@ int main(int argc, char* argv[])
         global_lt[3] = lt[3];
 
         {
-            FILE* f = fopen("a3d/game_sprites.a3d","rb");
+            FILE* f = fopen("a3d/game_items.a3d","rb");
 
             if (f)
             {
@@ -571,6 +575,11 @@ int main(int argc, char* argv[])
 
 		PurgeItemInstCache();
 
+		FreeSprites();
+
+#ifdef _WIN32
+		_CrtDumpMemoryLeaks();
+#endif
         return 0;
     }
 
@@ -1305,6 +1314,12 @@ int main(int argc, char* argv[])
 #endif
 
 	PurgeItemInstCache();
+
+	FreeSprites();
+
+#ifdef _WIN32
+	_CrtDumpMemoryLeaks();
+#endif
 
 	return 0;
 }

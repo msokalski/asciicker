@@ -1875,45 +1875,9 @@ Sprite* GetSprite(const SpriteReq* req)
 
 void FreeSprites()
 {
-	if (wolf)
-		FreeSprite(wolf);
-
-	if (wolf_attack)
-		FreeSprite(wolf_attack);
-
-	if (wolf_fall)
-		FreeSprite(wolf_fall);
-
-	if (player_naked)
-		FreeSprite(player_naked);
-
-	if (character_button)
-		FreeSprite(character_button);
-
-	for (int a = 0; a < ARMOR::SIZE; a++)
-	{
-		for (int h = 0; h < HELMET::SIZE; h++)
-		{
-			for (int s = 0; s < SHIELD::SIZE; s++)
-			{
-				for (int w = 0; w < WEAPON::SIZE; w++)
-				{
-					if (player[a][h][s][w])
-						FreeSprite(player[a][h][s][w]);
-					if (player_fall[a][h][s][w])
-						FreeSprite(player_fall[a][h][s][w]);
-					if (wolfie[a][h][s][w])
-						FreeSprite(wolfie[a][h][s][w]);
-					if (wolfie_fall[a][h][s][w])
-						FreeSprite(wolfie_fall[a][h][s][w]);
-					if (player_attack[a][h][s][w])
-						FreeSprite(player_attack[a][h][s][w]);
-					if (wolfie_attack[a][h][s][w])
-						FreeSprite(wolfie_attack[a][h][s][w]);
-				}
-			}
-		}
-	}
+	// handles double refs but not sprite prefs!
+	while (Sprite* s = GetFirstSprite())
+		FreeSprite(s);
 }
 
 Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)

@@ -7628,7 +7628,7 @@ void my_ptydata(A3D_PTY* pty)
 int main(int argc, char *argv[]) 
 {
 #ifdef _WIN32
-	// _CrtSetBreakAlloc(17113);
+	//_CrtSetBreakAlloc(11952);
 #endif
 	LoadSprites();
 
@@ -7691,17 +7691,17 @@ int main(int argc, char *argv[])
 	a3dOpen(&pi, &gd, 0);
 	a3dLoop();
 
-	// FreeSprites();
-
-	// handle double refs
-	while (Sprite* s = GetFirstSprite())
+	Sprite* s = GetFirstSprite();
+	while (s)
 	{
-		SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(s);
+		void* sp = GetSpriteCookie(s);
 		SetSpriteCookie(s,0);
 		if (sp)
 			free(sp);
-		FreeSprite(s);
+		s = s->next;
 	}
+
+	FreeSprites();
 
 #ifdef _WIN32
 	_CrtDumpMemoryLeaks();
