@@ -5,7 +5,7 @@
 BIN := .run/game
 
 # source files
-# SRCS :=	xterm.cpp \
+# SRCS :=	game_app.cpp \
 #		game.cpp \
 # 		render.cpp \
 # 		terrain.cpp \
@@ -22,8 +22,8 @@ BIN := .run/game
 SRCS :=	gl.c \
 		x11.cpp \
         term.cpp \
-		xterm.cpp \
 		game.cpp \
+		game_app.cpp \
 		render.cpp \
 		terrain.cpp \
 		world.cpp \

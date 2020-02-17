@@ -45,7 +45,7 @@ emcc --emrun -O3 \
     -s EXPORTED_FUNCTIONS='["_main","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
-    --preload-file a3d/game_sprites.a3d \
+    --preload-file a3d/game_items.a3d \
     --preload-file sprites/grid-alpha-sword.xp \
     --preload-file sprites/grid-apple.xp \
     --preload-file sprites/grid-beet.xp \
