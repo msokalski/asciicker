@@ -23,11 +23,11 @@ struct Inventory
 		// ...
 	};
 
-	int items;
-	MyItem item[max_items];
+	int my_items;
+	MyItem my_item[max_items];
 
-	bool InsertItem(Item* item, const int xy[2]); 
-	bool RemoveItem(int index, const float pos[3], float yaw);
+	bool InsertItem(Item* item, int xy[2]); 
+	bool RemoveItem(int index, float pos[3], float yaw);
 
 	int weight; // sum(Item* i=first..last) { i.count * i.proto->weight }
 	int area; // sum(Item* i=first..last) { (i.proto->sprite_2d.width+1)*(i.proto->sprite_2d.height+1) / 16 }

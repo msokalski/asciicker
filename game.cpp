@@ -1,4 +1,5 @@
 #include <string.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include "game.h"
 #include "platform.h"
@@ -1911,7 +1912,6 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->water = water;
 	g->prev_yaw = yaw;
 
-
 	return g;
 }
 
@@ -2383,8 +2383,145 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// update / animate:
 	player.dir = io.player_dir;
 
-	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
+	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
+
+	if (!player.talk_box)
+	{
+		// TODO sort items based on screen-x coord projection (affected by viewing yaw!)
+		// ...
+
+		int items = 0, items_width = 0;
+		int max_height = 0;
+		while (inrange[items])
+		{
+			Sprite::Frame* frame = inrange[items]->proto->sprite_2d->atlas;
+
+			// TODO:
+			// break here if width too big to fit on screen!
+
+			max_height = max_height < frame->height ? frame->height : max_height;
+			items_width += frame->width;
+			items++;
+		}
+
+
+		int items_x = (width - (items_width + items - 1)) / 2;
+		int items_y = height / 2 - 2;
+
+		if (items)
+		{
+			int y = items_y - max_height - 1;
+			AnsiCell* ac;
+			ac = ptr + items_x + y * width;
+			ac->bk = AverageGlyph(ac, 0xF);
+			ac->fg = 16;
+			ac->gl = 192;
+
+			y++;
+
+			for (; y < items_y; y++)
+			{
+				AnsiCell* ac;
+				ac = ptr + items_x + y * width;
+				ac->bk = AverageGlyph(ac, 0xF);
+				ac->fg = 16;
+				ac->gl = 179;
+			}
+
+			ac = ptr + items_x + y * width;
+			ac->bk = AverageGlyph(ac, 0xF);
+			ac->fg = 16;
+			ac->gl = 218;
+
+			items_x++;
+		}
+
+		for (int i = 0; i < items; i++)
+		{
+			if (input.last_hit_char == '1' + i)
+			{
+				// check if in inventory there is xy to put this item at
+				// ...
+
+				// put this item to inventory
+				int xy[2] = { 0,0 };
+				inventory.InsertItem(inrange[i], xy);
+			}
+
+			Sprite::Frame* frame = inrange[i]->proto->sprite_2d->atlas;
+
+			int y = items_y - (max_height + frame->height) / 2;
+			BlitSprite(ptr, width, height, frame, items_x, y);
+
+			for (int x = items_x; x < items_x + frame->width; x++)
+			{
+				AnsiCell* ac;
+				ac = ptr + x + items_y * width;
+				ac->bk = AverageGlyph(ac, 0xF);
+				ac->fg = 16;
+				ac->gl = 196;
+				ac = ptr + x + (items_y - max_height - 1) * width;
+				if (x == items_x + frame->width / 2)
+				{
+					ac->bk = 16;
+					ac->fg = 231; // wh
+					ac->gl = '1' + i;
+				}
+				else
+				{
+					ac->bk = AverageGlyph(ac, 0xF);
+					ac->fg = 16;
+					ac->gl = 196;
+				}
+			}
+
+			items_x += frame->width;
+
+			y = items_y - max_height - 1;
+
+			AnsiCell* ac;
+			ac = ptr + items_x + y * width;
+			ac->bk = AverageGlyph(ac, 0xF);
+			ac->fg = 16;
+
+			if (i == items - 1) // L
+			{
+				ac->gl = 217;
+			}
+			else // T
+			{
+				ac->gl = 193;
+			}
+
+			y++;
+
+			for (; y < items_y; y++)
+			{
+				AnsiCell* ac;
+				ac = ptr + items_x + y * width;
+				ac->bk = AverageGlyph(ac, 0xF);
+				ac->fg = 16;
+				ac->gl = 179;
+			}
+
+			ac = ptr + items_x + y * width;
+			ac->bk = AverageGlyph(ac, 0xF);
+			ac->fg = 16;
+
+			if (i == items - 1) // L
+			{
+				ac->gl = 191;
+			}
+			else // T
+			{
+				ac->gl = 194;
+			}
+
+			items_x++;
+		}
+	}
+
 
 	{
 		HPBar bar;
@@ -2493,6 +2630,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
+	input.last_hit_char = 0;
+
 	stamp = _stamp;
 }
 
@@ -2572,12 +2711,16 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				player.SetActionStand(stamp);
 			if (key == A3D_END)
 				player.SetActionFall(stamp);
+
+
+			/*
 			if (key == A3D_1)
 				player.SetMount(!player.req.mount);
 			if (key == A3D_2)
 				player.SetWeapon(!player.req.weapon);
 			if (key == A3D_3)
 				player.SetShield(!player.req.shield);
+			*/
 		}
 
 		if (!auto_rep)
@@ -2611,6 +2754,36 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	else
 	if (keyb == GAME_KEYB::KEYB_CHAR)
 	{
+		input.last_hit_char = key;
+
+		if (key == '0')
+		{
+			// drop last item from inventory
+			if (inventory.my_items)
+			{
+				float ang = rand() % 360;
+
+				double ret[4], nrm[4];
+				double dpos[3] =
+				{
+					player.pos[0] + (float)(2 * cos(ang*M_PI / 180)),
+					player.pos[1] + (float)(2 * sin(ang*M_PI / 180)),
+					0
+				};
+				double downward[3] = { 0,0,-1 };
+				HitTerrain(terrain, dpos, downward, ret, nrm);
+
+				float _pos[3] =
+				{
+					ret[0],
+					ret[1],
+					ret[2]
+				};
+
+				inventory.RemoveItem(inventory.my_items - 1, _pos, prev_yaw);
+			}
+		}
+
 		if (key != 9) // we skip all TABs
 		{
 			if (key == '\r') // windows only? todo: check linux and browsers

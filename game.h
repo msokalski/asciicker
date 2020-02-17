@@ -139,6 +139,7 @@ struct Game
 	// accumulated input state
 	struct Input 
 	{
+		int last_hit_char;
 		uint8_t key[32]; // keyb state
 
 		// we split touch input to multiple separate mice with left button only

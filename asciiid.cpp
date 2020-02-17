@@ -2085,12 +2085,16 @@ struct RenderContext
 
 	static void RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
 	{
-		if (!reps)
+		if (anim<0)
 		{
-			// item! frame contains purpose!
-			if (frame != Item::EDIT)
+			int purpose = frame;
+			Item* item = (Item*)reps;
+			if (purpose != Item::EDIT)
 				return;
 			anim = frame = 0;
+
+			static int _reps[4] = { -1,-1,-1,-1 };
+			reps = _reps;
 		}
 
 		RenderContext* rc = (RenderContext*)cookie;
@@ -4488,6 +4492,35 @@ void my_render(A3D_WND* wnd)
 			}
 
 			printf("--------\n");
+			printf("darken\n");
+			for (int j = 0; j < 16; j++)
+			{
+				for (int i = 0; i < 16; i++)
+				{
+					int v = j * 16 + i;
+					if (v < 16 || v >= 16 + 6 * 6 * 6)
+					{
+						printf("0xFF,");
+						continue;
+					}
+
+					int c = v - 16;
+					int cr = c / 36;
+					c -= cr * 36;
+					int cg = c / 6;
+					c -= cr * 6;
+					int cb = c;
+
+					cr = cr ? cr - 1 : 0;
+					cg = cg ? cg - 1 : 0;
+					cb = cb ? cb - 1 : 0;
+
+					v = 16 + cb + cg * 6 + cr * 36;
+
+					printf("0x%02X,",v);
+				}
+				printf("\n");
+			}
 
 			free(img);
 		}

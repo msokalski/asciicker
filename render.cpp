@@ -300,6 +300,11 @@ struct Renderer
 	int sprites;
 	SpriteRenderBuf* sprites_alloc;
 
+	static const int max_items = 9; // picking with keyb: 1-9, 0-drop
+	int items, sorts;
+	Item* item_sort[max_items+1]; // +1 for null-terminator
+	float item_dist[max_items];
+
 	uint8_t* buffer;
 	int buffer_size; // ansi_buffer allocation size in cells (minimize reallocs)
 
@@ -662,21 +667,60 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 
 void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/)
 {
-	if (!reps)
+	Renderer* r = (Renderer*)cookie;
+
+	if (anim < 0)
 	{
-		// item! frame contains purpose!
-		if (frame != Item::WORLD)
+		int purpose = frame;
+		Item* item = (Item*)reps;
+		if (purpose != Item::WORLD)
 			return;
 		anim = frame = 0;
 
 		static int _reps[4] = { -1,-1,-1,-1 };
 		reps = _reps;
+
+		// calc distance to player
+		// and choose upto 3 closest items
+		if (!global_refl_mode)
+		{
+			float dx = r->pos[0] - pos[0];
+			float dy = r->pos[1] - pos[1];
+			float dz = (r->pos[2]+3*HEIGHT_SCALE - pos[2]) / HEIGHT_SCALE;
+
+			float dist = dx * dx + dy * dy + dz * dz;
+
+			float max_item_dist = 20;
+			if (dist < max_item_dist)
+			{
+				int sort = 0;
+				for (; sort < r->items; sort++)
+				{
+					if (dist < r->item_dist[sort])
+					{
+						int last = r->items < r->max_items ? r->items : r->max_items - 1;
+						for (int move = last; move > sort; move--)
+						{
+							r->sorts++;
+							r->item_sort[move] = r->item_sort[move - 1];
+							r->item_dist[move] = r->item_dist[move - 1];
+						}
+						break;
+					}
+				}
+				if (sort < r->max_items)
+				{
+					r->item_sort[sort] = item;
+					r->item_dist[sort] = dist;
+					if (r->items < r->max_items)
+						r->items++;
+				}
+			}
+		}
 	}
 
 	if (global_refl_mode && s->projs == 1)
 		return;
-
-	Renderer* r = (Renderer*)cookie;
 
 	// transform and append to sprite render list
 	if (r->sprites == r->sprites_alloc_size)
@@ -699,7 +743,7 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 			// convert from samples to cells
 			buf->s_pos[0] = (tx - 1) >> 1;
 			buf->s_pos[1] = (ty - 1) >> 1;
-			buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
+			buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2);
 		}
 		/*
 		else
@@ -724,7 +768,7 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 			// convert from samples to cells
 			buf->s_pos[0] = (tx - 1) >> 1;
 			buf->s_pos[1] = (ty - 1) >> 1;
-			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
+			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
 		}
 		/*
 		else
@@ -1276,7 +1320,9 @@ int AverageGlyph(const AnsiCell* ptr, int mask)
 		num++;
 	}
 
-	return sum > num * 2 ? ptr->fg : ptr->bk;
+	if (sum > num * 2)
+		return ptr->fg != 255 ? ptr->fg : ptr->bk;
+	return ptr->bk != 255 ? ptr->bk : ptr->fg;
 
 	/*
 	// too complex, results in massive color bleeding
@@ -1814,11 +1860,6 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 				}
 			}
 
-			if (dst->bk == 255 || dst->fg == 255)
-			{
-				int a = 0;
-			}
-			
 			///////////////////////////
 
 			/*
@@ -1981,7 +2022,7 @@ void DeleteRenderer(Renderer* r)
 	free(r);
 }
 
-bool Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Sprite* sprite, int anim, int frame, float dir)
+Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Sprite* sprite, int anim, int frame, float dir)
 {
 	AnsiCell* out_ptr = ptr;
 
@@ -2186,6 +2227,9 @@ bool Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
 		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
+
+	r->items = 0;
+	r->sorts = 0;
 
 	r->sprites = 0;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
@@ -2967,12 +3011,13 @@ bool Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		int anim = buf->anim;
 		r->RenderSprite(out_ptr, width, height, buf->sprite, buf->refl, anim, frame, buf->angle, buf->s_pos);
 	}
-
+	
 	/*
 	int invpos[3] = { 1,1,0 };
 	if (inventory_sprite)
 		r->RenderSprite(out_ptr, width, height, inventory_sprite, false, 0, 0, 0, invpos);
 	*/
 
-	return true;
+	r->item_sort[r->items] = 0;
+	return r->item_sort;
 }

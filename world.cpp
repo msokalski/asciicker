@@ -1868,7 +1868,7 @@ struct World
 			if (i->inst_type == Inst::INST_TYPE::ITEM)
 			{
 				ItemInst* si = (ItemInst*)i;
-				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, 0, si->item->purpose,0, cookie);
+				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, -1, si->item->purpose, (int*)si->item, cookie);
 			}
         }
         else
@@ -1972,7 +1972,7 @@ struct World
 			if (i->inst_type == Inst::INST_TYPE::ITEM)
 			{
 				ItemInst* si = (ItemInst*)i;
-				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, 0, si->item->purpose, 0, cookie);
+				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, -1, si->item->purpose, (int*)si->item, cookie);
 			}
 		}
         else
