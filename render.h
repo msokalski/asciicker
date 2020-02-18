@@ -46,6 +46,7 @@ void DeleteRenderer(Renderer* r);
 Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		// scene
 			float zoom, float yaw, const float pos[3], const float lt[4],	// view
 			int width, int height, AnsiCell* ptr,  // target
-			Sprite* sprite, int anim, int frame, float dir);	// player
+			Sprite* sprite, int anim, int frame, float dir, 	// player
+			const int scene_shift[2]); // special fx
 
 int AverageGlyph(const AnsiCell* ptr, int mask);

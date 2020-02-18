@@ -102,6 +102,8 @@ struct Game
 	bool show_keyb; // activated together with talk_box by clicking on character
 	int keyb_hide;  // show / hide animator (vertical position)
 
+	bool show_inventory;
+	int scene_shift;
 	bool show_buts; // true only if no popup is visible
 	int bars_pos; // used to hide buts (0..7)
 
@@ -124,8 +126,16 @@ struct Game
 	Renderer* renderer;
 	Physics* physics;
 
+	Item** items_inrange;
+	int items_count;
+	int items_xarr[10];
+	int items_ylo;
+	int items_yhi;
+
 	Human player;
 	Inventory inventory;
+	bool DropItem(int index);
+	bool PickItem(Item* item);
 
 	int npcs;
 	Character* npc;

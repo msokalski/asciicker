@@ -290,8 +290,8 @@ inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], dou
 	double t = //f * edge2.dotProduct(q);
 		f * (edge2[0] * q[0] + edge2[1] * q[1] + edge2[2] * q[2]);
 
-	if (positive_only && t < EPSILON)
-		  return false;
+//	if (positive_only && t < EPSILON)
+//		  return false;
 
 	ret[0] = ray[6] + ray[3] * t;
 	ret[1] = ray[7] + ray[4] * t;

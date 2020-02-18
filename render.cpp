@@ -2022,7 +2022,7 @@ void DeleteRenderer(Renderer* r)
 	free(r);
 }
 
-Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Sprite* sprite, int anim, int frame, float dir)
+Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Sprite* sprite, int anim, int frame, float dir, const int scene_shift[2])
 {
 	AnsiCell* out_ptr = ptr;
 
@@ -2156,8 +2156,8 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 	tm[11] = 0;
 	//tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + pos[2] * tm[8]) * HEIGHT_CELLS;
 	//tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + pos[2] * tm[9]) * HEIGHT_CELLS;
-	tm[12] = dw*0.5 - (pos[0] * tm[0] * HEIGHT_CELLS + pos[1] * tm[4] * HEIGHT_CELLS + pos[2] * tm[8]);
-	tm[13] = dh*0.5 - (pos[0] * tm[1] * HEIGHT_CELLS + pos[1] * tm[5] * HEIGHT_CELLS + pos[2] * tm[9]);
+	tm[12] = dw*0.5 - (pos[0] * tm[0] * HEIGHT_CELLS + pos[1] * tm[4] * HEIGHT_CELLS + pos[2] * tm[8]) + scene_shift[0]*2;
+	tm[13] = dh*0.5 - (pos[0] * tm[1] * HEIGHT_CELLS + pos[1] * tm[5] * HEIGHT_CELLS + pos[2] * tm[9]) + scene_shift[1]*2;
 	tm[14] = 0.0; //-1.0;
 	tm[15] = 1.0;
 
@@ -2216,8 +2216,8 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 		clip_tm[9] = +cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
 		clip_tm[10] = +2. / 0xffff;
 		clip_tm[11] = 0;
-		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + pos[2] * clip_tm[8]);
-		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + pos[2] * clip_tm[9]);
+		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + pos[2] * clip_tm[8] - (double)scene_shift[0]*2/width );
+		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + pos[2] * clip_tm[9] - (double)scene_shift[1]*2/height);
 		clip_tm[14] = -1.0;
 		clip_tm[15] = 1.0;
 
@@ -2246,9 +2246,9 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
 
-	int sh_x = width+1;// & ~1;
+	int sh_x = width+1 +scene_shift[0]*2; // & ~1;
 	
-	for (int y = 0; y < dh; y++)
+	for (int y = 0 + scene_shift[1]*2; y < dh + scene_shift[1]*2; y++)
 	{
 		for (int x = sh_x-5; x <= sh_x+5; x++)
 		{
@@ -2305,8 +2305,8 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 
 	//tm[12] = dw*0.5 - (pos[0] * tm[0] + pos[1] * tm[4] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[8]) * HEIGHT_CELLS;
 	//tm[13] = dh*0.5 - (pos[0] * tm[1] + pos[1] * tm[5] + ((2 * water / HEIGHT_CELLS) - pos[2]) * tm[9]) * HEIGHT_CELLS;
-	tm[12] = dw*0.5 - (pos[0] * tm[0] * HEIGHT_CELLS + pos[1] * tm[4] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[8]);
-	tm[13] = dh*0.5 - (pos[0] * tm[1] * HEIGHT_CELLS + pos[1] * tm[5] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[9]);
+	tm[12] = dw*0.5 - (pos[0] * tm[0] * HEIGHT_CELLS + pos[1] * tm[4] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[8]) + scene_shift[0]*2;
+	tm[13] = dh*0.5 - (pos[0] * tm[1] * HEIGHT_CELLS + pos[1] * tm[5] * HEIGHT_CELLS + ((2 * water) - pos[2]) * tm[9]) + scene_shift[1]*2;
 	tm[14] = 2*r->water;
 
 	r->mul[0] = tm[0];
@@ -2355,8 +2355,8 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 		clip_tm[9] = -cos30 / HEIGHT_SCALE / (0.5 * dh) * ds * HEIGHT_CELLS;
 		clip_tm[10] = -2. / 0xffff;
 		clip_tm[11] = 0;
-		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2 * r->water - pos[2]) * clip_tm[8]);
-		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2 * r->water - pos[2]) * clip_tm[9]);
+		clip_tm[12] = -(pos[0] * clip_tm[0] + pos[1] * clip_tm[4] + (2 * r->water - pos[2]) * clip_tm[8] - (double)scene_shift[0] * 2 / width);
+		clip_tm[13] = -(pos[0] * clip_tm[1] + pos[1] * clip_tm[5] + (2 * r->water - pos[2]) * clip_tm[9] - (double)scene_shift[1] * 2 / height);
 		clip_tm[14] = +1.0;
 		clip_tm[15] = 1.0;
 
@@ -2976,8 +2976,8 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 		{
 			int player_pos[3]=
 			{
-				width / 2,
-				height / 2,
+				width / 2 + scene_shift[0],
+				height / 2 + scene_shift[1],
 				(int)floor(pos[2] + 0.5) + HEIGHT_SCALE / 4 
 			};
 			r->RenderSprite(out_ptr, width, height, sprite, false, anim, frame, ang, player_pos);
@@ -2988,8 +2988,8 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 
 			int player_pos[3] =
 			{
-				width / 2,
-				height / 2 - (int)floor(2 * (pos[2] - r->water)*dy_dz + 0.5),
+				width / 2 + scene_shift[0],
+				height / 2 - (int)floor(2 * (pos[2] - r->water)*dy_dz + 0.5) + scene_shift[1],
 				(int)floor(2 * r->water - pos[2] + 0.5) - HEIGHT_SCALE / 4
 			};
 			r->RenderSprite(out_ptr, width, height, sprite, true, anim, frame, ang, player_pos);

@@ -1609,6 +1609,7 @@ Sprite* wolf_fall = 0;   // todo
 Sprite* player_naked = 0; // what to do?
 
 Sprite* character_button = 0;
+Sprite* inventory_sprite = 0;
 
 #define LOAD_SPRITE(n) LoadSprite("./sprites/" n, n, 0, false);
 
@@ -1620,6 +1621,7 @@ void LoadSprites()
 
 	// main buts
 	character_button = LoadSprite("./sprites/character.xp", "character.xp", 0, false);
+	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory.xp", 0, false);
 
 	for (int a = 0; a < ARMOR::SIZE; a++)
 	{
@@ -1929,6 +1931,91 @@ void DeleteGame(Game* g)
 	}
 }
 
+bool Game::PickItem(Item* item)
+{
+	// automatically calculates xy in inventory
+	int iw = (item->proto->sprite_2d->atlas->width + 1) / 4;
+	int ih = (item->proto->sprite_2d->atlas->height + 1) / 4;
+
+	int xx = inventory.width - iw + 1;
+	for (int y = inventory.height - ih; y >= 0; y--)
+	{
+		for (int x = 0; x < xx; x++)
+		{
+			bool ok = true;
+			for (int v = y; v < y + ih && ok; v++)
+			{
+				for (int u = x; u < x + iw && ok; u++)
+				{
+					int i = u + v * inventory.width;
+					if (inventory.bitmask[i >> 3] & 1 << (i & 7))
+						ok = false;
+				}
+			}
+
+			if (!ok)
+				continue;
+
+			int xy[2] = { x,y };
+			inventory.InsertItem(item, xy);
+
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Game::DropItem(int index)
+{
+	// automatically calculates pos[3]
+
+	assert(index >= 0 && index < inventory.my_items);
+	float ang = rand() % 360;
+
+	double ret[4];
+	double dpos[3] =
+	{
+		player.pos[0] + (float)(2 * cos(ang*M_PI / 180)),
+		player.pos[1] + (float)(2 * sin(ang*M_PI / 180)),
+		0
+	};
+	double downward[3] = { 0,0,-1 };
+	double z = 0;
+	bool ok = false;
+	ok = 0 != HitTerrain(terrain, dpos, downward, ret, 0);
+	if (ok)
+	{
+		z = ret[2];
+		dpos[2] = player.pos[2] + 3 * HEIGHT_SCALE;
+		downward[2] = -dpos[2];
+		bool ok2 = 0 != HitWorld(world, dpos, downward, ret, 0, true);
+		if (ok2 && ret[2] > z)
+			z = ret[2];
+	}
+	else
+	{
+		dpos[2] = player.pos[2] + 3 * HEIGHT_SCALE;
+		downward[2] = -dpos[2];
+		ok = 0 != HitWorld(world, dpos, downward, ret, 0, true);
+		if (ok)
+			z = ret[2];
+	}
+
+	if (ok)
+	{
+		float _pos[3] =
+		{
+			dpos[0],
+			dpos[1],
+			(float)z
+		};
+
+		inventory.RemoveItem(index, _pos, prev_yaw);
+	}
+
+	return ok;
+}
+
 void Game::ScreenToCell(int p[2]) const
 {
 	p[0] = (2*p[0] - input.size[0] + render_size[0] * font_size[0]) / (2 * font_size[0]);
@@ -2236,8 +2323,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				if (i==0)
 				{
 					// relative to center
-					io.x_force = 2 * (input.contact[i].pos[0] * 2 - input.size[0]) / (float)input.size[0];
-					io.y_force = 2 * (input.size[1] - input.contact[i].pos[1] * 2) / (float)input.size[1];					
+					io.x_force = 2 * ((input.contact[i].pos[0] * 2 - input.size[0]) / (float)input.size[0] - 2*scene_shift / (float)render_size[0]);
+					io.y_force = 2 * ((input.size[1] - input.contact[i].pos[1] * 2) / (float)input.size[1]);					
 				}
 				else
 				{
@@ -2383,8 +2470,108 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// update / animate:
 	player.dir = io.player_dir;
 
+
+	if (show_inventory && scene_shift < 58/2) // inventory width with margins is 58
+		scene_shift++;
+	else
+	if (!show_inventory && scene_shift > 0)
+		scene_shift--;
+
+	int ss[2] = { scene_shift , 0 };
 	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
-		width, height, ptr, player.sprite, player.anim, player.frame, player.dir);
+		width, height, ptr, player.sprite, player.anim, player.frame, player.dir, ss);
+
+	if (scene_shift > 0)
+	{
+		int dx = scene_shift * 2 - 58;
+		int dy = 0;
+		int w = 58;
+		int h = height - 6;
+
+		for (int y = dy; y<dy+h; y++) 
+		{
+			if (y < 0 || y >= height)
+				continue;
+
+			int vy = y;
+
+			if (vy < 8)
+			{
+				// bottom
+			}
+			else
+			if (vy < 8 + (h - 33)/2)
+			{
+				// rep1
+				vy = 8;
+			}
+			else
+			if (vy < 25 + (h - 33) / 2)
+			{
+				// middle
+				vy -= (h - 33) / 2;
+			}
+			else
+			if (vy < h - 8)
+			{
+				// rep2
+				vy = 24;
+			}
+			else
+			{
+				// top
+				vy -= h-33;
+			}
+
+			if (vy < 0 || vy >= 33)
+				continue;
+
+			for (int x = dx; x<dx+w; x++)
+			{
+				if (x < 0 || x >= width)
+					continue;
+
+				int vx = x - (scene_shift * 2 - 58);
+
+				if (vx < 7)
+				{
+					// left
+				}
+				else
+				if (vx < w / 2 - 4)
+				{
+					// rep1
+					vx = 7;
+				}
+				else
+				if (vx < w / 2 + 4)
+				{
+					// center
+					vx = vx - (w / 2) + 11;
+				}
+				else
+				if (vx < w - 7)
+				{
+					// rep2
+					vx = 15;
+				}
+				else
+				{
+					// right
+					vx = vx - w + 23;
+				}
+
+				if (vx < 0 || vx >= 23)
+					continue;
+
+				ptr[x + width * y] = inventory_sprite->atlas->cell[vx + vy * inventory_sprite->atlas->width];
+			}
+		}
+
+	}
+
+	// ptr is valid till next Render
+	// store it in Game for mouse handling
 
 	if (!player.talk_box)
 	{
@@ -2405,9 +2592,18 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			items++;
 		}
 
+		// store
+		items_count = items;
+		items_inrange = inrange;
 
-		int items_x = (width - (items_width + items - 1)) / 2;
+
+		int clip_width = width - scene_shift;
+
+		// int items_x = (width - (items_width + items - 1)) / 2;
+		int items_x = scene_shift + (width - (items_width + items - 1)) / 2;
 		int items_y = height / 2 - 2;
+
+		items_y -= (items_y - max_height) / 2; // center below player
 
 		if (items)
 		{
@@ -2439,14 +2635,17 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		for (int i = 0; i < items; i++)
 		{
+			items_xarr[i] = items_x-1;
+
 			if (input.last_hit_char == '1' + i)
 			{
 				// check if in inventory there is xy to put this item at
 				// ...
 
-				// put this item to inventory
-				int xy[2] = { 0,0 };
-				inventory.InsertItem(inrange[i], xy);
+				if (!PickItem(inrange[i]))
+				{
+					// display status: "INVENTORY FULL / FRAGGED"
+				}
 			}
 
 			Sprite::Frame* frame = inrange[i]->proto->sprite_2d->atlas;
@@ -2520,6 +2719,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			items_x++;
 		}
+
+		items_xarr[items] = items_x - 1;
+		items_ylo = items_y - max_height - 1;
+		items_yhi = items_y;
+	}
+	else
+	{
+		items_count = 0;
 	}
 
 
@@ -2660,9 +2867,17 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
 		key &= ~A3D_AUTO_REPEAT;
 
+		if (show_inventory)
+		{
+			if (key == A3D_ESCAPE && !auto_rep)
+			{
+				show_inventory = false;
+			}
+		}
+		else
 		if ((key == A3D_TAB || key == A3D_ESCAPE) && !auto_rep)
 		{
-			if (!player.talk_box && key == A3D_TAB)
+			if (!player.talk_box && key == A3D_TAB && show_buts)
 			{
 				show_buts = false;
 				TalkBox_blink = 32;
@@ -2761,26 +2976,56 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			// drop last item from inventory
 			if (inventory.my_items)
 			{
-				float ang = rand() % 360;
+				// here we calc current & final item pos
+				// it should be animated globally (for all games)
+				// when current pos reaches final, it should be
+				// removed from global anim list
 
-				double ret[4], nrm[4];
-				double dpos[3] =
+				// also when player picks item it must always check
+				// if item is in global list, in such case it must remove it!
+
+				// global item anim referece should look like:
+				/*
+				struct ItemDrop
 				{
-					player.pos[0] + (float)(2 * cos(ang*M_PI / 180)),
-					player.pos[1] + (float)(2 * sin(ang*M_PI / 180)),
-					0
-				};
-				double downward[3] = { 0,0,-1 };
-				HitTerrain(terrain, dpos, downward, ret, nrm);
+					ItemDrop* prev;
+					ItemDrop* next;
+					Inst* item_inst;
+					float z_dest;
+					float z_vel;
 
-				float _pos[3] =
+					void Animate(float dt)
+					{
+						const float acc = 0.01;
+						float pos[3],yaw;
+						Item* item = GetInstItem(item_inst, pos, &yaw);
+						z_vel += dt * acc;
+						pos[2] -= z_vel;
+						if (pos[2] <= z_dest)
+						{
+							pos[2] = z_dest;
+							SetInstItem(item_inst, item, pos, yaw);
+
+							// remove from global list
+							if (prev)
+								prev->next = next;
+							else
+								head = next;
+							if (next)
+								next->prev = prev;
+							else
+								tail = prev;
+						}
+						else
+							SetInstItem(item_inst, item, pos, yaw);
+					}
+				};
+				*/
+
+				if (inventory.my_items > 0)
 				{
-					ret[0],
-					ret[1],
-					ret[2]
-				};
-
-				inventory.RemoveItem(inventory.my_items - 1, _pos, prev_yaw);
+					DropItem(inventory.my_items - 1);
+				}
 			}
 		}
 
@@ -2855,7 +3100,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		if (key == A3D_TAB)
 		{
 			// HANDLED BY EMULATION!
-			if (!player.talk_box)
+			if (!player.talk_box && show_buts)
 			{
 				show_buts = false;
 				TalkBox_blink = 32;
@@ -2947,11 +3192,69 @@ void Game::StartContact(int id, int x, int y, int b)
 	int cap = -1;
 	float yaw = 0;
 
-	if (show_buts && cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0]>= render_size[0] - bars_pos))
+	if (items_count && cp[1] >= items_ylo && cp[1] <= items_yhi && b == 1)
+	{
+		// check item pickup
+		if (cp[1] > items_ylo && cp[1] < items_yhi)
+		{
+			for (int i = 0; i < items_count; i++)
+			{
+				if (cp[0] > items_xarr[i] && cp[0] < items_xarr[i + 1])
+				{
+					if (!PickItem(items_inrange[i]))
+					{
+						// display status: "INVENTORY FULL / FRAGGED"
+					}
+
+					con->action = Input::Contact::NONE;
+					con->drag = b;
+					con->pos[0] = x;
+					con->pos[1] = y;
+					con->drag_from[0] = x;
+					con->drag_from[1] = y;
+
+					con->keyb_cap = cap;
+					con->margin = mrg;
+					con->player_hit = hit;
+					con->start_yaw = yaw;
+					return;
+				}
+			}
+		}
+
+		if (cp[0] >= items_xarr[0] && cp[0] <= items_xarr[items_count])
+		{
+			con->action = Input::Contact::NONE;
+			con->drag = b;
+			con->pos[0] = x;
+			con->pos[1] = y;
+			con->drag_from[0] = x;
+			con->drag_from[1] = y;
+
+			con->keyb_cap = cap;
+			con->margin = mrg;
+			con->player_hit = hit;
+			con->start_yaw = yaw;
+			return;
+		}
+	}
+
+	if (show_buts && cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0]>= render_size[0] - bars_pos) && b == 1)
 	{
 		// main but
 		// perform action immediately
 		// ...
+
+		if (cp[0] >= render_size[0] - bars_pos)
+		{
+			// temporarily drop item
+			if (inventory.my_items > 0)
+				DropItem(inventory.my_items - 1);
+		}
+		else
+		{
+			show_inventory = !show_inventory;
+		}
 
 		// make contact dead
 		con->action = Input::Contact::NONE;
@@ -3199,6 +3502,7 @@ void Game::EndContact(int id, int x, int y)
 					}
 				}
 				else
+				if (show_buts)
 				{
 					show_buts = false;
 					// open talk_box (and keyb if not open)

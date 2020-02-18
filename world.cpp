@@ -202,7 +202,7 @@ struct MeshInst : Inst
 		}
 	}
 
-	bool HitFace(double ray[6], double ret[3], double nrm[3], bool positive_only)
+	bool HitFace(double ray[6], double ret[3], double nrm[3], bool interval_only)
 	{
 		if (!mesh)
 			return false;
@@ -218,22 +218,25 @@ struct MeshInst : Inst
 			Product(tm, f->abc[2]->xyzw, v2);
 
 			double hit[3];
-			if (RayIntersectsTriangle(ray, v0, v1, v2, hit, positive_only))
+			if (RayIntersectsTriangle(ray, v0, v1, v2, hit, interval_only))
 			{
 				if (hit[2] > ret[2])
 				{
-					ret[0] = hit[0];
-					ret[1] = hit[1];
-					ret[2] = hit[2];
-
-					if (nrm)
+					if (!interval_only || hit[2] <= ray[9])
 					{
-						double d1[3] = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] };
-						double d2[3] = { v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2] };
-						CrossProduct(d1, d2, nrm);
-					}
+						ret[0] = hit[0];
+						ret[1] = hit[1];
+						ret[2] = hit[2];
 
-					flag = true;
+						if (nrm)
+						{
+							double d1[3] = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] };
+							double d2[3] = { v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2] };
+							CrossProduct(d1, d2, nrm);
+						}
+
+						flag = true;
+					}
 				}
 			}
 
@@ -1391,7 +1394,7 @@ struct World
         }
     }
 
-	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
+	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
 	{
 		if (!q)
 			return 0;
@@ -1400,7 +1403,7 @@ struct World
 		const float y[2] = {q->bbox[2],q->bbox[3]};
 		const float z[2] = {q->bbox[4],q->bbox[5]};
 
-		if (positive_only)
+		if (interval_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1418,7 +1421,7 @@ struct World
 			Inst* inst = (Inst*)q;
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
 					return inst;
 				else
 					return 0;
@@ -1430,8 +1433,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
             return i;
         }
@@ -1440,8 +1443,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
 
             j = s->head;
@@ -1449,7 +1452,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
                 j=j->next;
@@ -1467,7 +1470,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
                 j=j->next;
@@ -1478,7 +1481,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
+	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
 	{
 		if (!q)
 			return 0;
@@ -1487,7 +1490,7 @@ struct World
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
 
-		if (positive_only)
+		if (interval_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1505,7 +1508,7 @@ struct World
 			Inst* inst = (Inst*)q;
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
 					return inst;
 				else
 					return 0;
@@ -1517,8 +1520,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
             return i;
         }
@@ -1527,8 +1530,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
 
             j = s->head;
@@ -1536,7 +1539,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
 				j = j->next;
@@ -1554,7 +1557,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
                 j=j->next;
@@ -1565,7 +1568,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
+	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
 	{
 		if (!q)
 			return 0;
@@ -1574,7 +1577,7 @@ struct World
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
 
-		if (positive_only)
+		if (interval_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1592,7 +1595,7 @@ struct World
 			Inst* inst = (Inst*)q;
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
 					return inst;
 				else
 					return 0;
@@ -1604,8 +1607,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
             return i;
         }
@@ -1614,8 +1617,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
 
             j = s->head;
@@ -1623,7 +1626,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
 				j = j->next;
@@ -1641,7 +1644,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
 				j = j->next;
@@ -1652,7 +1655,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3], bool positive_only)
+	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
 	{
 		if (!q)
 			return 0;
@@ -1661,7 +1664,7 @@ struct World
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
 
-		if (positive_only)
+		if (interval_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1679,7 +1682,7 @@ struct World
 			Inst* inst = (Inst*)q;
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
 					return inst;
 				else
 					return 0;
@@ -1691,8 +1694,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
             return i;
         }
@@ -1701,8 +1704,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, positive_only);
-            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, positive_only);
+            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, interval_only);
+            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, interval_only);
             i = j ? j : i;
 
             j = s->head;
@@ -1710,7 +1713,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
 				j = j->next;
@@ -1728,7 +1731,7 @@ struct World
             {
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
 				j = j->next;
@@ -1740,10 +1743,19 @@ struct World
 	}
 
     // RAY HIT using plucker
-    Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3], bool positive_only)
+    Inst* HitWorld(double p[3], double v[3], double ret[4], double nrm[3], bool interval_only)
     {
 		if (!root)
 			return 0;
+
+		double max_z = 0;
+		if (interval_only)
+		{
+			max_z = p[2];
+			p[0] += v[0];
+			p[1] += v[1];
+			p[2] += v[2];
+		}
 
 		// p should be projected to the BOTTOM plane!
 		double ray[] =
@@ -1752,7 +1764,8 @@ struct World
 			p[2] * v[0] - p[0] * v[2],
 			p[0] * v[1] - p[1] * v[0],
 			v[0], v[1], v[2],
-			p[0], p[1], p[2] // used by triangle-ray intersection
+			p[0], p[1], p[2], // used by triangle-ray intersection
+			max_z
 		};
 
 		int sign_case = 0;
@@ -1774,15 +1787,17 @@ struct World
 			HitWorld3
 		};
 
-		if (!positive_only)
+		/*
+		if (!interval_only)
 		{
 			// otherwie ret must be preinitialized
 			ret[0] = p[0];
 			ret[1] = p[1];
 			ret[2] = p[2];
 		}
+		*/
 
-		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, positive_only);
+		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, interval_only);
 		return inst;
     }
 
@@ -3593,9 +3608,9 @@ World* LoadWorld(FILE* f, bool editor)
 }
 
 
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only)
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool interval_only)
 {
-    return w->HitWorld(p,v,ret,nrm, positive_only);
+    return w->HitWorld(p,v,ret,nrm, interval_only);
 }
 
 Mesh* GetInstMesh(Inst* i)

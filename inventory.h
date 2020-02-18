@@ -15,6 +15,9 @@ struct Inventory
 	static const int height = 20; // fit upto 10 7x7 cells items
 	static const int max_items = 256;
 
+	// free space lookup accelerator
+	uint8_t bitmask[(width*height+7)/8];
+
 	struct MyItem
 	{
 		Item* item;

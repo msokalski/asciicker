@@ -643,22 +643,64 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	return sprite;
 }
 
-void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y)
+void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y, const int src_clip[4])
 {
-	// calc clip rect
-	int sx = x < 0 ? -x : 0;
-	int sy = y < 0 ? -y : 0;
+	int sx = 0, sy = 0, w = sf->width, h = sf->height;
+	if (src_clip)
+	{
+		if (src_clip[0] >= src_clip[2] || src_clip[0] >= sf->width || src_clip[2] < 0 ||
+			src_clip[1] >= src_clip[3] || src_clip[1] >= sf->height || src_clip[3] < 0)
+			return;
 
-	int x1 = x > 0 ? x : 0;
-	int x2 = x + sf->width < width ? x + sf->width : width;
+		if (src_clip[0] < 0)
+			x += -src_clip[0];
+		else
+		{
+			sx = src_clip[0];
+			w -= src_clip[0];
+		}
 
-	int y1 = y > 0 ? y : 0;
-	int y2 = y + sf->height < height ? y + sf->height : height;
+		if (src_clip[2] < sx + w)
+			w -= sx + w - src_clip[2];
+
+		if (src_clip[1] < 0)
+			y += -src_clip[1];
+		else
+		{
+			sy = src_clip[1];
+			h -= src_clip[1];
+		}
+
+		if (src_clip[3] < sy+h)
+			h -= sy + h - src_clip[3];
+	}
+
+	if (x < 0)
+	{
+		w -= -x;
+		sx += -x;
+		x = 0;
+	}
+	if (x + w > width)
+		w = width - x;
+
+	if (y < 0)
+	{
+		h -= -y;
+		sy += -y;
+		y = 0;
+	}
+	if (y + h > height)
+		h = height - y;
+
+	int x1 = x;
+	int x2 = x + w;
+
+	int y1 = y;
+	int y2 = y + h;
 
 	if (x2 <= x1)
 		return;
-
-	int w = x2 - x1;
 
 	AnsiCell* dst = ptr + x1 + y1 * width;
 	const AnsiCell* src = sf->cell + sx + sy * sf->width;
