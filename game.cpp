@@ -2323,7 +2323,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				if (i==0)
 				{
 					// relative to center
-					io.x_force = 2 * ((input.contact[i].pos[0] * 2 - input.size[0]) / (float)input.size[0] - 2*scene_shift / (float)render_size[0]);
+					io.x_force = 2 * ((input.contact[i].pos[0] * 2 - input.size[0]) / (float)input.size[0] - 2*scene_shift/2 / (float)render_size[0]);
 					io.y_force = 2 * ((input.size[1] - input.contact[i].pos[1] * 2) / (float)input.size[1]);					
 				}
 				else
@@ -2470,104 +2470,158 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// update / animate:
 	player.dir = io.player_dir;
 
+	int inventory_width = 39;
 
-	if (show_inventory && scene_shift < 58/2) // inventory width with margins is 58
-		scene_shift++;
+	if (show_inventory && scene_shift < inventory_width) // inventory width with margins is 58
+	{
+		scene_shift += f120;
+		if (scene_shift > inventory_width)
+			scene_shift = inventory_width;
+	}
 	else
 	if (!show_inventory && scene_shift > 0)
-		scene_shift--;
+	{
+		scene_shift-=f120;
+		if (scene_shift < 0)
+			scene_shift = 0;
+	}
 
-	int ss[2] = { scene_shift , 0 };
+	int ss[2] = { scene_shift/2 , 0 };
 	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir, ss);
 
 	if (scene_shift > 0)
 	{
-		int dx = scene_shift * 2 - 58;
-		int dy = 0;
-		int w = 58;
-		int h = height - 6;
+		Sprite::Frame* sf = inventory_sprite->atlas;
+		int reps[3];
+		int max_height = 7 + 4*inventory.height+1 + 5;
+		int inventory_height = height - 6;
+		if (inventory_height > max_height)
+			inventory_height = max_height;
+		if (inventory_height < sf->height)
+			inventory_height = sf->height;
+		int diff = inventory_height - sf->height;
 
-		for (int y = dy; y<dy+h; y++) 
+		int dy = diff / 3;
+		diff -= 3 * dy;
+
+		for (int r = 0; r < 3; r++)
 		{
-			if (y < 0 || y >= height)
-				continue;
+			if (r < diff)
+				reps[r] = 2 + dy;
+			else
+				reps[r] = 1 + dy;
+		}
 
-			int vy = y;
+		int x = scene_shift - inventory_width;
+		int y = (height - 6 - inventory_height) / 2;
+		int clip[] = { 0,0,inventory_width,8 };
+		BlitSprite(ptr, width, height, sf, x, y, clip);
 
-			if (vy < 8)
+		clip[1] = 8; clip[3] = 9;
+		for (int i=0; i<reps[0]; i++)
+			BlitSprite(ptr, width, height, sf, x, y + 8 + i, clip);
+
+		clip[1] = 9; clip[3] = 17;
+		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0], clip);
+
+		clip[1] = 17; clip[3] = 18;
+		for (int i = 0; i < reps[1]; i++)
+			BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + i, clip);
+
+		clip[1] = 18; clip[3] = 26;
+		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1], clip);
+
+		clip[1] = 26; clip[3] = 27;
+		for (int i = 0; i < reps[2]; i++)
+			BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1] + 8 + i, clip);
+
+		clip[1] = 27; clip[3] = 35;
+		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1] + 8 + reps[2], clip);
+
+		static int dir = 1;
+		inventory.scroll += dir;
+
+		int max_scroll = max_height - inventory_height;
+
+		if (inventory.scroll < 0)
+		{
+			inventory.scroll = 0;
+			dir = 1;
+		}
+
+		if (inventory.scroll > max_scroll)
+		{
+			inventory.scroll = max_scroll;
+			dir = -1;
+		}
+
+		int scroll = inventory.scroll;
+
+		int dst_clip[4] = { x + 4, y + 8, x + 4 + 4 * inventory.width, y + inventory_height - 5 -1};
+		int frm_clip[4] = { x + 3, y + 7, x + 5 + 4 * inventory.width, y + inventory_height - 4 -1};
+
+		AnsiCell item_bk = { 16,136,32,0 };
+
+		for (int i = 0; i < inventory.my_items; i++)
+		{
+			int ix = x + inventory.my_item[i].xy[0]*4 + 4;
+			int iy = y + inventory.my_item[i].xy[1]*4 + inventory_height - 6 - (inventory.height*4-1) + scroll;
+
+			Sprite::Frame* isf = inventory.my_item[i].item->proto->sprite_2d->atlas;
+
+			BlitSprite(ptr, width, height, isf, ix, iy , dst_clip, false, &item_bk);
+
+			// select last item
+			if (i == inventory.my_items - 1)
 			{
-				// bottom
+				PaintFrame(ptr, width, height, ix - 1, iy - 1, isf->width + 2, isf->height + 2, frm_clip, 231/*fg*/, 255/*bk*/, true/*dbl-line*/, false/*combine*/);
+				if (y + 6 >= 0)
+				{
+					Item* item = inventory.my_item[i].item;
+					const char* str = item->proto->desc;
+					for (int s = 0; str[s]; s++)
+					{
+						if (x + 4 + s>= 0 && x + 4 + s < width)
+						{
+							AnsiCell* ac = ptr + x + 4 + s + (y + 6)*width;
+							ac->gl = str[s];
+						}
+					}
+				}
 			}
 			else
-			if (vy < 8 + (h - 33)/2)
+				PaintFrame(ptr, width, height, ix - 1, iy - 1, isf->width + 2, isf->height + 2, frm_clip, 16/*fg*/, 255/*bk*/, true/*dbl-line*/,true/*combine*/);
+
+		}
+
+		if (scroll > 0 && y + inventory_height - 6 >=0 && y + inventory_height - 6 <height)
+		{
+			// overwrite upper inventory clip-line with ----
+			AnsiCell* row = ptr + (y + inventory_height - 6)*width;
+			for (int dx = x + 3; dx < x + 36; dx++)
 			{
-				// rep1
-				vy = 8;
-			}
-			else
-			if (vy < 25 + (h - 33) / 2)
-			{
-				// middle
-				vy -= (h - 33) / 2;
-			}
-			else
-			if (vy < h - 8)
-			{
-				// rep2
-				vy = 24;
-			}
-			else
-			{
-				// top
-				vy -= h-33;
-			}
-
-			if (vy < 0 || vy >= 33)
-				continue;
-
-			for (int x = dx; x<dx+w; x++)
-			{
-				if (x < 0 || x >= width)
-					continue;
-
-				int vx = x - (scene_shift * 2 - 58);
-
-				if (vx < 7)
+				if (dx >= 0 && dx < width)
 				{
-					// left
+					row[dx].fg = 16;
+					row[dx].gl = 196;
 				}
-				else
-				if (vx < w / 2 - 4)
-				{
-					// rep1
-					vx = 7;
-				}
-				else
-				if (vx < w / 2 + 4)
-				{
-					// center
-					vx = vx - (w / 2) + 11;
-				}
-				else
-				if (vx < w - 7)
-				{
-					// rep2
-					vx = 15;
-				}
-				else
-				{
-					// right
-					vx = vx - w + 23;
-				}
-
-				if (vx < 0 || vx >= 23)
-					continue;
-
-				ptr[x + width * y] = inventory_sprite->atlas->cell[vx + vy * inventory_sprite->atlas->width];
 			}
 		}
 
+		if (scroll < max_scroll && y + 7 >= 0 && y + 7 < height)
+		{
+			// overwrite lower inventory clip-line with ----
+			AnsiCell* row = ptr + (y + 7)*width;
+			for (int dx = x + 3; dx < x + 36; dx++)
+			{
+				if (dx >= 0 && dx < width)
+				{
+					row[dx].fg = 16;
+					row[dx].gl = 196;
+				}
+			}
+		}
 	}
 
 	// ptr is valid till next Render
@@ -2575,9 +2629,6 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	if (!player.talk_box)
 	{
-		// TODO sort items based on screen-x coord projection (affected by viewing yaw!)
-		// ...
-
 		int items = 0, items_width = 0;
 		int max_height = 0;
 		while (inrange[items])
@@ -2586,6 +2637,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			// TODO:
 			// break here if width too big to fit on screen!
+
+			if (1 + items_width + frame->width + items >= width - scene_shift)
+				break;
 
 			max_height = max_height < frame->height ? frame->height : max_height;
 			items_width += frame->width;
@@ -2597,10 +2651,10 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		items_inrange = inrange;
 
 
-		int clip_width = width - scene_shift;
+		int clip_width = width - scene_shift/2;
 
 		// int items_x = (width - (items_width + items - 1)) / 2;
-		int items_x = scene_shift + (width - (items_width + items - 1)) / 2;
+		int items_x = scene_shift/2 + (width - (items_width + items - 1)) / 2;
 		int items_y = height / 2 - 2;
 
 		items_y -= (items_y - max_height) / 2; // center below player
@@ -2749,7 +2803,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	}
 
 	if (player.talk_box)
-		player.talk_box->Paint(ptr, width, height, width / 2, height / 2 + 8, (TalkBox_blink & 63) < 32);
+		player.talk_box->Paint(ptr, width, height, width / 2 + scene_shift/2, height / 2 + 8, (TalkBox_blink & 63) < 32);
 
 	if (show_buts && bars_pos < 7)
 		bars_pos++;
@@ -2867,14 +2921,6 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
 		key &= ~A3D_AUTO_REPEAT;
 
-		if (show_inventory)
-		{
-			if (key == A3D_ESCAPE && !auto_rep)
-			{
-				show_inventory = false;
-			}
-		}
-		else
 		if ((key == A3D_TAB || key == A3D_ESCAPE) && !auto_rep)
 		{
 			if (!player.talk_box && key == A3D_TAB && show_buts)
@@ -2908,6 +2954,11 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					if (input.contact[i].action == Input::Contact::KEYBCAP)
 						input.contact[i].action = Input::Contact::NONE;
 				}
+			}
+			else
+			if (show_inventory && key == A3D_ESCAPE)
+			{
+				show_inventory = false;
 			}
 		}
 
@@ -3139,6 +3190,8 @@ static bool PlayerHit(Game* g, int x, int y)
 {
 	int down[2] = { x,y };
 	g->ScreenToCell(down);
+
+	down[0] -= g->scene_shift/2;
 
 	// if talkbox is open check it too
 	if (g->player.talk_box)

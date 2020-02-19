@@ -11,12 +11,14 @@ void DestroyItem(Item* item);
 struct Inventory
 {
 	// max inventory dims as 4x4 cells blocks (incl. 1 border)
-	static const int width = 8;   // fit upto 4 7x7 cells items
+	static const int width = 8;   // fit upto 4 7x7 cells items - do not modify!!!
 	static const int height = 20; // fit upto 10 7x7 cells items
-	static const int max_items = 256;
+	static const int max_items = width*height; // please clamp to 100 items
+
+	int scroll;
 
 	// free space lookup accelerator
-	uint8_t bitmask[(width*height+7)/8];
+	uint8_t bitmask[(max_items+7)/8];
 
 	struct MyItem
 	{

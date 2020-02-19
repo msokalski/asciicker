@@ -643,36 +643,59 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	return sprite;
 }
 
-void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y, const int src_clip[4])
+void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y, const int clip[4], bool src_clip, AnsiCell* bk)
 {
 	int sx = 0, sy = 0, w = sf->width, h = sf->height;
-	if (src_clip)
+	if (clip)
 	{
-		if (src_clip[0] >= src_clip[2] || src_clip[0] >= sf->width || src_clip[2] < 0 ||
-			src_clip[1] >= src_clip[3] || src_clip[1] >= sf->height || src_clip[3] < 0)
-			return;
+		if (src_clip)
+		{
+			if (clip[0] >= clip[2] || clip[0] >= sf->width || clip[2] < 0 ||
+				clip[1] >= clip[3] || clip[1] >= sf->height || clip[3] < 0)
+				return;
 
-		if (src_clip[0] < 0)
-			x += -src_clip[0];
+			if (clip[0] < 0)
+				x += -clip[0];
+			else
+			{
+				sx = clip[0];
+				w -= clip[0];
+			}
+
+			if (clip[2] < sx + w)
+				w -= sx + w - clip[2];
+
+			if (clip[1] < 0)
+				y += -clip[1];
+			else
+			{
+				sy = clip[1];
+				h -= clip[1];
+			}
+
+			if (clip[3] < sy + h)
+				h -= sy + h - clip[3];
+		}
 		else
 		{
-			sx = src_clip[0];
-			w -= src_clip[0];
+			if (x < clip[0])
+			{
+				w -= clip[0] - x;
+				sx += clip[0] - x;
+				x = clip[0];
+			}
+			if (x + w > clip[2])
+				w = clip[2] - x;
+
+			if (y < clip[1])
+			{
+				h -= clip[1] - y;
+				sy += clip[1] - y;
+				y = clip[1];
+			}
+			if (y + h > clip[3])
+				h = clip[3] - y;
 		}
-
-		if (src_clip[2] < sx + w)
-			w -= sx + w - src_clip[2];
-
-		if (src_clip[1] < 0)
-			y += -src_clip[1];
-		else
-		{
-			sy = src_clip[1];
-			h -= src_clip[1];
-		}
-
-		if (src_clip[3] < sy+h)
-			h -= sy + h - src_clip[3];
 	}
 
 	if (x < 0)
@@ -704,6 +727,17 @@ void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, i
 
 	AnsiCell* dst = ptr + x1 + y1 * width;
 	const AnsiCell* src = sf->cell + sx + sy * sf->width;
+
+	if (bk)
+	{
+		AnsiCell* ptr = dst;
+		for (y = y1; y < y2; y++)
+		{
+			for (int i = 0; i < w; i++)
+				ptr[i] = *bk;
+			ptr += width;
+		}
+	}
 
 	for (y = y1; y < y2; y++)
 	{
@@ -783,3 +817,182 @@ void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, i
 	}
 }
 
+void PaintFrame(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, const int dst_clip[4], uint8_t fg, uint8_t bk, bool dbl, bool combine)
+{
+	int sx = x, sy = y;
+	int sw = w, sh = h;
+
+	bool l = true, r = true, b = true, t = true;
+
+	x++; y++;
+	w -= 2; h -= 2;
+
+	if (dst_clip)
+	{
+		if (sx < dst_clip[0])
+			l = false;
+		if (sx+sw > dst_clip[2])
+			r = false;
+		if (sy < dst_clip[1])
+			b = false;
+		if (sy + sh > dst_clip[3])
+			t = false;
+
+		if (x < dst_clip[0])
+		{
+			w -= dst_clip[0] - x;
+			x = dst_clip[0];
+		}
+
+		if (x + w > dst_clip[2])
+			w = dst_clip[2] - x;
+
+		if (y < dst_clip[1])
+		{
+			h -= dst_clip[1] - y;
+			y = dst_clip[1];
+		}
+
+		if (y + h > dst_clip[3])
+			h = dst_clip[3] - y;
+	}
+
+	if (sx < 0)
+		l = false;
+	if (sx + sw > width)
+		r = false;
+	if (sy < 0)
+		b = false;
+	if (sy + sh > height)
+		t = false;
+
+
+	if (x < 0)
+	{
+		w -= -x;
+		x = 0;
+	}
+	if (x + w > width)
+		w = width - x;
+
+	if (y < 0)
+	{
+		h -= -y;
+		y = 0;
+	}
+	if (y + h > height)
+		h = height - y;
+
+	if (w <= 0 || h <= 0)
+		return;
+
+	int x1 = x, x2 = x + w;
+	int y1 = y*width, y2 = (y + h)*width;
+
+	static const uint8_t bit2gl[16] = { 0, 0, 0, 187, 0, 205, 201, 203, 0, 188, 186, 185, 200, 202, 204, 206 };
+
+	static uint8_t gl2bit_raw[256] = { 0x0 };
+	static uint8_t gl2bit_cmb[256] = { 0xFF };
+	if (gl2bit_cmb[0] == 0xff)
+	{
+		memset(gl2bit_cmb, 0, 176);
+		for (int i = 176; i < 224; i++)
+		{
+			for (int j = 0; j < 16; j++)
+				if (i == bit2gl[j])
+					gl2bit_cmb[i] = j;
+		}
+	}
+
+	uint8_t* gl2bit = combine ? gl2bit_cmb : gl2bit_raw;
+
+	if (b)
+	{
+		AnsiCell* row = ptr + sy * width;
+
+		if (l)
+		{
+			row[sx].gl = bit2gl[gl2bit[row[sx].gl] | 0xC];
+			if (fg != 255)
+				row[sx].fg = fg;
+			if (bk != 255)
+				row[sx].bk = bk;
+		}
+
+		for (int dx = x1; dx < x2; dx++)
+		{
+			row[dx].gl = bit2gl[gl2bit[row[dx].gl] | 0x5];
+			if (fg != 255)
+				row[dx].fg = fg;
+			if (bk != 255)
+				row[dx].bk = bk;
+		}
+
+		if (r)
+		{
+			row[sx + sw-1].gl = bit2gl[gl2bit[row[sx + sw-1].gl] | 0x9];
+			if (fg != 255)
+				row[sx + sw-1].fg = fg;
+			if (bk != 255)
+				row[sx + sw-1].bk = bk;
+		}
+	}
+
+	if (t)
+	{
+		AnsiCell* row = ptr + (sy+sh-1) * width;
+
+		if (l)
+		{
+			row[sx].gl = bit2gl[gl2bit[row[sx].gl] | 0x6];
+			if (fg != 255)
+				row[sx].fg = fg;
+			if (bk != 255)
+				row[sx].bk = bk;
+		}
+
+		for (int dx = x1; dx < x2; dx++)
+		{
+			row[dx].gl = bit2gl[gl2bit[row[dx].gl] | 0x5];
+			if (fg != 255)
+				row[dx].fg = fg;
+			if (bk != 255)
+				row[dx].bk = bk;
+		}
+
+		if (r)
+		{
+			row[sx + sw-1].gl = bit2gl[gl2bit[row[sx + sw-1].gl] | 0x3];
+			if (fg != 255)
+				row[sx + sw-1].fg = fg;
+			if (bk != 255)
+				row[sx + sw-1].bk = bk;
+		}
+	}
+
+	if (l)
+	{
+		AnsiCell* col = ptr + sx;
+		for (int dy = y1; dy < y2; dy+=width)
+		{
+			col[dy].gl = bit2gl[gl2bit[col[dy].gl] | 0xA];
+			if (fg != 255)
+				col[dy].fg = fg;
+			if (bk != 255)
+				col[dy].bk = bk;
+		}
+	}
+
+	if (r)
+	{
+		AnsiCell* col = ptr + sx + sw - 1;
+		for (int dy = y1; dy < y2; dy+=width)
+		{
+			col[dy].gl = bit2gl[gl2bit[col[dy].gl] | 0xA];
+			if (fg != 255)
+				col[dy].fg = fg;
+			if (bk != 255)
+				col[dy].bk = bk;
+		}
+	}
+}
