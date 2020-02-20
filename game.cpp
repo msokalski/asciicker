@@ -1902,8 +1902,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->player.req.mount = MOUNT::NONE;
 	g->player.req.armor = ARMOR::NONE;
 	g->player.req.helmet = HELMET::NONE;
-	g->player.req.shield = SHIELD::REGULAR_SHIELD;
-	g->player.req.weapon = WEAPON::REGULAR_SWORD;
+	g->player.req.shield = SHIELD::NONE; // REGULAR_SHIELD;
+	g->player.req.weapon = WEAPON::NONE; // REGULAR_SWORD;
 	g->player.req.action = ACTION::NONE;
 
 	g->player.sprite = GetSprite(&g->player.req);
@@ -1921,6 +1921,9 @@ void DeleteGame(Game* g)
 {
 	if (g)
 	{
+		for (int i = 0; i < g->inventory.my_items; i++)
+			DestroyItem(g->inventory.my_item[i].item);
+
 		if (g->player.talk_box)
 			free(g->player.talk_box);
 		if (g->renderer)
@@ -1929,6 +1932,234 @@ void DeleteGame(Game* g)
 			DeletePhysics(g->physics);
 		free(g);
 	}
+}
+
+int Game::CheckPick(const int cp[2])
+{
+	// given cp, returns index to inventory.my_item or -1
+	Sprite::Frame* sf = inventory_sprite->atlas;
+
+	int width = render_size[0];
+	int height = render_size[1];
+
+	int inventory_width = 39;
+	int max_height = 7 + 4 * inventory.height + 1 + 5;
+	int inventory_height = height - 6;
+	if (inventory_height > max_height)
+		inventory_height = max_height;
+	if (inventory_height < sf->height)
+		inventory_height = sf->height;
+
+	int x = scene_shift - inventory_width;
+	int y = (height - 6 - inventory_height) / 2;
+
+	int max_scroll = max_height - inventory_height;
+
+	int scroll = inventory.scroll;
+	if (scroll < 0)
+		scroll = 0;
+	if (scroll > max_scroll)
+		scroll = max_scroll;
+
+	int left = x + 3;
+	int right = x + 3 + inventory.width * 4;
+	int upper = y + inventory_height - 6;
+	int lower = y + 7;
+
+	if (cp[0] > left && cp[0]<right && cp[1]>lower && cp[1] < upper)
+	{
+		int qx = cp[0] - (x + 4);
+		int qy = cp[1] - (y + inventory_height - 6 - inventory.height * 4 + 1 + scroll);
+
+		for (int i = 0; i < inventory.my_items; i++)
+		{
+			Sprite::Frame* frame = inventory.my_item[i].item->proto->sprite_2d->atlas;
+			int xy[2] = { inventory.my_item[i].xy[0] * 4, inventory.my_item[i].xy[1] * 4 };
+			if (qx >= xy[0] && qx < xy[0] + frame->width && qy >= xy[1] && qy < xy[1] + frame->height)
+			{
+				return i;
+			}
+		}
+	}
+
+	return -1;
+}
+
+bool Game::CheckDrop(int c, int drop_xy[2], AnsiCell* ptr, int width, int height)
+{
+	if (input.contact[c].action == Input::Contact::ITEM_LIST_DRAG ||
+		input.contact[c].action == Input::Contact::ITEM_GRID_DRAG)
+	{
+		Sprite::Frame* sf = inventory_sprite->atlas;
+
+		int inventory_width = 39;
+		int max_height = 7 + 4 * inventory.height + 1 + 5;
+		int inventory_height = height - 6;
+		if (inventory_height > max_height)
+			inventory_height = max_height;
+		if (inventory_height < sf->height)
+			inventory_height = sf->height;
+
+		int x = scene_shift - inventory_width;
+		int y = (height - 6 - inventory_height) / 2;
+
+		int max_scroll = max_height - inventory_height;
+
+		int scroll = inventory.scroll;
+		if (scroll < 0)
+			scroll = 0;
+		if (scroll > max_scroll)
+			scroll = max_scroll;
+
+		int cp[2] = { input.contact[c].pos[0], input.contact[c].pos[1] };
+		ScreenToCell(cp);
+
+		int left = x + 3;
+		int right = x + 3 + inventory.width * 4;
+		int upper = y + inventory_height - 6;
+		int lower = y + 7;
+		if (cp[0] > left && cp[0]<right && cp[1]>lower && cp[1] < upper)
+		{
+			Item* item = input.contact[c].item;
+			Sprite::Frame* frame = item->proto->sprite_2d->atlas;
+
+			// shift coords to bitmask coords
+			int qx = cp[0] - (x + 4);
+			int qy = cp[1] - (y + inventory_height - 6 - inventory.height * 4 + 1 + scroll);
+
+			qx -= frame->width / 2;
+			qy -= frame->height / 2;
+
+			int qw = (frame->width + 1) / 4;
+			int qh = (frame->height + 1) / 4;
+
+			qx = (qx + 2) / 4;
+			qy = (qy + 2) / 4;
+
+			if (qx < 0)
+				qx = 0;
+			if (qx + qw > inventory.width)
+				qx = inventory.width - qw;
+			if (qy < 0)
+				qy = 0;
+			if (qy + qh >= inventory.height)
+				qy = inventory.height - qh;
+
+			// check bitmask
+			// if no collision paint yellow, otherwise red
+			bool fit = true;
+
+			// TODO: 
+			// merge test (same proto) upto proto->max_count (not in struct yet)
+			// ...
+
+			// only non-split action must take care about extra 'self' space 
+			if (input.contact[c].action == Input::Contact::ITEM_GRID_DRAG 
+				&& (input.contact[c].drag == 1 || input.contact[c].item->count==1)) 
+			{
+				int* xy = inventory.my_item[input.contact[c].my_item].xy;
+
+				for (int my = qy; fit && my < qy + qh; my++)
+				{
+					for (int mx = qx; mx < qx + qw; mx++)
+					{
+						if (mx >= xy[0] && my >= xy[1] && mx < xy[0] + qw && my < xy[1] + qh)
+							continue;
+
+						int m = mx + my * inventory.width;
+
+						if (inventory.bitmask[m >> 3] & (1 << (m & 7)))
+						{
+							fit = false;
+							break;
+						}
+					}
+				}
+			}
+			else
+			{
+				for (int my = qy; fit && my < qy + qh; my++)
+				{
+					for (int mx = qx; mx < qx + qw; mx++)
+					{
+						int m = mx + my * inventory.width;
+						if (inventory.bitmask[m >> 3] & (1 << (m & 7)))
+						{
+							fit = false;
+							break;
+						}
+					}
+				}
+			}
+
+			if (drop_xy)
+			{
+				drop_xy[0] = qx;
+				drop_xy[1] = qy;
+			}
+
+			if (fit && ptr)
+			{
+				// REVERSE
+				qx = qx * 4 + (x + 4);
+				qy = qy * 4 + (y + inventory_height - 6 - inventory.height * 4 + 1 + scroll);
+				qw = qw * 4 - 1;
+				qh = qh * 4 - 1;
+
+				if (qx < 0)
+				{
+					qw -= qx;
+					qx = 0;
+				}
+				if (qx + qw > width)
+					qw = width - qx;
+
+				if (qy < lower + 1)
+				{
+					qh = qy + qh - (lower + 1);
+					qy = lower + 1;
+				}
+				if (qy + qh > upper)
+					qh = upper - qy;
+
+				for (int sy = 0; sy < qh; sy++)
+				{
+					for (int sx = 0; sx < qw; sx++)
+					{
+						ptr[qx + sx + (qy + sy)*width].fg = 222;
+					}
+				}
+			}
+
+			return fit;
+		}
+		else
+		{
+			// check if we can remove item from inventory
+			// indicate it by returning true and xy set to -1
+			if (input.contact[c].action == Input::Contact::ITEM_GRID_DRAG)
+			{
+				if (cp[0] < x || cp[0] >= x + inventory_width || cp[1] < y || cp[1] >= y + inventory_height)
+				{
+					// painting would require some kind of indication, red bk (+border)?
+					if (ptr)
+					{
+						// TODO!
+					}
+
+					if (drop_xy)
+					{
+						drop_xy[0] = -1;
+						drop_xy[1] = -1;
+					}
+
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
 }
 
 bool Game::PickItem(Item* item)
@@ -2366,8 +2597,17 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			float speed = 1;
 			if (input.IsKeyDown(A3D_LSHIFT) || input.IsKeyDown(A3D_RSHIFT))
 				speed *= 0.5;
-			io.x_force = (int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A));
-			io.y_force = (int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S));
+
+			if (show_inventory)
+			{
+				io.x_force = (int)input.IsKeyDown(A3D_D) - (int)input.IsKeyDown(A3D_A);
+				io.y_force = (int)input.IsKeyDown(A3D_W) - (int)input.IsKeyDown(A3D_S);
+			}
+			else
+			{
+				io.x_force = (int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A));
+				io.y_force = (int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S));
+			}
 
 			float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
 			if (len > 0)
@@ -2490,6 +2730,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player.sprite, player.anim, player.frame, player.dir, ss);
 
+	int contact_items = 0;
+	int contact_item[4] = { -1,-1,-1,-1 };
+
 	if (scene_shift > 0)
 	{
 		Sprite::Frame* sf = inventory_sprite->atlas;
@@ -2540,7 +2783,17 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1] + 8 + reps[2], clip);
 
 		static int dir = 1;
-		inventory.scroll += dir;
+
+		static int slower = 0;
+
+		// UNCOMMENT TO ANIMATE
+		// slower++;
+
+		if (slower == 20)
+		{
+			inventory.scroll += dir;
+			slower = 0;
+		}
 
 		int max_scroll = max_height - inventory_height;
 
@@ -2562,7 +2815,20 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		int frm_clip[4] = { x + 3, y + 7, x + 5 + 4 * inventory.width, y + inventory_height - 4 -1};
 
 		AnsiCell item_bk = { 16,136,32,0 };
+		AnsiCell item_inuse_bk = { 227/*yellow*/,203/*lt_red*/, 249/*dot*/,0 };
 
+		// for all contacts dragging items 
+		// check if they can drop at where they are, 
+		// paint hilight rects
+
+		if (show_inventory)
+		{
+			for (int c = 0; c < 4; c++)
+				CheckDrop(c, 0, ptr, width, height);
+		}
+
+		int focus_rect[4];
+		Item* focus_item = 0;
 		for (int i = 0; i < inventory.my_items; i++)
 		{
 			int ix = x + inventory.my_item[i].xy[0]*4 + 4;
@@ -2570,29 +2836,61 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			Sprite::Frame* isf = inventory.my_item[i].item->proto->sprite_2d->atlas;
 
-			BlitSprite(ptr, width, height, isf, ix, iy , dst_clip, false, &item_bk);
-
-			// select last item
-			if (i == inventory.my_items - 1)
+			// if being dragged, attach to contact!
+			int in_contact = -1;
+			for (int c = 0; c < 4; c++)
 			{
-				PaintFrame(ptr, width, height, ix - 1, iy - 1, isf->width + 2, isf->height + 2, frm_clip, 231/*fg*/, 255/*bk*/, true/*dbl-line*/, false/*combine*/);
-				if (y + 6 >= 0)
+				if (input.contact[c].action == Input::Contact::ITEM_GRID_DRAG &&
+					input.contact[c].my_item == i)
 				{
-					Item* item = inventory.my_item[i].item;
-					const char* str = item->proto->desc;
-					for (int s = 0; str[s]; s++)
-					{
-						if (x + 4 + s>= 0 && x + 4 + s < width)
-						{
-							AnsiCell* ac = ptr + x + 4 + s + (y + 6)*width;
-							ac->gl = str[s];
-						}
-					}
+					in_contact = c;
+					break;
 				}
+			}
+				
+			if (in_contact>=0)
+			{
+				contact_item[contact_items] = in_contact; // deferred render
+				contact_items++;
+			}
+			else
+			{
+				if (inventory.my_item[i].in_use)
+					BlitSprite(ptr, width, height, isf, ix, iy, dst_clip, false, &item_inuse_bk);
+				else
+					BlitSprite(ptr, width, height, isf, ix, iy, dst_clip, false, &item_bk);
+			}
+
+			// FOCUS
+			if (i == inventory.focus)
+			{
+				// deferred
+				focus_rect[0] = ix - 1;
+				focus_rect[1] = iy - 1;
+				focus_rect[2] = isf->width + 2;
+				focus_rect[3] = isf->height + 2;
+				focus_item = inventory.my_item[i].item;
 			}
 			else
 				PaintFrame(ptr, width, height, ix - 1, iy - 1, isf->width + 2, isf->height + 2, frm_clip, 16/*fg*/, 255/*bk*/, true/*dbl-line*/,true/*combine*/);
+		}
 
+		if (focus_item)
+		{
+			PaintFrame(ptr, width, height, focus_rect[0], focus_rect[1], focus_rect[2], focus_rect[3], frm_clip, 231/*fg*/, 255/*bk*/, true/*dbl-line*/, false/*combine*/);
+			if (y + 6 >= 0)
+			{
+				Item* item = focus_item;
+				const char* str = item->proto->desc;
+				for (int s = 0; str[s]; s++)
+				{
+					if (x + 4 + s >= 0 && x + 4 + s < width)
+					{
+						AnsiCell* ac = ptr + x + 4 + s + (y + 6)*width;
+						ac->gl = str[s];
+					}
+				}
+			}
 		}
 
 		if (scroll > 0 && y + inventory_height - 6 >=0 && y + inventory_height - 6 <height)
@@ -2634,9 +2932,6 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		while (inrange[items])
 		{
 			Sprite::Frame* frame = inrange[items]->proto->sprite_2d->atlas;
-
-			// TODO:
-			// break here if width too big to fit on screen!
 
 			if (1 + items_width + frame->width + items >= width - scene_shift)
 				break;
@@ -2691,21 +2986,45 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		{
 			items_xarr[i] = items_x-1;
 
-			if (input.last_hit_char == '1' + i)
-			{
-				// check if in inventory there is xy to put this item at
-				// ...
+			Sprite::Frame* frame = inrange[i]->proto->sprite_2d->atlas;
 
-				if (!PickItem(inrange[i]))
+			// check if in contact
+			int in_contact = -1;
+			for (int c = 0; c < 4; c++)
+			{
+				if (input.contact[c].action == Input::Contact::ITEM_LIST_DRAG ||
+					input.contact[c].action == Input::Contact::ITEM_GRID_DRAG)
 				{
-					// display status: "INVENTORY FULL / FRAGGED"
+					if (input.contact[c].item == inrange[i])
+					{
+						in_contact = c;
+						break;
+					}
 				}
 			}
 
-			Sprite::Frame* frame = inrange[i]->proto->sprite_2d->atlas;
-
 			int y = items_y - (max_height + frame->height) / 2;
-			BlitSprite(ptr, width, height, frame, items_x, y);
+
+			if (in_contact < 0)
+			{
+				if (input.last_hit_char == '1' + i)
+				{
+					// check if in inventory there is xy to put this item at
+					// ...
+
+					if (!PickItem(inrange[i]))
+					{
+						// display status: "INVENTORY FULL / FRAGGED"
+					}
+				}
+
+				BlitSprite(ptr, width, height, frame, items_x, y);
+			}
+			else
+			{
+				contact_item[contact_items] = in_contact; // deferred render
+				contact_items++;
+			}
 
 			for (int x = items_x; x < items_x + frame->width; x++)
 			{
@@ -2715,7 +3034,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				ac->fg = 16;
 				ac->gl = 196;
 				ac = ptr + x + (items_y - max_height - 1) * width;
-				if (x == items_x + frame->width / 2)
+				if (in_contact<0 && x == items_x + frame->width / 2)
 				{
 					ac->bk = 16;
 					ac->fg = 231; // wh
@@ -2783,6 +3102,20 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		items_count = 0;
 	}
 
+
+	for (int ic = 0; ic < contact_items; ic++)
+	{
+		int in_contact = contact_item[ic];
+		int cp[2] = { input.contact[in_contact].pos[0], input.contact[in_contact].pos[1] };
+		ScreenToCell(cp);
+
+		Sprite::Frame* frame = input.contact[in_contact].item->proto->sprite_2d->atlas;
+
+		cp[0] -= frame->width / 2;
+		cp[1] -= frame->height / 2;
+
+		BlitSprite(ptr, width, height, frame, cp[0], cp[1]);
+	}
 
 	{
 		HPBar bar;
@@ -2918,6 +3251,15 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 	if (keyb == GAME_KEYB::KEYB_DOWN)
 	{
+		if (key == A3D_ESCAPE)
+		{
+			// cancel all contacts
+			for (int i = 0; i < 4; i++)
+			{
+				input.contact[i].action = Input::Contact::NONE;
+			}
+		}
+
 		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
 		key &= ~A3D_AUTO_REPEAT;
 
@@ -2978,7 +3320,6 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			if (key == A3D_END)
 				player.SetActionFall(stamp);
 
-
 			/*
 			if (key == A3D_1)
 				player.SetMount(!player.req.mount);
@@ -3012,6 +3353,18 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				player.talk_box->MoveCursorY(-1);
 			if (key == A3D_DOWN)
 				player.talk_box->MoveCursorY(+1);
+		}
+		else
+		if (show_inventory)
+		{
+			switch (key)
+			{
+				case A3D_UP:
+				case A3D_DOWN:
+				case A3D_LEFT:
+				case A3D_RIGHT:
+					break;
+			}
 		}
 	}
 	else
@@ -3075,7 +3428,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 				if (inventory.my_items > 0)
 				{
-					DropItem(inventory.my_items - 1);
+					// only if not in use
+					if (!inventory.my_item[inventory.focus].in_use)
+						DropItem(inventory.focus);
 				}
 			}
 		}
@@ -3244,6 +3599,146 @@ void Game::StartContact(int id, int x, int y, int b)
 	int mrg = 0;
 	int cap = -1;
 	float yaw = 0;
+	Item* item = 0;
+
+	if (show_inventory && !player.talk_box)
+	{
+		bool can_scroll = false;
+		bool inside = false;
+
+		{ // protect x,y
+			int width = render_size[0];
+			int height = render_size[1];
+			Sprite::Frame* sf = inventory_sprite->atlas;
+
+			// check if inside widget
+			int inventory_width = 39;
+			int max_height = 7 + 4 * inventory.height + 1 + 5;
+			int inventory_height = height - 6;
+			if (inventory_height > max_height)
+				inventory_height = max_height;
+			if (inventory_height < sf->height)
+				inventory_height = sf->height;
+			int diff = inventory_height - sf->height;
+
+			int x = scene_shift - inventory_width;
+			int y = (height - 6 - inventory_height) / 2;
+
+			int left = x + 3;
+			int right = x + 3 + inventory.width * 4;
+			int upper = y + inventory_height - 6;
+			int lower = y + 7;
+
+			if (cp[0] >= x && cp[0] < x + inventory_width && cp[1] >= y && cp[1] < y + inventory_height)
+			{
+				inside = true;
+
+				if (cp[0] <= left || cp[0] >= right || cp[1] <= lower || cp[1] >= upper)
+				{
+					if (b==1)
+						can_scroll = true;
+				}
+				else
+				{
+					int my_item = CheckPick(cp);
+					// check for unused space
+					if (my_item < 0 && b==1)
+						can_scroll = true;
+					else
+					if (my_item >=0)
+					{
+						// if this item is not handled by any other contact
+
+						bool can_click = true;
+
+						for (int i = 0; i < 4; i++)
+						{
+							if (input.contact->action == Input::Contact::ITEM_GRID_CLICK ||
+								input.contact->action == Input::Contact::ITEM_GRID_DRAG)
+							{
+								if (my_item == input.contact->my_item)
+								{
+									can_click = false;
+									break;
+								}
+							}
+						}
+
+						if (can_click)
+						{
+							inventory.focus = my_item;
+
+							// note: in case of mouse, it can be right or left click
+							// left is for entire group move/remove, right is for 1 entity move/remove (split) 
+							con->action = Input::Contact::ITEM_GRID_CLICK;
+							con->my_item = my_item;
+							con->item = inventory.my_item[my_item].item;
+
+							con->drag = b;
+							con->pos[0] = x;
+							con->pos[1] = y;
+							con->drag_from[0] = x;
+							con->drag_from[1] = y;
+
+							con->keyb_cap = cap;
+							con->margin = mrg;
+							con->player_hit = hit;
+							con->start_yaw = yaw;
+							return;
+						}
+					}
+				}
+			}
+		}
+
+		if (can_scroll)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				if (input.contact[i].action == Input::Contact::ITEM_GRID_SCROLL)
+				{
+					can_scroll = false;
+					break;
+				}
+			}
+
+			if (can_scroll)
+			{
+				con->action = Input::Contact::ITEM_GRID_SCROLL;
+				con->scroll = inventory.scroll;
+
+				con->drag = b;
+				con->pos[0] = x;
+				con->pos[1] = y;
+				con->drag_from[0] = x;
+				con->drag_from[1] = y;
+
+				con->item = item;
+				con->keyb_cap = cap;
+				con->margin = mrg;
+				con->player_hit = hit;
+				con->start_yaw = yaw;
+				return;
+			}
+		}
+		else
+		if (inside)
+		{
+			con->action = Input::Contact::NONE;
+			con->drag = b;
+			con->pos[0] = x;
+			con->pos[1] = y;
+			con->drag_from[0] = x;
+			con->drag_from[1] = y;
+
+			con->item = item;
+			con->keyb_cap = cap;
+			con->margin = mrg;
+			con->player_hit = hit;
+			con->start_yaw = yaw;
+			return;
+		}
+	}
 
 	if (items_count && cp[1] >= items_ylo && cp[1] <= items_yhi && b == 1)
 	{
@@ -3254,6 +3749,37 @@ void Game::StartContact(int id, int x, int y, int b)
 			{
 				if (cp[0] > items_xarr[i] && cp[0] < items_xarr[i + 1])
 				{
+					// ensure no other contact with this item
+					bool ok = true;
+					for (int c = 0; c < 4; c++)
+					{
+						if (input.contact[c].action == Input::Contact::ITEM_LIST_CLICK ||
+							input.contact[c].action == Input::Contact::ITEM_LIST_DRAG)
+						{
+							ok = false;
+							break;
+						}
+					}
+
+					if (!ok)
+						break;
+
+					con->action = Input::Contact::ITEM_LIST_CLICK;
+					con->item = items_inrange[i];
+
+					con->drag = b;
+					con->pos[0] = x;
+					con->pos[1] = y;
+					con->drag_from[0] = x;
+					con->drag_from[1] = y;
+
+					con->keyb_cap = cap;
+					con->margin = mrg;
+					con->player_hit = hit;
+					con->start_yaw = yaw;
+					return;
+
+					/*
 					if (!PickItem(items_inrange[i]))
 					{
 						// display status: "INVENTORY FULL / FRAGGED"
@@ -3266,15 +3792,18 @@ void Game::StartContact(int id, int x, int y, int b)
 					con->drag_from[0] = x;
 					con->drag_from[1] = y;
 
+					con->item = item;
 					con->keyb_cap = cap;
 					con->margin = mrg;
 					con->player_hit = hit;
 					con->start_yaw = yaw;
 					return;
+					*/
 				}
 			}
 		}
 
+		// slightly missed (border / frame between items in list)
 		if (cp[0] >= items_xarr[0] && cp[0] <= items_xarr[items_count])
 		{
 			con->action = Input::Contact::NONE;
@@ -3284,6 +3813,7 @@ void Game::StartContact(int id, int x, int y, int b)
 			con->drag_from[0] = x;
 			con->drag_from[1] = y;
 
+			con->item = item;
 			con->keyb_cap = cap;
 			con->margin = mrg;
 			con->player_hit = hit;
@@ -3302,7 +3832,11 @@ void Game::StartContact(int id, int x, int y, int b)
 		{
 			// temporarily drop item
 			if (inventory.my_items > 0)
-				DropItem(inventory.my_items - 1);
+			{
+				// only if not in use
+				if (!inventory.my_item[inventory.focus].in_use)
+					DropItem(inventory.focus);
+			}
 		}
 		else
 		{
@@ -3434,6 +3968,7 @@ void Game::StartContact(int id, int x, int y, int b)
 	con->drag_from[0] = x;
 	con->drag_from[1] = y;
 
+	con->item = item;
 	con->keyb_cap = cap;
 	con->margin = mrg;
 	con->player_hit = hit;
@@ -3448,6 +3983,82 @@ void Game::MoveContact(int id, int x, int y)
 
 	switch (con->action)
 	{
+		case Input::Contact::ITEM_GRID_CLICK:
+		{
+			// if moved my 2 or more cells, change it into DRAG
+			int down[2] = { con->drag_from[0], con->drag_from[1] };
+			ScreenToCell(down);
+
+			int up[2] = { x, y };
+			ScreenToCell(up);
+
+			int rel[2] = { up[0] - down[0], up[1] - down[1] };
+			if (rel[0] * rel[0] + rel[1] * rel[1] >= 4)
+			{
+				// turn into moving/splitting/removing item
+				con->action = Input::Contact::ITEM_GRID_DRAG;
+			}
+			break;
+		}
+
+		case Input::Contact::ITEM_GRID_SCROLL:
+		{
+			int down[2] = { con->drag_from[0], con->drag_from[1] };
+			ScreenToCell(down);
+
+			int up[2] = { x, y };
+			ScreenToCell(up);
+
+			Sprite::Frame* sf = inventory_sprite->atlas;
+
+			int height = render_size[1];
+			int max_height = 7 + 4 * inventory.height + 1 + 5;
+			int inventory_height = height - 6;
+			if (inventory_height > max_height)
+				inventory_height = max_height;
+			if (inventory_height < sf->height)
+				inventory_height = sf->height;
+
+			int max_scroll = max_height - inventory_height;
+
+			int scroll = con->scroll + up[1] - down[1];
+			if (scroll < 0)
+				scroll = 0;
+			if (scroll > max_scroll)
+				scroll = max_scroll;
+
+			inventory.scroll = scroll;
+
+			break;
+		}
+		case Input::Contact::ITEM_LIST_CLICK:
+		{
+			int cp[2] = { x, y };
+			ScreenToCell(cp);
+
+			// locate in list
+			for (int i = 0; i < items_count; i++)
+			{
+				if (con->item == items_inrange[i])
+				{
+					if (cp[1] >= items_ylo && cp[1] <= items_yhi &&
+						cp[0] > items_xarr[i] && cp[0] < items_xarr[i + 1])
+					{
+						// still inside item rect, nutting to do
+						return;
+					}
+
+					// dragged out of the list
+					con->action = Input::Contact::ITEM_LIST_DRAG;
+					return;
+				}
+			}
+
+			// not in the list anymore
+			con->action = Input::Contact::NONE;
+			break;
+		}
+
 		case Input::Contact::PLAYER:
 		{
 			int down[2] = { con->drag_from[0], con->drag_from[1] };
@@ -3505,9 +4116,236 @@ void Game::EndContact(int id, int x, int y)
 	Input::Contact* con = input.contact + id;
 
 	// any contact end must cancel autorep
+	con->pos[0] = x;
+	con->pos[1] = y;
 
 	switch (con->action)
 	{
+		case Input::Contact::ITEM_GRID_CLICK:
+		{
+			// eat/use/unuse
+			// (only with right click)
+			if (con->drag==2)
+			switch (con->item->proto->kind)
+			{
+				case 'F': // food
+				case 'P': // potion
+				case 'D': // drink
+				{
+					if (con->item->count > 1)
+						con->item->count--;
+					else
+					{
+						// giving pos==null doesn't create world's instance!
+						inventory.RemoveItem(con->my_item, 0, 0);
+					}
+					break;
+				}
+
+				case 'W':
+				{
+					if (inventory.my_item[con->my_item].in_use)
+					{
+						if (player.SetWeapon(PLAYER_WEAPON_INDEX::WEAPON_NONE))
+						{
+							inventory.my_item[con->my_item].in_use = false;
+						}
+					}
+					else
+					{
+						if (player.SetWeapon(con->item->proto->sub_kind))
+						{
+							for (int i = 0; i < inventory.my_items; i++)
+							{
+								if (inventory.my_item[i].in_use && inventory.my_item[i].item->proto->kind == con->item->proto->kind)
+								{
+									inventory.my_item[i].in_use = false;
+									break;
+								}
+							}
+							inventory.my_item[con->my_item].in_use = true;
+						}
+					}
+					break;
+				}
+
+				case 'S':
+				{
+					if (inventory.my_item[con->my_item].in_use)
+					{
+						if (player.SetShield(PLAYER_SHIELD_INDEX::SHIELD_NONE))
+						{
+							inventory.my_item[con->my_item].in_use = false;
+						}
+					}
+					else
+					{
+						if (player.SetShield(con->item->proto->sub_kind))
+						{
+							for (int i = 0; i < inventory.my_items; i++)
+							{
+								if (inventory.my_item[i].in_use && inventory.my_item[i].item->proto->kind == con->item->proto->kind)
+								{
+									inventory.my_item[i].in_use = false;
+									break;
+								}
+							}
+							inventory.my_item[con->my_item].in_use = true;
+						}
+					}
+					break;
+				}
+
+				case 'H':
+				{
+					if (inventory.my_item[con->my_item].in_use)
+					{
+						if (player.SetHelmet(PLAYER_HELMET_INDEX::HELMET_NONE))
+						{
+							inventory.my_item[con->my_item].in_use = false;
+						}
+					}
+					else
+					{
+						if (player.SetHelmet(con->item->proto->sub_kind))
+						{
+							for (int i = 0; i < inventory.my_items; i++)
+							{
+								if (inventory.my_item[i].in_use && inventory.my_item[i].item->proto->kind == con->item->proto->kind)
+								{
+									inventory.my_item[i].in_use = false;
+									break;
+								}
+							}
+							inventory.my_item[con->my_item].in_use = true;
+						}
+					}
+				}
+
+				case 'A':
+				{
+					if (inventory.my_item[con->my_item].in_use)
+					{
+						if (player.SetArmor(PLAYER_ARMOR_INDEX::ARMOR_NONE))
+						{
+							inventory.my_item[con->my_item].in_use = false;
+						}
+					}
+					else
+					{
+						if (player.SetArmor(con->item->proto->sub_kind))
+						{
+							for (int i = 0; i < inventory.my_items; i++)
+							{
+								if (inventory.my_item[i].in_use && inventory.my_item[i].item->proto->kind == con->item->proto->kind)
+								{
+									inventory.my_item[i].in_use = false;
+									break;
+								}
+							}
+							inventory.my_item[con->my_item].in_use = true;
+						}
+					}
+				}
+			}
+
+			break;
+		}
+
+		case Input::Contact::ITEM_GRID_DRAG:
+		{
+			if (con->drag == 2 )
+			{
+				// SPLIT
+			}
+
+			int drop_at[2];
+			if (CheckDrop(id, drop_at, 0, render_size[0], render_size[1]))
+			{
+				if (drop_at[0] < 0 || drop_at[1] < 0)
+				{
+					// REMOVE! (if not in use)
+					if (!inventory.my_item[con->my_item].in_use)
+						DropItem(con->my_item);
+					break;
+				}
+
+				// clear bitmask first (NOT FOR SPLIT)
+				int* xy = inventory.my_item[con->my_item].xy;
+				Item* item = con->item;
+				int x0 = xy[0];
+				int x1 = x0 + (item->proto->sprite_2d->atlas->width + 1) / 4;
+				int y0 = xy[1];
+				int y1 = y0 + (item->proto->sprite_2d->atlas->height + 1) / 4;
+				for (int y = y0; y < y1; y++)
+				{
+					for (int x = x0; x < x1; x++)
+					{
+						int i = x + y * inventory.width;
+						inventory.bitmask[i >> 3] &= ~(1 << (i & 7));
+					}
+				}
+
+				inventory.my_item[con->my_item].xy[0] = drop_at[0];
+				inventory.my_item[con->my_item].xy[1] = drop_at[1];
+
+				// SET BITMASK
+				x0 = xy[0];
+				x1 = x0 + (item->proto->sprite_2d->atlas->width + 1) / 4;
+				y0 = xy[1];
+				y1 = y0 + (item->proto->sprite_2d->atlas->height + 1) / 4;
+				for (int y = y0; y < y1; y++)
+				{
+					for (int x = x0; x < x1; x++)
+					{
+						int i = x + y * inventory.width;
+						inventory.bitmask[i >> 3] |= 1 << (i & 7);
+					}
+				}
+			}
+
+			break;
+		}
+
+		case Input::Contact::ITEM_LIST_CLICK:
+		case Input::Contact::ITEM_LIST_DRAG:
+		{
+			int cp[2] = { x, y };
+			ScreenToCell(cp);
+
+			// locate in list
+			for (int i = 0; i < items_count; i++)
+			{
+				if (con->item == items_inrange[i])
+				{
+					if (con->action == Input::Contact::ITEM_LIST_CLICK)
+					{
+						if (cp[1] >= items_ylo && cp[1] <= items_yhi &&
+							cp[0] > items_xarr[i] && cp[0] < items_xarr[i + 1])
+						{
+							// TRY TO PICK
+							PickItem(items_inrange[i]);
+							break;
+						}
+					}
+					else
+					if (show_inventory)
+					{
+						// TRY TO INSERT INTO INVENTORY at given pos
+						int drop_at[2];
+						if (CheckDrop(id, drop_at, 0, render_size[0], render_size[1]))
+						{
+							inventory.InsertItem(items_inrange[i], drop_at);
+						}
+					}
+
+					break;
+				}
+			}
+
+			break;
+		}
+
 		case Input::Contact::KEYBCAP:
 		{
 			// maybe we should clear it also when another cap is pressed?

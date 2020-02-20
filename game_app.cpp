@@ -453,7 +453,7 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 int main(int argc, char* argv[])
 {
 #ifdef _WIN32
-	//_CrtSetBreakAlloc(2239);
+	//_CrtSetBreakAlloc(5971);
 #endif
 
     // if there is no '-term' arg given run A3D (GL) term

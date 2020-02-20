@@ -33,6 +33,8 @@ bool Inventory::InsertItem(Item* item, int xy[2])
 		my_item[my_items].xy[0] = xy[0];
 		my_item[my_items].xy[1] = xy[1];
 		my_item[my_items].item = item;
+		my_item[my_items].in_use = false;
+
 
 		// set bitmask
 		int x0 = my_item[my_items].xy[0];
@@ -49,6 +51,7 @@ bool Inventory::InsertItem(Item* item, int xy[2])
 		}
 
 		my_items++;
+		focus = my_items - 1;
 	}
 
 	return true;
@@ -62,8 +65,6 @@ bool Inventory::RemoveItem(int index, float pos[3], float yaw)
 	int flags = INST_USE_TREE | INST_VISIBLE;
 
 	Item* item = my_item[index].item;
-	item->purpose = Item::WORLD;
-	item->inst = CreateInst(world, item, flags, pos, yaw);
 
 	// clear bitmask
 	int x0 = my_item[index].xy[0];
@@ -79,11 +80,25 @@ bool Inventory::RemoveItem(int index, float pos[3], float yaw)
 		}
 	}
 
+	if (pos)
+	{
+		item->purpose = Item::WORLD;
+		item->inst = CreateInst(world, item, flags, pos, yaw);
+		assert(item->inst);
+	}
+	else
+	{
+		DestroyItem(item);
+	}
+
 	my_items--; // fill gap, preserve order!
+
+	if (focus > index || focus == my_items)
+		focus--;
+
 	for (int i = index; i < my_items; i++)
 		my_item[i] = my_item[i + 1];
 	my_item[my_items].item = 0;
 
-	assert(item->inst);
 	return true;
 }

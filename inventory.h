@@ -16,6 +16,7 @@ struct Inventory
 	static const int max_items = width*height; // please clamp to 100 items
 
 	int scroll;
+	int focus;
 
 	// free space lookup accelerator
 	uint8_t bitmask[(max_items+7)/8];
@@ -24,8 +25,8 @@ struct Inventory
 	{
 		Item* item;
 		int xy[2];
-		// some ui states if needed
-		// ...
+
+		bool in_use;
 	};
 
 	int my_items;
@@ -49,8 +50,8 @@ struct Inventory
 
 struct ItemProto // loaded from items.txt file
 {
-	int kind; // 'W'eapon, 'S'hield, 'H'elmet, 'A'rmor, 'R'ing, ... 'C'onsumable
-	int sub_kind; // (ie: for kind=='W' sub_kind==1 is sword, for kind=='C' sub_kind==1 is hp_potion )
+	int kind; // 'W'eapon, 'S'hield, 'H'elmet, 'A'rmor, 'R'ing, ... 
+	int sub_kind; // (ie: for kind=='W' sub_kind==1 is sword, for kind=='P' sub_kind==1 is hp_potion )
 
 	// use command:
 	// will check for kind=W/S/H/A and we have player-sprite with given sub_kind (currently only 0/1)

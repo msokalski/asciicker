@@ -2339,23 +2339,41 @@ static void CloneItemInsts(World* w, BSP* bsp)
 
 void ResetItemInsts(World* w)
 {
-	if (w && w->root)
-	{
-		delete_item_list = 0;
-		DeleteItemInsts(w->root, false); // prepares list only
+	delete_item_list = 0;
 
-		Item* item = delete_item_list;
-		while (item)
+	if (w)
+	{
+		// flat first
+		Inst* i = w->head_inst;
+		while (i)
 		{
-			Item* n = (Item*)item->proto;
-			DestroyItem(item); // destroys inst too!!!
-			item = n;
+			if (i->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				Item* item = ((ItemInst*)i)->item;
+				if (/*all || */item->purpose == Item::WORLD)
+				{
+					item->proto = (ItemProto*)delete_item_list;
+					delete_item_list = item;
+				}
+			}
+			i = i->next;
 		}
 
 		if (w->root)
-			CloneItemInsts(w,w->root); // clones immediately
-		RebuildWorld(w);
+			DeleteItemInsts(w->root, false); // prepares list only
 	}
+
+	Item* item = delete_item_list;
+	while (item)
+	{
+		Item* n = (Item*)item->proto;
+		DestroyItem(item); // destroys inst too!!!
+		item = n;
+	}
+
+	if (w->root)
+		CloneItemInsts(w,w->root); // clones immediately
+	RebuildWorld(w);
 }
 
 bool Mesh::Update(const char* path)
@@ -3056,42 +3074,66 @@ void DeleteWorld(World* w)
         return;
 
     // killing bsp brings all instances to world list
+
+
+	delete_item_list = 0;
+	delete_sprite_list = 0;
+
+	// flat first
+	Inst* i = w->head_inst;
+	while (i)
+	{
+		if (i->inst_type == Inst::INST_TYPE::ITEM)
+		{
+			Item* item = ((ItemInst*)i)->item;
+			if (/*all || */item->purpose == Item::WORLD)
+			{
+				item->proto = (ItemProto*)delete_item_list;
+				delete_item_list = item;
+			}
+		}
+		else
+		if (i->inst_type == Inst::INST_TYPE::SPRITE)
+		{
+			SpriteInst* si = (SpriteInst*)i;
+			si->sprite = (Sprite*)delete_sprite_list;
+			delete_sprite_list = si;
+		}
+
+		i = i->next;
+	}
+
 	if (w->root)
 	{
-		////////////////////////////////////////////////
-		// items & their insts
-
-		delete_item_list = 0;
 		DeleteItemInsts(w->root, true); // prepares list only
-
-		Item* item = delete_item_list;
-		while (item)
-		{
-			Item* n = (Item*)item->proto;
-			DestroyItem(item); // destroys inst too!!!
-			item = n;
-		}
-
-		////////////////////////////////////////////////
-		// sprite insts
-
-		delete_sprite_list = 0;
-		if (w->root)
-			DeleteSpriteInsts(w->root);
-
-		SpriteInst* si = delete_sprite_list;
-		while (si)
-		{
-			SpriteInst* n = (SpriteInst*)si->sprite;
-			DeleteInst(si);
-			si = n;
-		}
-
-		if (w->root)
-			w->DeleteBSP(w->root);
-
-		w->root = 0;
 	}
+
+	Item* item = delete_item_list;
+	while (item)
+	{
+		Item* n = (Item*)item->proto;
+		DestroyItem(item); // destroys inst too!!!
+		item = n;
+	}
+
+	////////////////////////////////////////////////
+	// sprite insts
+
+	if (w->root)
+		DeleteSpriteInsts(w->root);
+
+	SpriteInst* si = delete_sprite_list;
+	while (si)
+	{
+		SpriteInst* n = (SpriteInst*)si->sprite;
+		DeleteInst(si);
+		si = n;
+	}
+
+	if (w->root)
+		w->DeleteBSP(w->root);
+
+	w->root = 0;
 
     // killing all meshes should kill all insts as well
     while (w->meshes)

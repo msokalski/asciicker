@@ -136,6 +136,8 @@ struct Game
 	Inventory inventory;
 	bool DropItem(int index);
 	bool PickItem(Item* item);
+	bool CheckDrop(int c/*contact index*/, int xy[2]=0, AnsiCell* ptr=0, int w=0, int h=0);
+	int CheckPick(const int pos[2]);
 
 	int npcs;
 	Character* npc;
@@ -145,6 +147,8 @@ struct Game
 	void EndContact(int id, int x, int y);
 
 	int GetContact(int id);
+
+
 
 	// accumulated input state
 	struct Input 
@@ -161,7 +165,13 @@ struct Game
 				KEYBCAP,
 				PLAYER,
 				TORQUE, // can be abs (right mouse but) or (timer touch on margin)
-				FORCE
+				FORCE,
+
+				ITEM_LIST_CLICK,
+				ITEM_LIST_DRAG,
+				ITEM_GRID_CLICK,
+				ITEM_GRID_DRAG,
+				ITEM_GRID_SCROLL,
 			};
 
 			int action;
@@ -170,10 +180,13 @@ struct Game
 			int pos[2];  // mouse pos
 			int drag_from[2]; // where drag has started
 
+			Item* item;
+			int my_item;
 			int keyb_cap; // if touch starts at some cap
 			bool player_hit; // if touch started at player/talkbox
 			int margin; // -1: if touch started at left margin, +1 : if touch started at right margin, 0 otherwise
 			float start_yaw; // absolute by mouse
+			int scroll;
 		};
 
 		Contact contact[4]; // 0:mouse, 1:primary_touch 2:secondary_touch 3:unused
