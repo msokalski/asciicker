@@ -2236,9 +2236,9 @@ bool Game::DropItem(int index)
 	{
 		float _pos[3] =
 		{
-			dpos[0],
-			dpos[1],
-			(float)z
+			+(float)dpos[0],
+			+(float)dpos[1],
+			+(float)z
 		};
 
 		inventory.RemoveItem(index, _pos, prev_yaw);
