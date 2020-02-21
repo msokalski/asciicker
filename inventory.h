@@ -15,7 +15,8 @@ struct Inventory
 	static const int height = 20; // fit upto 10 7x7 cells items
 	static const int max_items = width*height; // please clamp to 100 items
 
-	int scroll;
+	bool animate_scroll;
+	int scroll, smooth_scroll;
 	int focus;
 
 	// free space lookup accelerator
@@ -35,17 +36,10 @@ struct Inventory
 	bool InsertItem(Item* item, int xy[2]); 
 	bool RemoveItem(int index, float pos[3], float yaw);
 
-	int weight; // sum(Item* i=first..last) { i.count * i.proto->weight }
-	int area; // sum(Item* i=first..last) { (i.proto->sprite_2d.width+1)*(i.proto->sprite_2d.height+1) / 16 }
+	int find_pos[2]; // both set when focusing, only one on FindNext()
 
-	void Pack();
-	bool FindFree(int dw, int dh, int xy[2]) const;
-
-	bool Move(Item* item, const int to_xy[2]);
-
-	// items must be first inserted to world (by LoadWorld)
-	// then they can be moved to inventory and back to world (per game object separately)
-
+	void FocusNext(int dx, int dy);
+	void SetFocus(int index);
 };
 
 struct ItemProto // loaded from items.txt file

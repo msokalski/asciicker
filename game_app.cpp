@@ -966,6 +966,16 @@ int main(int argc, char* argv[])
                                     {
                                         int but = val[0] & 0x3;
 
+										if (val[0] >= 64)
+										{
+											// wheel
+											if (but == 0)
+												game->OnMouse(Game::MOUSE_WHEEL_DOWN, val[1] - 1, val[2] - 1);
+											else
+											if (but == 1)
+												game->OnMouse(Game::MOUSE_WHEEL_UP, val[1] - 1, val[2] - 1);
+										}
+										else
                                         if (val[0] >= 32)
                                         {
                                             // motion

@@ -2758,6 +2758,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		int x = scene_shift - inventory_width;
 		int y = (height - 6 - inventory_height) / 2;
+
 		int clip[] = { 0,0,inventory_width,8 };
 		BlitSprite(ptr, width, height, sf, x, y, clip);
 
@@ -2782,32 +2783,55 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		clip[1] = 27; clip[3] = 35;
 		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1] + 8 + reps[2], clip);
 
-		static int dir = 1;
-
-		static int slower = 0;
-
-		// UNCOMMENT TO ANIMATE
-		// slower++;
-
-		if (slower == 20)
+		if (inventory.animate_scroll)
 		{
-			inventory.scroll += dir;
-			slower = 0;
+			if (!inventory.my_items)
+				inventory.animate_scroll = false;
+			int i = inventory.focus;
+			int iy = y + inventory.my_item[i].xy[1] * 4 + inventory_height - 6 - (inventory.height * 4 - 1) + inventory.scroll;
+
+			Sprite::Frame* isf = inventory.my_item[i].item->proto->sprite_2d->atlas;
+
+			if (iy < y + 9)
+			{
+				int d = y + 9 - iy;
+				inventory.scroll += d<f120 ? d : f120;
+			}
+			if (iy + isf->height > y + inventory_height - 5 - 2)
+			{
+				int d = (iy + isf->height)-(y + inventory_height - 5 - 2);
+				inventory.scroll -= d < f120 ? d : f120;
+			}
 		}
 
 		int max_scroll = max_height - inventory_height;
 
-		if (inventory.scroll < 0)
+		if (inventory.animate_scroll)
+			inventory.smooth_scroll = inventory.scroll;
+		else
 		{
-			inventory.scroll = 0;
-			dir = 1;
+			if (inventory.smooth_scroll < 0)
+				inventory.smooth_scroll = 0;
+			if (inventory.smooth_scroll > max_scroll)
+				inventory.smooth_scroll = max_scroll;
+
+			if (inventory.smooth_scroll < inventory.scroll)
+			{
+				int d = inventory.scroll - inventory.smooth_scroll;
+				inventory.scroll-= d < f120 ? d : f120;
+			}
+			else
+			if (inventory.smooth_scroll > inventory.scroll)
+			{
+				int d = inventory.smooth_scroll - inventory.scroll;
+				inventory.scroll+= d < f120 ? d : f120;
+			}
 		}
 
+		if (inventory.scroll < 0)
+			inventory.scroll = 0;
 		if (inventory.scroll > max_scroll)
-		{
 			inventory.scroll = max_scroll;
-			dir = -1;
-		}
 
 		int scroll = inventory.scroll;
 
@@ -2850,6 +2874,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				
 			if (in_contact>=0)
 			{
+				// fill bk, defer sprite attached to contact
+				if (inventory.my_item[i].in_use)
+					FillRect(ptr, width, height, ix, iy, isf->width, isf->height, item_inuse_bk);
+				else
+					FillRect(ptr, width, height, ix, iy, isf->width, isf->height, item_bk);
+
 				contact_item[contact_items] = in_contact; // deferred render
 				contact_items++;
 			}
@@ -2862,7 +2892,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			}
 
 			// FOCUS
-			if (i == inventory.focus)
+			if (i == inventory.focus && in_contact<0)
 			{
 				// deferred
 				focus_rect[0] = ix - 1;
@@ -3360,9 +3390,16 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			switch (key)
 			{
 				case A3D_UP:
+					inventory.FocusNext(0, 1);
+					break;
 				case A3D_DOWN:
+					inventory.FocusNext(0, -1);
+					break;
 				case A3D_LEFT:
+					inventory.FocusNext(-1, 0);
+					break;
 				case A3D_RIGHT:
+					inventory.FocusNext(1, 0);
 					break;
 			}
 		}
@@ -3601,10 +3638,54 @@ void Game::StartContact(int id, int x, int y, int b)
 	float yaw = 0;
 	Item* item = 0;
 
+	if (show_buts && cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0] >= render_size[0] - bars_pos) && b == 1)
+	{
+		// main but
+		// perform action immediately
+		// ...
+
+		if (cp[0] >= render_size[0] - bars_pos)
+		{
+			// temporarily drop item
+			/*
+			if (inventory.my_items > 0)
+			{
+				// only if not in use
+				if (!inventory.my_item[inventory.focus].in_use)
+					DropItem(inventory.focus);
+			}
+			*/
+
+			// TODO:
+			// SHOW HELP!
+		}
+		else
+		{
+			show_inventory = !show_inventory;
+		}
+
+		// make contact dead
+		con->action = Input::Contact::NONE;
+		con->drag = b;
+		con->pos[0] = x;
+		con->pos[1] = y;
+		con->drag_from[0] = x;
+		con->drag_from[1] = y;
+
+		con->item = item;
+		con->keyb_cap = cap;
+		con->margin = mrg;
+		con->player_hit = hit;
+		con->start_yaw = yaw;
+		return;
+	}
+
 	if (show_inventory && !player.talk_box)
 	{
 		bool can_scroll = false;
 		bool inside = false;
+
+		int _x = x, _y = y;
 
 		{ // protect x,y
 			int width = render_size[0];
@@ -3651,12 +3732,15 @@ void Game::StartContact(int id, int x, int y, int b)
 
 						bool can_click = true;
 
-						for (int i = 0; i < 4; i++)
+						for (int c = 0; c < 4; c++)
 						{
-							if (input.contact->action == Input::Contact::ITEM_GRID_CLICK ||
-								input.contact->action == Input::Contact::ITEM_GRID_DRAG)
+							if (input.contact[c].action == Input::Contact::ITEM_LIST_CLICK ||
+								input.contact[c].action == Input::Contact::ITEM_LIST_DRAG ||
+								input.contact[c].action == Input::Contact::ITEM_GRID_CLICK ||
+								input.contact[c].action == Input::Contact::ITEM_GRID_DRAG)
 							{
-								if (my_item == input.contact->my_item)
+								// if (my_item == input.contact->my_item)
+								// ENFORCED TO ONE SCROLL AND ONE CLICK/DRAG CONTACT AT ONCE
 								{
 									can_click = false;
 									break;
@@ -3666,7 +3750,8 @@ void Game::StartContact(int id, int x, int y, int b)
 
 						if (can_click)
 						{
-							inventory.focus = my_item;
+							inventory.SetFocus(my_item);
+							inventory.animate_scroll = true;
 
 							// note: in case of mouse, it can be right or left click
 							// left is for entire group move/remove, right is for 1 entity move/remove (split) 
@@ -3675,10 +3760,10 @@ void Game::StartContact(int id, int x, int y, int b)
 							con->item = inventory.my_item[my_item].item;
 
 							con->drag = b;
-							con->pos[0] = x;
-							con->pos[1] = y;
-							con->drag_from[0] = x;
-							con->drag_from[1] = y;
+							con->pos[0] = _x;
+							con->pos[1] = _y;
+							con->drag_from[0] = _x;
+							con->drag_from[1] = _y;
 
 							con->keyb_cap = cap;
 							con->margin = mrg;
@@ -3704,6 +3789,7 @@ void Game::StartContact(int id, int x, int y, int b)
 
 			if (can_scroll)
 			{
+				inventory.animate_scroll = false;
 				con->action = Input::Contact::ITEM_GRID_SCROLL;
 				con->scroll = inventory.scroll;
 
@@ -3754,7 +3840,9 @@ void Game::StartContact(int id, int x, int y, int b)
 					for (int c = 0; c < 4; c++)
 					{
 						if (input.contact[c].action == Input::Contact::ITEM_LIST_CLICK ||
-							input.contact[c].action == Input::Contact::ITEM_LIST_DRAG)
+							input.contact[c].action == Input::Contact::ITEM_LIST_DRAG ||
+							input.contact[c].action == Input::Contact::ITEM_GRID_CLICK ||
+							input.contact[c].action == Input::Contact::ITEM_GRID_DRAG)
 						{
 							ok = false;
 							break;
@@ -3822,31 +3910,6 @@ void Game::StartContact(int id, int x, int y, int b)
 		}
 	}
 
-	if (show_buts && cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0]>= render_size[0] - bars_pos) && b == 1)
-	{
-		// main but
-		// perform action immediately
-		// ...
-
-		if (cp[0] >= render_size[0] - bars_pos)
-		{
-			// temporarily drop item
-			if (inventory.my_items > 0)
-			{
-				// only if not in use
-				if (!inventory.my_item[inventory.focus].in_use)
-					DropItem(inventory.focus);
-			}
-		}
-		else
-		{
-			show_inventory = !show_inventory;
-		}
-
-		// make contact dead
-		con->action = Input::Contact::NONE;
-	}
-	else
 	{
 		if (show_keyb)
 		{
@@ -4028,6 +4091,8 @@ void Game::MoveContact(int id, int x, int y)
 				scroll = max_scroll;
 
 			inventory.scroll = scroll;
+			inventory.smooth_scroll = inventory.scroll;
+
 
 			break;
 		}
@@ -4507,7 +4572,20 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 		// they are handled
 		// after switch !!!
 		case MOUSE_WHEEL_DOWN:
+			if (scene_shift)
+			{
+				// if mouse on x-visible part of inventory
+				inventory.animate_scroll = false;
+				inventory.smooth_scroll += 5;
+			}
+			break;
 		case MOUSE_WHEEL_UP:
+			if (scene_shift)
+			{
+				// if mouse on x-visible part of inventory
+				inventory.animate_scroll = false;
+				inventory.smooth_scroll -= 5;
+			}
 			break;
 
 		case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: 

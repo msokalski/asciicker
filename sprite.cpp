@@ -643,6 +643,39 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	return sprite;
 }
 
+void FillRect(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, AnsiCell ac)
+{
+	if (x < 0)
+	{
+		w -= -x;
+		x = 0;
+	}
+	if (x + w > width)
+		w = width - x;
+
+	if (y < 0)
+	{
+		h -= -y;
+		y = 0;
+	}
+	if (y + h > height)
+		h = height - y;
+
+	int x1 = x;
+	int x2 = x + w;
+
+	int y1 = y;
+	int y2 = y + h;
+
+	AnsiCell* dst = ptr + x1 + y1 * width;
+	for (y = y1; y < y2; y++)
+	{
+		for (int i = 0; i < w; i++)
+			dst[i] = ac;
+		dst += width;
+	}
+}
+
 void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y, const int clip[4], bool src_clip, AnsiCell* bk)
 {
 	int sx = 0, sy = 0, w = sf->width, h = sf->height;
