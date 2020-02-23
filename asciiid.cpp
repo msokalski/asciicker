@@ -6881,7 +6881,7 @@ void my_render(A3D_WND* wnd)
 	{
 		if (item_preview_sprite)
 		{
-			RenderContext::RenderSprite(item_preview_sprite, sprite_preview_pos, 0, 0, Item::EDIT, 0, rc);
+			RenderContext::RenderSprite(item_preview_sprite, sprite_preview_pos, 0, -1, Item::EDIT, 0, rc);
 		}
 		else
 		{
