@@ -36,8 +36,6 @@ struct Inventory
 	bool InsertItem(Item* item, int xy[2]); 
 	bool RemoveItem(int index, float pos[3], float yaw);
 
-	int find_pos[2]; // both set when focusing, only one on FindNext()
-
 	void FocusNext(int dx, int dy);
 	void SetFocus(int index);
 };

@@ -142,13 +142,25 @@ struct Game
 	int npcs;
 	Character* npc;
 
+
+	void CancelItemContacts();
+	void ExecuteItem(int my_item);
+
 	void StartContact(int id, int x, int y, int b);
 	void MoveContact(int id, int x, int y);
 	void EndContact(int id, int x, int y);
 
 	int GetContact(int id);
 
+	struct ConsumeAnim
+	{
+		int pos[2];
+		Sprite* sprite;
+		uint64_t stamp;
+	};
 
+	int consume_anims;
+	ConsumeAnim consume_anim[16];
 
 	// accumulated input state
 	struct Input 

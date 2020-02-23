@@ -16,6 +16,8 @@
 # cd ~/emsdk
 # source ./emsdk_env.sh --build=Release
 
+# AUTO SETUP (will be called everytime as all vars are set to this batch env only)
+hash emcc 2>/dev/null || { pushd ~/emsdk; source ./emsdk_env.sh --build=Release; popd; }
 
 # now we can build, 
 # for the first time it will compile and cache libc

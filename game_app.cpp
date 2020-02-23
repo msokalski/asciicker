@@ -623,7 +623,7 @@ int main(int argc, char* argv[])
     uint64_t frames = 0;
 
     {
-        FILE* f = fopen("a3d/game_sprites.a3d","rb");
+        FILE* f = fopen("a3d/game_items.a3d","rb");
 
         if (f)
         {
@@ -871,6 +871,18 @@ int main(int argc, char* argv[])
                     game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DOWN);
                     i+=3;
                 }    
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'H')
+                {
+                    // home
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_HOME);
+                    i+=3;
+                }
+                if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'F')
+                {
+                    // end
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_END);
+                    i+=3;
+                }    
 
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '1' && stream[i+3] == ';')
                 {
@@ -970,10 +982,10 @@ int main(int argc, char* argv[])
 										{
 											// wheel
 											if (but == 0)
-												game->OnMouse(Game::MOUSE_WHEEL_DOWN, val[1] - 1, val[2] - 1);
+												game->OnMouse(Game::MOUSE_WHEEL_UP, val[1] - 1, val[2] - 1);
 											else
 											if (but == 1)
-												game->OnMouse(Game::MOUSE_WHEEL_UP, val[1] - 1, val[2] - 1);
+												game->OnMouse(Game::MOUSE_WHEEL_DOWN, val[1] - 1, val[2] - 1);
 										}
 										else
                                         if (val[0] >= 32)

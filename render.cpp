@@ -2248,9 +2248,15 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 
 	int sh_x = width+1 +scene_shift[0]*2; // & ~1;
 	
-	for (int y = 0 + scene_shift[1]*2; y < dh + scene_shift[1]*2; y++)
+	for (int y = 0; y < dh; y++)
 	{
-		for (int x = sh_x-5; x <= sh_x+5; x++)
+		int left = sh_x-5;
+		int right = sh_x+5;
+		if (left<0)
+			left=0;
+		if (right>=dw)
+			right=dw-1;
+		for (int x = left; x <= right; x++)
 		{
 			Sample* s = r->sample_buffer.ptr + x + y * dw;
 			if (abs(s->height - pos[2]) <= 64)

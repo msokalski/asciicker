@@ -1,0 +1,47 @@
+Control your character:
+-----------------------
+
+by keyboard:
+- arrow keys: move
+- WASD keys:  move (alternate)
+- Q/E keys:   rotates view
+- SPACE key:  jump
+- ENTER:      attack (you must be equipped)
+
+by mouse:
+- push and hold LMB in desired move direction, relative to character 
+- while holding LMB press RMB to jump
+- drag with RMB to rotate view
+
+by touch:
+- start touch anywhere excluding areas covered by popup elements
+- move your finger in desired direction
+- while holding move finger tap with another finger to jump
+- hold finger on left/right screen edge to rotate view
+
+Picking up items:
+- get close to the item / items, popup elements will appear below character
+- tap / click on item or press coresponding number on keyboard to pick it up
+- if inventory is open you can drag item from popup right into inventory
+
+Open / close inventory:
+-----------------------
+
+by keyboard:
+- press I key
+
+by mouse / touch:
+- tap on character icon in upper-left corner
+
+Removing items from inventory:
+------------------------------
+
+- drag item outside inventory window and drop
+- hilight item and press 0 key (also possible when inventory is closed)
+
+Consuming / Using / Unusing items
+---------------------------------
+
+- by mouse: RMB click on item in inventry
+- by touch: hold one finger on item in inventory and tap with another finger anywhere 
+

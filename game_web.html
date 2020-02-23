@@ -626,8 +626,26 @@
         }
           
         window.addEventListener("DOMMouseScroll", preventZoom, { passive: false });
-        window.addEventListener("mousewheel", preventZoom, { passive: false });
         window.addEventListener("contextmenu", preventMenu, { passive: false });
+
+        window.addEventListener("wheel", 
+        function(e)
+        {
+          var x = e.pageX;
+          var y = e.pageY;
+          if (ak_ratio>1.0)
+          {
+            x *= ak_ratio;
+            y *= ak_ratio;
+          }
+          
+          if (e.deltaY > 0)
+            Mouse(7/*WHEEL_DN*/,x,y);
+          else
+          if (e.deltaY < 0)
+            Mouse(8/*WHEEL_UP*/,x,y);
+          e.preventDefault();
+        }, { passive: false });
           
         window.addEventListener("mousedown", 
         function(e) 
