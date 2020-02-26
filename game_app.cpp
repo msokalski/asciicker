@@ -421,14 +421,16 @@ float global_lt[4];
 World* world;
 Terrain* terrain;
 
+int font_zoom = 0;
+
 int GetGLFont(int wh[2], const int wnd_wh[2])
 {
-    int tex = 0;
     float err = 0;
 
     assert(wnd_wh);
     float area = wnd_wh[0]*wnd_wh[1];
 
+	int j = -1;
     for (int i=0; i<fonts_loaded; i++)
     {
         MyFont* f = font + i;
@@ -436,19 +438,49 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 
         if (!i || e<err)
         {
+			j = i;
             err = e;
-            tex = f->tex;
-
-            if (wh)
-            {
-                wh[0] = f->width;
-                wh[1] = f->height;
-            }
         }
     }
 
-	return tex;
+	j += font_zoom;
+	j = j < 0 ? 0 : j >= fonts_loaded ? fonts_loaded - 1 : j;
+
+	MyFont* f = font + j;
+
+	if (wh)
+	{
+		wh[0] = f->width;
+		wh[1] = f->height;
+	}
+
+	return f->tex;
 }
+
+bool PrevGLFont()
+{
+	font_zoom--;
+	if (font_zoom < -fonts_loaded / 2)
+	{
+		font_zoom = -fonts_loaded / 2;
+		return false;
+	}
+	TermResizeAll();
+	return true;
+}
+
+bool NextGLFont()
+{
+	font_zoom++;
+	if (font_zoom > fonts_loaded/2)
+	{
+		font_zoom = fonts_loaded/2;
+		return false;
+	}
+	TermResizeAll();
+	return true;
+}
+
 
 int main(int argc, char* argv[])
 {

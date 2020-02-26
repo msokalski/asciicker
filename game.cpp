@@ -1875,7 +1875,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->stamp = stamp;
 
 	// init player!
-	g->player.req.mount = MOUNT::NONE;
+	g->player.req.mount = MOUNT::WOLF;
 	g->player.req.armor = ARMOR::NONE;
 	g->player.req.helmet = HELMET::NONE;
 	g->player.req.shield = SHIELD::NONE; // REGULAR_SHIELD;
@@ -2077,34 +2077,21 @@ int Game::CheckPick(const int cp[2])
 	int width = render_size[0];
 	int height = render_size[1];
 
-	int inventory_width = 39;
-	int max_height = 7 + 4 * inventory.height + 1 + 5;
-	int inventory_height = height - 6;
-	if (inventory_height > max_height)
-		inventory_height = max_height;
-	if (inventory_height < sf->height)
-		inventory_height = sf->height;
-
-	int x = scene_shift - inventory_width;
-	int y = (height - 6 - inventory_height) / 2;
-
-	int max_scroll = max_height - inventory_height;
-
 	int scroll = inventory.scroll;
 	if (scroll < 0)
 		scroll = 0;
-	if (scroll > max_scroll)
-		scroll = max_scroll;
+	if (scroll > inventory.layout_max_scroll)
+		scroll = inventory.layout_max_scroll;
 
-	int left = x + 3;
-	int right = x + 3 + inventory.width * 4;
-	int upper = y + inventory_height - 6;
-	int lower = y + 7;
+	int left = inventory.layout_frame[0];
+	int right = inventory.layout_frame[2];
+	int upper = inventory.layout_frame[3];
+	int lower = inventory.layout_frame[1];
 
 	if (cp[0] > left && cp[0]<right && cp[1]>lower && cp[1] < upper)
 	{
-		int qx = cp[0] - (x + 4);
-		int qy = cp[1] - (y + inventory_height - 6 - inventory.height * 4 + 1 + scroll);
+		int qx = cp[0] - (inventory.layout_x + 4);
+		int qy = cp[1] - (inventory.layout_y + inventory.layout_height - 6 - inventory.height * 4 + 1 + scroll);
 
 		for (int i = 0; i < inventory.my_items; i++)
 		{
@@ -2127,40 +2114,28 @@ bool Game::CheckDrop(int c, int drop_xy[2], AnsiCell* ptr, int width, int height
 	{
 		Sprite::Frame* sf = inventory_sprite->atlas;
 
-		int inventory_width = 39;
-		int max_height = 7 + 4 * inventory.height + 1 + 5;
-		int inventory_height = height - 6;
-		if (inventory_height > max_height)
-			inventory_height = max_height;
-		if (inventory_height < sf->height)
-			inventory_height = sf->height;
-
-		int x = scene_shift - inventory_width;
-		int y = (height - 6 - inventory_height) / 2;
-
-		int max_scroll = max_height - inventory_height;
-
 		int scroll = inventory.scroll;
 		if (scroll < 0)
 			scroll = 0;
-		if (scroll > max_scroll)
-			scroll = max_scroll;
+		if (scroll > inventory.layout_max_scroll)
+			scroll = inventory.layout_max_scroll;
 
 		int cp[2] = { input.contact[c].pos[0], input.contact[c].pos[1] };
 		ScreenToCell(cp);
 
-		int left = x + 3;
-		int right = x + 3 + inventory.width * 4;
-		int upper = y + inventory_height - 6;
-		int lower = y + 7;
+		int left = inventory.layout_frame[0];
+		int right = inventory.layout_frame[2];
+		int upper = inventory.layout_frame[3];
+		int lower = inventory.layout_frame[1];
+
 		if (cp[0] > left && cp[0]<right && cp[1]>lower && cp[1] < upper)
 		{
 			Item* item = input.contact[c].item;
 			Sprite::Frame* frame = item->proto->sprite_2d->atlas;
 
 			// shift coords to bitmask coords
-			int qx = cp[0] - (x + 4);
-			int qy = cp[1] - (y + inventory_height - 6 - inventory.height * 4 + 1 + scroll);
+			int qx = cp[0] - (inventory.layout_x + 4);
+			int qy = cp[1] - (inventory.layout_y + inventory.layout_height - 6 - inventory.height * 4 + 1 + scroll);
 
 			qx -= frame->width / 2;
 			qy -= frame->height / 2;
@@ -2236,8 +2211,8 @@ bool Game::CheckDrop(int c, int drop_xy[2], AnsiCell* ptr, int width, int height
 			if (fit && ptr)
 			{
 				// REVERSE
-				qx = qx * 4 + (x + 4);
-				qy = qy * 4 + (y + inventory_height - 6 - inventory.height * 4 + 1 + scroll);
+				qx = qx * 4 + (inventory.layout_x + 4);
+				qy = qy * 4 + (inventory.layout_y + inventory.layout_height - 6 - inventory.height * 4 + 1 + scroll);
 				qw = qw * 4 - 1;
 				qh = qh * 4 - 1;
 
@@ -2274,7 +2249,10 @@ bool Game::CheckDrop(int c, int drop_xy[2], AnsiCell* ptr, int width, int height
 			// indicate it by returning true and xy set to -1
 			if (input.contact[c].action == Input::Contact::ITEM_GRID_DRAG)
 			{
-				if (cp[0] < x || cp[0] >= x + inventory_width || cp[1] < y || cp[1] >= y + inventory_height)
+				if (cp[0] < inventory.layout_x || 
+					cp[0] >= inventory.layout_x + inventory.layout_width || 
+					cp[1] < inventory.layout_y || 
+					cp[1] >= inventory.layout_y + inventory.layout_height)
 				{
 					// painting would require some kind of indication, red bk (+border)?
 					if (ptr)
@@ -2868,55 +2846,35 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	int contact_items = 0;
 	int contact_item[4] = { -1,-1,-1,-1 };
 
+	inventory.UpdateLayout(width,height,scene_shift);
+
 	if (scene_shift > 0)
 	{
 		Sprite::Frame* sf = inventory_sprite->atlas;
-		int reps[3];
-		int max_height = 7 + 4*inventory.height+1 + 5;
-		int inventory_height = height - 6;
-		if (inventory_height > max_height)
-			inventory_height = max_height;
-		if (inventory_height < sf->height)
-			inventory_height = sf->height;
-		int diff = inventory_height - sf->height;
 
-		int dy = diff / 3;
-		diff -= 3 * dy;
-
-		for (int r = 0; r < 3; r++)
-		{
-			if (r < diff)
-				reps[r] = 2 + dy;
-			else
-				reps[r] = 1 + dy;
-		}
-
-		int x = scene_shift - inventory_width;
-		int y = (height - 6 - inventory_height) / 2;
-
-		int clip[] = { 0,0,inventory_width,8 };
-		BlitSprite(ptr, width, height, sf, x, y, clip);
+		int clip[] = { 0,0,inventory.layout_width,8 };
+		BlitSprite(ptr, width, height, sf, inventory.layout_x, inventory.layout_y, clip);
 
 		clip[1] = 8; clip[3] = 9;
-		for (int i=0; i<reps[0]; i++)
-			BlitSprite(ptr, width, height, sf, x, y + 8 + i, clip);
+		for (int i=0; i< inventory.layout_reps[0]; i++)
+			BlitSprite(ptr, width, height, sf, inventory.layout_x, inventory.layout_y + 8 + i, clip);
 
 		clip[1] = 9; clip[3] = 17;
-		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0], clip);
+		BlitSprite(ptr, width, height, sf, inventory.layout_x, inventory.layout_y + 8 + inventory.layout_reps[0], clip);
 
 		clip[1] = 17; clip[3] = 18;
-		for (int i = 0; i < reps[1]; i++)
-			BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + i, clip);
+		for (int i = 0; i < inventory.layout_reps[1]; i++)
+			BlitSprite(ptr, width, height, sf, inventory.layout_x, inventory.layout_y + 8 + inventory.layout_reps[0] + 8 + i, clip);
 
 		clip[1] = 18; clip[3] = 26;
-		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1], clip);
+		BlitSprite(ptr, width, height, sf, inventory.layout_x, inventory.layout_y + 8 + inventory.layout_reps[0] + 8 + inventory.layout_reps[1], clip);
 
 		clip[1] = 26; clip[3] = 27;
-		for (int i = 0; i < reps[2]; i++)
-			BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1] + 8 + i, clip);
+		for (int i = 0; i < inventory.layout_reps[2]; i++)
+			BlitSprite(ptr, width, height, sf, inventory.layout_x, inventory.layout_y + 8 + inventory.layout_reps[0] + 8 + inventory.layout_reps[1] + 8 + i, clip);
 
 		clip[1] = 27; clip[3] = 35;
-		BlitSprite(ptr, width, height, sf, x, y + 8 + reps[0] + 8 + reps[1] + 8 + reps[2], clip);
+		BlitSprite(ptr, width, height, sf, inventory.layout_x, inventory.layout_y + 8 + inventory.layout_reps[0] + 8 + inventory.layout_reps[1] + 8 + inventory.layout_reps[2], clip);
 
 		if (inventory.animate_scroll)
 		{
@@ -2925,24 +2883,22 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			else
 			{
 				int i = inventory.focus;
-				int iy = y + inventory.my_item[i].xy[1] * 4 + inventory_height - 6 - (inventory.height * 4 - 1) + inventory.scroll;
+				int iy = inventory.layout_y + inventory.my_item[i].xy[1] * 4 + inventory.layout_height - 6 - (inventory.height * 4 - 1) + inventory.scroll;
 
 				Sprite::Frame* isf = inventory.my_item[i].item->proto->sprite_2d->atlas;
 
-				if (iy < y + 9)
+				if (iy < inventory.layout_y + 9)
 				{
-					int d = y + 9 - iy;
+					int d = inventory.layout_y + 9 - iy;
 					inventory.scroll += d<f120 ? d : f120;
 				}
-				if (iy + isf->height > y + inventory_height - 5 - 2)
+				if (iy + isf->height > inventory.layout_y + inventory.layout_height - 5 - 2)
 				{
-					int d = (iy + isf->height)-(y + inventory_height - 5 - 2);
+					int d = (iy + isf->height)-(inventory.layout_y + inventory.layout_height - 5 - 2);
 					inventory.scroll -= d < f120 ? d : f120;
 				}
 			}
 		}
-
-		int max_scroll = max_height - inventory_height;
 
 		if (inventory.animate_scroll)
 			inventory.smooth_scroll = inventory.scroll;
@@ -2950,8 +2906,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		{
 			if (inventory.smooth_scroll < 0)
 				inventory.smooth_scroll = 0;
-			if (inventory.smooth_scroll > max_scroll)
-				inventory.smooth_scroll = max_scroll;
+			if (inventory.smooth_scroll > inventory.layout_max_scroll)
+				inventory.smooth_scroll = inventory.layout_max_scroll;
 
 			if (inventory.smooth_scroll < inventory.scroll)
 			{
@@ -2968,13 +2924,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		if (inventory.scroll < 0)
 			inventory.scroll = 0;
-		if (inventory.scroll > max_scroll)
-			inventory.scroll = max_scroll;
+		if (inventory.scroll > inventory.layout_max_scroll)
+			inventory.scroll = inventory.layout_max_scroll;
 
 		int scroll = inventory.scroll;
 
-		int dst_clip[4] = { x + 4, y + 8, x + 4 + 4 * inventory.width, y + inventory_height - 5 -1};
-		int frm_clip[4] = { x + 3, y + 7, x + 5 + 4 * inventory.width, y + inventory_height - 4 -1};
+		int dst_clip[4] = { inventory.layout_x + 4, inventory.layout_y + 8, inventory.layout_x + 4 + 4 * inventory.width, inventory.layout_y + inventory.layout_height - 5 -1};
+		int frm_clip[4] = { inventory.layout_x + 3, inventory.layout_y + 7, inventory.layout_x + 5 + 4 * inventory.width, inventory.layout_y + inventory.layout_height - 4 -1};
 
 		AnsiCell item_bk = { black,brown,32,0 };
 		AnsiCell item_inuse_bk = { yellow,lt_red, 249/*dot*/,0 };
@@ -3002,8 +2958,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				continue;
 			}
 
-			int ix = x + a->pos[0]*4 + 4;
-			int iy = y + a->pos[1]*4 + inventory_height - 6 - (inventory.height*4-1) + scroll;
+			int ix = inventory.layout_x + a->pos[0]*4 + 4;
+			int iy = inventory.layout_y + a->pos[1]*4 + inventory.layout_height - 6 - (inventory.height*4-1) + scroll;
 
 			int clip[4] = { ix, iy, ix + a->sprite->atlas->width, iy + a->sprite->atlas->height };
 			if (clip[0] < dst_clip[0])
@@ -3022,8 +2978,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		Item* focus_item = 0;
 		for (int i = 0; i < inventory.my_items; i++)
 		{
-			int ix = x + inventory.my_item[i].xy[0]*4 + 4;
-			int iy = y + inventory.my_item[i].xy[1]*4 + inventory_height - 6 - (inventory.height*4-1) + scroll;
+			int ix = inventory.layout_x + inventory.my_item[i].xy[0]*4 + 4;
+			int iy = inventory.layout_y + inventory.my_item[i].xy[1]*4 + inventory.layout_height - 6 - (inventory.height*4-1) + scroll;
 
 			Sprite::Frame* isf = inventory.my_item[i].item->proto->sprite_2d->atlas;
 
@@ -3081,26 +3037,27 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		if (focus_item)
 		{
 			PaintFrame(ptr, width, height, focus_rect[0], focus_rect[1], focus_rect[2], focus_rect[3], frm_clip, white/*fg*/, 255/*bk*/, true/*dbl-line*/, false/*combine*/);
-			if (y + 6 >= 0)
+			if (inventory.layout_y + 6 >= 0)
 			{
 				Item* item = focus_item;
 				const char* str = item->proto->desc;
 				for (int s = 0; str[s]; s++)
 				{
-					if (x + 4 + s >= 0 && x + 4 + s < width)
+					if (inventory.layout_x + 4 + s >= 0 && inventory.layout_x + 4 + s < width)
 					{
-						AnsiCell* ac = ptr + x + 4 + s + (y + 6)*width;
+						AnsiCell* ac = ptr + inventory.layout_x + 4 + s + (inventory.layout_y + 6)*width;
 						ac->gl = str[s];
 					}
 				}
 			}
 		}
 
-		if (scroll > 0 && y + inventory_height - 6 >=0 && y + inventory_height - 6 <height)
+		if (scroll > 0 && inventory.layout_y + inventory.layout_height - 6 >=0 && 
+			inventory.layout_y + inventory.layout_height - 6 <height)
 		{
 			// overwrite upper inventory clip-line with ----
-			AnsiCell* row = ptr + (y + inventory_height - 6)*width;
-			for (int dx = x + 3; dx < x + 36; dx++)
+			AnsiCell* row = ptr + (inventory.layout_y + inventory.layout_height - 6)*width;
+			for (int dx = inventory.layout_x + 3; dx < inventory.layout_x + 36; dx++)
 			{
 				if (dx >= 0 && dx < width)
 				{
@@ -3110,11 +3067,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			}
 		}
 
-		if (scroll < max_scroll && y + 7 >= 0 && y + 7 < height)
+		if (scroll < inventory.layout_max_scroll && inventory.layout_y + 7 >= 0 && inventory.layout_y + 7 < height)
 		{
 			// overwrite lower inventory clip-line with ----
-			AnsiCell* row = ptr + (y + 7)*width;
-			for (int dx = x + 3; dx < x + 36; dx++)
+			AnsiCell* row = ptr + (inventory.layout_y + 7)*width;
+			for (int dx = inventory.layout_x + 3; dx < inventory.layout_x + 36; dx++)
 			{
 				if (dx >= 0 && dx < width)
 				{
@@ -3891,24 +3848,15 @@ void Game::StartContact(int id, int x, int y, int b)
 			Sprite::Frame* sf = inventory_sprite->atlas;
 
 			// check if inside widget
-			int inventory_width = 39;
-			int max_height = 7 + 4 * inventory.height + 1 + 5;
-			int inventory_height = height - 6;
-			if (inventory_height > max_height)
-				inventory_height = max_height;
-			if (inventory_height < sf->height)
-				inventory_height = sf->height;
-			int diff = inventory_height - sf->height;
+			int left = inventory.layout_frame[0];
+			int right = inventory.layout_frame[2];
+			int upper = inventory.layout_frame[3];
+			int lower = inventory.layout_frame[1];
 
-			int x = scene_shift - inventory_width;
-			int y = (height - 6 - inventory_height) / 2;
-
-			int left = x + 3;
-			int right = x + 3 + inventory.width * 4;
-			int upper = y + inventory_height - 6;
-			int lower = y + 7;
-
-			if (cp[0] >= x && cp[0] < x + inventory_width && cp[1] >= y && cp[1] < y + inventory_height)
+			if (cp[0] >= inventory.layout_x && 
+				cp[0] < inventory.layout_x + inventory.layout_width && 
+				cp[1] >= inventory.layout_y && 
+				cp[1] < inventory.layout_y + inventory.layout_height)
 			{
 				inside = true;
 
@@ -4165,17 +4113,10 @@ void Game::StartContact(int id, int x, int y, int b)
 			int width = render_size[0];
 			int height = render_size[1];
 
-			int max_height = 7 + 4 * inventory.height + 1 + 5;
-			int inventory_height = height - 6;
-			if (inventory_height > max_height)
-				inventory_height = max_height;
-			if (inventory_height < sf->height)
-				inventory_height = sf->height;
-
-			int inventory_y = (height - 6 - inventory_height) / 2;
-
 			// ensure not on inventory
-			if (cp[0] < scene_shift && cp[1]>=inventory_y && cp[1]<inventory_y+inventory_height)
+			if (cp[0] < scene_shift && 
+				cp[1]>= inventory.layout_y && 
+				cp[1]< inventory.layout_y+ inventory.layout_height)
 			{
 				con->action = Input::Contact::NONE;	
 			}
@@ -4292,21 +4233,11 @@ void Game::MoveContact(int id, int x, int y)
 
 			Sprite::Frame* sf = inventory_sprite->atlas;
 
-			int height = render_size[1];
-			int max_height = 7 + 4 * inventory.height + 1 + 5;
-			int inventory_height = height - 6;
-			if (inventory_height > max_height)
-				inventory_height = max_height;
-			if (inventory_height < sf->height)
-				inventory_height = sf->height;
-
-			int max_scroll = max_height - inventory_height;
-
 			int scroll = con->scroll + up[1] - down[1];
 			if (scroll < 0)
 				scroll = 0;
-			if (scroll > max_scroll)
-				scroll = max_scroll;
+			if (scroll > inventory.layout_max_scroll)
+				scroll = inventory.layout_max_scroll;
 
 			inventory.scroll = scroll;
 			inventory.smooth_scroll = inventory.scroll;
@@ -4679,19 +4610,8 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 				{
 					Sprite::Frame* sf = inventory_sprite->atlas;
 
-					int width = render_size[0];
-					int height = render_size[1];
-
-					int max_height = 7 + 4 * inventory.height + 1 + 5;
-					int inventory_height = height - 6;
-					if (inventory_height > max_height)
-						inventory_height = max_height;
-					if (inventory_height < sf->height)
-						inventory_height = sf->height;
-
-					int inventory_y = (height - 6 - inventory_height) / 2;
-
-					if (cp[1]>=inventory_y && cp[1]<inventory_y+inventory_height)
+					if (cp[1]>= inventory.layout_y && 
+						cp[1]< inventory.layout_y+ inventory.layout_height)
 					{
 						inventory.animate_scroll = false;
 						inventory.smooth_scroll += 5;
@@ -4709,19 +4629,8 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 				{
 					Sprite::Frame* sf = inventory_sprite->atlas;
 
-					int width = render_size[0];
-					int height = render_size[1];
-
-					int max_height = 7 + 4 * inventory.height + 1 + 5;
-					int inventory_height = height - 6;
-					if (inventory_height > max_height)
-						inventory_height = max_height;
-					if (inventory_height < sf->height)
-						inventory_height = sf->height;
-
-					int inventory_y = (height - 6 - inventory_height) / 2;
-
-					if (cp[1]>=inventory_y && cp[1]<inventory_y+inventory_height)
+					if (cp[1]>= inventory.layout_y && 
+						cp[1]< inventory.layout_y+ inventory.layout_height)
 					{
 						inventory.animate_scroll = false;
 						inventory.smooth_scroll -= 5;

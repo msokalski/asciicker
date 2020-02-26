@@ -46,6 +46,8 @@ struct TERM_LIST
 extern Terrain* terrain;
 extern World* world;
 int GetGLFont(int wh[2], const int wnd_wh[2]);
+bool NextGLFont();
+bool PrevGLFont();
 
 TERM_LIST* term_head = 0;
 TERM_LIST* term_tail = 0;
@@ -464,6 +466,15 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 
 	if (down)
 	{
+		if (ki == A3D_NUMPAD_ADD)
+		{
+			NextGLFont();
+		}
+		if (ki == A3D_NUMPAD_SUBTRACT)
+		{
+			PrevGLFont();
+		}
+
 		if (ki == A3D_F11)
 		{
 			if (a3dGetRect(wnd,0,0) != A3D_WND_FULLSCREEN)

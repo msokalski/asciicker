@@ -3,6 +3,7 @@
 #include <string.h>
 
 extern World* world;
+extern Sprite* inventory_sprite;
 const ItemProto* item_proto_lib;
 
 Item* CreateItem()
@@ -17,6 +18,40 @@ void DestroyItem(Item* item)
 	if (item->inst)
 		DeleteInst(item->inst);
 	free(item);
+}
+
+void Inventory::UpdateLayout(int render_width, int render_height, int scene_shift)
+{
+	Sprite::Frame* sf = inventory_sprite->atlas;
+	layout_width = 39;
+	layout_max_height = 7 + 4*height+1 + 5;
+	layout_height = render_height - 6;
+	if (layout_height > layout_max_height)
+		layout_height = layout_max_height;
+	if (layout_height < sf->height)
+		layout_height = sf->height;
+	int diff = layout_height - sf->height;
+
+	int dy = diff / 3;
+	diff -= 3 * dy;
+
+	for (int r = 0; r < 3; r++)
+	{
+		if (r < diff)
+			layout_reps[r] = 2 + dy;
+		else
+			layout_reps[r] = 1 + dy;
+	}
+
+	layout_max_scroll = layout_max_height - layout_height;
+
+	layout_x = scene_shift - layout_width;
+	layout_y = (render_height - 6 - layout_height) / 2;
+
+	layout_frame[0] = layout_x + 3;
+	layout_frame[1] = layout_y + 7;
+	layout_frame[2] = layout_x + 3 + width * 4;
+	layout_frame[3] = layout_y + layout_height - 6;
 }
 
 void Inventory::FocusNext(int dx, int dy)

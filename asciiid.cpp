@@ -645,6 +645,30 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 	return f->tex;
 }
 
+bool PrevGLFont()
+{
+	active_font--;
+	if (active_font < 0)
+	{
+		active_font = 0;
+		return false;
+	}
+	TermResizeAll();
+	return true;
+}
+
+bool NextGLFont()
+{
+	active_font++;
+	if (active_font >= fonts_loaded)
+	{
+		active_font = fonts_loaded - 1;
+		return false;
+	}
+	TermResizeAll();
+	return true;
+}
+
 /*
 float dawn_color[3] = { 1,.8f,0 };
 float noon_color[3] = { 1,1,1 };
@@ -6430,6 +6454,9 @@ void my_render(A3D_WND* wnd)
 						else
 						if (!io.KeyCtrl)
 						{
+							// hit against meshes, stacking?
+							inst = HitWorld(world, ray_p, ray_v, hit, 0);
+
 							// pretranslate and scale
 							MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);
 
@@ -6556,7 +6583,9 @@ void my_render(A3D_WND* wnd)
 				{
 					if (!inst_added || !io.MouseDown[0])
 					{
-						Inst* inst = 0;
+						Inst* inst = HitWorld(world, ray_p, ray_v, hit, hit_nrm);
+
+						/*
 						if (io.KeyCtrl || io.KeyShift)
 						{
 							// HITTEST!
@@ -6585,32 +6614,36 @@ void my_render(A3D_WND* wnd)
 						else
 						if (!io.KeyCtrl)
 						{
-							SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
+						*/
 
-							if (!inst_added && io.MouseDown[0])
-							{
-								int flags = INST_USE_TREE | INST_VISIBLE;
-								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
+						SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
 
-								float pos[3] = { hit[0], hit[1], hit[2] };
+						if (!inst_added && io.MouseDown[0])
+						{
+							int flags = INST_USE_TREE | INST_VISIBLE;
+							// inst = CreateInst(active_mesh, flags, inst_tm, 0);
 
-								int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
-								int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
-								float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
+							float pos[3] = { hit[0], hit[1], hit[2] };
 
-								inst = URDO_Create(world, active_sprite, flags, pos, _yaw, _anim, _frame, sp->t);
+							int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
+							int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
+							float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
 
-								inst_added = true;
-								RebuildWorld(world);
-							}
-							else
-							{
-								// we'll need to paint active_mesh with inst_tm
-								sprite_preview = true;
-								sprite_preview_pos[0] = hit[0];
-								sprite_preview_pos[1] = hit[1];
-								sprite_preview_pos[2] = hit[2];
-							}
+							inst = URDO_Create(world, active_sprite, flags, pos, _yaw, _anim, _frame, sp->t);
+
+							inst_added = true;
+							RebuildWorld(world);
+						}
+						else
+						{
+							// we'll need to paint active_mesh with inst_tm
+							sprite_preview = true;
+							sprite_preview_pos[0] = hit[0];
+							sprite_preview_pos[1] = hit[1];
+							sprite_preview_pos[2] = hit[2];
+						}
+
+						/*
 						}
 
 						if (io.KeyCtrl)
@@ -6631,6 +6664,7 @@ void my_render(A3D_WND* wnd)
 								}
 							}
 						}
+						*/
 					}
 				}
 				else
@@ -6638,7 +6672,9 @@ void my_render(A3D_WND* wnd)
 				{
 					if (!inst_added || !io.MouseDown[0])
 					{
-						Inst* inst = 0;
+						Inst* inst = HitWorld(world, ray_p, ray_v, hit, hit_nrm);
+
+						/*
 						if (io.KeyCtrl || io.KeyShift)
 						{
 							// HITTEST!
@@ -6667,41 +6703,44 @@ void my_render(A3D_WND* wnd)
 						else
 						if (!io.KeyCtrl)
 						{
-							if (!inst_added && io.MouseDown[0])
-							{
-								int flags = INST_USE_TREE | INST_VISIBLE;
-								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
+						*/
 
-								float pos[3] = { hit[0], hit[1], hit[2] };
+						if (!inst_added && io.MouseDown[0])
+						{
+							int flags = INST_USE_TREE | INST_VISIBLE;
+							// inst = CreateInst(active_mesh, flags, inst_tm, 0);
 
-								Item* item = CreateItem();
-								item->proto = item_proto_lib + active_item;
-								item->count = 1;
-								item->purpose = Item::EDIT;
-								item->inst = 0;
-								item->inst = URDO_Create(world, item, flags, pos, 0);
+							float pos[3] = { hit[0], hit[1], hit[2] };
 
-								// and world clone
-								Item* clone = CreateItem();
-								clone->proto = item_proto_lib + active_item;
-								clone->count = 1;
-								clone->purpose = Item::WORLD;
-								clone->inst = 0;
-								clone->inst = CreateInst(world, clone, flags, pos, 0);
+							Item* item = CreateItem();
+							item->proto = item_proto_lib + active_item;
+							item->count = 1;
+							item->purpose = Item::EDIT;
+							item->inst = 0;
+							item->inst = URDO_Create(world, item, flags, pos, 0);
 
-								inst_added = true;
-								RebuildWorld(world);
-							}
-							else
-							{
-								// we'll need to paint active_mesh with inst_tm
-								sprite_preview = true;
-								sprite_preview_pos[0] = hit[0];
-								sprite_preview_pos[1] = hit[1];
-								sprite_preview_pos[2] = hit[2];
-							}
+							// and world clone
+							Item* clone = CreateItem();
+							clone->proto = item_proto_lib + active_item;
+							clone->count = 1;
+							clone->purpose = Item::WORLD;
+							clone->inst = 0;
+							clone->inst = CreateInst(world, clone, flags, pos, 0);
+
+							inst_added = true;
+							RebuildWorld(world);
 						}
-
+						else
+						{
+							// we'll need to paint active_mesh with inst_tm
+							sprite_preview = true;
+							sprite_preview_pos[0] = hit[0];
+							sprite_preview_pos[1] = hit[1];
+							sprite_preview_pos[2] = hit[2];
+						}
+					
+						/*
+						}
 						if (io.KeyCtrl)
 						{
 							inst_preview = 0;
@@ -6720,6 +6759,7 @@ void my_render(A3D_WND* wnd)
 								}
 							}
 						}
+						*/
 					}
 				}
 			}

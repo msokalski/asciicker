@@ -19,6 +19,16 @@ struct Inventory
 	int scroll, smooth_scroll;
 	int focus;
 
+	// layout
+	int layout_width;
+	int layout_height;
+	int layout_max_height;
+	int layout_max_scroll;
+	int layout_reps[3];
+	int layout_x;
+	int layout_y;
+	int layout_frame[4];
+
 	// free space lookup accelerator
 	uint8_t bitmask[(max_items+7)/8];
 
@@ -32,6 +42,8 @@ struct Inventory
 
 	int my_items;
 	MyItem my_item[max_items];
+
+	void UpdateLayout(int width, int height, int scene_shift);
 
 	bool InsertItem(Item* item, int xy[2]); 
 	bool RemoveItem(int index, float pos[3], float yaw);

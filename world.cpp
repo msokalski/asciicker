@@ -1499,7 +1499,7 @@ struct World
 			z[0] * ray[3] - ray[5] * x[0] - ray[1] > 0 ||
 			ray[2] - ray[4] * x[0] + ray[3] * y[0] > 0 ||
 			ray[0] + z[1] * ray[4] - ray[5] * y[0] > 0 ||
-			ray[1] - z[0] * ray[3] + ray[5] * x[1] > 0 ||
+			ray[1] - z[1] * ray[3] + ray[5] * x[1] > 0 ||
 			ray[4] * x[1] - ray[3] * y[1] - ray[2] > 0)
 			return 0;
 
