@@ -127,13 +127,13 @@ emcc --emrun -O3 \
     --preload-file sprites/inventory.xp \
     --preload-file sprites/wolfie-0011.xp \
     --preload-file sprites/wolfie.xp \
+    --preload-file sprites/player-nude.xp \
     --preload-file sprites/attack-0001.xp \
     --preload-file sprites/attack-0011.xp \
     --preload-file sprites/player-0000.xp \
     --preload-file sprites/player-0001.xp \
     --preload-file sprites/player-0010.xp \
     --preload-file sprites/player-0011.xp \
-    --preload-file sprites/player-nude.xp \
     --preload-file sprites/plydie-0000.xp \
     --preload-file sprites/plydie-0001.xp \
     --preload-file sprites/plydie-0010.xp \

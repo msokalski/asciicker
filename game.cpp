@@ -1569,6 +1569,8 @@ struct MOUNT { enum
 	SIZE
 };};
 
+Sprite* player_nude = 0;
+
 Sprite* player[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
 Sprite* player_fall[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
 Sprite* player_attack[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
@@ -1596,6 +1598,8 @@ void LoadSprites()
 	// main buts
 	character_button = LoadSprite("./sprites/character.xp", "character.xp", 0, false);
 	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory.xp", 0, false);
+
+	player_nude = LoadSprite("./sprites/player-nude.xp", "player-nude.xp", 0, false);
 
 	for (int a = 0; a < ARMOR::SIZE; a++)
 	{
@@ -1875,7 +1879,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->stamp = stamp;
 
 	// init player!
-	g->player.req.mount = MOUNT::WOLF;
+	g->player.req.mount = MOUNT::NONE;
 	g->player.req.armor = ARMOR::NONE;
 	g->player.req.helmet = HELMET::NONE;
 	g->player.req.shield = SHIELD::NONE; // REGULAR_SHIELD;
@@ -2952,6 +2956,19 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			int max_elaps = a->sprite->atlas->height;
 			if (elaps >= max_elaps)
 			{
+				if (a->sprite == item_proto_lib[40].sprite_2d)
+				{
+					// grey potion hack
+					player.SetMount(MOUNT::WOLF);
+				}
+				else
+				if (a->sprite == item_proto_lib[39].sprite_2d)
+				{
+					// gold potion hack
+					player.SetMount(MOUNT::NONE);
+				}
+				
+
 				memmove(a,a+1,sizeof(ConsumeAnim)*(consume_anims-i-1));
 				consume_anims--;
 				i--;
