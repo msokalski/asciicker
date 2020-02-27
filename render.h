@@ -43,10 +43,19 @@ Renderer* CreateRenderer(uint64_t stamp);
 void DeleteRenderer(Renderer* r);
 
 // return null-terminated array of item pointers that are reachable by player
+/*
 Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		// scene
 			float zoom, float yaw, const float pos[3], const float lt[4],	// view
 			int width, int height, AnsiCell* ptr,  // target
 			Sprite* sprite, int anim, int frame, float dir, 	// player
 			const int scene_shift[2]); // special fx
+*/
 
+Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		// scene
+	float zoom, float yaw, const float pos[3], const float lt[4],	// view
+	int width, int height, AnsiCell* ptr,  // target
+	Inst* player, // player
+	const int scene_shift[2]); // special fx
+
+void ProjectCoords(Renderer* r, const float pos[3], int view[3]); // like a sprite!
 int AverageGlyph(const AnsiCell* ptr, int mask);

@@ -88,7 +88,7 @@ void Inventory::FocusNext(int dx, int dy)
 		fy = 2*(dy>0 ? y1 : y0);
 	}
 
-	unsigned int best_e = 0xffff;
+	int best_e = 0xffff;
 	int best_i = -1;
 
 	for (int i = 0; i < my_items; i++)
@@ -186,6 +186,12 @@ void Inventory::SetFocus(int index)
 bool Inventory::InsertItem(Item* item, int xy[2])
 {
 	assert(item && item->inst && item->purpose == Item::WORLD);
+
+	// here we should send 'pickitem' to server
+	// it will validate if it was on our exclusive list
+	// and will remove it from there and from world
+	// it will also remember we own it
+
 	if (my_items < max_items)
 	{
 		DeleteInst(item->inst);
@@ -229,7 +235,12 @@ bool Inventory::RemoveItem(int index, float pos[3], float yaw)
 	assert(index >= 0 && index < my_items && my_item[index].item &&
 		my_item[index].item->purpose == Item::OWNED && !my_item[index].item->inst);
 
-	int flags = INST_USE_TREE | INST_VISIBLE;
+	// here we should also send 'dropitem' to server
+	// otherwise item won't show up (even for us) for picking up in the list
+	// server removes it from our inventory and inserts it to the world
+	// (till we disconnect)
+
+	int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
 
 	Item* item = my_item[index].item;
 
@@ -252,6 +263,9 @@ bool Inventory::RemoveItem(int index, float pos[3], float yaw)
 		item->purpose = Item::WORLD;
 		item->inst = CreateInst(world, item, flags, pos, yaw);
 		assert(item->inst);
+
+		// from flat to bvh
+		AttachInst(world,item->inst);
 	}
 	else
 	{

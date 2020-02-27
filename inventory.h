@@ -102,11 +102,11 @@ struct Item
 		// game item, inside someone's inventory
 		// dont't render in game (owner's inventory only)
 		// item must be detached from BHV (travels with player) inst=0
-		OWNED = 2,
+		OWNED = 2, // not savable
 
 		// game item, no owner, render it in game for all players
 		// item must be attached to BHV (for players)
-		WORLD = 3, 
+		WORLD = 3, // not savable 
 	};
 
 	// note: changing purpose may need adjusting World::insts counter!

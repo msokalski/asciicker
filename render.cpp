@@ -2022,8 +2022,13 @@ void DeleteRenderer(Renderer* r)
 	free(r);
 }
 
-Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Sprite* sprite, int anim, int frame, float dir, const int scene_shift[2])
+Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Inst* inst, const int scene_shift[2])
 {
+
+	if (inst)
+		HideInst(inst);
+
+
 	AnsiCell* out_ptr = ptr;
 
 	double dt = stamp - r->stamp;
@@ -2974,8 +2979,14 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 	}
 
 #else
-	if (sprite)
+	if (inst)
 	{
+		float pos[3];
+		float dir;
+		int anim;
+		int frame;
+		int reps[4];
+		Sprite* sprite = GetInstSprite(inst, pos, &dir, &anim, &frame, reps);
 		int ang = (int)floor((dir - yaw) * sprite->angles / 360.0f + 0.5f);
 		ang = ang >= 0 ? ang % sprite->angles : (ang % sprite->angles + sprite->angles) % sprite->angles;
 
@@ -3025,5 +3036,37 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 	*/
 
 	r->item_sort[r->items] = 0;
+
+	// now we should send request to server for changing exclusive item list
+	// and return only those that are already confirmed as exclusive and still visible now
+	// (maybe we should introduce few frames window until we request de-exclusivity?)
+
+	if (inst)
+		ShowInst(inst);
+
+	// restore positive projection for ProjectCoords func (now they are for reflection).
+
+	r->mul[0] = proj_tm[0];
+	r->mul[1] = proj_tm[1]; 
+	r->mul[2] = proj_tm[2]; 
+	r->mul[3] = proj_tm[3]; 
+	r->mul[4] = proj_tm[4]; 
+	r->mul[5] = proj_tm[5]; 
+	r->add[0] = proj_tm[6]; 
+	r->add[1] = proj_tm[7]; 
+	r->add[2] = proj_tm[8];
+
 	return r->item_sort;
+}
+
+void ProjectCoords(Renderer* r, const float pos[3], int view[3])
+{
+	float w_pos[3] = { pos[0] * HEIGHT_CELLS, pos[1] * HEIGHT_CELLS, pos[2] };
+	int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
+	int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
+
+	// convert from samples to cells
+	view[0] = (tx - 1) >> 1;
+	view[1] = (ty - 1) >> 1;
+	view[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
 }

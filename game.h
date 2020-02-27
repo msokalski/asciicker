@@ -84,6 +84,19 @@ struct Human : Character
 
 	TalkBox* talk_box;
 
+	struct Talk
+	{
+		uint64_t stamp;
+		TalkBox* box;
+		float pos[3];
+	};
+
+	int talks;
+	Talk talk[3];
+
+	Human* prev;
+	Human* next;
+
 	SpriteReq req;
 };
 
@@ -142,6 +155,7 @@ struct Game
 	int npcs;
 	Character* npc;
 
+	Inst* player_inst;
 
 	void CancelItemContacts();
 	void ExecuteItem(int my_item);

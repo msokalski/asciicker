@@ -41,13 +41,18 @@ int GetInstFlags(Inst* i);
 bool GetInstTM(Inst* i, double tm[16]);
 void GetInstBBox(Inst* i, double bbox[6]);
 
+void UpdateSpriteInst(World* world, Inst* i, Sprite* sprite, const float pos[3], float yaw, int anim, int frame, const int reps[4]);
 Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, int reps[4]);
 Item* GetInstItem(Inst* i, float pos[3], float* yaw);
+
+void ShowInst(Inst* i);
+void HideInst(Inst* i);
 
 enum INST_FLAGS
 {
     INST_VISIBLE = 0x1,
     INST_USE_TREE = 0x2,
+	INST_VOLATILE = 0x4
 };
 
 // new
@@ -72,6 +77,8 @@ World* LoadWorld(FILE* f, bool editor);
 
 void PurgeItemInstCache();
 void ResetItemInsts(World* w);
+
+bool AttachInst(World* w, Inst* i);
 
 /*
 int AddInstDataProvider(World* w, void (*on_newinst)(Inst* i), void (*on_delinst)(Inst* i));

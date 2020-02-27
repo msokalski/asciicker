@@ -125,6 +125,8 @@ struct BSP
     TYPE type;    
     float bbox[6]; // in world coords
     BSP* bsp_parent; // BSP_Node or BSP_NodeShare or NULL if not attached to tree
+
+	bool InsertInst(World* w, Inst* i);
 };
 
 struct BSP_Node : BSP
@@ -439,7 +441,8 @@ struct World
 			head_inst = i;
 		tail_inst = i;
 
-		if (item->purpose == Item::WORLD)
+		// if (item->purpose == Item::WORLD)
+		if (flags & INST_FLAGS::INST_VOLATILE)
 			temp_insts++;
 
 		insts++;
@@ -486,6 +489,9 @@ struct World
 		else
 			head_inst = i;
 		tail_inst = i;
+
+		if (flags & INST_FLAGS::INST_VOLATILE)
+			temp_insts++;
 
 		insts++;
 		return i;
@@ -540,7 +546,10 @@ struct World
             tail_inst->next = i;
         else
             head_inst = i;
-        tail_inst = i;    
+        tail_inst = i;  
+
+		if (flags & INST_FLAGS::INST_VOLATILE)
+			temp_insts++;
         
         insts++;
         return i;
@@ -666,6 +675,9 @@ struct World
         if (root == i)
             root = 0;
            
+		if (i->flags & INST_FLAGS::INST_VOLATILE)
+			temp_insts--;
+
         insts--;
         free(i);
 
@@ -770,6 +782,9 @@ struct World
 
 		if (root == i)
 			root = 0;
+
+		if (i->flags & INST_FLAGS::INST_VOLATILE)
+			temp_insts--;
 
 		insts--;
 		free(i);
@@ -877,7 +892,9 @@ struct World
 		if (root == i)
 			root = 0;
 
-		if (i->item->purpose == Item::WORLD)
+
+		//if (i->item->purpose == Item::WORLD)
+		if (i->flags & INST_FLAGS::INST_VOLATILE)
 			temp_insts--;
 
 		insts--;
@@ -1218,7 +1235,9 @@ struct World
             int axis = best_axis;
             qsort(arr, num, sizeof(BSP_Item), sort[axis]);
 
-            BSP_Node* node = (BSP_Node*)malloc(sizeof(BSP_Node));
+            // BSP_Node* node = (BSP_Node*)malloc(sizeof(BSP_Node));
+			BSP_Node* node = (BSP_Node*)malloc(sizeof(BSP_NodeShare)); // make it easily changable!
+
             node->bsp_parent = 0;
             node->type = BSP::BSP_TYPE_NODE;
 
@@ -1877,7 +1896,8 @@ struct World
 			if (i->inst_type == Inst::INST_TYPE::SPRITE)
 			{
 				SpriteInst* si = (SpriteInst*)i;
-				cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
+				if (i->flags & INST_FLAGS::INST_VISIBLE)
+					cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
 			}
 			else
 			if (i->inst_type == Inst::INST_TYPE::ITEM)
@@ -1981,7 +2001,8 @@ struct World
 			if (i->inst_type == Inst::INST_TYPE::SPRITE)
 			{
 				SpriteInst* si = (SpriteInst*)i;
-				cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
+				if (i->flags & INST_FLAGS::INST_VISIBLE)
+					cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
 			}
 			else
 			if (i->inst_type == Inst::INST_TYPE::ITEM)
@@ -3338,6 +3359,9 @@ void RebuildWorld(World* w, bool boxes)
 
 static void SaveInst(Inst* inst, FILE* f)
 {
+	if (inst->flags & INST_FLAGS::INST_VOLATILE)
+		return;
+
 	if (inst->inst_type == Inst::INST_TYPE::MESH)
 	{
 		MeshInst* i = (MeshInst*)inst;
@@ -3387,7 +3411,9 @@ static void SaveInst(Inst* inst, FILE* f)
 		// SAVE ONLY EDITOR INSTANCES !!!
 		ItemInst* i = (ItemInst*)inst;
 
-		if (i->item->purpose == Item::EDIT)
+		// checked by inst flags
+		// if (i->item->purpose == Item::EDIT)
+
 		{
 			int mesh_id_len = -2; // identify item
 			fwrite(&mesh_id_len, 1, 4, f);
@@ -3630,6 +3656,9 @@ World* LoadWorld(FILE* f, bool editor)
 
 			Item* item = CreateItem();
 
+			if (!editor)
+				flags |= INST_FLAGS::INST_VOLATILE;
+
 			item->count = count;
 			item->proto = item_proto_lib + item_proto_index;
 			item->purpose = editor ? Item::EDIT : Item::WORLD;
@@ -3641,7 +3670,7 @@ World* LoadWorld(FILE* f, bool editor)
 				Item* clone = CreateItem(); // (Item*)malloc(sizeof(Item));
 				memcpy(clone, item, sizeof(Item));
 				clone->purpose = Item::WORLD;
-				clone->inst = CreateInst(w, clone, flags, pos, yaw);
+				clone->inst = CreateInst(w, clone, flags | INST_FLAGS::INST_VOLATILE, pos, yaw);
 			}
 		}
     }
@@ -3734,4 +3763,286 @@ Item* GetInstItem(Inst* i, float pos[3], float* yaw)
 		*yaw = ii->yaw;
 
 	return ii->item;
+}
+
+bool BSP::InsertInst(World* w, Inst* i)
+{
+	// i->bbox must be up to date !
+
+	if (bbox[0] > i->bbox[0] || bbox[1] < i->bbox[1] ||
+		bbox[2] > i->bbox[2] || bbox[3] < i->bbox[3] ||
+		bbox[4] > i->bbox[4] || bbox[5] < i->bbox[5])
+	{
+		return false;
+	}
+
+	switch (type)
+	{
+		case BSP::BSP_TYPE_INST:
+			return false;
+
+		case BSP::BSP_TYPE_NODE:
+		case BSP::BSP_TYPE_NODE_SHARE:
+		{
+			BSP_Node* n = (BSP_Node*)this;
+			if (n->bsp_child[0])
+			{
+				if (n->bsp_child[0]->InsertInst(w,i))
+					return true;
+			}
+			if (n->bsp_child[1])
+			{
+				if (n->bsp_child[1]->InsertInst(w,i))
+					return true;
+			}
+
+			bool ok = false;
+			if (!n->bsp_child[0])
+			{
+				n->bsp_child[0] = i;
+				ok = true;
+			}
+			if (!n->bsp_child[1])
+			{
+				n->bsp_child[1] = i;
+				ok = true;
+			}
+
+			if (!ok)
+			{
+				BSP_NodeShare* s = (BSP_NodeShare*)this;
+				if (type != BSP::BSP_TYPE_NODE_SHARE)
+				{
+					type = BSP::BSP_TYPE_NODE_SHARE;
+					s->head = 0;
+					s->tail = 0;
+				}
+
+				i->bsp_parent = this;
+
+				if (i->prev)
+					i->prev->next = i->next;
+				else
+					w->head_inst = i->next;
+
+				if (i->next)
+					i->next->prev = i->prev;
+				else
+					w->tail_inst = i->prev;
+
+				i->prev = 0;
+
+				i->next = s->head;
+				if (s->head)
+					s->head->prev = i;
+				else
+					s->tail = i;
+
+				s->head = i;
+
+				return true;
+			}
+
+			if (ok)
+			{
+				i->bsp_parent = this;
+
+				if (i->prev)
+					i->prev->next = i->next;
+				else
+					w->head_inst = i->next;
+
+				if (i->next)
+					i->next->prev = i->prev;
+				else
+					w->tail_inst = i->prev;
+
+				i->next = 0;
+				i->prev = 0;
+
+				return true;
+			}
+
+			break;
+		}
+
+		case BSP::BSP_TYPE_LEAF:
+		{
+			BSP_Leaf* l = (BSP_Leaf*)this;
+
+			i->bsp_parent = this;
+
+			if (i->prev)
+				i->prev->next = i->next;
+			else
+				w->head_inst = i->next;
+
+			if (i->next)
+				i->next->prev = i->prev;
+			else
+				w->tail_inst = i->prev;
+
+			i->prev = 0;
+
+			i->next = l->head;
+			if (l->head)
+				l->head->prev = i;
+			else
+				l->tail = i;
+
+			l->head = i;
+
+			return true;
+		}
+
+	}
+
+	return false;
+}
+
+bool DetachInst(World* w, Inst* inst)
+{
+	// move it to flat list
+	if (!inst->bsp_parent && inst != w->root)
+		return false; // already out
+
+	if (inst == w->root)
+	{
+		w->root = 0;
+	}
+	else
+	switch (inst->bsp_parent->type)
+	{
+		case BSP::BSP_TYPE_NODE_SHARE:
+		case BSP::BSP_TYPE_NODE:
+		{
+			BSP_Node* n = (BSP_Node*)inst->bsp_parent;
+			if (n->bsp_child[0] == inst)
+				n->bsp_child[0] = 0;
+			else
+			if (n->bsp_child[1] == inst)
+				n->bsp_child[1] = 0;
+			else
+			{
+				BSP_NodeShare* s = (BSP_NodeShare*)inst->bsp_parent;
+				if (inst->bsp_parent->type == BSP::BSP_TYPE_NODE_SHARE)
+				{
+					if (inst->prev)
+						inst->prev->next = inst->next;
+					else
+						s->head = inst->next;
+					if (inst->next)
+						inst->next->prev = inst->prev;
+					else
+						s->tail = inst->prev;
+				}
+				else
+					assert(0);
+			}
+			break;
+		}
+		case BSP::BSP_TYPE_LEAF:
+		{
+			BSP_Leaf* l = (BSP_Leaf*)inst->bsp_parent;
+			if (inst->prev)
+				inst->prev->next = inst->next;
+			else
+				l->head = inst->next;
+			if (inst->next)
+				inst->next->prev = inst->prev;
+			else
+				l->tail = inst->prev;
+			break;
+		}
+
+	}
+
+	inst->next = w->head_inst;
+	inst->prev = 0;
+	if (w->head_inst)
+		w->head_inst->prev = inst;
+	else
+		w->tail_inst = inst;
+	inst->bsp_parent = 0;
+
+	return true;
+}
+
+bool AttachInst(World* w, Inst* inst)
+{
+	// update bbox if needed
+	switch (inst->inst_type)
+	{
+		case Inst::INST_TYPE::SPRITE:
+		{
+			SpriteInst* si = (SpriteInst*)inst;
+			Sprite* s = si->sprite;
+			si->bbox[0] = s->proj_bbox[0] + si->pos[0];
+			si->bbox[1] = s->proj_bbox[1] + si->pos[0];
+			si->bbox[2] = s->proj_bbox[2] + si->pos[1];
+			si->bbox[3] = s->proj_bbox[3] + si->pos[1];
+			si->bbox[4] = s->proj_bbox[4] + si->pos[2];
+			si->bbox[5] = s->proj_bbox[5] + si->pos[2];
+			break;
+		}
+		case Inst::INST_TYPE::ITEM:
+		{
+			ItemInst* ii = (ItemInst*)inst;
+			Sprite* s = ii->item->proto->sprite_3d;
+			ii->bbox[0] = s->proj_bbox[0] + ii->pos[0];
+			ii->bbox[1] = s->proj_bbox[1] + ii->pos[0];
+			ii->bbox[2] = s->proj_bbox[2] + ii->pos[1];
+			ii->bbox[3] = s->proj_bbox[3] + ii->pos[1];
+			ii->bbox[4] = s->proj_bbox[4] + ii->pos[2];
+			ii->bbox[5] = s->proj_bbox[5] + ii->pos[2];
+			break;
+		}
+		case Inst::INST_TYPE::MESH:
+			((MeshInst*)inst)->UpdateBox();
+			break;
+	}
+
+	if (inst->bsp_parent || inst == w->root)
+		return false; // already in
+
+	if (!w->root)
+		return false; // no place to insert
+
+	return w->root->InsertInst(w,inst);
+}
+
+void ShowInst(Inst* i)
+{
+	i->flags |= INST_FLAGS::INST_VISIBLE;
+}
+
+void HideInst(Inst* i)
+{
+	i->flags &= ~INST_FLAGS::INST_VISIBLE;
+}
+
+void UpdateSpriteInst(World* world, Inst* i, Sprite* sprite, const float pos[3], float yaw, int anim, int frame, const int reps[4])
+{
+	assert(i->inst_type == Inst::INST_TYPE::SPRITE);
+
+	// instead of detach/ attach it could be more intelligent:
+	// start from current parrent, if bbox ok try its children
+	// if not retry with parent's parent ...
+
+	DetachInst(world, i);
+
+	SpriteInst* si = (SpriteInst*)i;
+	si->sprite = sprite;
+	si->pos[0] = pos[0];
+	si->pos[1] = pos[1];
+	si->pos[2] = pos[2];
+	si->yaw = yaw;
+	si->anim = anim;
+	si->frame = frame;
+	si->reps[0] = reps[0];
+	si->reps[1] = reps[1];
+	si->reps[2] = reps[2];
+	si->reps[3] = reps[3];
+
+	AttachInst(world, i);
 }

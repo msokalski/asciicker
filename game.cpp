@@ -20,6 +20,10 @@ static const uint8_t lt_blue = 16 + 5 * 1 + 1 * 6 + 1 * 36;
 static const uint8_t dk_blue = 16 + 3 * 1 + 0 * 6 + 0 * 36;
 static const uint8_t brown = 16 + 0 * 1 + 2 * 6 + 3 * 36;
 
+Human* player_head = 0;
+Human* player_tail = 0;
+
+
 struct HPBar
 {
 	static const int height = 4;
@@ -1867,6 +1871,14 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
 
+	g->player.prev = 0;
+	g->player.next = player_head;
+	if (player_head)
+		player_head->prev = &g->player;
+	else
+		player_tail = &g->player;
+	player_head = &g->player;
+
 	// just initialized,
 	// nowhere modified!
 	g->show_buts = true;
@@ -1894,6 +1906,15 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->water = water;
 	g->prev_yaw = yaw;
 
+	// fancy part
+	// create player sprite instance inside world but never paint
+	// this is to be used by other clients only!
+	// renderer will hide its client sprite
+
+	int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
+	int reps[4] = { 0,0,0,0 };
+	g->player_inst = CreateInst(world, g->player.sprite, flags, pos, yaw, g->player.anim, g->player.frame, reps);
+
 	return g;
 }
 
@@ -1901,8 +1922,13 @@ void DeleteGame(Game* g)
 {
 	if (g)
 	{
+		DeleteInst(g->player_inst);
+
 		for (int i = 0; i < g->inventory.my_items; i++)
 			DestroyItem(g->inventory.my_item[i].item);
+
+		for (int i = 0; i < g->player.talks; i++)
+			free(g->player.talk[i].box);
 
 		if (g->player.talk_box)
 			free(g->player.talk_box);
@@ -1910,6 +1936,16 @@ void DeleteGame(Game* g)
 			DeleteRenderer(g->renderer);
 		if (g->physics)
 			DeletePhysics(g->physics);
+
+		if (g->player.prev)
+			g->player.prev->next = g->player.next;
+		else
+			player_head = g->player.next;
+		if (g->player.next)
+			g->player.next->prev = g->player.prev;
+		else
+			player_tail = g->player.prev;
+
 		free(g);
 	}
 }
@@ -2827,6 +2863,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// update / animate:
 	player.dir = io.player_dir;
 
+	// update player inst in world
+	int reps[4] = { 0,0,0,0 };
+	UpdateSpriteInst(world, player_inst, player.sprite, player.pos, player.dir, player.anim, player.frame, reps);
+
+	// here we should also send 'updateplayer' to server
+	// ...
+
 	int inventory_width = 39;
 
 	if (show_inventory && scene_shift < inventory_width) // inventory width with margins is 58
@@ -2844,8 +2887,45 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	}
 
 	int ss[2] = { scene_shift/2 , 0 };
+
 	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
-		width, height, ptr, player.sprite, player.anim, player.frame, player.dir, ss);
+		width, height, ptr, player_inst, ss);
+
+	// inrange list MUST be already booked by server for us as exclusive!
+	// no other player will be able to see these items in their lists!
+	// in this way we are sure we can handle picking up safely
+
+	Human* h = player_head;
+	while (h)
+	{
+		// todo: ALL TALKS should be sorted by ascending stamp
+		// should be Z tested! (so maybe better move it to render)
+		// and should have some kind of fade out
+		for (int i = 0; i < h->talks; i++)
+		{
+			int elaps = stamp - h->talk[i].stamp;
+			int dy = elaps / 100000; // 10 dy per sec
+			
+			if (dy <= 20)
+			{
+				int view[3];
+				ProjectCoords(renderer, h->talk[i].pos, view);
+				h->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false);
+			}
+			else
+			if (h == &player)
+			{
+				// each player handles its own talks
+				free(player.talk[i].box);
+				player.talks--;
+				for (int j = i; j < player.talks; j++)
+					player.talk[j] = player.talk[j + 1];
+				i--;
+			}
+		}
+		h = h->next;
+	}
+
 
 	int contact_items = 0;
 	int contact_item[4] = { -1,-1,-1,-1 };
@@ -3464,7 +3544,21 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			if (player.talk_box)
 			{
 				//show_buts = true;
-				free(player.talk_box);
+
+				if (player.talk_box->len > 0 && player.talks < 3)
+				{
+					int idx = player.talks;
+					player.talk[idx].box = player.talk_box;
+					player.talk[idx].pos[0] = player.pos[0];
+					player.talk[idx].pos[1] = player.pos[1];
+					player.talk[idx].pos[2] = player.pos[2];
+					player.talk[idx].stamp = stamp;
+
+					player.talks++;
+				}
+				else
+					free(player.talk_box);
+
 				player.talk_box = 0;
 				if (show_keyb)
 					memset(keyb_key, 0, 32);

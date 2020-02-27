@@ -6725,7 +6725,7 @@ void my_render(A3D_WND* wnd)
 							clone->count = 1;
 							clone->purpose = Item::WORLD;
 							clone->inst = 0;
-							clone->inst = CreateInst(world, clone, flags, pos, 0);
+							clone->inst = CreateInst(world, clone, flags | INST_VOLATILE, pos, 0);
 
 							inst_added = true;
 							RebuildWorld(world);
