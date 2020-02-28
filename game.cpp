@@ -23,6 +23,25 @@ static const uint8_t brown = 16 + 0 * 1 + 2 * 6 + 3 * 36;
 Human* player_head = 0;
 Human* player_tail = 0;
 
+void ReadConf(Game* g)
+{
+	FILE* f = fopen("asciicker.cfg", "rb");
+	if (f)
+	{
+		fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+		fclose(f);
+	}
+}
+
+void WriteConf(Game* g)
+{
+	FILE* f = fopen("asciicker.cfg", "wb");
+	if (f)
+	{
+		fwrite(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+		fclose(f);
+	}
+}
 
 struct HPBar
 {
@@ -436,7 +455,7 @@ struct TalkBox
 					{
 						for (int x = dx + i; x < c->span; x++)
 						{
-							if (x < 0 || x >= c->width)
+							if (x + c->x < 0 || x + c->x >= c->width)
 								continue;
 
 							AnsiCell* ac = ar + x;
@@ -3545,8 +3564,16 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			{
 				//show_buts = true;
 
-				if (player.talk_box->len > 0 && player.talks < 3)
+				if (player.talk_box->len > 0 && key == A3D_TAB)
 				{
+					if (player.talks == 3)
+					{
+						free(player.talk[0].box);
+						player.talks--;
+						for (int i = 0; i < player.talks; i++)
+							player.talk[i] = player.talk[i + 1];
+					}
+
 					int idx = player.talks;
 					player.talk[idx].box = player.talk_box;
 					player.talk[idx].pos[0] = player.pos[0];
@@ -3555,11 +3582,28 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					player.talk[idx].stamp = stamp;
 
 					player.talks++;
+
+					// alloc new
+					player.talk_box = 0;
+
+					TalkBox_blink = 32;
+					player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+					memset(player.talk_box, 0, sizeof(TalkBox));
+					player.talk_box->max_width = 33;
+					player.talk_box->max_height = 7; // 0: off
+					int s[2], p[2];
+					player.talk_box->Reflow(s, p);
+					player.talk_box->size[0] = s[0];
+					player.talk_box->size[1] = s[1];
+					player.talk_box->cursor_xy[0] = p[0];
+					player.talk_box->cursor_xy[1] = p[1];
 				}
 				else
+				{
 					free(player.talk_box);
+					player.talk_box = 0;
+				}
 
-				player.talk_box = 0;
 				if (show_keyb)
 					memset(keyb_key, 0, 32);
 				show_keyb = false;
@@ -3743,9 +3787,72 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				player.talk_box->MoveCursorY(-1);
 			if (key == A3D_DOWN)
 				player.talk_box->MoveCursorY(+1);
+
+			int mem_idx = -1;
+			switch (key)
+			{
+				case A3D_F5: mem_idx = 0; break;
+				case A3D_F6: mem_idx = 1; break;
+				case A3D_F7: mem_idx = 2; break;
+				case A3D_F8: mem_idx = 3; break;
+			}
+
+			if (mem_idx >= 0)
+			{
+				// store, even if empty
+				memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
+				talk_mem[mem_idx].len = player.talk_box->len;
+				WriteConf(this);
+			}
 		}
 		else
 		{
+			int mem_idx = -1;
+			switch (key)
+			{
+				case A3D_F5: mem_idx = 0; break;
+				case A3D_F6: mem_idx = 1; break;
+				case A3D_F7: mem_idx = 2; break;
+				case A3D_F8: mem_idx = 3; break;
+			}
+
+			if (mem_idx >= 0 && talk_mem[mem_idx].len > 0)
+			{
+				// immediate post
+				TalkBox* box = 0;
+				if (player.talks == 3)
+				{
+					box = player.talk[0].box;
+					player.talks--;
+					for (int i = 0; i < player.talks; i++)
+						player.talk[i] = player.talk[i + 1];
+				}
+				else
+					box = (TalkBox*)malloc(sizeof(TalkBox));
+
+				memset(box, 0, sizeof(TalkBox));
+				memcpy(box->buf, talk_mem[mem_idx].buf, 256);
+				box->len = talk_mem[mem_idx].len;
+				box->cursor_pos = box->len;
+
+				box->max_width = 33;
+				box->max_height = 7; // 0: off
+				int s[2], p[2];
+				box->Reflow(s, p);
+				box->size[0] = s[0];
+				box->size[1] = s[1];
+				box->cursor_xy[0] = p[0];
+				box->cursor_xy[1] = p[1];
+
+				player.talk[player.talks].pos[0] = player.pos[0];
+				player.talk[player.talks].pos[1] = player.pos[1];
+				player.talk[player.talks].pos[2] = player.pos[2];
+				player.talk[player.talks].box = box;
+				player.talk[player.talks].stamp = stamp;
+				player.talks++;
+			}
+
+
 			// simulate key down / up based on a time relaxation
 			// for: QWEASD and cursor keys
 

@@ -152,6 +152,14 @@ struct Game
 	bool CheckDrop(int c/*contact index*/, int xy[2]=0, AnsiCell* ptr=0, int w=0, int h=0);
 	int CheckPick(const int pos[2]);
 
+	struct TalkMem
+	{
+		char buf[256];
+		int len;
+	};
+
+	TalkMem talk_mem[4];
+
 	int npcs;
 	Character* npc;
 

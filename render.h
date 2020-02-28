@@ -58,4 +58,3 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		
 	const int scene_shift[2]); // special fx
 
 void ProjectCoords(Renderer* r, const float pos[3], int view[3]); // like a sprite!
-int AverageGlyph(const AnsiCell* ptr, int mask);

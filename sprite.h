@@ -52,3 +52,5 @@ void FreeSprite(Sprite* spr);
 void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y, const int clip[4]=0, bool src_clip=true, AnsiCell* bk=0);
 void PaintFrame(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, const int dst_clip[4] = 0, uint8_t fg=0, uint8_t bk=255, bool dbl=true, bool combine=true);
 void FillRect(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, AnsiCell ac);
+
+int AverageGlyph(const AnsiCell* ptr, int mask);

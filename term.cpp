@@ -470,11 +470,19 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 		{
 			NextGLFont();
 		}
+		else
 		if (ki == A3D_NUMPAD_SUBTRACT)
 		{
 			PrevGLFont();
 		}
-
+		else
+		if (ki >= A3D_F5 && ki <= A3D_F8)
+		{
+			// send press
+			if (!(ki & A3D_AUTO_REPEAT))
+				term->game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, ki);
+		}
+		else
 		if (ki == A3D_F11)
 		{
 			if (a3dGetRect(wnd,0,0) != A3D_WND_FULLSCREEN)
