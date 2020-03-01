@@ -6,7 +6,6 @@
 #include "render.h"
 #include "game.h"
 
-
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -15,24 +14,442 @@
 
 #pragma comment(lib,"Ws2_32.lib")
 
+typedef SOCKET TCP_SOCKET;
+#define INVALID_TCP_SOCKET INVALID_SOCKET
+
+inline int TCP_INIT()
+{
+	WSADATA wsaData;
+	return WSAStartup(MAKEWORD(2, 2), &wsaData);
+}
+
+inline int TCP_CLOSE(TCP_SOCKET s)
+{
+	return closesocket(s);
+}
+
+inline int TCP_CLEANUP()
+{
+	return WSACleanup();
+}
+
+struct THREAD_HANDLE
+{
+	HANDLE th;
+
+	void* (*entry)(void*);
+	void* arg;
+
+	static DWORD WINAPI wrap(LPVOID p)
+	{
+		THREAD_HANDLE* t = (THREAD_HANDLE*)p;
+		t->arg = t->entry(t->arg);
+		return 0;
+	}
+};
+
+THREAD_HANDLE* THREAD_CREATE(void* (*entry)(void*), void* arg)
+{
+	HANDLE th;
+	DWORD id;
+
+	THREAD_HANDLE* t = (THREAD_HANDLE*)malloc(sizeof(THREAD_HANDLE));
+	t->arg = arg;
+	t->entry = entry;
+	th = CreateThread(0, 0, THREAD_HANDLE::wrap, t, 0, &id);
+	if (!th)
+	{
+		free(t);
+		return 0;
+	}
+	t->th = th;
+	return t;
+}
+
+void* THREAD_JOIN(THREAD_HANDLE* thread)
+{
+	WaitForSingleObject(thread->th, INFINITE);
+	CloseHandle(thread->th);
+	void* ret = thread->arg;
+	free(thread);
+	return ret;
+}
+
+struct MUTEX_HANDLE
+{
+	CRITICAL_SECTION mu;
+};
+
+MUTEX_HANDLE* MUTEX_CREATE()
+{
+	MUTEX_HANDLE* m = (MUTEX_HANDLE*)malloc(sizeof(MUTEX_HANDLE));
+	InitializeCriticalSection(&m->mu);
+	return m;
+}
+
+void MUTEX_DELETE(MUTEX_HANDLE* mutex)
+{
+	DeleteCriticalSection(&mutex->mu);
+	free(mutex);
+}
+
+void MUTEX_LOCK(MUTEX_HANDLE* mutex)
+{
+	EnterCriticalSection(&mutex->mu);
+}
+
+void MUTEX_UNLOCK(MUTEX_HANDLE* mutex)
+{
+	LeaveCriticalSection(&mutex->mu);
+}
+
+#else
+
+typedef int TCP_SOCKET;
+#define INVALID_TCP_SOCKET (-1)
+
+inline int TCP_INIT()
+{
+	return 0;
+}
+
+inline int TCP_CLOSE(TCP_SOCKET s)
+{
+	return close(s);
+}
+
+inline int TCP_CLEANUP()
+{
+	return 0;
+}
+
+struct THREAD_HANDLE
+{
+	pthread_t th;
+};
+
+inline THREAD_HANDLE* THREAD_CREATE(void* (*entry)(void*), void* arg)
+{
+	pthread_t th;
+	pthread_create(&th, 0, entry, arg);
+	if (!th)
+		return 0;
+
+	THREAD_HANDLE* t = (THREAD_HANDLE*)malloc(sizeof(THREAD_HANDLE));
+	t->th = th;
+	return t;
+}
+
+inline void* THREAD_JOIN(THREAD_HANDLE* thread)
+{
+	void* ret = 0;
+	pthread_join(thread->th, &ret);
+	free(thread);
+	return ret;
+}
+
+struct MUTEX_HANDLE
+{
+	pthread_mutex_t mu;
+};
+
+inline MUTEX_HANDLE* MUTEX_CREATE()
+{
+	MUTEX_HANDLE* m = (MUTEX_HANDLE*)malloc(sizeof(MUTEX_HANDLE));
+	pthread_mutex_init(&m->mu, 0);
+	return m;
+}
+
+inline void MUTEX_DELETE(MUTEX_HANDLE* mutex)
+{
+	pthread_mutex_destroy(&mutex->mu);
+	free(mutex);
+}
+
+inline void MUTEX_LOCK(MUTEX_HANDLE* mutex)
+{
+	pthread_mutex_lock(&mutex->mu);
+}
+
+inline void MUTEX_UNLOCK(MUTEX_HANDLE* mutex)
+{
+	pthread_mutex_unlock(&mutex->mu);
+}
+
+#endif
+
+inline int TCP_WRITE(TCP_SOCKET s, const uint8_t* buf, int size)
+{
+	return send(s, (const char*)buf, size, 0);
+}
+
+inline int TCP_READ(TCP_SOCKET s, uint8_t* buf, int size)
+{
+	return recv(s, (char*)buf, size, 0);
+}
+
+int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split)
+{
+	if (size <= 0)
+		return size;
+
+	if (split <= 0)
+		split = size;
+
+	// try making frames of equal size
+	int frames = (size + split - 1) / split;
+	int frame_size = (size + frames - 1) / frames; 
+
+	/*
+		  0                   1                   2                   3
+		  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+		 +-+-+-+-+-------+-+-------------+-------------------------------+
+		 |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+		 |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+		 |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+		 | |1|2|3|       |K|             |                               |
+		 +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+		 |     Extended payload length continued, if payload len == 127  |
+		 + - - - - - - - - - - - - - - - +-------------------------------+
+		 |                               |Masking-key, if MASK set to 1  |
+		 +-------------------------------+-------------------------------+
+		 | Masking-key (continued)       |          Payload Data         |
+		 +-------------------------------- - - - - - - - - - - - - - - - +
+		 :                     Payload Data continued ...                :
+		 + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+		 |                     Payload Data continued ...                |
+		 +---------------------------------------------------------------+
+	*/
+
+	int offs = 0;
+
+	do
+	{
+		int len = 0;
+		uint8_t frame[10];
+
+		int payload = frame_size;
+
+		if (offs + payload >= size)
+		{
+			payload = size - offs;
+			frame[0] = 0x80/*FIN*/;
+		}
+		else
+		{
+			frame[0] = 0x00/*FIN*/;
+		}
+
+		if (offs == 0)
+			frame[0] |= 0x2/*BIN*/;
+
+		if (payload < 126)
+		{
+			
+			frame[1] = 0x00/*MSK*/ | payload;
+			len = 2;
+		}
+		else
+		if (payload < 65536)
+		{
+			frame[1] = 0x00/*MSK*/ | 126;
+			frame[2] = (payload >> 8) & 0xFF;
+			frame[3] = payload & 0xFF;
+			len = 4;
+		}
+		else
+		{
+			frame[1] = 0x00/*MSK*/ | 127;
+			frame[2] = 0;
+			frame[3] = 0;
+			frame[4] = 0;
+			frame[5] = 0;
+			frame[6] = (payload >> 24) & 0xFF;
+			frame[7] = (payload >> 16) & 0xFF;
+			frame[8] = (payload >> 8) & 0xFF;
+			frame[9] = payload & 0xFF;
+			len = 10;
+		}
+
+		int ofs = 0;
+
+		do
+		{
+			int w = TCP_WRITE(s, frame + ofs, len - ofs);
+			if (w <= 0)
+				return w;
+			ofs += w;
+		} while (ofs < len);
+
+		while (payload)
+		{
+			int w = TCP_WRITE(s, buf + offs, payload);
+			if (w <= 0)
+				return w;
+			offs += w;
+			payload -= w;
+		}
+
+	} while (offs < size);
+
+	return size;
+}
+
+int WS_READ(TCP_SOCKET s, uint8_t* buf, int size)
+{
+	if (size < 0)
+		return size;
+
+	int len = 0, tot_data = 0;
+	uint8_t frame[14];
+
+	do
+	{
+		// read first 2 bytes
+		{
+			do
+			{
+				int r = TCP_READ(s, frame + len, 2-len);
+				if (r <= 0)
+					return r;
+			} while (len < 2);
+		}
+
+		uint64_t payload = frame[1] & 0x7F;
+		uint8_t* mask = 0;
+
+		if (frame[1] & 0x80) // if mask bit is set
+		{
+
+			if (payload == 126)
+			{
+				// READ next 6 bytes -> first 2 replace payload len, other 4 is xor_mask
+				do
+				{
+					int r = TCP_READ(s, frame + len, 8 - len);
+					if (r <= 0)
+						return r;
+				} while (len < 8);
+
+				payload = (frame[2] << 8) | frame[3];
+				mask = frame+4;
+			}
+			else
+			if (payload == 127)
+			{
+				// READ next 12 bytes -> first 8 replace payload len, other 4 is xor_mask
+				do
+				{
+					int r = recv(s, (char*)frame + len, 14 - len, 0);
+					if (r <= 0)
+						return r;
+				} while (len < 14);
+
+				payload = (frame[2] << 24) | (frame[3] << 16) | (frame[4] << 8) | frame[5];
+				payload |= (payload << 32) | (frame[6] << 24) | (frame[7] << 16) | (frame[8] << 8) | frame[9];
+
+				mask = frame + 10;
+			}
+			else
+			{
+				// READ next 4 bytes of xor_mask
+				do
+				{
+					int r = recv(s, (char*)frame + len, 6 - len, 0);
+					if (r <= 0)
+						return r;
+				} while (len < 6);
+
+				mask = frame + 2;
+			}
+		}
+		else
+		{
+			if (payload == 126)
+			{
+				// READ next 2 bytes->replace payload len
+				do
+				{
+					int r = recv(s, (char*)frame + len, 4 - len, 0);
+					if (r <= 0)
+						return r;
+				} while (len < 4);
+
+				payload = (frame[2] << 8) | frame[3];
+			}
+			else
+			if (payload == 127)
+			{
+				// READ next 8 bytes->replace payload len
+				do
+				{
+					int r = recv(s, (char*)frame + len, 10 - len, 0);
+					if (r <= 0)
+						return r;
+				} while (len < 10);
+
+				payload = (frame[2] << 24) | (frame[3] << 16) | (frame[4] << 8) | frame[5];
+				payload |= (payload << 32) | (frame[6] << 24) | (frame[7] << 16) | (frame[8] << 8) | frame[9];
+			}
+		}
+
+		if (size < payload)
+			return -1;
+
+		int read = (int)payload;
+		int offs = 0;
+
+		while (read)
+		{
+			int r = TCP_READ(s, buf + offs, read);
+			if (r <= 0)
+				return r;
+
+			if (mask)
+			{
+				int end = offs + r;
+				for (int i = offs; i < end; i++)
+					buf[i] ^= mask[i & 3];
+			}
+
+			read -= r;
+			offs += r;
+		}
+
+		buf += offs;
+		size -= offs;
+		tot_data += offs;
+
+	} while (!(frame[0] & 0x80)); //(FIN bit is not set)
+
+	return tot_data;
+}
+
 struct PlayerCon
 {
 	char* name;
-	SOCKET client_socket;
-	HANDLE read_thread;
-	int index;
+	volatile TCP_SOCKET client_socket;
+	THREAD_HANDLE* thread;
 
 	void Start(SOCKET socket)
 	{
 		client_socket = socket;
-		read_thread = CreateThread(0, 0, Recv, this, 0, 0);
+
+		// is there any old thread hanging around?
+		if (thread)
+			THREAD_JOIN(thread);
+
+		thread = THREAD_CREATE(Recv, this);
 	}
 
-	enum CMD
+	void Stop()
 	{
-		LOG_IN = 0,
-		PLAYER_STATE = 1,
-	};
+		TCP_SOCKET s = client_socket;
+		client_socket = INVALID_TCP_SOCKET; // atomic?
+		TCP_CLOSE(s);
+		THREAD_JOIN(thread);
+		thread = 0;
+	}
 
 	struct PlayerState
 	{
@@ -44,211 +461,104 @@ struct PlayerCon
 		int32_t flags; // unspecified
 	};
 
-	int release_index; // MUST NOT BE USED OUTSIDE OF ACQUIRE/RELEASE
+
 	PlayerState player_state; // this player
 
 	void Recv()
 	{
-		bool logged = false; // till not logged in only ping is ok
-
-		char buf[2048]; // should be enough for any message size including talkboxes
-		int len = 0;
+		printf("CONNECTED ID: %d\n", this - players);
+		uint8_t buf[2048]; // should be enough for any message size including talkboxes
 		
 		while (1)
 		{
-			int ret = recv(client_socket, buf + len, 4 - len, 0);
-			if (ret <= 0)
-			{
-				// time to disconnect
+			TCP_SOCKET s = client_socket; // atomic?
+			if (s == INVALID_TCP_SOCKET)
 				break;
-			}
 
-			len += ret;
+			int size = WS_READ(s, buf, 2048);
 
-			if (len >= 4)
-			{
-				int cmd_size = *(int32_t*)buf;
-				if (cmd_size < 0 || cmd_size>2048)
-					break;
+			printf("%d\n", size);
 
-				if (cmd_size == 4)
-				{
-					// ping? -> pong
-					ret = send(client_socket, (const char*)&cmd_size, 4, 0);
-
-					if (ret != 4)
-					{
-						// time to disconnect
-						break;
-					}
-
-					len = 0;
-					continue;
-				}
-
-				if (cmd_size < 8)
-				{
-					// invalid!
-					// all cmds except ping must contain 4 bytes cmd_id
-					// time to disconnect
-					break;
-				}
-
-				while (len < cmd_size)
-				{
-					ret = recv(client_socket, buf + len, cmd_size - len, 0);
-					if (ret <= 0)
-					{
-						// time to disconnect
-						break;
-					}
-
-					len += ret;
-				}
-
-				if (ret <= 0)
-				{
-					// time to disconnect
-					break;
-				}
-
-				int cmd_id = *(int32_t*)(buf+4);
-				void* data = buf + 8;
-				len -= 8;
-				// ready to parse cmd and dispatch
-
-				if (!logged && cmd_id != LOG_IN || 
-					logged && cmd_id == LOG_IN)
-				{
-					// time to disconnect
-					break;
-				}
-
-				switch (cmd_id)
-				{
-					case LOG_IN:
-					{
-						// check credentials
-						// ...
-
-						// if ok, transfer all players & items info!
-						// ...
-
-						// order new full snapshot, wait for it and transmit
-						// ...
-
-						break;
-					}
-
-					case PLAYER_STATE:
-					{
-						PlayerState* s = (PlayerState*)data;
-						memcpy(&player_state, s, sizeof(PlayerState));
-
-						// set entrire row of 10000 bits in dirty matrix (blindly!)
-						// so responds for other clients know which states should they include
-
-						// LOCK, copy & clear column, UNLOCK ?
-
-						break;
-					}
-				}
-			}
+			if (size <= 0)
+				break;
 		}
 
-		// cleanup
+		Release();
+
+		printf("DISCONNECTED ID: %d\n", this - players);
 	}
 
-	static DWORD WINAPI Recv(LPVOID p)
+	static void* Recv(void* p)
 	{
 		PlayerCon* con = (PlayerCon*)p;
 		con->Recv();
 		return 0;
 	}
 
-	static CRITICAL_SECTION cs;
-	static const int max_clients = 10000;
+	//////////////////////////////////////////////////////
+	// ID AQUIRE / RELEASE 
+	//
+	int release_index; // MUST NOT BE USED OUTSIDE OF ACQUIRE/RELEASE
+
+	static MUTEX_HANDLE* cs;
+	static const int max_clients = 100;
 	static int clients;
 	static int client_id[]; // used first then free
 	static PlayerCon players[];
-
-	// identifies which players changed state since last update sent to this player
-	uint8_t player_mask[(max_clients + 7) / 8]; // 1.25 KB (12.5 MB total)
-	
-	// same with all items? -- but what with dynamically created ones (like fruits on / at trees)
-	// uint8_t item_mask[(max_items + 7) / 8]]
-
-	// if we process items serially for all players, there would be no problem
-
 	
 	static PlayerCon* Aquire() // returns ID
 	{
 		PlayerCon* con = 0;
-		EnterCriticalSection(&cs); // prevent pending releases
+		MUTEX_LOCK(cs); // prevent pending releases
 		if (clients < max_clients)
 		{
 			con = players + client_id[clients];
 			con->release_index = clients;
 			clients++;
 		}
-		LeaveCriticalSection(&cs);
+		MUTEX_UNLOCK(cs);
 		return con;
 	}
 
 	void Release()
 	{
-		EnterCriticalSection(&cs); // prevent pending aquire and other releases
+		MUTEX_LOCK(cs); // prevent pending aquire and other releases
 		clients--;
 		int mov_id = client_id[clients];
 		int rel_id = client_id[release_index];
 		client_id[release_index] = mov_id;
 		client_id[clients] = rel_id;
 		players[mov_id].release_index = rel_id;
-		LeaveCriticalSection(&cs);
+		MUTEX_UNLOCK(cs);
 	}
+
+	//////////////////////////////////////////////////////
 };
 
-CRITICAL_SECTION PlayerCon::cs;
+MUTEX_HANDLE* PlayerCon::cs;
 int PlayerCon::clients;
 int PlayerCon::client_id[PlayerCon::max_clients]; 
 PlayerCon PlayerCon::players[PlayerCon::max_clients];
 
 volatile bool isRunning = true;
 
-BOOL WINAPI consoleHandler(DWORD signal)
+int ServerLoop(const char* port)
 {
-	switch (signal)
-	{
-	case CTRL_C_EVENT:
-		isRunning = false;
-		// Signal is handled - don't pass it on to the next handler
-		return TRUE;
-	default:
-		// Pass signal on to the next handler
-		return FALSE;
-	}
-}
-
-int a3dListen(const char* port)
-{
-	// setup ^C ?
-
-	WSADATA wsaData;
 	int iResult;
 
 	// Initialize Winsock
-	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	iResult = TCP_INIT();
 	if (iResult != 0) 
 	{
 		printf("WSAStartup failed: %d\n", iResult);
 		return 1;
 	}
 
-	SOCKET ListenSocket = INVALID_SOCKET;
+	TCP_SOCKET ListenSocket = INVALID_SOCKET;
 	struct addrinfo *result = NULL, *ptr = NULL, hints;
 
+	memset(&hints, 0, sizeof(hints));
 
-	ZeroMemory(&hints, sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
@@ -259,7 +569,7 @@ int a3dListen(const char* port)
 	if (iResult != 0)
 	{
 		printf("getaddrinfo failed: %d\n", iResult);
-		WSACleanup();
+		TCP_CLEANUP();
 		return 1;
 	}
 
@@ -267,9 +577,9 @@ int a3dListen(const char* port)
 
 	if (ListenSocket == INVALID_SOCKET) 
 	{
-		printf("Error at socket(): %ld\n", WSAGetLastError());
+		//printf("Error at socket(): %ld\n", WSAGetLastError());
 		freeaddrinfo(result);
-		WSACleanup();
+		TCP_CLEANUP();
 		return 1;
 	}
 
@@ -277,10 +587,10 @@ int a3dListen(const char* port)
 	iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
 	if (iResult == SOCKET_ERROR) 
 	{
-		printf("bind failed with error: %d\n", WSAGetLastError());
+		//printf("bind failed with error: %d\n", WSAGetLastError());
 		freeaddrinfo(result);
 		closesocket(ListenSocket);
-		WSACleanup();
+		TCP_CLEANUP();
 		return 1;
 	}
 
@@ -288,28 +598,31 @@ int a3dListen(const char* port)
 
 	if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR) 
 	{
-		printf("Listen failed with error: %ld\n", WSAGetLastError());
-		closesocket(ListenSocket);
-		WSACleanup();
+		//printf("Listen failed with error: %ld\n", WSAGetLastError());
+		TCP_CLOSE(ListenSocket);
+		TCP_CLEANUP();
 		return 1;
 	}
 
-	// init free ids
+	// init, importand to null-out all thread handles
+	memset(PlayerCon::players, 0, sizeof(PlayerCon) * PlayerCon::max_clients);
 	PlayerCon::clients = 0;
 	for (int i = 0; i < PlayerCon::max_clients; i++)
 		PlayerCon::client_id[i] = i;
 
+	PlayerCon::cs = MUTEX_CREATE();
+
 	while (isRunning)
 	{
-		SOCKET ClientSocket = INVALID_SOCKET;
+		TCP_SOCKET ClientSocket = INVALID_TCP_SOCKET;
 
 		// Accept a client socket
 		ClientSocket = accept(ListenSocket, NULL, NULL);
-		if (ClientSocket != INVALID_SOCKET)
+		if (ClientSocket != INVALID_TCP_SOCKET)
 		{
 			PlayerCon* con = PlayerCon::Aquire();
 			if (!con)
-				closesocket(ClientSocket);
+				TCP_CLOSE(ClientSocket);
 			else
 				con->Start(ClientSocket);
 		}
@@ -317,7 +630,7 @@ int a3dListen(const char* port)
 		{
 			if (isRunning)
 			{
-				printf("accept failed: %d\n", WSAGetLastError());
+				//printf("accept failed: %d\n", WSAGetLastError());
 				isRunning = false;
 			}
 			else
@@ -326,17 +639,21 @@ int a3dListen(const char* port)
 		}
 	}
 
-	closesocket(ListenSocket);
+	TCP_CLOSE(ListenSocket);
+	MUTEX_DELETE(PlayerCon::cs);
 
-	// enum all connections & shut down!
-	// ...
+	for (int i = 0; i < PlayerCon::clients; i++)
+	{
+		int id = PlayerCon::client_id[i];
+		PlayerCon* con = PlayerCon::players + id;
+		con->Stop();
+	}
 
-	WSACleanup();
+	TCP_CLEANUP();
 
 	return 0;
 }
-#else
-#endif
+
 
 Terrain* terrain = 0;
 World* world = 0;
@@ -406,7 +723,7 @@ int main(int argc, char* argv[])
 	if (world)
 		RebuildWorld(world, true);
 
-	a3dListen("8080");
+	ServerLoop("8080");
 
 	DeleteWorld(world);
 	DeleteTerrain(terrain);
