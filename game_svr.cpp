@@ -477,7 +477,7 @@ struct PlayerCon
 
 	void Recv()
 	{
-		printf("CONNECTED ID: %d\n", this - players);
+		printf("CONNECTED ID: %d\n", (int)(this - players));
 		uint8_t buf[2048]; // should be enough for any message size including talkboxes
 
 		// read /GET request with some headers, but ensure these: "Upgrade: WebSocket" and "Connection: Upgrade"
@@ -501,41 +501,124 @@ struct PlayerCon
 		"Connection: Upgrade"
 		#endif
 
-		// stupid CRLFCRLF parser!
+		const int headers = 7;
 		int crlf_state=0;
+		int header_idx = headers;
+		int header_len = 0;
+		int value_len = 0;
+		int col = 1;
+		char header[32];
+
+		static const char* header_match[headers] = 
+		{
+			"Accept-Encoding",
+			"Sec-WebSocket-Extensions", 
+			"Sec-WebSocket-Version",	// ensure 13
+			"Sec-WebSocket-Key",		// work out new one
+			"Upgrade",		 			// ensure WebSocket
+			"Connection",				// ensure Upgrade
+			"Content-Length"			// ensure none or 0
+		};
+
+		char value[headers+1][32] = {0}; // +1 for request line
+
 		do
 		{
 			int r = TCP_READ(client_socket, buf, 2048);
 			if (r<=0)
 			{
 				Release();
-				printf("DISCONNECTED ID: %d\n", this - players);
+				printf("DISCONNECTED ID: %d\n", (int)(this - players));
 				return;
 			}
 
 			for (int i=0; i<r; i++)
 			{
-				switch (crlf_state)
+				switch (buf[i])
 				{
-					case 0: if (buf[i] == 0x0D) crlf_state = 1; break;
-					case 1: if (buf[i] == 0x0A) crlf_state = 2; else crlf_state = 0; break;
-					case 2: if (buf[i] == 0x0D) crlf_state = 3; else crlf_state = 0; break;
-					case 3: if (buf[i] == 0x0A) crlf_state = 4; else crlf_state = 0; break;
+					case 0x0D: 
+						if (crlf_state == 0 || crlf_state == 2) 
+							crlf_state++; 
+						else 
+							crlf_state = 0; 
+						break;
+
+					case 0x0A: 
+						if (crlf_state == 1 || crlf_state == 3) 
+						{
+							if (header_idx>=0)
+							{
+								if (value_len<32)
+									value[header_idx][value_len] = 0;
+								else
+									value[header_idx][32-1] = 0;
+							}
+							
+							value_len = 0;
+							header_len = 0;
+							header_idx = -1;
+							crlf_state++; 
+							col=0;
+						}  
+						else 
+							crlf_state = 0; 
+						break;
+
+					default:
+					{
+						crlf_state = 0;
+						if (col==0)
+						{
+							if (buf[i] == ':')
+							{
+								col = 1;
+								header_idx = -1;
+								if (header_len<=32)
+								{
+									for (int h=0; h<headers; h++)
+									{
+										if (strncmp(header_match[h],header,header_len)==0)
+										{
+											header_idx = h;
+											break;
+										}
+									}
+								}
+							}
+							else
+							{
+								if (header_len < 32)
+									header[header_len] = buf[i];
+								header_len++;
+							}
+						}
+						else
+						{
+							if (header_idx>=0)
+							{
+								if (value_len < 32)
+									value[header_idx][value_len] = buf[i];
+								value_len++;
+							}
+						}
+						break;
+					}
 				}
+
 				if (crlf_state == 4)
 					break;
 			}
-		} while (crlf_state != 4);
 
-		static const char response[] = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: WebSocket\r\nConnection: Upgrade\r\n\r\n";
-		int w = TCP_WRITE(client_socket, (const uint8_t*)response, sizeof(response)-1);
+		} while (crlf_state != 4);
 
 		// TODO: importand thing is to send back new Sec-WebSocket-Key based on client's one:
 		// - first concatenate client's key with this string: "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 		// - then calculate SHA-1 hash of it
 		// - finaly resulting Sec-WebSocket-Key is base64 encoding of that hash
-
 		// probably we should also answer back with "Sec-WebSocket-Version: 13"
+
+		static const char response[] = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: WebSocket\r\nConnection: Upgrade\r\n\r\n";
+		int w = TCP_WRITE(client_socket, (const uint8_t*)response, sizeof(response)-1);
 
 		printf("------------- AFTER-SHAKE ----------------\n");
 		
@@ -555,7 +638,7 @@ struct PlayerCon
 
 		Release();
 
-		printf("DISCONNECTED ID: %d\n", this - players);
+		printf("DISCONNECTED ID: %d\n", (int)(this - players));
 	}
 
 	static void* Recv(void* p)
