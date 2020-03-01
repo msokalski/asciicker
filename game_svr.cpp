@@ -105,6 +105,13 @@ void MUTEX_UNLOCK(MUTEX_HANDLE* mutex)
 
 #else
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <pthread.h> // compile with -pthread
+#include <string.h>
+
 typedef int TCP_SOCKET;
 #define INVALID_TCP_SOCKET (-1)
 
@@ -431,7 +438,7 @@ struct PlayerCon
 	volatile TCP_SOCKET client_socket;
 	THREAD_HANDLE* thread;
 
-	void Start(SOCKET socket)
+	void Start(TCP_SOCKET socket)
 	{
 		client_socket = socket;
 
@@ -554,7 +561,7 @@ int ServerLoop(const char* port)
 		return 1;
 	}
 
-	TCP_SOCKET ListenSocket = INVALID_SOCKET;
+	TCP_SOCKET ListenSocket = INVALID_TCP_SOCKET;
 	struct addrinfo *result = NULL, *ptr = NULL, hints;
 
 	memset(&hints, 0, sizeof(hints));
@@ -575,7 +582,7 @@ int ServerLoop(const char* port)
 
 	ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 
-	if (ListenSocket == INVALID_SOCKET) 
+	if (ListenSocket == INVALID_TCP_SOCKET) 
 	{
 		//printf("Error at socket(): %ld\n", WSAGetLastError());
 		freeaddrinfo(result);
@@ -585,18 +592,18 @@ int ServerLoop(const char* port)
 
 	// Setup the TCP listening socket
 	iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
-	if (iResult == SOCKET_ERROR) 
+	if (iResult < 0) 
 	{
 		//printf("bind failed with error: %d\n", WSAGetLastError());
 		freeaddrinfo(result);
-		closesocket(ListenSocket);
+		TCP_CLOSE(ListenSocket);
 		TCP_CLEANUP();
 		return 1;
 	}
 
 	freeaddrinfo(result);
 
-	if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR) 
+	if (listen(ListenSocket, SOMAXCONN) < 0) 
 	{
 		//printf("Listen failed with error: %ld\n", WSAGetLastError());
 		TCP_CLOSE(ListenSocket);
