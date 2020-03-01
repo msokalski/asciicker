@@ -57,9 +57,9 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-# CPPFLAGS := -save-temps=obj -pthread -DSERVER -O3
+CPPFLAGS := -save-temps=obj -pthread -DSERVER -O3 -std=c++0x
 # CPPFLAGS := -g -save-temps=obj -pthread -DSERVER -O3
-CPPFLAGS := -g -save-temps=obj -pthread -DSERVER -fsanitize=address
+# CPPFLAGS := -g -save-temps=obj -pthread -DSERVER -fsanitize=address
 
 # linker flags
 # LDFLAGS := -save-temps=obj -pthread -O3

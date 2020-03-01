@@ -192,7 +192,11 @@ inline int TCP_WRITE(TCP_SOCKET s, const uint8_t* buf, int size)
 
 inline int TCP_READ(TCP_SOCKET s, uint8_t* buf, int size)
 {
-	return recv(s, (char*)buf, size, 0);
+	int ret = recv(s, (char*)buf, size, 0);
+	for (int i=0; i<ret; i++)
+		printf("%c",buf[i]);
+	printf("\n");
+	return ret;
 }
 
 int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split)
@@ -475,6 +479,62 @@ struct PlayerCon
 	{
 		printf("CONNECTED ID: %d\n", this - players);
 		uint8_t buf[2048]; // should be enough for any message size including talkboxes
+
+		// read /GET request with some headers, but ensure these: "Upgrade: WebSocket" and "Connection: Upgrade"
+#if 0
+GET / HTTP/1.1
+Host: localhost:8080
+User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:73.0) Gecko/20100101 Firefox/73.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Sec-WebSocket-Version: 13
+Origin: http://asciicker.com
+Sec-WebSocket-Extensions: permessage-deflate
+Sec-WebSocket-Key: btsPdKGunHdaTPnSSDlfow==
+Pragma: no-cache
+Cache-Control: no-cache
+X-Forwarded-For: 89.64.42.93
+X-Forwarded-Host: asciicker.com
+X-Forwarded-Server: asciicker.com
+Upgrade: WebSocket
+Connection: Upgrade
+#endif
+
+		int crlf_state=0;
+		do
+		{
+			int r = TCP_READ(client_socket, buf, 2048);
+			if (r<=0)
+			{
+				Release();
+				printf("DISCONNECTED ID: %d\n", this - players);
+				return;
+			}
+
+			for (int i=0; i<r; i++)
+			{
+				switch (crlf_state)
+				{
+					case 0: if (buf[i] == 0x0D) crlf_state = 1; break;
+					case 1: if (buf[i] == 0x0A) crlf_state = 2; else crlf_state = 0; break;
+					case 2: if (buf[i] == 0x0D) crlf_state = 3; else crlf_state = 0; break;
+					case 3: if (buf[i] == 0x0A) crlf_state = 4; else crlf_state = 0; break;
+				}
+				if (crlf_state == 4)
+					break;
+			}
+		} while (crlf_state != 4);
+
+		static const char response[] = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: WebSocket\r\nConnection: Upgrade\r\n\r\n";
+		int w = TCP_WRITE(client_socket, (const uint8_t*)response, sizeof(response)-1);
+
+		// TODO: importand thing is to send back new Sec-WebSocket-Key based on client's one:
+		// - first concatenate client's key with this string: "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+		// - then calculate SHA-1 hash of it
+		// - finaly resulting Sec-WebSocket-Key is base64 encoding of that hash
+
+		printf("------------- AFTER-SHAKE ----------------\n");
 		
 		while (1)
 		{
