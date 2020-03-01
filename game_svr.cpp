@@ -481,26 +481,27 @@ struct PlayerCon
 		uint8_t buf[2048]; // should be enough for any message size including talkboxes
 
 		// read /GET request with some headers, but ensure these: "Upgrade: WebSocket" and "Connection: Upgrade"
-#if 0
-GET / HTTP/1.1
-Host: localhost:8080
-User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:73.0) Gecko/20100101 Firefox/73.0
-Accept: */*
-Accept-Language: en-US,en;q=0.5
-Accept-Encoding: gzip, deflate
-Sec-WebSocket-Version: 13
-Origin: http://asciicker.com
-Sec-WebSocket-Extensions: permessage-deflate
-Sec-WebSocket-Key: btsPdKGunHdaTPnSSDlfow==
-Pragma: no-cache
-Cache-Control: no-cache
-X-Forwarded-For: 89.64.42.93
-X-Forwarded-Host: asciicker.com
-X-Forwarded-Server: asciicker.com
-Upgrade: WebSocket
-Connection: Upgrade
-#endif
+		#if 0
+		"GET / HTTP/1.1"
+		"Host: localhost:8080"
+		"User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:73.0) Gecko/20100101 Firefox/73.0"
+		"Accept: */*"
+		"Accept-Language: en-US,en;q=0.5"
+		"Accept-Encoding: gzip, deflate"
+		"Sec-WebSocket-Version: 13"
+		"Origin: http://asciicker.com"
+		"Sec-WebSocket-Extensions: permessage-deflate"
+		"Sec-WebSocket-Key: btsPdKGunHdaTPnSSDlfow=="
+		"Pragma: no-cache"
+		"Cache-Control: no-cache"
+		"X-Forwarded-For: 89.64.42.93"
+		"X-Forwarded-Host: asciicker.com"
+		"X-Forwarded-Server: asciicker.com"
+		"Upgrade: WebSocket"
+		"Connection: Upgrade"
+		#endif
 
+		// stupid CRLFCRLF parser!
 		int crlf_state=0;
 		do
 		{
@@ -533,6 +534,8 @@ Connection: Upgrade
 		// - first concatenate client's key with this string: "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 		// - then calculate SHA-1 hash of it
 		// - finaly resulting Sec-WebSocket-Key is base64 encoding of that hash
+
+		// probably we should also answer back with "Sec-WebSocket-Version: 13"
 
 		printf("------------- AFTER-SHAKE ----------------\n");
 		
