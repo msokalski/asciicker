@@ -22,6 +22,7 @@
     <ClInclude Include="fast_rand.h" />
     <ClInclude Include="game.h" />
     <ClInclude Include="inventory.h" />
+    <ClInclude Include="network.h" />
     <ClInclude Include="physics.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="sprite.h" />
@@ -32,8 +33,10 @@
     <ClCompile Include="game.cpp" />
     <ClCompile Include="game_svr.cpp" />
     <ClCompile Include="inventory.cpp" />
+    <ClCompile Include="network.cpp" />
     <ClCompile Include="physics.cpp" />
     <ClCompile Include="render.cpp" />
+    <ClCompile Include="sha1.c" />
     <ClCompile Include="sprite.cpp" />
     <ClCompile Include="terrain.cpp" />
     <ClCompile Include="tinfl.c" />

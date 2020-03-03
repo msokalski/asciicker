@@ -196,6 +196,7 @@
   <ItemGroup>
     <ClCompile Include="game.cpp" />
     <ClCompile Include="inventory.cpp" />
+    <ClCompile Include="network.cpp" />
     <ClCompile Include="render.cpp" />
     <ClCompile Include="screen.cpp" />
     <ClCompile Include="term.cpp" />

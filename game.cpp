@@ -3,6 +3,7 @@
 #include <math.h>
 #include "game.h"
 #include "platform.h"
+#include "network.h"
 
 static const int stand_us_per_frame = 30000;
 static const int fall_us_per_frame = 30000;
@@ -2808,7 +2809,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int steps = Animate(physics, _stamp, &io);
 	if (steps > 0)
+	{
 		input.jump = false;
+	}
 
 	prev_yaw = io.yaw;
 
@@ -2910,11 +2913,26 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss);
 
+	// NET_TODO:
+	// compare inrange with server confirmed inrange
+	// if differs request change by ITEM command
+	// ...
+
+	// NET_TODO:
+	// construct inrange array containing only intersection of confirmed and rendered items
+	// use it for rendering list of pickup items
+	// ...
+
 	// inrange list MUST be already booked by server for us as exclusive!
 	// no other player will be able to see these items in their lists!
 	// in this way we are sure we can handle picking up safely
 
-	Human* h = player_head;
+	Human* h;
+	if (server)
+		h = server->Lock();
+	else
+		h = player_head;
+
 	while (h)
 	{
 		// todo: ALL TALKS should be sorted by ascending stamp
@@ -2932,9 +2950,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				h->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false);
 			}
 			else
-			if (h == &player)
+			if (h == &player || server)
 			{
-				// each player handles its own talks
+				// each player handles its own talks (except server players, they need help)
 				free(player.talk[i].box);
 				player.talks--;
 				for (int j = i; j < player.talks; j++)
@@ -2945,6 +2963,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		h = h->next;
 	}
 
+	if (server)
+		server->Unlock();
 
 	int contact_items = 0;
 	int contact_item[4] = { -1,-1,-1,-1 };
@@ -3217,7 +3237,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			items++;
 		}
 
-		// store
+		// store 
+		// NET_TODO: store intersection of confirmed and rendered items!
 		items_count = items;
 		items_inrange = inrange;
 
@@ -3505,6 +3526,25 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	input.last_hit_char = 0;
 
 	stamp = _stamp;
+
+	if (steps && server)
+	{
+		STRUCT_REQ_POSE req_pose = { 0 };
+		req_pose.token = 'P';
+		req_pose.anim= player.anim;
+		req_pose.frame = player.frame;
+		req_pose.pos[0] = player.pos[0];
+		req_pose.pos[1] = player.pos[1];
+		req_pose.pos[2] = player.pos[2];
+		req_pose.dir = player.dir;
+		req_pose.sprite = 
+			(player.req.armor << 12) | 
+			(player.req.helmet << 8) |
+			(player.req.shield << 4) |
+			player.req.weapon; // 0xAHSW
+
+		server->Send(&req_pose, sizeof(STRUCT_REQ_POSE));
+	}
 }
 
 void Game::OnSize(int w, int h, int fw, int fh)
@@ -4966,4 +5006,10 @@ void Game::OnFocus(bool set)
 		input.size[0] = w;
 		input.size[1] = h;
 	}
+}
+
+void Game::OnMessage(const uint8_t* msg, int len)
+{
+	// NET_TODO:
+	// this is called by JS or game_app (already on game's thread)
 }

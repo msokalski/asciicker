@@ -42,7 +42,20 @@
 #include "render.h"
 #include "game.h"
 
-// A3D_WND* wnd = 0;
+Server* server = 0; // this is to fullfil game.cpp externs!
+void Server::Send(const void* data, int size)
+{
+}
+
+Human* Server::Lock()
+{
+	return 0;
+}
+
+void Server::Unlock()
+{
+}
+
 
 // just for write(fd)
 #ifndef _WIN32

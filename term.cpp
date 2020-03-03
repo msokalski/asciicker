@@ -62,6 +62,11 @@ void term_render(A3D_WND* wnd)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
+	// dispatch all queued messages to game
+	// 1. flush list
+	// 2. reverse order
+	// 3. dispatch every message with term->game->OnMessage()
+
 	int wnd_wh[2];
 
 	a3dGetRect(wnd, 0, wnd_wh);
@@ -80,105 +85,6 @@ void term_render(A3D_WND* wnd)
 	uint64_t stamp = a3dGetTime();
 
 	term->game->Render(stamp, term->buf, width, height);
-
-#if 0
-
-	PhysicsIO io;
-
-	float speed = 1;
-	if (term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT))
-		speed *= 0.5;
-	io.x_force = (int)(term->IsKeyDown(A3D_RIGHT) || term->IsKeyDown(A3D_D)) - (int)(term->IsKeyDown(A3D_LEFT) || term->IsKeyDown(A3D_A));
-	io.y_force = (int)(term->IsKeyDown(A3D_UP) || term->IsKeyDown(A3D_W)) - (int)(term->IsKeyDown(A3D_DOWN) || term->IsKeyDown(A3D_S));
-
-	float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
-	if (len > 0)
-		speed /= len;
-	io.x_force *= speed;
-	io.y_force *= speed;
-
-	io.torque = (int)(term->IsKeyDown(A3D_DELETE) || term->IsKeyDown(A3D_PAGEUP) || term->IsKeyDown(A3D_F1) || term->IsKeyDown(A3D_Q)) -
-		(int)(term->IsKeyDown(A3D_INSERT) || term->IsKeyDown(A3D_PAGEDOWN) || term->IsKeyDown(A3D_F2) || term->IsKeyDown(A3D_E));
-	io.water = probe_z;
-	io.jump = term->IsKeyDown(A3D_LALT) || term->IsKeyDown(A3D_RALT) || term->IsKeyDown(A3D_SPACE) || term->mouse_j;
-	//io.slow = term->IsKeyDown(A3D_LSHIFT) || term->IsKeyDown(A3D_RSHIFT);
-
-
-
-	if (term->mouse_rot)
-	{
-		/*
-		float ox = (wnd_wh[0] - width * (fnt_wh[0] >> 4)) *0.5f;
-		float mx = (term->mouse_x - ox) / (fnt_wh[0] >> 4);
-		io.torque = -2 * (mx * 2 - width) / (float)width;
-		*/
-
-		float sensitivity = 200.0f / wnd_wh[0];
-		float yaw = term->mouse_rot_yaw - sensitivity * (term->mouse_x - term->mouse_rot_x);
-		io.torque = 1000000;
-		io.yaw = yaw;
-	}
-	else
-	if (term->mouse_b)
-	{
-		float ox = (wnd_wh[0] - width*(fnt_wh[0]>>4)) *0.5f;
-		float oy = (wnd_wh[1] - height*(fnt_wh[1]>>4)) *0.5f;
-
-		float mx = (term->mouse_x - ox) / (fnt_wh[0]>>4);
-		float my = (term->mouse_y - oy) / (fnt_wh[1]>>4);
-
-		float speed = 1.0;
-		io.x_force = speed*2*(mx*2 - width) / (float)width;
-		io.y_force = speed*2*(height - my*2) / (float)height;
-	}
-
-	Animate(term->phys, stamp, &io);
-
-	term->yaw = io.yaw;
-
-	if (!io.jump)
-	{
-		term->keys[A3D_LALT/8] &= ~(1<<(A3D_LALT&7));
-		term->keys[A3D_RALT/8] &= ~(1<<(A3D_RALT&7));
-		term->keys[A3D_SPACE/8] &= ~(1<<(A3D_SPACE&7));
-		term->mouse_j = false;
-	}
-
-	// FPS DUMPER
-	{
-		static int frames = 0;
-		frames++;
-		static uint64_t p = a3dGetTime();
-		uint64_t t = stamp;
-		uint64_t d = t - p;
-		if (d > 1000000)
-		{
-			double fps = 1000000.0 * frames / (double)d;
-			printf("fps = %.2f, x = %.2f, y = %.2f, z = %.2f\n", fps, io.pos[0],io.pos[1],io.pos[2]);
-			p = t;
-			frames = 0;
-		}
-	}
-
-	float zoom = 1.0;
-	//Render(terrain, world, term->water, zoom, term->yaw, term->pos, width, height, term->buf);
-
-	/*
-	float pos[3] = { pos_x, pos_y, pos_z };
-	float yaw = rot_yaw;
-	*/
-
-	float ln = 1.0f/sqrtf(global_lt[0] * global_lt[0] + global_lt[1] * global_lt[1] + global_lt[2] * global_lt[2]);
-	float lt[4] =
-	{
-		global_lt[0] * ln,
-		global_lt[1] * ln,
-		global_lt[2] * ln,
-		global_lt[3]
-	};
-
-	Render(stamp,terrain, world, io.water, zoom, io.yaw, io.pos, lt, width, height, term->buf, io.player_dir, io.player_stp, io.dt, io.xyz);
-#endif
 
 	glClearColor(0, 0, 0, 0);
 	glClear(GL_COLOR_BUFFER_BIT);

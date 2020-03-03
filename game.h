@@ -7,6 +7,7 @@
 #include "terrain.h"
 
 #include "inventory.h"
+#include "network.h"
 
 
 struct Character
@@ -32,10 +33,11 @@ struct SpriteReq
 	int weapon;
 };
 
+Sprite* GetSprite(const SpriteReq* req);
+
 struct Human : Character
 {
-	char name[16];
-	char desc[16];
+	char name[32];
 
 	int level;
 
@@ -98,7 +100,19 @@ struct Human : Character
 	Human* next;
 
 	SpriteReq req;
+
+	Inst* inst; // only server players
 };
+
+struct Server
+{
+	void Send(const void* data, int size);
+	Human* Lock();
+	void Unlock();
+	// pose->pad with hold new/del/upd flags
+};
+
+extern Server* server; // global!
 
 struct Game
 {
@@ -279,6 +293,7 @@ struct Game
 	void OnTouch(GAME_TOUCH touch, int id, int x, int y);
 	void OnFocus(bool set);
 	void OnSize(int w, int h, int fw, int fh);
+	void OnMessage(const uint8_t* msg, int len);
 
 	// update physics with accumulated input then render state to output
 	void Render(uint64_t _stamp, AnsiCell* ptr, int width, int height);

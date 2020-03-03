@@ -20,6 +20,8 @@
 #include "sprite.h"
 #include "matrix.h"
 
+#include "network.h"
+
 // FOR GL 
 #include "term.h"
 #include "gl.h"
@@ -428,7 +430,7 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
     float err = 0;
 
     assert(wnd_wh);
-    float area = wnd_wh[0]*wnd_wh[1];
+    float area = (float)(wnd_wh[0]*wnd_wh[1]);
 
 	int j = -1;
     for (int i=0; i<fonts_loaded; i++)
@@ -481,10 +483,349 @@ bool NextGLFont()
 	return true;
 }
 
+Server* server = 0;
+
+struct GameServer : Server
+{
+	MUTEX_HANDLE* mt;
+	Human* others; // client view
+	Human* head;
+	Human* tail;
+
+
+	bool Start(TCP_SOCKET s, int max_cli) // todo: add max_items
+	{
+		head = 0;
+		tail = 0;
+		server_socket = s;
+		max_clients = max_cli;
+
+		// create mutex for accessing existing users, their poses and confirmed item locks
+		mt = MUTEX_CREATE();
+
+		bool ok = THREAD_CREATE_DETACHED(Entry, this);
+
+		if (!ok)
+		{
+			MUTEX_DELETE(mt);
+			return false;
+		}
+
+		others = (Human*)malloc(sizeof(Human) * max_cli);
+
+		return true;
+	}
+
+	void Recv()
+	{
+		while (1)
+		{
+			uint8_t buf[2048];
+			int w = WS_READ(server_socket, buf, 2048, 0);
+			if (w <= 0)
+			{
+				break;
+			}
+
+			MUTEX_LOCK(mt);
+			switch (buf[0])
+			{
+				case 'j': // hello!
+				{
+					STRUCT_BRC_JOIN* join = (STRUCT_BRC_JOIN*)buf;
+					Human* h = others + join->id;
+					memset(h, 0, sizeof(Human));
+
+					strcpy(h->name, join->name);
+					h->prev = 0;
+					h->next = head;
+					if (head)
+						head->prev = h;
+					else
+						tail = h;
+					head = h;
+
+					// def pose
+					h->sprite = GetSprite(&h->req);
+
+					// insert Inst to the world
+					int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
+					int reps[4] = { 0,0,0,0 };
+					h->inst = CreateInst(world, h->sprite, flags, h->pos, h->dir, h->anim, h->frame, reps, 0);
+
+					break;
+				}
+				case 'e': // cya!
+				{
+					STRUCT_BRC_EXIT* leave = (STRUCT_BRC_EXIT*)buf;
+					Human* h = others + leave->id;
+					if (h->prev)
+						h->prev->next = h->next;
+					else
+						head = h->next;
+					if (h->next)
+						h->next->prev = h->prev;
+					else
+						tail = h->prev;
+
+					// if has world's Inst, remove it
+					if (h->inst)
+						DeleteInst(h->inst);
+					h->inst = 0;
+
+					break;
+				}
+
+				case 'p': // you can move!
+				{
+					STRUCT_BRC_POSE* pose = (STRUCT_BRC_POSE*)buf;
+					Human* h = others + pose->id;
+
+					h->req.action = (pose->am >> 4) & 0xF;
+					h->req.mount = pose->am & 0xF;
+					h->req.armor = (pose->sprite >> 12) & 0xF;
+					h->req.helmet = (pose->sprite >> 8) & 0xF;
+					h->req.shield = (pose->sprite >> 4) & 0xF;
+					h->req.weapon = pose->sprite & 0xF;
+
+					h->sprite = GetSprite(&h->req);
+
+					h->anim = pose->anim;
+					h->frame = pose->frame;
+
+					h->dir = pose->dir;
+					h->pos[0] = pose->pos[0];
+					h->pos[1] = pose->pos[1];
+					h->pos[2] = pose->pos[2];
+
+					if (h->inst)
+					{
+						int reps[4];
+						UpdateSpriteInst(world, h->inst, h->sprite, h->pos, h->dir, h->anim, h->frame, reps);
+					}
+
+					break;
+				}
+
+				default:
+					exit(0);
+			}
+			MUTEX_UNLOCK(mt);
+		}
+	}
+
+	static void* Entry(void* arg)
+	{
+		((GameServer*)arg)->Recv();
+		return 0;
+	}
+
+	void Stop()
+	{
+		// finish thread
+		// close socket
+		TCP_CLOSE(server_socket);
+		TCP_CLEANUP();
+	}
+
+	int max_clients;
+	TCP_SOCKET server_socket;
+	// bookkeeping:
+	// pose for max_cli players
+	// locked items (confirmed by server)
+};
+
+void Server::Send(const void* data, int size)
+{
+	GameServer* gs = (GameServer*)this;
+	int w = WS_WRITE(gs->server_socket, (const uint8_t*)data, size, 0, true);
+	if (w <= 0)
+	{
+		// shut down!
+		exit(0);
+	}
+}
+
+Human* Server::Lock()
+{
+	GameServer* gs = (GameServer*)this;
+	MUTEX_LOCK(gs->mt);
+	return gs->head;
+}
+
+void Server::Unlock()
+{
+	GameServer* gs = (GameServer*)this;
+	MUTEX_UNLOCK(gs->mt);
+}
+
+bool Connect(const char* addr, const char* port, const char* user)
+{
+	int iResult;
+
+	// Initialize Winsock
+	iResult = TCP_INIT();
+	if (iResult != 0)
+	{
+		printf("WSAStartup failed: %d\n", iResult);
+		return false;
+	}
+
+	TCP_SOCKET server_socket = INVALID_TCP_SOCKET;
+
+	const char* hostname = addr;
+	const char* portname = port;
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+	hints.ai_flags = AI_PASSIVE;
+	struct addrinfo* result = 0;
+	iResult = getaddrinfo(hostname, portname, &hints, &result);
+	if (iResult != 0)
+	{
+		printf("getaddrinfo failed: %d\n", iResult);
+		TCP_CLEANUP();
+		return false;
+	}
+
+	// socket create and varification 
+	server_socket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+	if (server_socket == INVALID_TCP_SOCKET)
+	{
+		printf("socket creation failed...\n");
+		TCP_CLEANUP();
+		return false;
+	}
+	else
+		printf("Socket successfully created..\n");
+
+	// connect the client socket to server socket 
+	if (connect(server_socket, result->ai_addr, (int)result->ai_addrlen) != 0)
+	{
+		printf("connection with the server failed...\n");
+		TCP_CLOSE(server_socket);
+		TCP_CLEANUP();
+		return false;
+	}
+	else
+		printf("connected to the server..\n");
+
+	freeaddrinfo(result);
+
+	// first, send HTTP->WS upgrade request (over http)
+	const char* request =
+		"GET /ws/y4/ HTTP/1.1\r\n"
+#ifdef _WIN32
+		"User-Agent: native-asciicker-windows"
+#else
+		"User-Agent: native-asciicker-linux"
+#endif
+		"Accept: */*\r\n"
+		"Accept-Language: en-US,en;q=0.5\r\n"
+		"Sec-WebSocket-Version: 13\r\n"
+		"Sec-WebSocket-Key: btsPdKGunHdaTPnSSDlfow==\r\n"
+		"Pragma: no-cache\r\n"
+		"Cache-Control: no-cache\r\n"
+		"Upgrade: WebSocket\r\n"
+		"Connection: Upgrade\r\n\r\n";
+
+	int w = TCP_WRITE(server_socket, (uint8_t*)request, (int)strlen(request));
+	if (w < 0)
+	{
+		TCP_CLOSE(server_socket);
+		TCP_CLEANUP();
+		return false;
+	}
+
+	// wait for response (check HTTP status / headers)
+	struct Headers
+	{
+		static int cb(const char* header, const char* value, void* param)
+		{
+			Headers* h = (Headers*)param;
+
+			if (header)
+			{
+				if (strcmp("Content-Length", header) == 0)
+					h->content_len = atoi(value);
+			}
+
+			return 0;
+		}
+
+		int content_len;
+	} headers;
+
+	headers.content_len = 0;
+
+	char buf[2048];
+	int over_read = HTTP_READ(server_socket, Headers::cb, &headers, buf);
+
+	if (over_read < 0 || over_read > headers.content_len || headers.content_len > 2048)
+	{
+		TCP_CLOSE(server_socket);
+		TCP_CLEANUP();
+		return false;
+	}
+
+	while (headers.content_len > over_read)
+	{
+		int r = TCP_READ(server_socket, (uint8_t*)buf + over_read, headers.content_len - over_read);
+		if (r <= 0)
+		{
+			TCP_CLOSE(server_socket);
+			TCP_CLEANUP();
+			return false;
+		}
+		over_read += r;
+	}
+
+	// server should stay silent till we join the game
+	// send JOIN command along with user name (over ws)
+	STRUCT_REQ_JOIN req_join = { 0 };
+	req_join.token = 'J';
+	strncpy(req_join.name, user, 30);
+	int ws = WS_WRITE(server_socket, (uint8_t*)&req_join, sizeof(STRUCT_REQ_JOIN), 0, true);
+	if (ws <= 0)
+	{
+		TCP_CLOSE(server_socket);
+		TCP_CLEANUP();
+		return false;
+	}
+
+	// Recv for ID (over ws) (it can send us some content to display!)
+	STRUCT_RSP_JOIN rsp_join = { 0 };
+	ws = WS_READ(server_socket, (uint8_t*)&rsp_join, sizeof(STRUCT_RSP_JOIN), 0);
+	if (ws <= 0 || rsp_join.token != 'j')
+	{
+		TCP_CLOSE(server_socket);
+		TCP_CLEANUP();
+		return false;
+	}
+
+	int ID = rsp_join.id;
+	printf("connected with ID:%d/%d\n", ID, rsp_join.maxcli);
+
+	GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
+	server = gs;
+
+	if (!gs->Start(server_socket, rsp_join.maxcli))
+	{
+		TCP_CLOSE(server_socket);
+		TCP_CLEANUP();
+		return false;
+	}
+
+	return true;
+}
 
 int main(int argc, char* argv[])
 {
 #ifdef _WIN32
+	
+	PostMessage(GetConsoleWindow(), WM_SYSCOMMAND, SC_MINIMIZE, 0);
 	//_CrtSetBreakAlloc(5971);
 #endif
 
@@ -500,12 +841,87 @@ int main(int argc, char* argv[])
         gsettings set org.gnome.desktop.peripherals.keyboard delay 250    
     */
 
+	// if -user is given get its name and connect to server !
+
+
+	char* url = 0; // must be in form [user@]server_address/path[:port]
+
+	// to be upgraded by host (good if no encryption is needed but can't connect on weird port)
+	/*
+	const char* user = "player";
+	const char* addr = "asciicker.com";
+	const char* path = "/ws/y4/";
+	const char* port = "80";
+	*/
+
+	// to be upgraded by host (good if encryption is needed)
+	/*
+	const char* user = "player";
+	const char* addr = "asciicker.com";
+	const char* path = "/ws/y4/";
+	const char* port = "443";
+	*/
+
+	// directly (best but no encryption and requires weird port to be allowed to send request to)
+	/*
+	const char* user = "player";
+	const char* addr = "asciicker.com";
+	const char* path = "/ws/y4/"; // just to check if same as server expects
+	const char* port = "8080";
+	*/
+
     bool term = false;
     for (int p=1; p<argc; p++)
     {
         if (strcmp(argv[p],"-term")==0)
             term = true;
+		else
+		if (p+1<argc)
+		{
+			if (strcmp(argv[p], "-url") == 0)
+			{
+				p++;
+				url = argv[p];
+			}
+		}
     }
+
+	// NET_TODO:
+	// if url is given try to open connection
+
+	if (url)
+	{
+		// [user@]server_address/path[:port]
+		char* monkey = strchr(url, '@');
+		char* colon = monkey ? strchr(monkey, ':') : strchr(url, ':');
+
+		char* addr = url;
+		char* user = "player";
+		char* port = "8080";
+
+		if (monkey)
+		{
+			*monkey = 0;
+			user = url;
+			addr = monkey + 1;
+		}
+
+		if (colon)
+		{
+			*colon = 0;
+			port = colon + 1;
+		}
+
+		if (!Connect(addr, port, user))
+		{
+			printf("Couldn't connect to server, starting solo ...\n");
+		}
+
+		// here we should know if server is present or not
+		// so we can creare game or term with or without server
+		// ...
+	}
+
 
 
     float water = 55;
@@ -598,6 +1014,10 @@ int main(int argc, char* argv[])
             a3dListDir(font_dirname, MyFont::Scan, font_dirname);
             a3dLoop();
         }
+
+		// NET_TODO:
+		// close network if open
+		// ...
 
         if (terrain)
             DeleteTerrain(terrain);
@@ -1333,6 +1753,13 @@ int main(int argc, char* argv[])
         // check number of chars awaiting in buffer
         // -> read them all, mark as pressed for 0.1 sec / if already pressed prolong
 
+		// NET_TODO:
+		// if connection is open:
+		// dispatch all queued messages to game
+		// 1. flush list
+		// 2. reverse order
+		// 3. dispatch every message with term->game->OnMessage()
+
         // render
         game->Render(stamp,buf,wh[0],wh[1]);
 
@@ -1340,6 +1767,10 @@ int main(int argc, char* argv[])
         Print(buf,wh[0],wh[1],CP437_UTF8);
         frames++;
     }
+
+	// NET_TODO:
+	// close network if open
+	// ...
 
     exit:
     uint64_t end = GetTime();
