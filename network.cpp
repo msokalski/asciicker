@@ -141,6 +141,17 @@ unsigned int INTERLOCKED_INC(volatile unsigned int* ptr)
 	return InterlockedIncrement(ptr);
 }
 
+unsigned int INTERLOCKED_SUB(volatile unsigned int* ptr, unsigned int sub)
+{
+	return (unsigned int)InterlockedAdd((volatile LONG*)ptr,-(LONG)sub);
+}
+
+unsigned int INTERLOCKED_ADD(volatile unsigned int* ptr, unsigned int add)
+{
+	return (unsigned int)InterlockedAdd((volatile LONG*)ptr, (LONG)add);
+}
+
+
 struct MUTEX_HANDLE
 {
 	CRITICAL_SECTION mu;
@@ -300,16 +311,36 @@ unsigned int INTERLOCKED_INC(volatile unsigned int* ptr)
 	return __sync_fetch_and_add(ptr, 1) + 1;
 }
 
+unsigned int INTERLOCKED_SUB(volatile unsigned int* ptr, unsigned int sub)
+{
+	return __sync_fetch_and_sub(ptr, sub) - sub;
+}
+
+unsigned int INTERLOCKED_ADD(volatile unsigned int* ptr, unsigned int add)
+{
+	return __sync_fetch_and_add(ptr, add) + add;
+}
+
 #endif
 
 int TCP_WRITE(TCP_SOCKET s, const uint8_t* buf, int size)
 {
-	return send(s, (const char*)buf, size, 0);
+	int w = send(s, (const char*)buf, size, 0);
+	if (w <= 0)
+	{
+		int a = 0;
+	}
+	return w;
 }
 
 int TCP_READ(TCP_SOCKET s, uint8_t* buf, int size)
 {
-	return recv(s, (char*)buf, size, 0);
+	int r = recv(s, (char*)buf, size, 0);
+	if (r <= 0)
+	{
+		int a = 0;
+	}
+	return r;
 }
 
 // returns body_overread size (so 0 is very fine)

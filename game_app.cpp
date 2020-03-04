@@ -487,31 +487,45 @@ Server* server = 0;
 
 struct GameServer : Server
 {
-	MUTEX_HANDLE* mt;
-	Human* others; // client view
-	Human* head;
-	Human* tail;
+	TCP_SOCKET server_socket;
 
+	static const int buf_size = 1<<16;
+	uint8_t buf[buf_size];
+	int buf_ofs;
 
-	bool Start(TCP_SOCKET s, int max_cli) // todo: add max_items
+	struct MSG_FIFO
+	{
+		uint8_t* ptr;
+		int size;
+	};
+
+	static const int max_msg_size = 1 << 8;
+	static const int msg_size = buf_size / max_msg_size;
+	MSG_FIFO msg[msg_size];
+
+	int msg_read; // r/w only by main-thread wrapped at 256 to 0
+	int msg_write; // r/w only by net-thread wrapped at 256 to 0
+
+	volatile unsigned int msg_num; // inter_inc by net-thread, inter_and(0) by main-thread
+
+	bool Start()
 	{
 		head = 0;
 		tail = 0;
-		server_socket = s;
-		max_clients = max_cli;
 
-		// create mutex for accessing existing users, their poses and confirmed item locks
-		mt = MUTEX_CREATE();
+		others = (Human*)malloc(sizeof(Human) * max_clients);
+		
+		buf_ofs = 0;
+		msg_read = 0;
+		msg_write = 0;
+		msg_num = 0;
 
 		bool ok = THREAD_CREATE_DETACHED(Entry, this);
 
 		if (!ok)
 		{
-			MUTEX_DELETE(mt);
 			return false;
 		}
-
-		others = (Human*)malloc(sizeof(Human) * max_cli);
 
 		return true;
 	}
@@ -520,103 +534,33 @@ struct GameServer : Server
 	{
 		while (1)
 		{
-			uint8_t buf[2048];
-			int w = WS_READ(server_socket, buf, 2048, 0);
-			if (w <= 0)
+			int r = WS_READ(server_socket, buf + buf_ofs, 2048, 0);
+			if (r <= 0)
 			{
 				break;
 			}
 
-			MUTEX_LOCK(mt);
-			switch (buf[0])
-			{
-				case 'j': // hello!
-				{
-					STRUCT_BRC_JOIN* join = (STRUCT_BRC_JOIN*)buf;
-					Human* h = others + join->id;
-					memset(h, 0, sizeof(Human));
+			while (msg_num == msg_size)
+				Sleep(15);
 
-					strcpy(h->name, join->name);
-					h->prev = 0;
-					h->next = head;
-					if (head)
-						head->prev = h;
-					else
-						tail = h;
-					head = h;
+			MSG_FIFO* m = msg + msg_write;
+			m->size = r;
+			m->ptr = buf + buf_ofs;
 
-					// def pose
-					h->sprite = GetSprite(&h->req);
+			INTERLOCKED_INC(&msg_num);
 
-					// insert Inst to the world
-					int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
-					int reps[4] = { 0,0,0,0 };
-					h->inst = CreateInst(world, h->sprite, flags, h->pos, h->dir, h->anim, h->frame, reps, 0);
+			msg_write = (msg_write + 1)&(msg_size - 1);
 
-					break;
-				}
-				case 'e': // cya!
-				{
-					STRUCT_BRC_EXIT* leave = (STRUCT_BRC_EXIT*)buf;
-					Human* h = others + leave->id;
-					if (h->prev)
-						h->prev->next = h->next;
-					else
-						head = h->next;
-					if (h->next)
-						h->next->prev = h->prev;
-					else
-						tail = h->prev;
-
-					// if has world's Inst, remove it
-					if (h->inst)
-						DeleteInst(h->inst);
-					h->inst = 0;
-
-					break;
-				}
-
-				case 'p': // you can move!
-				{
-					STRUCT_BRC_POSE* pose = (STRUCT_BRC_POSE*)buf;
-					Human* h = others + pose->id;
-
-					h->req.action = (pose->am >> 4) & 0xF;
-					h->req.mount = pose->am & 0xF;
-					h->req.armor = (pose->sprite >> 12) & 0xF;
-					h->req.helmet = (pose->sprite >> 8) & 0xF;
-					h->req.shield = (pose->sprite >> 4) & 0xF;
-					h->req.weapon = pose->sprite & 0xF;
-
-					h->sprite = GetSprite(&h->req);
-
-					h->anim = pose->anim;
-					h->frame = pose->frame;
-
-					h->dir = pose->dir;
-					h->pos[0] = pose->pos[0];
-					h->pos[1] = pose->pos[1];
-					h->pos[2] = pose->pos[2];
-
-					if (h->inst)
-					{
-						int reps[4];
-						UpdateSpriteInst(world, h->inst, h->sprite, h->pos, h->dir, h->anim, h->frame, reps);
-					}
-
-					break;
-				}
-
-				default:
-					exit(0);
-			}
-			MUTEX_UNLOCK(mt);
+			buf_ofs += r;
+			if (buf_size - buf_ofs < max_msg_size)
+				buf_ofs = 0;
 		}
 	}
 
 	static void* Entry(void* arg)
 	{
-		((GameServer*)arg)->Recv();
+		GameServer* gs = (GameServer*)arg;
+		gs->Recv();
 		return 0;
 	}
 
@@ -624,42 +568,46 @@ struct GameServer : Server
 	{
 		// finish thread
 		// close socket
-		TCP_CLOSE(server_socket);
-		TCP_CLEANUP();
-	}
+		if (server_socket != INVALID_TCP_SOCKET)
+		{
+			TCP_CLOSE(server_socket);
+			TCP_CLEANUP();
+		}
 
-	int max_clients;
-	TCP_SOCKET server_socket;
-	// bookkeeping:
-	// pose for max_cli players
-	// locked items (confirmed by server)
+		server_socket = INVALID_TCP_SOCKET;
+
+		if (others)
+			free(others);
+		others = 0;
+	}
 };
 
-void Server::Send(const void* data, int size)
+bool Server::Send(const uint8_t* data, int size)
 {
 	GameServer* gs = (GameServer*)this;
 	int w = WS_WRITE(gs->server_socket, (const uint8_t*)data, size, 0, true);
 	if (w <= 0)
 	{
-		// shut down!
-		exit(0);
+		return false;
 	}
+	return true;
 }
 
-Human* Server::Lock()
+void Server::Proc()
 {
 	GameServer* gs = (GameServer*)this;
-	MUTEX_LOCK(gs->mt);
-	return gs->head;
+	int num = gs->msg_num;
+	for (int i = 0; i < num; i++)
+	{
+		GameServer::MSG_FIFO* m = gs->msg + gs->msg_read;
+		Server::Proc(m->ptr, m->size); // this would be called directly by JS
+		gs->msg_read = (gs->msg_read + 1)&(GameServer::msg_size - 1);
+	}
+
+	INTERLOCKED_SUB(&gs->msg_num, num);
 }
 
-void Server::Unlock()
-{
-	GameServer* gs = (GameServer*)this;
-	MUTEX_UNLOCK(gs->mt);
-}
-
-bool Connect(const char* addr, const char* port, const char* user)
+GameServer* Connect(const char* addr, const char* port, const char* user)
 {
 	int iResult;
 
@@ -809,16 +757,10 @@ bool Connect(const char* addr, const char* port, const char* user)
 	printf("connected with ID:%d/%d\n", ID, rsp_join.maxcli);
 
 	GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
-	server = gs;
+	gs->server_socket = server_socket;
+	gs->max_clients = rsp_join.maxcli;
 
-	if (!gs->Start(server_socket, rsp_join.maxcli))
-	{
-		TCP_CLOSE(server_socket);
-		TCP_CLEANUP();
-		return false;
-	}
-
-	return true;
+	return gs;
 }
 
 int main(int argc, char* argv[])
@@ -888,6 +830,7 @@ int main(int argc, char* argv[])
 
 	// NET_TODO:
 	// if url is given try to open connection
+	GameServer* gs = 0;
 
 	if (url)
 	{
@@ -912,7 +855,9 @@ int main(int argc, char* argv[])
 			port = colon + 1;
 		}
 
-		if (!Connect(addr, port, user))
+		gs = Connect(addr, port, user);
+
+		if (!gs)
 		{
 			printf("Couldn't connect to server, starting solo ...\n");
 		}
@@ -921,8 +866,6 @@ int main(int argc, char* argv[])
 		// so we can creare game or term with or without server
 		// ...
 	}
-
-
 
     float water = 55;
     float dir = 0;
@@ -934,6 +877,80 @@ int main(int argc, char* argv[])
 	float last_yaw = yaw;
 
 	LoadSprites();
+
+	{
+		FILE* f = fopen("a3d/game_items.a3d", "rb");
+
+		// TODO:
+		// if GameServer* gs != 0
+		// DO NOT LOAD ITEMS!
+		// we will receive them from server
+
+		if (f)
+		{
+			terrain = LoadTerrain(f);
+
+			if (terrain)
+			{
+				for (int i = 0; i < 256; i++)
+				{
+					if (fread(mat[i].shade, 1, sizeof(MatCell) * 4 * 16, f) != sizeof(MatCell) * 4 * 16)
+						break;
+				}
+
+				world = LoadWorld(f, false);
+				if (world)
+				{
+					// reload meshes too
+					Mesh* m = GetFirstMesh(world);
+
+					while (m)
+					{
+						char mesh_name[256];
+						GetMeshName(m, mesh_name, 256);
+						char obj_path[4096];
+						sprintf(obj_path, "%smeshes/%s", "./"/*root_path*/, mesh_name);
+						if (!UpdateMesh(m, obj_path))
+						{
+							// what now?
+							// missing mesh file!
+						}
+
+						m = GetNextMesh(m);
+					}
+				}
+			}
+
+			fclose(f);
+		}
+
+		// if (!terrain || !world)
+		//    return -1;
+
+		// add meshes from library that aren't present in scene file
+		char mesh_dirname[4096];
+		sprintf(mesh_dirname, "%smeshes", "./"/*root_path*/);
+		//a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
+
+		// this is the only case when instances has no valid bboxes yet
+		// as meshes weren't present during their creation
+		// now meshes are loaded ...
+		// so we need to update instance boxes with (,true)
+
+		if (world)
+			RebuildWorld(world, true);
+	}
+
+	if (gs)
+	{
+		server = gs;
+
+		if (!gs->Start())
+		{
+			TCP_CLEANUP();
+			return false;
+		}
+	}
 
     if (!term)
     {
@@ -948,64 +965,6 @@ int main(int argc, char* argv[])
         global_lt[1] = lt[1];
         global_lt[2] = lt[2];
         global_lt[3] = lt[3];
-
-        {
-            FILE* f = fopen("a3d/game_items.a3d","rb");
-
-            if (f)
-            {
-                terrain = LoadTerrain(f);
-
-                if (terrain)
-                {
-                    for (int i=0; i<256; i++)
-                    {
-                        if ( fread(mat[i].shade,1,sizeof(MatCell)*4*16,f) != sizeof(MatCell)*4*16 )
-                            break;
-                    }
-
-                    world = LoadWorld(f,false);
-                    if (world)
-                    {
-                        // reload meshes too
-                        Mesh* m = GetFirstMesh(world);
-
-                        while (m)
-                        {
-                            char mesh_name[256];
-                            GetMeshName(m,mesh_name,256);
-                            char obj_path[4096];
-                            sprintf(obj_path,"%smeshes/%s","./"/*root_path*/,mesh_name);
-                            if (!UpdateMesh(m,obj_path))
-                            {
-                                // what now?
-                                // missing mesh file!
-                            }
-
-                            m = GetNextMesh(m);
-                        }
-                    }
-                }
-
-                fclose(f);
-            }
-
-            // if (!terrain || !world)
-            //    return -1;
-
-            // add meshes from library that aren't present in scene file
-            char mesh_dirname[4096];
-            sprintf(mesh_dirname,"%smeshes","./"/*root_path*/);
-            //a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
-
-            // this is the only case when instances has no valid bboxes yet
-            // as meshes weren't present during their creation
-            // now meshes are loaded ...
-            // so we need to update instance boxes with (,true)
-
-            if (world)
-                RebuildWorld(world, true);
-        }
 
         if (TermOpen(0, yaw, pos))
         {
@@ -1073,62 +1032,6 @@ int main(int argc, char* argv[])
     uint64_t begin = GetTime();
     uint64_t stamp = begin;
     uint64_t frames = 0;
-
-    {
-        FILE* f = fopen("a3d/game_items.a3d","rb");
-
-        if (f)
-        {
-            terrain = LoadTerrain(f);
-
-            if (terrain)
-            {
-                for (int i=0; i<256; i++)
-                {
-                    if ( fread(mat[i].shade,1,sizeof(MatCell)*4*16,f) != sizeof(MatCell)*4*16 )
-                        break;
-                }
-
-                world = LoadWorld(f,false);
-                if (world)
-                {
-                    // reload meshes too
-                    Mesh* m = GetFirstMesh(world);
-
-                    while (m)
-                    {
-                        char mesh_name[256];
-                        GetMeshName(m,mesh_name,256);
-                        char obj_path[4096];
-                        sprintf(obj_path,"%smeshes/%s","./"/*root_path*/,mesh_name);
-                        if (!UpdateMesh(m,obj_path))
-                        {
-                            // what now?
-                            // missing mesh file!
-                        }
-
-                        m = GetNextMesh(m);
-                    }
-                }
-            }
-
-            fclose(f);
-        }
-
-        if (!terrain || !world)
-            goto exit;
-
-        // add meshes from library that aren't present in scene file
-        char mesh_dirname[4096];
-        sprintf(mesh_dirname,"%smeshes","./"/*root_path*/);
-        //a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
-
-        // this is the only case when instances has no valid bboxes yet
-        // as meshes weren't present during their creation
-        // now meshes are loaded ...
-        // so we need to update instance boxes with (,true)
-        RebuildWorld(world, true);
-    }
 
     // init CP437 to UTF8 converter
     char CP437_UTF8 [256][4];
@@ -1760,8 +1663,11 @@ int main(int argc, char* argv[])
 		// 2. reverse order
 		// 3. dispatch every message with term->game->OnMessage()
 
-        // render
-        game->Render(stamp,buf,wh[0],wh[1]);
+		if (server)
+			server->Proc();
+
+		// render
+		game->Render(stamp,buf,wh[0],wh[1]);
 
         // write to stdout
         Print(buf,wh[0],wh[1],CP437_UTF8);

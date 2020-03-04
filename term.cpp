@@ -82,8 +82,10 @@ void term_render(A3D_WND* wnd)
 	if (height > term->max_height)
 		height = term->max_height;
 
-	uint64_t stamp = a3dGetTime();
+	if (server)
+		server->Proc();
 
+	uint64_t stamp = a3dGetTime();
 	term->game->Render(stamp, term->buf, width, height);
 
 	glClearColor(0, 0, 0, 0);

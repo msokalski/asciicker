@@ -55,6 +55,8 @@ void RWLOCK_WRITE_UNLOCK(RWLOCK_HANDLE* rwl);
 
 unsigned int INTERLOCKED_DEC(volatile unsigned int* ptr);
 unsigned int INTERLOCKED_INC(volatile unsigned int* ptr);
+unsigned int INTERLOCKED_SUB(volatile unsigned int* ptr, unsigned int sub);
+unsigned int INTERLOCKED_ADD(volatile unsigned int* ptr, unsigned int add);
 
 ////////////////////////////////////////////////////////////
 
@@ -74,8 +76,13 @@ struct STRUCT_RSP_JOIN
 struct STRUCT_BRC_JOIN
 {
 	uint8_t token; // 'j' -- (theres collision with STRUCT_RSP_JOIN, but RSP is sent in sync, only once prior to any broadcast)
-	uint8_t pad;
+	uint8_t anim;
+	uint8_t frame;
+	uint8_t am; // action / mount
+	float pos[3];
+	float dir;
 	uint16_t id;
+	uint16_t sprite;
 	char name[32];
 };
 

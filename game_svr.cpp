@@ -10,16 +10,12 @@
 #define MAX_CLIENTS 50
 Server* server = 0; // this is to fullfil game.cpp externs!
 
-void Server::Send(const void* data, int size)
+bool Server::Send(const uint8_t* data, int size)
 {
+	return false;
 }
 
-Human* Server::Lock()
-{
-	return 0;
-}
-
-void Server::Unlock()
+void Server::Proc()
 {
 }
 
@@ -449,6 +445,15 @@ struct PlayerCon
 					RWLOCK_WRITE_LOCK(rwlock);
 					strcpy(player_name, req_join->name);
 					joined = true;
+					has_state = false;
+					player_state.am = 0;
+					player_state.anim = 0;
+					player_state.dir = 0;
+					player_state.flags = 0;
+					player_state.sprite = 0;
+					player_state.pos[0] = 0;
+					player_state.pos[1] = 0;
+					player_state.pos[2] = -1000;
 					RWLOCK_WRITE_UNLOCK(rwlock);
 
 					STRUCT_RSP_JOIN rsp_join = { 0 };
@@ -465,7 +470,6 @@ struct PlayerCon
 					}
 
 					// for all clients emu join
-					// WHY CLIENT DOESNT GET IT!!!
 					STRUCT_BRC_JOIN brc_join = { 0 };
 					brc_join.token = 'j';
 					for (int i = 0; i < clients; i++)
@@ -476,9 +480,17 @@ struct PlayerCon
 
 						PlayerCon* con = players + id;
 						RWLOCK_READ_LOCK(con->rwlock);
-						brc_join.id = id;
+						brc_join.anim = con->player_state.anim;
+						brc_join.frame = con->player_state.frame;
+						brc_join.am = con->player_state.am;
+						brc_join.pos[0] = con->player_state.pos[0];
+						brc_join.pos[1] = con->player_state.pos[1];
+						brc_join.pos[2] = con->player_state.pos[2];
+						brc_join.dir = con->player_state.dir;
+						brc_join.sprite = con->player_state.sprite;
 						strcpy(brc_join.name, con->player_name);
 						RWLOCK_READ_UNLOCK(con->rwlock);
+						brc_join.id = id;
 						brc_join.name[30] = 0;
 						brc_join.name[31] = 0;
 
@@ -501,6 +513,16 @@ struct PlayerCon
 						(ExitBroadCast*)malloc(sizeof(ExitBroadCast));
 					broadcast->size = sizeof(STRUCT_BRC_JOIN);
 					broadcast->token = 'j';
+
+					broadcast->anim = 0;
+					broadcast->frame = 0;
+					broadcast->am = 0;
+					broadcast->pos[0] = 0;
+					broadcast->pos[1] = 0;
+					broadcast->pos[2] = -1000; // hide under water :)
+					broadcast->dir = 0;
+					broadcast->sprite = 0;
+
 					broadcast->id = ID;
 					strcpy(broadcast->name, player_name);
 					broadcast->name[30] = 0;

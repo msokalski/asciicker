@@ -43,19 +43,14 @@
 #include "game.h"
 
 Server* server = 0; // this is to fullfil game.cpp externs!
-void Server::Send(const void* data, int size)
+bool Server::Send(const uint8_t* ptr, int size)
 {
+	return false;
 }
 
-Human* Server::Lock()
-{
-	return 0;
-}
-
-void Server::Unlock()
+void Server::Proc()
 {
 }
-
 
 // just for write(fd)
 #ifndef _WIN32

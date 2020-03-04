@@ -106,9 +106,17 @@ struct Human : Character
 
 struct Server
 {
-	void Send(const void* data, int size);
-	Human* Lock();
-	void Unlock();
+	bool Proc(const uint8_t* ptr, int size); // called directly by JS (implemented in game.cpp)
+
+	void Proc(); // does nothing on JS, native apps calls above func for all queued commands
+	bool Send(const uint8_t* data, int size); // implemented by game_app/game_web
+
+	int max_clients;
+	Human* others; // [max_clients]
+
+	Human* head;
+	Human* tail;
+
 	// pose->pad with hold new/del/upd flags
 };
 
