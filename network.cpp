@@ -94,6 +94,11 @@ bool THREAD_CREATE_DETACHED(void* (*entry)(void*), void* arg)
 	return true;
 }
 
+void THREAD_SLEEP(int ms)
+{
+	Sleep(ms);
+}
+
 struct RWLOCK_HANDLE
 {
 	SRWLOCK rw;
@@ -233,6 +238,11 @@ bool THREAD_CREATE_DETACHED(void* (*entry)(void*), void* arg)
 		return false;
 	pthread_detach(th);
 	return true;
+}
+
+void THREAD_SLEEP(int ms)
+{
+	usleep(ms*1000);
 }
 
 struct RWLOCK_HANDLE

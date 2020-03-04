@@ -541,7 +541,7 @@ struct GameServer : Server
 			}
 
 			while (msg_num == msg_size)
-				Sleep(15);
+				THREAD_SLEEP(15);
 
 			MSG_FIFO* m = msg + msg_write;
 			m->size = r;
@@ -616,7 +616,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	if (iResult != 0)
 	{
 		printf("WSAStartup failed: %d\n", iResult);
-		return false;
+		return 0;
 	}
 
 	TCP_SOCKET server_socket = INVALID_TCP_SOCKET;
@@ -635,7 +635,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	{
 		printf("getaddrinfo failed: %d\n", iResult);
 		TCP_CLEANUP();
-		return false;
+		return 0;
 	}
 
 	// socket create and varification 
@@ -644,7 +644,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	{
 		printf("socket creation failed...\n");
 		TCP_CLEANUP();
-		return false;
+		return 0;
 	}
 	else
 		printf("Socket successfully created..\n");
@@ -655,7 +655,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 		printf("connection with the server failed...\n");
 		TCP_CLOSE(server_socket);
 		TCP_CLEANUP();
-		return false;
+		return 0;
 	}
 	else
 		printf("connected to the server..\n");
@@ -684,7 +684,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	{
 		TCP_CLOSE(server_socket);
 		TCP_CLEANUP();
-		return false;
+		return 0;
 	}
 
 	// wait for response (check HTTP status / headers)
@@ -715,7 +715,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	{
 		TCP_CLOSE(server_socket);
 		TCP_CLEANUP();
-		return false;
+		return 0;
 	}
 
 	while (headers.content_len > over_read)
@@ -725,7 +725,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 		{
 			TCP_CLOSE(server_socket);
 			TCP_CLEANUP();
-			return false;
+			return 0;
 		}
 		over_read += r;
 	}
@@ -740,7 +740,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	{
 		TCP_CLOSE(server_socket);
 		TCP_CLEANUP();
-		return false;
+		return 0;
 	}
 
 	// Recv for ID (over ws) (it can send us some content to display!)
@@ -750,7 +750,7 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	{
 		TCP_CLOSE(server_socket);
 		TCP_CLEANUP();
-		return false;
+		return 0;
 	}
 
 	int ID = rsp_join.id;
@@ -838,9 +838,12 @@ int main(int argc, char* argv[])
 		char* monkey = strchr(url, '@');
 		char* colon = monkey ? strchr(monkey, ':') : strchr(url, ':');
 
+        char def_user[] = "player";
+        char def_port[] = "8080";
+
 		char* addr = url;
-		char* user = "player";
-		char* port = "8080";
+		char* user = def_user;
+		char* port = def_port;
 
 		if (monkey)
 		{

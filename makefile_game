@@ -24,6 +24,7 @@ SRCS :=	gl.c \
         term.cpp \
 		game.cpp \
 		game_app.cpp \
+		network.cpp \
 		render.cpp \
 		terrain.cpp \
 		world.cpp \
@@ -83,7 +84,7 @@ CPPFLAGS := -g -save-temps=obj -pthread -DGAME -fsanitize=address
 
 # linker flags
 # LDFLAGS := -save-temps=obj -pthread -O3
-LDFLAGS := -g -save-temps=obj -pthread -O3
+# LDFLAGS := -g -save-temps=obj -pthread -O3
 LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address
 
 # flags required for dependency generation; passed to compilers

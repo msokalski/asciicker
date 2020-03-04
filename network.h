@@ -41,6 +41,8 @@ void* THREAD_JOIN(THREAD_HANDLE* thread);
 
 bool THREAD_CREATE_DETACHED(void* (*entry)(void*), void* arg);
 
+void THREAD_SLEEP(int ms);
+
 MUTEX_HANDLE* MUTEX_CREATE();
 void MUTEX_DELETE(MUTEX_HANDLE* mutex);
 void MUTEX_LOCK(MUTEX_HANDLE* mutex);

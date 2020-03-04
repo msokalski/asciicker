@@ -5,6 +5,8 @@
 BIN := .run/server
 
 SRCS :=	game_svr.cpp \
+		network.cpp \
+		sha1.c \
 		game.cpp \
 		render.cpp \
 		terrain.cpp \
@@ -57,13 +59,13 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-CPPFLAGS := -save-temps=obj -pthread -DSERVER -O3
+# CPPFLAGS := -save-temps=obj -pthread -DSERVER -O3
 # CPPFLAGS := -g -save-temps=obj -pthread -DSERVER -O3
-# CPPFLAGS := -g -save-temps=obj -pthread -DSERVER -fsanitize=address
+CPPFLAGS := -g -save-temps=obj -pthread -DSERVER -fsanitize=address
 
 # linker flags
 # LDFLAGS := -save-temps=obj -pthread -O3
-LDFLAGS := -g -save-temps=obj -pthread -O3
+# LDFLAGS := -g -save-temps=obj -pthread -O3
 LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address
 
 # flags required for dependency generation; passed to compilers
