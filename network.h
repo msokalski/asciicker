@@ -118,5 +118,17 @@ struct STRUCT_BRC_POSE
 	uint16_t id;
 };
 
+struct STRUCT_REQ_TALK
+{
+	uint8_t token; // 'T'
+	uint8_t len;
+	uint8_t str[256]; // trim to actual size!
+};
 
-
+struct STRUCT_BRC_TALK
+{
+	uint8_t token; // 't'
+	uint8_t len;
+	uint16_t id;
+	uint8_t str[256]; // trim to actual size!
+};

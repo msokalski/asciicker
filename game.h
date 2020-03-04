@@ -117,6 +117,8 @@ struct Server
 	Human* head;
 	Human* tail;
 
+	uint64_t stamp;
+
 	// pose->pad with hold new/del/upd flags
 };
 

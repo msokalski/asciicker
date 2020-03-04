@@ -28,110 +28,6 @@ extern World* world;
 Human* player_head = 0;
 Human* player_tail = 0;
 
-bool Server::Proc(const uint8_t* ptr, int size)
-{
-	switch (ptr[0])
-	{
-	case 'j': // hello!
-	{
-		STRUCT_BRC_JOIN* join = (STRUCT_BRC_JOIN*)ptr;
-		Human* h = others + join->id;
-		memset(h, 0, sizeof(Human));
-
-		strcpy(h->name, join->name);
-		h->prev = 0;
-		h->next = head;
-		if (head)
-			head->prev = h;
-		else
-			tail = h;
-		head = h;
-
-		// def pose
-		h->req.action = (join->am >> 4) & 0xF;
-		h->req.mount = join->am & 0xF;
-		h->req.armor = (join->sprite >> 12) & 0xF;
-		h->req.helmet = (join->sprite >> 8) & 0xF;
-		h->req.shield = (join->sprite >> 4) & 0xF;
-		h->req.weapon = join->sprite & 0xF;
-
-		h->sprite = GetSprite(&h->req);
-
-		h->anim = join->anim;
-		h->frame = join->frame;
-
-		h->dir = join->dir;
-		h->pos[0] = join->pos[0];
-		h->pos[1] = join->pos[1];
-		h->pos[2] = join->pos[2];
-
-		// insert Inst to the world
-		int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
-		int reps[4] = { 0,0,0,0 };
-		h->inst = CreateInst(world, h->sprite, flags, h->pos, h->dir, h->anim, h->frame, reps, 0);
-
-		break;
-	}
-	case 'e': // cya!
-	{
-		STRUCT_BRC_EXIT* leave = (STRUCT_BRC_EXIT*)ptr;
-		Human* h = others + leave->id;
-		if (h->prev)
-			h->prev->next = h->next;
-		else
-			head = h->next;
-		if (h->next)
-			h->next->prev = h->prev;
-		else
-			tail = h->prev;
-
-		// if has world's Inst, remove it
-		if (h->inst)
-			DeleteInst(h->inst);
-		h->inst = 0;
-
-		break;
-	}
-
-	case 'p': // you can move!
-	{
-		STRUCT_BRC_POSE* pose = (STRUCT_BRC_POSE*)ptr;
-		Human* h = others + pose->id;
-
-		h->req.action = (pose->am >> 4) & 0xF;
-		h->req.mount = pose->am & 0xF;
-		h->req.armor = (pose->sprite >> 12) & 0xF;
-		h->req.helmet = (pose->sprite >> 8) & 0xF;
-		h->req.shield = (pose->sprite >> 4) & 0xF;
-		h->req.weapon = pose->sprite & 0xF;
-
-		h->sprite = GetSprite(&h->req);
-
-		h->anim = pose->anim;
-		h->frame = pose->frame;
-
-		h->dir = pose->dir;
-		h->pos[0] = pose->pos[0];
-		h->pos[1] = pose->pos[1];
-		h->pos[2] = pose->pos[2];
-
-		if (h->inst)
-		{
-			int reps[4];
-			UpdateSpriteInst(world, h->inst, h->sprite, h->pos, h->dir, h->anim, h->frame, reps);
-		}
-
-		break;
-	}
-
-	//default:
-	// return false;
-	}
-
-	return true;
-}
-
-
 void ReadConf(Game* g)
 {
 	FILE* f = fopen("asciicker.cfg", "rb");
@@ -1123,6 +1019,158 @@ struct TalkBox
 
 	char buf[256];
 };
+
+bool Server::Proc(const uint8_t* ptr, int size)
+{
+	switch (ptr[0])
+	{
+		case 'j': // hello!
+		{
+			STRUCT_BRC_JOIN* join = (STRUCT_BRC_JOIN*)ptr;
+			Human* h = others + join->id;
+			memset(h, 0, sizeof(Human));
+
+			strcpy(h->name, join->name);
+			h->prev = 0;
+			h->next = head;
+			if (head)
+				head->prev = h;
+			else
+				tail = h;
+			head = h;
+
+			// def pose
+			h->req.action = (join->am >> 4) & 0xF;
+			h->req.mount = join->am & 0xF;
+			h->req.armor = (join->sprite >> 12) & 0xF;
+			h->req.helmet = (join->sprite >> 8) & 0xF;
+			h->req.shield = (join->sprite >> 4) & 0xF;
+			h->req.weapon = join->sprite & 0xF;
+
+			h->sprite = GetSprite(&h->req);
+
+			h->anim = join->anim;
+			h->frame = join->frame;
+
+			h->dir = join->dir;
+			h->pos[0] = join->pos[0];
+			h->pos[1] = join->pos[1];
+			h->pos[2] = join->pos[2];
+
+			// insert Inst to the world
+			int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
+			int reps[4] = { 0,0,0,0 };
+			h->inst = CreateInst(world, h->sprite, flags, h->pos, h->dir, h->anim, h->frame, reps, 0);
+
+			break;
+		}
+		case 'e': // cya!
+		{
+			STRUCT_BRC_EXIT* leave = (STRUCT_BRC_EXIT*)ptr;
+			Human* h = others + leave->id;
+
+			// free talks
+
+
+			if (h->prev)
+				h->prev->next = h->next;
+			else
+				head = h->next;
+			if (h->next)
+				h->next->prev = h->prev;
+			else
+				tail = h->prev;
+
+			// if has world's Inst, remove it
+			if (h->inst)
+				DeleteInst(h->inst);
+			h->inst = 0;
+
+			break;
+		}
+
+		case 'p': // you can move!
+		{
+			STRUCT_BRC_POSE* pose = (STRUCT_BRC_POSE*)ptr;
+			Human* h = others + pose->id;
+
+			h->req.action = (pose->am >> 4) & 0xF;
+			h->req.mount = pose->am & 0xF;
+			h->req.armor = (pose->sprite >> 12) & 0xF;
+			h->req.helmet = (pose->sprite >> 8) & 0xF;
+			h->req.shield = (pose->sprite >> 4) & 0xF;
+			h->req.weapon = pose->sprite & 0xF;
+
+			h->sprite = GetSprite(&h->req);
+
+			h->anim = pose->anim;
+			h->frame = pose->frame;
+
+			h->dir = pose->dir;
+			h->pos[0] = pose->pos[0];
+			h->pos[1] = pose->pos[1];
+			h->pos[2] = pose->pos[2];
+
+			if (h->inst)
+			{
+				int reps[4];
+				UpdateSpriteInst(world, h->inst, h->sprite, h->pos, h->dir, h->anim, h->frame, reps);
+			}
+
+			break;
+		}
+
+		case 't': // you can even talk!
+		{
+			STRUCT_BRC_TALK* talk = (STRUCT_BRC_TALK*)ptr;
+			Human* h = others + talk->id;
+			if (h->pos[2] > -100)
+			{
+				TalkBox* box = 0;
+				if (h->talks == 3)
+				{
+					box = h->talk[0].box;
+					h->talks--;
+					for (int i = 0; i < h->talks; i++)
+						h->talk[i] = h->talk[i + 1];
+				}
+				else
+				{
+					box = (TalkBox*)malloc(sizeof(TalkBox));
+				}
+				
+				memset(box, 0, sizeof(TalkBox));
+				memcpy(box->buf, talk->str, talk->len);
+				box->buf[talk->len] = 0;
+				box->len = talk->len;
+
+				box->max_width = 33;
+				box->max_height = 7; // 0: off
+				int s[2],p[2];
+				box->Reflow(s,p);
+				box->size[0] = s[0];
+				box->size[1] = s[1];
+				box->cursor_xy[0] = p[0];
+				box->cursor_xy[1] = p[1];
+
+				int idx = h->talks;
+				h->talk[idx].box = box;
+				h->talk[idx].pos[0] = h->pos[0];
+				h->talk[idx].pos[1] = h->pos[1];
+				h->talk[idx].pos[2] = h->pos[2];
+				h->talk[idx].stamp = stamp;
+				h->talks++;
+			}
+			break;
+		}
+
+	//default:
+	// return false;
+	}
+
+	return true;
+}
+
 
 struct KeyCap
 {
@@ -2768,6 +2816,9 @@ bool Human::SetMount(int m)
 
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
+	if (server)
+		server->stamp = _stamp;
+
 	if (_stamp-stamp > 500000) // treat lags longer than 0.5s as stall
 		stamp = _stamp;
 
@@ -2995,9 +3046,6 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	int reps[4] = { 0,0,0,0 };
 	UpdateSpriteInst(world, player_inst, player.sprite, player.pos, player.dir, player.anim, player.frame, reps);
 
-	// here we should also send 'updateplayer' to server
-	// ...
-
 	int inventory_width = 39;
 
 	if (show_inventory && scene_shift < inventory_width) // inventory width with margins is 58
@@ -3035,9 +3083,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	Human* h;
 	if (server)
+	{
 		h = server->head;
+		if (!h)
+			h = &player;
+	}
 	else
-		h = player_head;
+		h = player_head; // asciid multi-term
 
 	while (h)
 	{
@@ -3059,14 +3111,18 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			if (h == &player || server)
 			{
 				// each player handles its own talks (except server players, they need help)
-				free(player.talk[i].box);
-				player.talks--;
-				for (int j = i; j < player.talks; j++)
-					player.talk[j] = player.talk[j + 1];
+				free(h->talk[i].box);
+				h->talks--;
+				for (int j = i; j < h->talks; j++)
+					h->talk[j] = h->talk[j + 1];
 				i--;
 			}
 		}
-		h = h->next;
+
+		if (!h->next && server && h!=&player)
+			h = &player; // what a hack! -- just forcing this player to handle its own talkbox (server case)
+		else
+			h = h->next;
 	}
 
 	int contact_items = 0;
@@ -3723,6 +3779,15 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					player.talk[idx].pos[1] = player.pos[1];
 					player.talk[idx].pos[2] = player.pos[2];
 					player.talk[idx].stamp = stamp;
+
+					if (server)
+					{
+						STRUCT_REQ_TALK req_talk = { 0 };
+						req_talk.token = 'T';
+						req_talk.len = player.talk[idx].box->len;
+						memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+						server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+					}
 
 					player.talks++;
 

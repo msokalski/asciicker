@@ -527,6 +527,8 @@ struct GameServer : Server
 			return false;
 		}
 
+        stamp = GetTime();
+
 		return true;
 	}
 

@@ -15,6 +15,17 @@ uint64_t GetTime()
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+Server* server = 0; // this is to fullfil game.cpp externs!
+
+bool Server::Send(const uint8_t* data, int size)
+{
+	return false;
+}
+
+void Server::Proc()
+{
+}
+
 Game* game = 0;
 Terrain* terrain = 0;
 World* world = 0;
@@ -26,8 +37,12 @@ void* GetMaterialArr()
     return mat;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+    // main should be called AFTER js receives join-response (containing max_cli)
+    // or if Connect() fails main will be called with no args
+    // arg[0]=? [arg[1]="user" [arg[2]="max_cli"]]
+
     float water = 55.0f;
     float yaw = 45;
     float dir = 0;
@@ -129,32 +144,53 @@ extern "C"
 {
     void* Render(int width, int height)
     {
-        game->Render(GetTime(),render_buf,width,height);
-        return render_buf;
+        if (game && render_buf)
+        {
+            game->Render(GetTime(),render_buf,width,height);
+            return render_buf;
+        }
+
+        return 0;
     }
 
     void Size(int w, int h, int fw, int fh)
     {
-        game->OnSize(w,h,fw,fh);
+        if (game)
+            game->OnSize(w,h,fw,fh);
     }
 
     void Keyb(int type, int val)
     {
-        game->OnKeyb((Game::GAME_KEYB)type,val);
+        if (game)
+            game->OnKeyb((Game::GAME_KEYB)type,val);
     }
 
     void Mouse(int type, int x, int y)
     {
-        game->OnMouse((Game::GAME_MOUSE)type, x, y);
+        if (game)
+            game->OnMouse((Game::GAME_MOUSE)type, x, y);
     }
 
     void Touch(int type, int id, int x, int y)
     {
-        game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
+        if (game)
+            game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
     }
 
     void Focus(int set)
     {
-        game->OnFocus(set!=0);
+        if (game)
+            game->OnFocus(set!=0);
+    }
+
+    void Join(const char* name, int id, int max_cli)
+    {
+        // alloc server, prepare for Packet()s
+    }
+
+    void Packet(const uint8_t* ptr, int size)
+    {
+        if (server)
+            server->Proc(ptr, size);
     }
 }

@@ -533,6 +533,27 @@ struct PlayerCon
 					break;
 				}
 
+				case 'T':
+				{
+					STRUCT_REQ_TALK* req_talk = (STRUCT_REQ_TALK*)buf;
+					if (size < 4 || size != 4 + req_talk->len)
+					{
+						Release();
+						return;						
+					}
+
+					struct TalkBroadCast : BroadCast, STRUCT_BRC_TALK {} *broadcast =
+						(TalkBroadCast*)malloc(sizeof(BroadCast) + 4 + req_talk->len);
+					broadcast->size = 4 + req_talk->len;
+					broadcast->token = 't';
+
+					broadcast->len = req_talk->len;
+					broadcast->id = ID;
+					memcpy(broadcast->str, req_talk->str, req_talk->len);
+					broadcast->Send(ID);
+					break;
+				}
+
 				default:
 				{
 					//oops

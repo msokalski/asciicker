@@ -777,6 +777,9 @@
         Keyb = Module.cwrap('Keyb', null, ['number','number']);
         Mouse = Module.cwrap('Mouse', null, ['number','number','number']);
         Touch = Module.cwrap('Touch', null, ['number','number','number','number']);
+        Focus = Module.cwrap('Focus', null, ['number']);
+        Join = Module.cwrap('Join', null, ['string','number']);
+        Packet = Module.cwrap('Packet', null, ['array', 'number']);
 
         ak_canvas = document.getElementById('asciicker_canvas');
         ak_canvas.hidden = false;
@@ -913,6 +916,7 @@
     </div-->
     <!--textarea class="asciicker" id="output" rows="8"></textarea-->
     <script type='text/javascript'>
+
       var statusElement = document.getElementById('status');
       var progressElement = document.getElementById('progress');
       var spinnerElement = document.getElementById('spinner');
