@@ -154,4 +154,4 @@ emcc --emrun -O3 \
     --preload-file meshes/ship-1.ply 
 
 # run in mini-server
-emrun --no_browser --port 8080 .web/index.html
+emrun --no_browser --port 8888 .web/index.html

@@ -153,13 +153,113 @@
     //]]>
     </script>
 
+
+    <script>
+      var ak_connection = null;
+      var Join = null;
+      var Packet = null;
+      
+      var ak_joined = false;
+			
+			function Connect()
+			{
+			  console.log('ws connecting...');
+        var connection = null;
+
+        var player_name = location.search.player;
+        if (!player_name)
+          player_name = "player";
+        var player_name_len = player_name.length;
+        if (player_name_len>30)
+          player_name_len=30;
+        
+        // var port_override = "";
+        var port_override = ":8080";
+
+				if (location.protocol !== 'https:') 
+				{
+					connection = new WebSocket('ws://' + location.hostname + port_override + '/ws/y4/');
+				}
+				else
+				{
+					connection = new WebSocket('wss://' + location.hostname + port_override + '/ws/y4/');
+        }
+        
+        connection.binaryType = "arraybuffer";
+
+        connection.onopen = function () 
+        {
+          // connection is opened and ready to use
+          ak_connection = connection;
+          console.log('ws ready!');
+
+          // send join request 
+          var req_join = new Uint8Array(32);
+          req_join[0] = 0x4A;
+          for (var i=0; i<player_name_len; i++)
+            req_join[i+1] = player_name.charCodeAt(i) & 0xFF;
+
+          ak_connection.onerror = function (err)
+          {
+            console.log(err);
+            if (ak_connection)
+            {
+              ak_connection.close();
+              ak_connection=null;
+            }            
+          };
+
+          ak_connection.onmessage = function (msg)
+          {
+            msg = new Uint8Array(msg.data);
+            if (!ak_joined)
+            {
+              ak_joined = true;
+              console.log("response " + msg[0]);
+
+              if (msg[0]==0x6A)
+              {
+                var max_cli = msg[1];
+                var id = msg[2] | (msg[3] << 8);
+                console.log("calling Join(" + player_name + "," + id + "," + max_cli + ");");
+                if (Join)
+                {
+                  Join(player_name,id,max_cli);
+                  // this is where we could start loading stuff
+                  // ...
+                }
+              }
+            }
+            else
+            {
+              console.log("packet " + msg[0]);
+              if (Packet)
+              {
+                Packet(msg,msg.length);
+              }
+            }
+          };
+          ak_connection.send(req_join);
+        };
+			}
+		
+			function ak_Send(x,y,z,a,f)
+			{
+				// ak_connection.send(JSON.stringify([x,y,z,a,f,ak_lag]));
+      }
+
+      Connect(); // right away!
+      
+    </script>
+
     <script>
 
       var Render = null;
       var Size = null;
       var Keyb = null;
       var Mouse = null;
-      var Touch = null
+      var Touch = null;
+      var Focus = null;
 
       var ak_canvas;
       var ak_ctx;
@@ -778,7 +878,7 @@
         Mouse = Module.cwrap('Mouse', null, ['number','number','number']);
         Touch = Module.cwrap('Touch', null, ['number','number','number','number']);
         Focus = Module.cwrap('Focus', null, ['number']);
-        Join = Module.cwrap('Join', null, ['string','number']);
+        Join = Module.cwrap('Join', null, ['string','number','number']);
         Packet = Module.cwrap('Packet', null, ['array', 'number']);
 
         ak_canvas = document.getElementById('asciicker_canvas');
