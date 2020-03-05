@@ -75,7 +75,7 @@ int Base64Encode(unsigned char* data, int len, char* base64)
 
 struct BroadCast /* rare messages like talk item(add/rem/del) join and exit */
 {
-	void Send(int id_from);
+	void Send(int id_from, bool cs_already_locked = false);
 
 	volatile unsigned int refs; // interlocked?
 	int pad;
@@ -312,8 +312,8 @@ struct PlayerCon
 		
 		while (1)
 		{
-			bool bin = false;
-			int size = WS_READ(client_socket, buf, 2047, &bin);
+			int type = 0;
+			int size = WS_READ(client_socket, buf, 2047, &type);
 			if (size <= 0)
 				break;
 
@@ -347,7 +347,7 @@ struct PlayerCon
 					{
 						BroadCast* n = head->next[ID];
 
-						int w = WS_WRITE(client_socket, (uint8_t*)(head + 1), head->size, 0, true);
+						int w = WS_WRITE(client_socket, (uint8_t*)(head + 1), head->size, 0, 0x2);
 						if (w <= 0)
 						{
 							RWLOCK_WRITE_UNLOCK(rwlock);
@@ -368,15 +368,14 @@ struct PlayerCon
 					tail = 0;
 					broadcasts = 0;
 					
-					if (num)
-						printf("ID:%d processed %d broadcasts\n", ID, num);
+					//if (num)
+					//	printf("ID:%d processed %d broadcasts\n", ID, num);
 
 					STRUCT_REQ_POSE* req_pose = (STRUCT_REQ_POSE*)buf;
 					if (size != sizeof(STRUCT_REQ_POSE))
 					{
 						RWLOCK_WRITE_UNLOCK(rwlock);
 						Release();
-						printf("DISCONNECTED ID: %d\n", ID);
 						return;
 					}
 
@@ -462,7 +461,7 @@ struct PlayerCon
 					rsp_join.maxcli = MAX_CLIENTS;
 					rsp_join.id = ID;
 
-					size = WS_WRITE(client_socket, (uint8_t*)&rsp_join, sizeof(STRUCT_RSP_JOIN), 0, true);
+					size = WS_WRITE(client_socket, (uint8_t*)&rsp_join, sizeof(STRUCT_RSP_JOIN), 0, 0x2);
 					if (size <= 0)
 					{
 						RWLOCK_READ_UNLOCK(cs);
@@ -480,6 +479,15 @@ struct PlayerCon
 							continue;
 
 						PlayerCon* con = players + id;
+
+						// newly created client (not joined yet)
+						// must be excluded !!!
+						if (!con->joined)
+						{
+							printf("!con->joined in Recv()\n");
+							continue;
+						}
+							
 						RWLOCK_READ_LOCK(con->rwlock);
 						brc_join.anim = con->player_state.anim;
 						brc_join.frame = con->player_state.frame;
@@ -495,7 +503,7 @@ struct PlayerCon
 						brc_join.name[30] = 0;
 						brc_join.name[31] = 0;
 
-						size = WS_WRITE(client_socket, (uint8_t*)&brc_join, sizeof(STRUCT_BRC_JOIN), 0, true);
+						size = WS_WRITE(client_socket, (uint8_t*)&brc_join, sizeof(STRUCT_BRC_JOIN), 0, 0x2);
 						if (size <= 0)
 						{
 							RWLOCK_READ_UNLOCK(cs);
@@ -563,27 +571,6 @@ struct PlayerCon
 					return;
 				}
 			}
-
-			/*
-			printf("(%d) %*s\n", size, size, buf);
-			buf[size] = 0;
-
-			float data[6]; //x,y,z,ang,frm,lag
-			sscanf((char*)buf, "[%f,%f,%f,%f,%f,%f]", data + 0, data + 1, data + 2, data + 3, data + 4, data + 5);
-
-			size = 0;
-			for (int zombie = 0; zombie < 10; zombie++)
-			{
-				size += sprintf((char*)buf+size,"[%f,%f,%f,%f,%f,%f]",
-					data[0] + rand() % 21 - 10,
-					data[1] + rand() % 21 - 10,
-					data[2], data[3], data[4], 11.0f);
-			}
-
-			int w = WS_WRITE(client_socket, buf, size, 1000, bin);
-			if (w <= 0)
-				break;
-			*/
 		}
 
 		Release();
@@ -624,6 +611,9 @@ struct PlayerCon
 
 	void Release()
 	{
+		// remove as soon as possible
+		RWLOCK_WRITE_LOCK(cs); 
+
 		if (client_socket != INVALID_TCP_SOCKET)
 		{
 			TCP_CLOSE(client_socket);
@@ -640,20 +630,19 @@ struct PlayerCon
 			broadcast->size = sizeof(STRUCT_BRC_EXIT);
 			broadcast->token = 'e';
 			broadcast->id = ID;
-			broadcast->Send(ID);
+			broadcast->Send(ID, true /* cs_already_locked */);
 		}
 
-		// remove as soon as possible
-		RWLOCK_WRITE_LOCK(cs); // prevent pending aquire and other releases
 		clients--;
-		joined = false;
-		has_state = false;
+
 		int mov_id = client_id[clients];
 		int rel_id = client_id[release_index];
 		client_id[release_index] = mov_id;
 		client_id[clients] = rel_id;
-		players[mov_id].release_index = rel_id;
+		players[mov_id].release_index = release_index; // WHAT A BUG WAS THAT: rel_id;
 
+		joined = false;
+		has_state = false;
 		// remove broadcasts
 		while (head)
 		{
@@ -667,7 +656,7 @@ struct PlayerCon
 		broadcasts = 0;
 
 		RWLOCK_DELETE(rwlock);
-		rwlock = 0;
+		rwlock = (RWLOCK_HANDLE*)(intptr_t)0xDEADBEEF;
 
 		RWLOCK_WRITE_UNLOCK(cs);
 
@@ -677,12 +666,13 @@ struct PlayerCon
 	//////////////////////////////////////////////////////
 };
 
-void BroadCast::Send(int id_from)
+void BroadCast::Send(int id_from, bool cs_already_locked)
 {
 	refs = 1;
 	memset(next, 0, sizeof(BroadCast*) * MAX_CLIENTS);
 
-	RWLOCK_READ_LOCK(PlayerCon::cs);
+	if (!cs_already_locked)
+		RWLOCK_READ_LOCK(PlayerCon::cs);
 
 	for (int i = 0; i < PlayerCon::clients; i++)
 	{
@@ -691,6 +681,15 @@ void BroadCast::Send(int id_from)
 			continue;
 
 		PlayerCon* con = PlayerCon::players + id;
+
+		// newly created client (not joined yet)
+		// must be excluded !!!
+		if (!con->joined)
+		{
+			printf("!con->joined in Send()\n");
+			continue;
+		}
+
 		RWLOCK_WRITE_LOCK(con->rwlock);
 		if (*(uint8_t*)(this + 1) == 'p' && 
 			con->broadcasts >= 10 * MAX_CLIENTS) // 500 broadcasts awaiting, make it easier
@@ -722,12 +721,13 @@ void BroadCast::Send(int id_from)
 		}
 	}
 
-	RWLOCK_READ_UNLOCK(PlayerCon::cs);
-
 	if (INTERLOCKED_DEC(&refs) == 0)
 	{
 		free(this);
 	}
+
+	if (!cs_already_locked)
+		RWLOCK_READ_UNLOCK(PlayerCon::cs);
 }
 
 

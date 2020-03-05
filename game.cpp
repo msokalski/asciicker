@@ -1022,6 +1022,8 @@ struct TalkBox
 
 bool Server::Proc(const uint8_t* ptr, int size)
 {
+	bool ret = false;
+
 	switch (ptr[0])
 	{
 		case 'j': // hello!
@@ -1038,6 +1040,21 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			else
 				tail = h;
 			head = h;
+
+			// check if h is reachable from head
+			/*
+			Human* c = head;
+			while (c)
+			{
+				if (c == h)
+				{
+					ret = true;
+					break;
+				}
+				c=c->next;
+			}
+			*/
+
 
 			// def pose
 			h->req.action = (join->am >> 4) & 0xF;
@@ -1069,8 +1086,24 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			STRUCT_BRC_EXIT* leave = (STRUCT_BRC_EXIT*)ptr;
 			Human* h = others + leave->id;
 
-			// free talks
+			// check if h is reachable from head
+			/*
+			Human* c = head;
+			while (c)
+			{
+				if (c == h)
+				{
+					ret = true;
+					break;
+				}
+				c=c->next;
+			}
+			*/
 
+
+			// free talks
+			for (int i=0; i<h->talks; i++)
+				free(h->talk[i].box);
 
 			if (h->prev)
 				h->prev->next = h->next;
@@ -1093,6 +1126,20 @@ bool Server::Proc(const uint8_t* ptr, int size)
 		{
 			STRUCT_BRC_POSE* pose = (STRUCT_BRC_POSE*)ptr;
 			Human* h = others + pose->id;
+
+			// check if h is reachable from head
+			/*
+			Human* c = head;
+			while (c)
+			{
+				if (c == h)
+				{
+					ret = true;
+					break;
+				}
+				c=c->next;
+			}
+			*/
 
 			h->req.action = (pose->am >> 4) & 0xF;
 			h->req.mount = pose->am & 0xF;
@@ -1124,7 +1171,22 @@ bool Server::Proc(const uint8_t* ptr, int size)
 		{
 			STRUCT_BRC_TALK* talk = (STRUCT_BRC_TALK*)ptr;
 			Human* h = others + talk->id;
-			if (h->pos[2] > -100)
+
+			// check if h is reachable from head
+			/*
+			Human* c = head;
+			while (c)
+			{
+				if (c == h)
+				{
+					ret = true;
+					break;
+				}
+				c=c->next;
+			}
+			*/
+
+			// if (h->pos[2] > -100)
 			{
 				TalkBox* box = 0;
 				if (h->talks == 3)
@@ -1168,7 +1230,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 	// return false;
 	}
 
-	return true;
+	return ret;
 }
 
 
@@ -2044,6 +2106,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	// load defaults
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
+
+	ReadConf(g);
 
 	g->player.prev = 0;
 	g->player.next = player_head;
@@ -2950,6 +3014,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		{
 			io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
 				(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E));
+
+			//io.torque = 1;
+			//io.y_force = 1;
 		}
 	}
 
@@ -3690,6 +3757,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	{
 		STRUCT_REQ_POSE req_pose = { 0 };
 		req_pose.token = 'P';
+		req_pose.am = (player.req.action<<4) | player.req.mount;
 		req_pose.anim= player.anim;
 		req_pose.frame = player.frame;
 		req_pose.pos[0] = player.pos[0];
@@ -3884,24 +3952,99 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				player.talk_box->MoveCursorY(-1);
 			if (key == A3D_DOWN)
 				player.talk_box->MoveCursorY(+1);
-		}
-		else
-		if (show_inventory)
-		{
+
+			int mem_idx = -1;
 			switch (key)
 			{
-				case A3D_UP:
-					inventory.FocusNext(0, 1);
-					break;
-				case A3D_DOWN:
-					inventory.FocusNext(0, -1);
-					break;
-				case A3D_LEFT:
-					inventory.FocusNext(-1, 0);
-					break;
-				case A3D_RIGHT:
-					inventory.FocusNext(1, 0);
-					break;
+				case A3D_F5: mem_idx = 0; break;
+				case A3D_F6: mem_idx = 1; break;
+				case A3D_F7: mem_idx = 2; break;
+				case A3D_F8: mem_idx = 3; break;
+			}
+
+			if (mem_idx >= 0)
+			{
+				// store, even if empty
+				memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
+				talk_mem[mem_idx].len = player.talk_box->len;
+				WriteConf(this);
+			}				
+		}
+		else
+		{
+			int mem_idx = -1;
+			switch (key)
+			{
+				case A3D_F5: mem_idx = 0; break;
+				case A3D_F6: mem_idx = 1; break;
+				case A3D_F7: mem_idx = 2; break;
+				case A3D_F8: mem_idx = 3; break;
+			}
+
+			if (mem_idx >= 0 && talk_mem[mem_idx].len > 0)
+			{
+				// immediate post
+				TalkBox* box = 0;
+				if (player.talks == 3)
+				{
+					box = player.talk[0].box;
+					player.talks--;
+					for (int i = 0; i < player.talks; i++)
+						player.talk[i] = player.talk[i + 1];
+				}
+				else
+					box = (TalkBox*)malloc(sizeof(TalkBox));
+
+				memset(box, 0, sizeof(TalkBox));
+				memcpy(box->buf, talk_mem[mem_idx].buf, 256);
+				box->len = talk_mem[mem_idx].len;
+				box->cursor_pos = box->len;
+
+				box->max_width = 33;
+				box->max_height = 7; // 0: off
+				int s[2], p[2];
+				box->Reflow(s, p);
+				box->size[0] = s[0];
+				box->size[1] = s[1];
+				box->cursor_xy[0] = p[0];
+				box->cursor_xy[1] = p[1];
+
+				player.talk[player.talks].pos[0] = player.pos[0];
+				player.talk[player.talks].pos[1] = player.pos[1];
+				player.talk[player.talks].pos[2] = player.pos[2];
+				player.talk[player.talks].box = box;
+				player.talk[player.talks].stamp = stamp;
+
+				if (server)
+				{
+					int idx = player.talks;
+					STRUCT_REQ_TALK req_talk = { 0 };
+					req_talk.token = 'T';
+					req_talk.len = player.talk[idx].box->len;
+					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+				}				
+
+				player.talks++;
+			}
+
+			if (show_inventory)
+			{
+				switch (key)
+				{
+					case A3D_UP:
+						inventory.FocusNext(0, 1);
+						break;
+					case A3D_DOWN:
+						inventory.FocusNext(0, -1);
+						break;
+					case A3D_LEFT:
+						inventory.FocusNext(-1, 0);
+						break;
+					case A3D_RIGHT:
+						inventory.FocusNext(1, 0);
+						break;
+				}
 			}
 		}
 	}
@@ -4057,6 +4200,17 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				player.talk[player.talks].pos[2] = player.pos[2];
 				player.talk[player.talks].box = box;
 				player.talk[player.talks].stamp = stamp;
+
+				if (server)
+				{
+					int idx = player.talks;
+					STRUCT_REQ_TALK req_talk = { 0 };
+					req_talk.token = 'T';
+					req_talk.len = player.talk[idx].box->len;
+					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+				}				
+
 				player.talks++;
 			}
 

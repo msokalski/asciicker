@@ -178,15 +178,17 @@
 			  console.log('ws connecting...');
         var connection = null;
 
-        var player_name = location.search.player;
+        var urlParams = new URLSearchParams(location.search);
+
+        var player_name = urlParams.get("player");
         if (!player_name)
           player_name = "player";
         var player_name_len = player_name.length;
         if (player_name_len>30)
           player_name_len=30;
         
-        // var port_override = "";
-        var port_override = ":8080";
+        var port_override = "";
+        //var port_override = ":8080";
 
 				if (location.protocol !== 'https:') 
 				{

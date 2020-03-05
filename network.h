@@ -33,8 +33,10 @@ int TCP_READ(TCP_SOCKET s, uint8_t* buf, int size);
 
 int HTTP_READ(TCP_SOCKET s, int(*cb)(const char* header, const char* value, void* param), void* param, char body_overread[2048]);
 
-int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split, bool bin);
-int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin);
+// type: 0x1-text 0x2-bin 0x8-close 0x9-ping 0xA-pong
+int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split, int type);
+int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, int* type);
+
 
 THREAD_HANDLE* THREAD_CREATE(void* (*entry)(void*), void* arg);
 void* THREAD_JOIN(THREAD_HANDLE* thread);

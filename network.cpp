@@ -335,22 +335,30 @@ unsigned int INTERLOCKED_ADD(volatile unsigned int* ptr, unsigned int add)
 
 int TCP_WRITE(TCP_SOCKET s, const uint8_t* buf, int size)
 {
-	int w = send(s, (const char*)buf, size, 0);
-	if (w <= 0)
+	int l = size;
+	while (l > 0)
 	{
-		int a = 0;
+		int w = send(s, (const char*)buf, l, 0);
+		if (w <= 0)
+			return w;
+		l -= w;
+		buf += w;		
 	}
-	return w;
+	return size;
 }
 
 int TCP_READ(TCP_SOCKET s, uint8_t* buf, int size)
 {
-	int r = recv(s, (char*)buf, size, 0);
-	if (r <= 0)
+	int l = size;
+	while (l > 0)
 	{
-		int a = 0;
+		int r = recv(s, (char*)buf, l, 0);
+		if (r <= 0)
+			return r;
+		l -= r;
+		buf += r;
 	}
-	return r;
+	return size;
 }
 
 // returns body_overread size (so 0 is very fine)
@@ -372,7 +380,7 @@ int HTTP_READ(TCP_SOCKET s, int(*cb)(const char* header, const char* value, void
 
 	do
 	{
-		int r = TCP_READ(s, buf, 2048);
+		int r = recv(s, (char*)buf, 2048, 0);
 		if (r <= 0)
 		{
 			free(header);
@@ -515,7 +523,7 @@ int HTTP_READ(TCP_SOCKET s, int(*cb)(const char* header, const char* value, void
 	return ret;
 }
 
-int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split, bool bin)
+int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split, int type)
 {
 	if (size <= 0)
 		return size;
@@ -550,7 +558,7 @@ int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split, bool bin)
 
 	int offs = 0;
 
-	int fmt = bin ? 0x2 : 0x1;
+	int fmt = type;
 
 	do
 	{
@@ -600,31 +608,23 @@ int WS_WRITE(TCP_SOCKET s, const uint8_t* buf, int size, int split, bool bin)
 				len = 10;
 			}
 
-		int ofs = 0;
+		int w = TCP_WRITE(s, frame, len);
+		if (w <= 0)
+			return w;
 
-		do
-		{
-			int w = TCP_WRITE(s, frame + ofs, len - ofs);
-			if (w <= 0)
-				return w;
-			ofs += w;
-		} while (ofs < len);
-
-		while (payload)
+		if (payload)
 		{
 			int w = TCP_WRITE(s, buf + offs, payload);
 			if (w <= 0)
 				return w;
 			offs += w;
-			payload -= w;
 		}
-
 	} while (offs < size);
 
 	return size;
 }
 
-int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
+int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, int* type)
 {
 	if (size < 0)
 		return size;
@@ -636,17 +636,14 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
 	{
 		// read first 2 bytes
 		{
-			do
-			{
-				int r = TCP_READ(s, frame + len, 2 - len);
-				if (r <= 0)
-					return r;
-				len += r;
-			} while (len < 2);
+			int r = TCP_READ(s, frame, 2);
+			if (r <= 0)
+				return r;
+			len += r;
 		}
 
-		if (bin)
-			*bin = (frame[0] & 0xF) == 0x2;
+		if (type)
+			*type = frame[0] & 0xF;
 
 		uint64_t payload = frame[1] & 0x7F;
 		uint8_t* mask = 0;
@@ -657,13 +654,10 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
 			if (payload == 126)
 			{
 				// READ next 6 bytes -> first 2 replace payload len, other 4 is xor_mask
-				do
-				{
-					int r = TCP_READ(s, frame + len, 8 - len);
-					if (r <= 0)
-						return r;
-					len += r;
-				} while (len < 8);
+				int r = TCP_READ(s, frame + len, 6);
+				if (r <= 0)
+					return r;
+				len += r;
 
 				payload = (frame[2] << 8) | frame[3];
 				mask = frame + 4;
@@ -672,13 +666,10 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
 				if (payload == 127)
 				{
 					// READ next 12 bytes -> first 8 replace payload len, other 4 is xor_mask
-					do
-					{
-						int r = recv(s, (char*)frame + len, 14 - len, 0);
-						if (r <= 0)
-							return r;
-						len += r;
-					} while (len < 14);
+					int r = TCP_READ(s, frame + len, 12);
+					if (r <= 0)
+						return r;
+					len += r;
 
 					payload = (frame[2] << 24) | (frame[3] << 16) | (frame[4] << 8) | frame[5];
 					payload |= (payload << 32) | (frame[6] << 24) | (frame[7] << 16) | (frame[8] << 8) | frame[9];
@@ -688,13 +679,10 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
 				else
 				{
 					// READ next 4 bytes of xor_mask
-					do
-					{
-						int r = recv(s, (char*)frame + len, 6 - len, 0);
-						if (r <= 0)
-							return r;
-						len += r;
-					} while (len < 6);
+					int r = TCP_READ(s, frame + len, 4);
+					if (r <= 0)
+						return r;
+					len += r;
 
 					mask = frame + 2;
 				}
@@ -704,13 +692,10 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
 			if (payload == 126)
 			{
 				// READ next 2 bytes->replace payload len
-				do
-				{
-					int r = recv(s, (char*)frame + len, 4 - len, 0);
-					if (r <= 0)
-						return r;
-					len += r;
-				} while (len < 4);
+				int r = TCP_READ(s, frame + len, 2);
+				if (r <= 0)
+					return r;
+				len += r;
 
 				payload = (frame[2] << 8) | frame[3];
 			}
@@ -718,13 +703,10 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
 				if (payload == 127)
 				{
 					// READ next 8 bytes->replace payload len
-					do
-					{
-						int r = recv(s, (char*)frame + len, 10 - len, 0);
-						if (r <= 0)
-							return r;
-						len += r;
-					} while (len < 10);
+					int r = TCP_READ(s, frame + len, 8);
+					if (r <= 0)
+						return r;
+					len += r;
 
 					payload = (frame[2] << 24) | (frame[3] << 16) | (frame[4] << 8) | frame[5];
 					payload |= (payload << 32) | (frame[6] << 24) | (frame[7] << 16) | (frame[8] << 8) | frame[9];
@@ -732,31 +714,68 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, bool* bin)
 		}
 
 		if (size < payload)
-			return -1;
-
-		int read = (int)payload;
-		int offs = 0;
-
-		while (read)
 		{
-			int r = TCP_READ(s, buf + offs, read);
-			if (r <= 0)
-				return r;
-
-			if (mask)
-			{
-				int end = offs + r;
-				for (int i = offs; i < end; i++)
-					buf[i] ^= mask[i & 3];
-			}
-
-			read -= r;
-			offs += r;
+			return -1;
 		}
 
-		buf += offs;
-		size -= offs;
-		tot_data += offs;
+		switch (frame[0] & 0xF)
+		{
+			case 0x0:
+			case 0x1:
+			case 0x2:
+				break;
+
+			case 0x8: // close
+			{
+				WS_WRITE(s, 0, 0, 0, 0x8);
+				return -1;
+			}
+			case 0x9: // ping
+			{
+				uint8_t ping[125];
+				if (payload)
+				{
+					int r = TCP_READ(s, ping, payload);
+					if (r <= 0)
+						return r;
+					if (mask)
+					{
+						for (int i = 0; i < payload; i++)
+							ping[i] ^= mask[i & 3];
+					}
+				}
+				WS_WRITE(s, ping, payload, 0, 0xA);
+				continue;
+			}
+			case 0xA: // pong
+			{
+				uint8_t ping[125];
+				if (payload)
+				{
+					int r = TCP_READ(s, ping, payload);
+					if (r <= 0)
+						return r;
+				}
+				continue;
+			}
+
+			default:
+				return -1;
+		}		
+
+		int r = TCP_READ(s, buf, payload);
+		if (r <= 0)
+			return r;
+
+		if (mask)
+		{
+			for (int i = 0; i < payload; i++)
+				buf[i] ^= mask[i & 3];
+		}
+
+		buf += payload;
+		size -= payload;
+		tot_data += payload;
 
 	} while (!(frame[0] & 0x80)); //(FIN bit is not set)
 

@@ -215,6 +215,8 @@ extern "C"
     void Packet(const uint8_t* ptr, int size)
     {
         if (server)
-            server->Proc(ptr, size);
+        {
+            bool ok = server->Proc(ptr, size);
+        }
     }
 }
