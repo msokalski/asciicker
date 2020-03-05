@@ -157,9 +157,21 @@
     <script>
       var ak_connection = null;
       var Join = null;
+      var Load = null;
       var Packet = null;
+      var ak_packet = 0;
       
       var ak_joined = false;
+
+			function Send()
+			{
+        if (ak_connection)
+        {
+          var chunk = new Uint8Array(ak_packet.buffer,ak_packet.byteOffset+1,ak_packet[0]);
+          ak_connection.send(chunk);
+          // console.log("sending " + chunk.length + " bytes ..." + chunk[0]);
+        }
+      }
 			
 			function Connect()
 			{
@@ -187,6 +199,23 @@
         
         connection.binaryType = "arraybuffer";
 
+        connection.onerror = function (err)
+        {
+          console.log("ws error, starting solo ...");
+          if (ak_connection)
+          {
+            ak_connection.close();
+            ak_connection=null;
+          }
+
+          if (!ak_joined)
+          {
+            Load();
+            Resize(null);
+            window.requestAnimationFrame(AsciickerLoop);
+          }
+        };        
+
         connection.onopen = function () 
         {
           // connection is opened and ready to use
@@ -199,15 +228,7 @@
           for (var i=0; i<player_name_len; i++)
             req_join[i+1] = player_name.charCodeAt(i) & 0xFF;
 
-          ak_connection.onerror = function (err)
-          {
-            console.log(err);
-            if (ak_connection)
-            {
-              ak_connection.close();
-              ak_connection=null;
-            }            
-          };
+          ak_connection.send(req_join);
 
           ak_connection.onmessage = function (msg)
           {
@@ -224,32 +245,31 @@
                 console.log("calling Join(" + player_name + "," + id + "," + max_cli + ");");
                 if (Join)
                 {
-                  Join(player_name,id,max_cli);
-                  // this is where we could start loading stuff
-                  // ...
+                  var mem = Join(player_name,id,max_cli);
+                  ak_packet = new Uint8Array(Module.HEAP8.buffer,mem,257);
                 }
+
+                Load();
+                Resize(null);
+                window.requestAnimationFrame(AsciickerLoop);
+              }
+              else
+              {
+                Load();
+                Resize(null);
+                window.requestAnimationFrame(AsciickerLoop);
               }
             }
             else
             {
-              console.log("packet " + msg[0]);
               if (Packet)
               {
                 Packet(msg,msg.length);
               }
             }
           };
-          ak_connection.send(req_join);
         };
 			}
-		
-			function ak_Send(x,y,z,a,f)
-			{
-				// ak_connection.send(JSON.stringify([x,y,z,a,f,ak_lag]));
-      }
-
-      Connect(); // right away!
-      
     </script>
 
     <script>
@@ -872,13 +892,14 @@
       {
         console.log('Loaded '+fonts.length+' fonts'); 
 
+        Load = Module.cwrap('Load', null, []);
         Render = Module.cwrap('Render', 'number', ['number','number']);
         Size = Module.cwrap('Size', null, ['number','number','number','number']);
         Keyb = Module.cwrap('Keyb', null, ['number','number']);
         Mouse = Module.cwrap('Mouse', null, ['number','number','number']);
         Touch = Module.cwrap('Touch', null, ['number','number','number','number']);
         Focus = Module.cwrap('Focus', null, ['number']);
-        Join = Module.cwrap('Join', null, ['string','number','number']);
+        Join = Module.cwrap('Join', 'number', ['string','number','number']);
         Packet = Module.cwrap('Packet', null, ['array', 'number']);
 
         ak_canvas = document.getElementById('asciicker_canvas');
@@ -990,9 +1011,8 @@
         setFocusHandlers();
 
         window.addEventListener("resize",Resize); 
-        Resize(null);
 
-        window.requestAnimationFrame(AsciickerLoop);
+        Connect(); // window.requestAnimationFrame(AsciickerLoop);
       }
     </script>
 

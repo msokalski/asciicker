@@ -1,4 +1,5 @@
 
+#include <emscripten.h>
 #include <stdint.h>
 
 #include "terrain.h"
@@ -17,14 +18,26 @@ uint64_t GetTime()
 
 Server* server = 0; // this is to fullfil game.cpp externs!
 
+struct GameServer : Server
+{
+    uint8_t send_buf[1+256];
+};
+
 bool Server::Send(const uint8_t* data, int size)
 {
-	return false;
+    GameServer* gs = (GameServer*)server;
+    if (size > 256)
+        return false;
+    gs->send_buf[0] = size;
+    memcpy(gs->send_buf+1, data, size);
+    int s = EM_ASM_INT( return Send(); );
+	return s > 0;
 }
 
 void Server::Proc()
 {
 }
+
 
 Game* game = 0;
 Terrain* terrain = 0;
@@ -39,9 +52,12 @@ void* GetMaterialArr()
 
 int main(int argc, char* argv[])
 {
-    // main should be called AFTER js receives join-response (containing max_cli)
-    // or if Connect() fails main will be called with no args
-    // arg[0]=? [arg[1]="user" [arg[2]="max_cli"]]
+    return 0;
+}
+
+int Main()
+{
+    // here we must already know if serer on not server
 
     float water = 55.0f;
     float yaw = 45;
@@ -142,6 +158,11 @@ int main(int argc, char* argv[])
 
 extern "C"
 {
+    void Load()
+    {
+        Main();
+    }
+
     void* Render(int width, int height)
     {
         if (game && render_buf)
@@ -183,9 +204,12 @@ extern "C"
             game->OnFocus(set!=0);
     }
 
-    void Join(const char* name, int id, int max_cli)
+    void* Join(const char* name, int id, int max_cli)
     {
         // alloc server, prepare for Packet()s
+        GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
+        server = gs;
+        return gs->send_buf;
     }
 
     void Packet(const uint8_t* ptr, int size)
