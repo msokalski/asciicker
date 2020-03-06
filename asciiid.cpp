@@ -52,6 +52,10 @@ void Server::Proc()
 {
 }
 
+void Server::Log(const char* str)
+{
+}
+
 // just for write(fd)
 #ifndef _WIN32
 #include <unistd.h>

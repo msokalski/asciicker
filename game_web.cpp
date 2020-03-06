@@ -38,6 +38,17 @@ void Server::Proc()
 {
 }
 
+void Server::Log(const char* str)
+{
+    GameServer* gs = (GameServer*)server;
+    int len = strlen(str);
+    if (len>255)
+        len=255;
+    gs->send_buf[0] = len;
+    memcpy(gs->send_buf+1,str,len);
+    gs->send_buf[len+1] = 0;
+    EM_ASM( ConsoleLog(); );
+}
 
 Game* game = 0;
 Terrain* terrain = 0;
@@ -208,7 +219,9 @@ extern "C"
     {
         // alloc server, prepare for Packet()s
         GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
+        memset(gs,0,sizeof(GameServer));
         server = gs;
+        server->others = (Human*)malloc(sizeof(Human)*max_cli);
         return gs->send_buf;
     }
 

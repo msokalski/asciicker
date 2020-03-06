@@ -172,6 +172,13 @@
           // console.log("sending " + chunk.length + " bytes ..." + chunk[0]);
         }
       }
+
+      function ConsoleLog()
+      {
+        var chunk = new Uint8Array(ak_packet.buffer,ak_packet.byteOffset+1,ak_packet[0]);
+        var str = new TextDecoder("utf-8").decode(chunk);
+        console.log(str);
+      }
 			
 			function Connect()
 			{

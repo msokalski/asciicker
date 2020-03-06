@@ -20,6 +20,10 @@ void Server::Proc()
 {
 }
 
+void Server::Log(const char* str)
+{
+}
+
 extern "C" void SHA1(void* data, int len, unsigned char digest[20]);
 
 int Base64Encode(unsigned char* data, int len, char* base64)

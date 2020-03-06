@@ -64,6 +64,8 @@ unsigned int INTERLOCKED_ADD(volatile unsigned int* ptr, unsigned int add);
 
 ////////////////////////////////////////////////////////////
 
+#pragma pack(push,1)
+
 struct STRUCT_REQ_JOIN
 {
 	uint8_t token; // 'J'
@@ -134,3 +136,5 @@ struct STRUCT_BRC_TALK
 	uint16_t id;
 	uint8_t str[256]; // trim to actual size!
 };
+
+#pragma pack(pop)

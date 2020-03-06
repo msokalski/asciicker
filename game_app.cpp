@@ -609,7 +609,12 @@ void Server::Proc()
 	INTERLOCKED_SUB(&gs->msg_num, num);
 }
 
-GameServer* Connect(const char* addr, const char* port, const char* user)
+void Server::Log(const char* str)
+{
+    printf("%s",str);
+}
+
+GameServer* Connect(const char* addr, const char* port, const char* path, const char* user)
 {
 	int iResult;
 
@@ -665,12 +670,13 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 	freeaddrinfo(result);
 
 	// first, send HTTP->WS upgrade request (over http)
-	const char* request =
-		"GET /ws/y4/ HTTP/1.1\r\n"
+	const char* request_fmt =
+		"GET /%s HTTP/1.1\r\n"
+        "Host: %s\r\n"
 #ifdef _WIN32
-		"User-Agent: native-asciicker-windows"
+		"User-Agent: native-asciicker-windows\r\n"
 #else
-		"User-Agent: native-asciicker-linux"
+		"User-Agent: native-asciicker-linux\r\n"
 #endif
 		"Accept: */*\r\n"
 		"Accept-Language: en-US,en;q=0.5\r\n"
@@ -680,6 +686,9 @@ GameServer* Connect(const char* addr, const char* port, const char* user)
 		"Cache-Control: no-cache\r\n"
 		"Upgrade: WebSocket\r\n"
 		"Connection: Upgrade\r\n\r\n";
+
+    char request[2048];
+    sprintf(request, request_fmt, path, addr);
 
 	int w = TCP_WRITE(server_socket, (uint8_t*)request, (int)strlen(request));
 	if (w < 0)
@@ -839,13 +848,16 @@ int main(int argc, char* argv[])
 		// [user@]server_address/path[:port]
 		char* monkey = strchr(url, '@');
 		char* colon = monkey ? strchr(monkey, ':') : strchr(url, ':');
+        char* slash = colon ? strchr(colon, '/') : monkey ? strchr(monkey, '/') : strchr(url, '/');
 
         char def_user[] = "player";
         char def_port[] = "8080";
+        char def_path[] = "";
 
 		char* addr = url;
 		char* user = def_user;
 		char* port = def_port;
+		char* path = def_path;
 
 		if (monkey)
 		{
@@ -860,7 +872,13 @@ int main(int argc, char* argv[])
 			port = colon + 1;
 		}
 
-		gs = Connect(addr, port, user);
+        if (slash)
+        {
+            *slash = 0;
+            path = slash + 1;
+        }
+
+		gs = Connect(addr, port, path, user);
 
 		if (!gs)
 		{

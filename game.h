@@ -111,6 +111,8 @@ struct Server
 	void Proc(); // does nothing on JS, native apps calls above func for all queued commands
 	bool Send(const uint8_t* data, int size); // implemented by game_app/game_web
 
+	void Log(const char* str);
+
 	int max_clients;
 	Human* others; // [max_clients]
 

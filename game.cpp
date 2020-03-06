@@ -1022,8 +1022,6 @@ struct TalkBox
 
 bool Server::Proc(const uint8_t* ptr, int size)
 {
-	bool ret = false;
-
 	switch (ptr[0])
 	{
 		case 'j': // hello!
@@ -1040,21 +1038,6 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			else
 				tail = h;
 			head = h;
-
-			// check if h is reachable from head
-			/*
-			Human* c = head;
-			while (c)
-			{
-				if (c == h)
-				{
-					ret = true;
-					break;
-				}
-				c=c->next;
-			}
-			*/
-
 
 			// def pose
 			h->req.action = (join->am >> 4) & 0xF;
@@ -1086,21 +1069,6 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			STRUCT_BRC_EXIT* leave = (STRUCT_BRC_EXIT*)ptr;
 			Human* h = others + leave->id;
 
-			// check if h is reachable from head
-			/*
-			Human* c = head;
-			while (c)
-			{
-				if (c == h)
-				{
-					ret = true;
-					break;
-				}
-				c=c->next;
-			}
-			*/
-
-
 			// free talks
 			for (int i=0; i<h->talks; i++)
 				free(h->talk[i].box);
@@ -1126,20 +1094,6 @@ bool Server::Proc(const uint8_t* ptr, int size)
 		{
 			STRUCT_BRC_POSE* pose = (STRUCT_BRC_POSE*)ptr;
 			Human* h = others + pose->id;
-
-			// check if h is reachable from head
-			/*
-			Human* c = head;
-			while (c)
-			{
-				if (c == h)
-				{
-					ret = true;
-					break;
-				}
-				c=c->next;
-			}
-			*/
 
 			h->req.action = (pose->am >> 4) & 0xF;
 			h->req.mount = pose->am & 0xF;
@@ -1172,21 +1126,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			STRUCT_BRC_TALK* talk = (STRUCT_BRC_TALK*)ptr;
 			Human* h = others + talk->id;
 
-			// check if h is reachable from head
-			/*
-			Human* c = head;
-			while (c)
-			{
-				if (c == h)
-				{
-					ret = true;
-					break;
-				}
-				c=c->next;
-			}
-			*/
-
-			// if (h->pos[2] > -100)
+			if (h->pos[2] > -100)
 			{
 				TalkBox* box = 0;
 				if (h->talks == 3)
@@ -1226,11 +1166,12 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			break;
 		}
 
-	//default:
-	// return false;
+	default:
+		return false;
 	}
 
-	return ret;
+
+	return true;
 }
 
 
@@ -3156,10 +3097,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			h = &player;
 	}
 	else
+	{
 		h = player_head; // asciid multi-term
+	}
 
+	int num = 0;
 	while (h)
 	{
+		num++;
 		// todo: ALL TALKS should be sorted by ascending stamp
 		// should be Z tested! (so maybe better move it to render)
 		// and should have some kind of fade out
