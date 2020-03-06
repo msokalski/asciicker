@@ -208,20 +208,51 @@
         
         connection.binaryType = "arraybuffer";
 
-        connection.onerror = function (err)
+        connection.onclose = function(err)
         {
-          console.log("ws error, starting solo ...");
           if (ak_connection)
           {
+            ak_connection.onclose = null;
+            ak_connection.onmessage = null;
+            ak_connection.onerror = null;
+            ak_connection=null;
+          }
+
+          if (!ak_joined)
+          {
+            console.log("ws error, starting solo ...");
+            Load();
+            Resize(null);
+            window.requestAnimationFrame(AsciickerLoop);
+          }
+          else
+          {
+            Join("",-1,-1);
+          }              
+        };
+
+        connection.onerror = function (err)
+        {
+          
+          if (ak_connection)
+          {
+            ak_connection.onclose = null;
+            ak_connection.onmessage = null;
+            ak_connection.onerror = null;
             ak_connection.close();
             ak_connection=null;
           }
 
           if (!ak_joined)
           {
+            console.log("ws error, starting solo ...");
             Load();
             Resize(null);
             window.requestAnimationFrame(AsciickerLoop);
+          }
+          else
+          {
+            Join("",-1,-1);
           }
         };        
 

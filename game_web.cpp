@@ -217,6 +217,16 @@ extern "C"
 
     void* Join(const char* name, int id, int max_cli)
     {
+        if (id<0)
+        {
+            if (server)
+            {
+                free(server->others);
+                free(server);
+                server = 0;
+            }
+               return 0;
+        }
         // alloc server, prepare for Packet()s
         GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
         memset(gs,0,sizeof(GameServer));

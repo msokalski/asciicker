@@ -536,20 +536,19 @@ struct GameServer : Server
 	{
 		while (1)
 		{
-			int r = WS_READ(server_socket, buf + buf_ofs, 2048, 0);
-			if (r <= 0)
-			{
-				break;
-			}
-
 			while (msg_num == msg_size)
 				THREAD_SLEEP(15);
+
+			int r = WS_READ(server_socket, buf + buf_ofs, 2048, 0);
 
 			MSG_FIFO* m = msg + msg_write;
 			m->size = r;
 			m->ptr = buf + buf_ofs;
 
 			INTERLOCKED_INC(&msg_num);
+
+            if (r<=0)
+                break;
 
 			msg_write = (msg_write + 1)&(msg_size - 1);
 
@@ -590,6 +589,10 @@ bool Server::Send(const uint8_t* data, int size)
 	int w = WS_WRITE(gs->server_socket, (const uint8_t*)data, size, 0, true);
 	if (w <= 0)
 	{
+        gs->Stop();
+        free(others);
+        free(server);
+        server=0;
 		return false;
 	}
 	return true;
@@ -602,6 +605,13 @@ void Server::Proc()
 	for (int i = 0; i < num; i++)
 	{
 		GameServer::MSG_FIFO* m = gs->msg + gs->msg_read;
+        if (m->size<=0)
+        {
+            free(others);
+            free(server);
+            server = 0;
+            return;
+        }
 		Server::Proc(m->ptr, m->size); // this would be called directly by JS
 		gs->msg_read = (gs->msg_read + 1)&(GameServer::msg_size - 1);
 	}
@@ -666,6 +676,14 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
 	}
 	else
 		printf("connected to the server..\n");
+
+    /*
+    int optval = 1;
+    if (setsockopt(server_socket, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) != 0)
+    {
+        // ok we can live without it
+    }
+    */
 
 	freeaddrinfo(result);
 

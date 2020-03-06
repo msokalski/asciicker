@@ -20,6 +20,8 @@ static const uint8_t yellow = 16 + 1 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t lt_blue = 16 + 5 * 1 + 1 * 6 + 1 * 36;
 static const uint8_t dk_blue = 16 + 3 * 1 + 0 * 6 + 0 * 36;
 static const uint8_t brown = 16 + 0 * 1 + 2 * 6 + 3 * 36;
+static const uint8_t lt_green = 16 + 1 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t dk_green = 16 + 0 * 1 + 3 * 6 + 0 * 36;
 
 extern Terrain* terrain;
 extern World* world;
@@ -3074,6 +3076,39 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss);
+
+	{
+		AnsiCell status;
+		const char* status_text = server ? " ON LINE" : "OFF LINE";
+		if (server)
+		{
+			status.fg = 16;
+			status.bk = dk_green;
+			status.gl=' ';
+			status.spare = 0;
+		}
+		else
+		{
+			status.fg = yellow;
+			status.bk = dk_red;
+			status.gl=' ';
+			status.spare = 0;
+		}
+		AnsiCell* top = ptr + (height-1)*width;
+		int x = 0;
+		for (; x<width/2 - 4; x++)
+			top[x] = status;
+		for (; x<width/2 + 4; x++)
+		{
+			int i = x - (width/2 - 4);
+			status.gl = status_text[i];
+			top[x] = status;
+		}
+		status.gl = ' ';
+		for (; x<width; x++)
+			top[x] = status;
+	}
+	
 
 	// NET_TODO:
 	// compare inrange with server confirmed inrange
