@@ -4647,7 +4647,58 @@ void Game::StartContact(int id, int x, int y, int b)
 				else
 				{
 					if (ch)
-						OnKeyb(GAME_KEYB::KEYB_CHAR, ch); // like from terminal!
+					{
+						if (ch == '\n' && !( keyb_key[A3D_LSHIFT >> 3] & (1 << (A3D_LSHIFT & 7)) ) )
+						{
+							if (player.talk_box->len > 0)
+							{
+								if (player.talks == 3)
+								{
+									free(player.talk[0].box);
+									player.talks--;
+									for (int i = 0; i < player.talks; i++)
+										player.talk[i] = player.talk[i + 1];
+								}
+
+								int idx = player.talks;
+								player.talk[idx].box = player.talk_box;
+								player.talk[idx].pos[0] = player.pos[0];
+								player.talk[idx].pos[1] = player.pos[1];
+								player.talk[idx].pos[2] = player.pos[2];
+								player.talk[idx].stamp = stamp;
+
+								if (server)
+								{
+									STRUCT_REQ_TALK req_talk = { 0 };
+									req_talk.token = 'T';
+									req_talk.len = player.talk[idx].box->len;
+									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+								}
+
+								player.talks++;
+
+								// alloc new
+								player.talk_box = 0;
+
+								TalkBox_blink = 32;
+								player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+								memset(player.talk_box, 0, sizeof(TalkBox));
+								player.talk_box->max_width = 33;
+								player.talk_box->max_height = 7; // 0: off
+								int s[2], p[2];
+								player.talk_box->Reflow(s, p);
+								player.talk_box->size[0] = s[0];
+								player.talk_box->size[1] = s[1];
+								player.talk_box->cursor_xy[0] = p[0];
+								player.talk_box->cursor_xy[1] = p[1];
+							}
+
+							ch = 0;
+						}
+						else
+							OnKeyb(GAME_KEYB::KEYB_CHAR, ch); // like from terminal!
+					}
 					keyb_key[cap >> 3] |= 1 << (cap & 7);  // just to hilight keycap
 				}
 				con->keyb_cap = cap;
