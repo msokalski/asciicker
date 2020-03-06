@@ -826,13 +826,11 @@ int ServerLoop(const char* port)
 		ClientSocket = accept(ListenSocket, NULL, NULL);
 		if (ClientSocket != INVALID_TCP_SOCKET)
 		{
-			/*
 			int optval = 1;
 			if (setsockopt(ClientSocket, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) != 0)
 			{
 				// ok we can live without it
 			}
-			*/
 
 			PlayerCon* con = PlayerCon::Aquire();
 			if (!con)

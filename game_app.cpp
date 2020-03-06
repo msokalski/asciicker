@@ -677,13 +677,11 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
 	else
 		printf("connected to the server..\n");
 
-    /*
     int optval = 1;
     if (setsockopt(server_socket, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) != 0)
     {
         // ok we can live without it
     }
-    */
 
 	freeaddrinfo(result);
 
