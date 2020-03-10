@@ -3,183 +3,106 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <link href="style.css" rel="stylesheet">  
     <title>ASCIICKER - Let's kick some ASCII</title>
-    <style>
-        @font-face {
-            font-family: "myfont";
-            src: url("PxPlus_IBM_CGAthin.woff") format('woff'),
-                 url("PxPlus_IBM_CGAthin.ttf") format('ttf');
-        }
-
-        pre
-        {
-            font-family: myfont;
-            font-size: 13px;
-            line-height: 12px;
-        }
-		
-        h1
-        {
-            font-family: myfont;
-            font-size: 30px;
-			line-height: 70px;
-        }
-        h2
-        {
-            font-family: myfont;
-            font-size: 10px;
-			line-height: 20px;
-        }
-
-		a
-		{
-		  text-shadow: 0px 10px 10px rgba(0,0,0,2.0);
-		  
-		  padding: 5px;
-		  color: #ffa;
-		}
-         body {
-  background-image: url('ASCIICKER background.png');
-  background-size: cover;
-    }
-
-.box {
-  width: 0px;
-  margin: 0 auto;
-  background: none);
-  padding: 35px;
-  border: none;
-  border-radius: 20px/50px;
-  background-clip: padding-box;
-  text-align: right;
-}
-
-.button {
-  font-size: 5;
-  padding: 0px;
-  color: myfont;
-  border: none;
-  text-decoration: none;
-  cursor: pointer;
-  text-align: right;
-  }
-
-.button:hover {
-  background: none;
-  text-decoration: underline;
-
-}
-
-.overlay {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.7);
-  transition: opacity 500ms;
-  visibility: hidden;
-  opacity: 0;
-}
-.overlay:target {
-  visibility: visible;
-  opacity: 1;
-}
-
-.popup {
-  margin: 70px auto;
-  padding: 15px;
-  background: #999999;
-  border-radius: 5px;
-  width: 12%;
-  position: relative;
-  transition: all 5s ease-in-out;
-  font-size: 10;
-}
-
-.popup h2 {
-  margin-top: 20;
-  color: myfont;
-  font-family: myfont;
-}
-.popup .close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  transition: all 200ms;
-  font-size: 20px;
-  font-weight: bold;
-  text-decoration: none;
-  color: myfont;
-}
-.popup .close:hover {
-  color: #000000;
-}
-.popup .content {
-  max-height: 30%;
-  overflow: auto;
-}
-
-
-}
-
-  </style>
   </head>
   <body>
 
 
-<a href="https://discord.gg/BKhcutP">
- <img style="float:right;width:100px;height:100px;border:0;" src="discord.png" alt="discord logo">
-</a>
+    <div style="float:right;">
+      <a href="https://discord.gg/BKhcutP">
+        <img style="float:right;width:100px;height:100px;border:0;" src="discord.png" alt="discord logo">
+      </a>
+    </div>
 
 
-<table height="100%" width="100%"><tr valign="center"><td align="top">
-<h1 style="margin-top:-80px;text-align:center;">
-<a href="http://asciicker.com/"><b>ASCIICKER VERSIONS</b> </a><br/>
-<a href="x1">X1</a> <a href="x2">X2</a> <a href="x3">X3</a> <a href="x4">X4</a> <a href="x5">X5</a> <a href="x6">X6</a> <a href="x7">X7</a><br/>
-<a href="x8">X8</a> <a href="x9">X9</a> <a href="x10">X10</a> <a href="x11"><b>X11</b></a> <a href="x12">X12</a> <a href="x13"><b>X13</b></a> <a href="yy">YY</a> <a href="xx">XX</a><br/>
-<a href="y0">Y0</a> <a href="y1">Y1</a> <a href="y2">Y2</a> <a href="y3"><b>Y3</b></a>
-</h1>
+    <table height="100%" width="100%">
+      <tr valign="center">
+        <td align="top">
+          <h1 style="margin-top:-80px;text-align:center;">
+            <a href="http://asciicker.com/">
+              <b>ASCIICKER VERSIONS</b> 
+            </a>
+            <br/>
+          
+            <a href="x1">X1</a> 
+            <a href="x2">X2</a> 
+            <a href="x3">X3</a> 
+            <a href="x4">X4</a> 
+            <a href="x5">X5</a> 
+            <a href="x6">X6</a> 
+            <a href="x7">X7</a>
+            <br/>
+            <a href="x8">X8</a> 
+            <a href="x9">X9</a> 
+            <a href="x10">X10</a> 
+            <a href="x11"><b>X11</b></a> 
+            <a href="x12">X12</a> 
+            <a href="x13"><b>X13</b></a> 
+            <a href="yy">YY</a> 
+            <a href="xx">XX</a>
+            <br/>
+            <a href="y0">Y0</a> 
+            <a href="y1">Y1</a> 
+            <a href="y2">Y2</a> 
+            <a href="y3"><b>Y3</b></a>
+          </h1>
+        </td>
+      </tr>
+    </table>
 
 
-<font size="-5">
-<h2 style="text-align:left;position:absolute;bottom:1px;">
-<a>ASCIICKER name, images,copyright and intellectual propety owned by gumix</a>
-</h2>
-</font>
+    <font size="-5">
+      <h2 id="copyright">
+        <a>ASCIICKER name, images,copyright and intellectual propety owned by gumix</a>
+      </h2>
+    </font>
+
+    <div id="twitter-band"></div>
+    <div id="twitter-button" onclick="display_twitter_embed()" style="left: 0%;">
+
+    </div>
+
+    </div>
+
+    <div id="twitter-embed" style="left: -50%; width: 0vw; height: 0vh;">
+      <font size="-5">
+        <h2 style="text-align:left;position:absolute;top:1px;">
+          <a id="twitter" class="twitter-timeline" data-width="300" data-height="510" data-dnt="true" data-theme="dark" href="https://twitter.com/MrGumix?ref_src=twsrc%5Etfw">Tweets & likes from MrGumix</a> <script async src="https://platform.twitter.com/widgets.js" charset="UTF-8"></script>
+        </h2>
+      </font>
+    </div>
 
 
-<font size="-5">
-<h2 style="text-align:left;position:absolute;top:1px;">
-<a class="twitter-timeline" data-width="300" data-height="510" data-dnt="true" data-theme="dark" href="https://twitter.com/MrGumix?ref_src=twsrc%5Etfw">Tweets & likes from MrGumix</a> <script async src="https://platform.twitter.com/widgets.js" charset="UTF-8"></script>
-</font>
-</h2>
+    <font color="#ffffaa">
+      <div class="box">
+    	  <a style="text-align:right;position:absolute;right:13px;bottom:0px" class="button" href="#popup1"><h2>Credits</h2></a>
+      </div>
+      <h2>
+        <div align="center" id="popup1" class="overlay">
+    	    <div class="popup">
+    	  	  <br/>Special Thanks to:<br/>
+    	  	  <a class="close" href="#">
+              &times;
+            </a>
+    	  	  <div class="content">
+    	  		   __________________		 
+    	  		   Chuck_Norris_#4886
+    	  		   [Web Design / Discord Moderator]      
+    	  		   __________________
+                                 Gabrieldd001#4922 
+    	  		   [Discord Server/ Discord Moderator]
+    	  		   __________________
+                                 TomiPepi#0646
+                                 [Discord Moderator]
+    	  		   __________________
+    	  	  </div>
+    	    </div>
+        </div>
+      </h2>
+    </font>
 
-
-<font color="#ffffaa">
-<div class="box">
-	<a style="text-align:right;position:absolute;right:13px;bottom:0px" class="button" href="#popup1"><h2>Credits</h2></a>
-</div><h2>
-<div align="center" id="popup1" class="overlay">
-	<div class="popup">
-		<br/>Special Thanks to:<br/>
-		<a class="close" href="#">&times;</a>
-		<div class="content">
-			 __________________		 
-			 Chuck_Norris_#4886
-			 [Web Design / Discord Moderator]      
-			 __________________
-                         Gabrieldd001#4922 
-			 [Discord Server/ Discord Moderator]
-			 __________________
-                         TomiPepi#0646
-                         [Discord Moderator]
-			 __________________
-		</div>
-	</div>
-</div>
-
-</font>
-</h2>
-</body>
+    <script src="main.js"></script>
+    
+  </body>
 </html>

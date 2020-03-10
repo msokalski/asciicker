@@ -1,0 +1,164 @@
+@font-face {
+    font-family: "myfont";
+    src: url("PxPlus_IBM_CGAthin.woff") format('woff'),
+         url("PxPlus_IBM_CGAthin.ttf") format('ttf');
+}
+
+pre
+{
+    font-family: myfont;
+    font-size: 13px;
+    line-height: 12px;
+}
+
+h1
+{
+    font-family: myfont;
+    font-size: 30px;
+    line-height: 70px;
+}
+h2
+{
+    font-family: myfont;
+    font-size: 10px;
+    line-height: 20px;
+}
+
+a
+{
+  text-shadow: 0px 10px 10px rgba(0,0,0,2.0);
+  
+  padding: 5px;
+  color: #ffa;
+}
+
+/* background fixed so that it adapt to user screen size */
+body {
+    background: url('ASCIICKER background.png') no-repeat center center fixed;
+    background-size: cover;
+}
+
+.box {
+    width: 0px;
+    margin: 0 auto;
+    background: none;
+    padding: 35px;
+    border: none;
+    border-radius: 20px/50px;
+    background-clip: padding-box;
+    text-align: right;
+}
+
+.button {
+    font-size: 5;
+    padding: 0px;
+    color: myfont;
+    border: none;
+    text-decoration: none;
+    cursor: pointer;
+    text-align: right;
+}
+
+.button:hover {
+    background: none;
+    text-decoration: underline;
+}
+
+.overlay {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
+    transition: opacity 500ms;
+    visibility: hidden;
+    opacity: 0;
+}
+
+.overlay:target {
+    visibility: visible;
+    opacity: 1;
+}
+
+.popup {
+    margin: 70px auto;
+    padding: 15px;
+    background: #999999;
+    border-radius: 5px;
+    width: 12%;
+    position: relative;
+    transition: all 5s ease-in-out;
+    font-size: 10;
+}
+
+.popup h2 {
+    margin-top: 20;
+    color: myfont;
+    font-family: myfont;
+}
+
+.popup .close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    transition: all 200ms;
+    font-size: 20px;
+    font-weight: bold;
+    text-decoration: none;
+    color: myfont;
+}
+
+.popup .close:hover {
+    color: #000000;
+}
+
+.popup .content {
+    max-height: 30%;
+    overflow: auto;
+}
+
+#copyright{
+    text-align:left;
+    position:absolute;
+    bottom:1px;
+}
+
+#twitter-button{
+    display: none;
+}
+
+/* responsive part for twitter embed */
+
+@media only screen and (max-width: 1500px) {
+    #twitter-embed{
+        position: absolute;
+        top: 0%;
+        left: -50%;
+        transition: all 0.7s ease-in-out;
+    }
+
+    #twitter-button{
+        display: block;
+        position: absolute;
+        top: 1%;
+        left: 0%;
+        width: 8vw;
+        height: 8vw;
+        background-color: white;
+        background-image: url("twitter_open.png");
+        background-size: cover;
+        transition: all 0.5s ease-in-out;
+    }
+
+    #twitter-band{
+        position: absolute;
+        width: 75vw;
+        height: 8vw;
+        top: 1%;
+        left: -75%;
+        background-color: white;
+        transition: all 0.5s ease-in-out;
+    }
+
+}
