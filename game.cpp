@@ -1062,7 +1062,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			// insert Inst to the world
 			int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
 			int reps[4] = { 0,0,0,0 };
-			h->inst = CreateInst(world, h->sprite, flags, h->pos, h->dir, h->anim, h->frame, reps, 0);
+			h->inst = CreateInst(world, h->sprite, flags, h->pos, h->dir, h->anim, h->frame, reps, 0, -1/*not storyline*/);
 
 			break;
 		}
@@ -2094,7 +2094,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 	int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
 	int reps[4] = { 0,0,0,0 };
-	g->player_inst = CreateInst(world, g->player.sprite, flags, pos, yaw, g->player.anim, g->player.frame, reps);
+	g->player_inst = CreateInst(world, g->player.sprite, flags, pos, yaw, g->player.anim, g->player.frame, reps, 0, -1/*not in story*/);
 
 	return g;
 }
@@ -2475,10 +2475,29 @@ bool Game::CheckDrop(int c, int drop_xy[2], AnsiCell* ptr, int width, int height
 					cp[1] < inventory.layout_y || 
 					cp[1] >= inventory.layout_y + inventory.layout_height)
 				{
-					// painting would require some kind of indication, red bk (+border)?
+					// TODO:
+					// check for NPCs to indicate GIVE
+					// we'd need to get a query of nearby sprites from render
+					// and check if they are getters (characters)
+					// PlayerHit(g)
+
 					if (ptr)
 					{
-						// TODO!
+						Item* item = input.contact[c].item;
+						Sprite::Frame* frame = item->proto->sprite_2d->atlas;
+						int y = cp[1] - frame->height/2 - 1;
+						if (y>=0 && y<height)
+						for (int i = 0; i < 5; i++)
+						{
+							int x = i + cp[0] - 2;
+							if (x >= 0 && x < width)
+							{
+								AnsiCell* ind = ptr + x + y * width;
+								ind->bk = AverageGlyph(ind, 0xF);
+								ind->gl = "DROP\x1F"[i];
+								ind->fg = white;
+							}
+						}
 					}
 
 					if (drop_xy)
@@ -3074,8 +3093,10 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int ss[2] = { scene_shift/2 , 0 };
 
-	Item** inrange = ::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
+	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss);
+
+	Item** inrange = GetNearbyItems(renderer);
 
 	{
 		AnsiCell status;

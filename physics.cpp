@@ -546,7 +546,7 @@ struct Physics
 		phys->soup_items ++;
 	}
 
-	static void SpriteCollect(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+	static void SpriteCollect(Inst* inst, Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
 	{
 		// no collisions with sprites at the moment
 	}

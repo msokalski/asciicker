@@ -194,16 +194,16 @@ bool Inventory::InsertItem(Item* item, int xy[2])
 
 	if (my_items < max_items)
 	{
-		DeleteInst(item->inst);
-
-		item->inst = 0;
-		item->purpose = Item::OWNED;
-
+		my_item[my_items].story_id = GetInstStoryID(item->inst);
 		my_item[my_items].xy[0] = xy[0];
 		my_item[my_items].xy[1] = xy[1];
 		my_item[my_items].item = item;
 		my_item[my_items].in_use = false;
 
+		DeleteInst(item->inst);
+
+		item->inst = 0;
+		item->purpose = Item::OWNED;
 
 		// set bitmask
 		int x0 = my_item[my_items].xy[0];
@@ -244,6 +244,8 @@ bool Inventory::RemoveItem(int index, float pos[3], float yaw)
 
 	Item* item = my_item[index].item;
 
+	int story_id = my_item[index].story_id;
+
 	// clear bitmask
 	int x0 = my_item[index].xy[0];
 	int x1 = x0 + (item->proto->sprite_2d->atlas->width + 1) / 4;
@@ -261,7 +263,7 @@ bool Inventory::RemoveItem(int index, float pos[3], float yaw)
 	if (pos)
 	{
 		item->purpose = Item::WORLD;
-		item->inst = CreateInst(world, item, flags, pos, yaw);
+		item->inst = CreateInst(world, item, flags, pos, yaw, story_id);
 		assert(item->inst);
 
 		// from flat to bvh
@@ -269,6 +271,11 @@ bool Inventory::RemoveItem(int index, float pos[3], float yaw)
 	}
 	else
 	{
+		if (story_id >= 0)
+		{
+			// eating story item !!!
+			// review your story line design skills!
+		}
 		DestroyItem(item);
 	}
 

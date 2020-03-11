@@ -31,13 +31,14 @@ void GetMeshBBox(Mesh* m, float bbox[6]);
 int GetMeshFaces(Mesh* m);
 void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie), void* cookie);
 
-Inst* CreateInst(World* w, Item* item, int flags, float pos[3], float yaw);
-Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name = 0);
-Inst* CreateInst(Mesh* m, int flags, const double tm[16] = 0, const char* name = 0);
+Inst* CreateInst(World* w, Item* item, int flags, float pos[3], float yaw, int story_id);
+Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name, int story_id);
+Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name, int story_id);
 void DeleteInst(Inst* i);
 
 Mesh* GetInstMesh(Inst* i);
 int GetInstFlags(Inst* i);
+int GetInstStoryID(Inst* i);
 bool GetInstTM(Inst* i, double tm[16]);
 void GetInstBBox(Inst* i, double bbox[6]);
 
@@ -61,7 +62,7 @@ enum INST_FLAGS
 struct QueryWorldCB
 {
 	void(*mesh_cb)(Mesh* m, double tm[16], void* cookie);
-	void(*sprite_cb)(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie);
+	void(*sprite_cb)(Inst* inst, Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie);
 };
 
 void QueryWorld(World* w, int planes, double plane[][4], QueryWorldCB* cb, void* cookie);

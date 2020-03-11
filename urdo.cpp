@@ -80,6 +80,7 @@ struct URDO_InstCreate : URDO
 
 	int flags;
 	Inst* inst;
+	int story_id;
 
 	union
 	{
@@ -110,9 +111,9 @@ struct URDO_InstCreate : URDO
 	};
 
 	static void Delete(Inst* i);
-	static Inst* Create(Mesh* m, int flags, double tm[16]);
-	static Inst* Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4]);
-	static Inst* Create(World* w, Item* item, int flags, float pos[3], float yaw);
+	static Inst* Create(Mesh* m, int flags, double tm[16], int story_id);
+	static Inst* Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], int story_id);
+	static Inst* Create(World* w, Item* item, int flags, float pos[3], float yaw, int story_id);
 
 	void Do(bool un);
 };
@@ -461,25 +462,25 @@ void URDO_Close()
 	URDO_Group::Close();
 }
 
-Inst* URDO_Create(Mesh* m, int flags, double tm[16])
+Inst* URDO_Create(Mesh* m, int flags, double tm[16], int story_id)
 {
 	assert(group_open < 64);
 
-	return URDO_InstCreate::Create(m,flags,tm);
+	return URDO_InstCreate::Create(m,flags,tm, story_id);
 }
 
-Inst* URDO_Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4])
+Inst* URDO_Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], int story_id)
 {
 	assert(group_open < 64);
 
-	return URDO_InstCreate::Create(w,s,flags,pos,yaw,anim,frame,reps);
+	return URDO_InstCreate::Create(w,s,flags,pos,yaw,anim,frame,reps,story_id);
 }
 
-Inst* URDO_Create(World* w, Item* item, int flags, float pos[3], float yaw)
+Inst* URDO_Create(World* w, Item* item, int flags, float pos[3], float yaw, int story_id)
 {
 	assert(group_open < 64);
 
-	return URDO_InstCreate::Create(w, item, flags, pos, yaw);
+	return URDO_InstCreate::Create(w, item, flags, pos, yaw, story_id);
 }
 
 void URDO_Delete(Inst* i)
@@ -698,6 +699,7 @@ void URDO_InstCreate::Delete(Inst* i)
 
 	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
 
+	urdo->story_id = GetInstStoryID(i);
 	urdo->mesh = GetInstMesh(i); // needed?
 	urdo->flags = GetInstFlags(i);
 	GetInstTM(i, urdo->tm);
@@ -709,7 +711,7 @@ void URDO_InstCreate::Delete(Inst* i)
 	urdo->inst = 0;
 }
 
-Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16])
+Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16], int story_id)
 {
 	if (!group_open)
 		PurgeRedo();
@@ -720,12 +722,12 @@ Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16])
 	urdo->mesh = 0;
 	urdo->flags = 0;
 	memset(urdo->tm, 0, sizeof(double[16]));
-	urdo->inst = CreateInst(m,flags,tm,0);
+	urdo->inst = CreateInst(m,flags,tm,0,story_id);
 
 	return urdo->inst;
 }
 
-Inst* URDO_InstCreate::Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4])
+Inst* URDO_InstCreate::Create(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], int story_id)
 {
 	if (!group_open)
 		PurgeRedo();
@@ -735,12 +737,12 @@ Inst* URDO_InstCreate::Create(World* w, Sprite* s, int flags, float pos[3], floa
 	urdo->mode = 1; // sprite
 	urdo->w = w;
 	urdo->flags = 0;
-	urdo->inst = CreateInst(w,s,flags,pos,yaw,anim,frame,reps,0);
+	urdo->inst = CreateInst(w,s,flags,pos,yaw,anim,frame,reps,0,story_id);
 
 	return urdo->inst;
 }
 
-Inst* URDO_InstCreate::Create(World* w, Item* item, int flags, float pos[3], float yaw)
+Inst* URDO_InstCreate::Create(World* w, Item* item, int flags, float pos[3], float yaw, int story_id)
 {
 	if (!group_open)
 		PurgeRedo();
@@ -750,7 +752,7 @@ Inst* URDO_InstCreate::Create(World* w, Item* item, int flags, float pos[3], flo
 	urdo->mode = 2; // item
 	urdo->w = w;
 	urdo->flags = 0;
-	urdo->inst = CreateInst(w, item, flags, pos, yaw);
+	urdo->inst = CreateInst(w, item, flags, pos, yaw, story_id);
 
 	return urdo->inst;
 }
@@ -762,10 +764,11 @@ void URDO_InstCreate::Do(bool un)
 	{
 		if (!inst)
 		{
-			inst = CreateInst(mesh, flags, tm);
+			inst = CreateInst(mesh, flags, tm, 0, story_id);
 		}
 		else
 		{
+			story_id = GetInstStoryID(inst);
 			mesh = GetInstMesh(inst);
 			flags = GetInstFlags(inst);
 			GetInstTM(inst, tm);
@@ -780,10 +783,11 @@ void URDO_InstCreate::Do(bool un)
 	{
 		if (!inst)
 		{
-			inst = CreateInst(w,s,flags, pos,yaw,anim,frame,reps,0);
+			inst = CreateInst(w,s,flags, pos,yaw,anim,frame,reps,0,story_id);
 		}
 		else
 		{
+			story_id = GetInstStoryID(inst);
 			s = GetInstSprite(inst, pos,&yaw,&anim,&frame,reps);
 			flags = GetInstFlags(inst);
 			DeleteInst(inst);
@@ -797,10 +801,11 @@ void URDO_InstCreate::Do(bool un)
 	{
 		if (!inst)
 		{
-			inst = CreateInst(w, item, flags, pos, yaw);
+			inst = CreateInst(w, item, flags, pos, yaw, story_id);
 		}
 		else
 		{
+			story_id = GetInstStoryID(inst);
 			item = GetInstItem(inst, pos, &yaw);
 			flags = GetInstFlags(inst);
 			DeleteInst(inst);

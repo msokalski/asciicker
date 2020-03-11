@@ -36,6 +36,7 @@ struct Inventory
 	{
 		Item* item;
 		int xy[2];
+		int story_id;
 
 		bool in_use;
 	};

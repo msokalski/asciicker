@@ -51,10 +51,13 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		
 			const int scene_shift[2]); // special fx
 */
 
-Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		// scene
+void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		// scene
 	float zoom, float yaw, const float pos[3], const float lt[4],	// view
 	int width, int height, AnsiCell* ptr,  // target
 	Inst* player, // player
 	const int scene_shift[2]); // special fx
 
 void ProjectCoords(Renderer* r, const float pos[3], int view[3]); // like a sprite!
+
+Item** GetNearbyItems(Renderer* r);
+Inst** GetNearbyCharacters(Renderer* r);

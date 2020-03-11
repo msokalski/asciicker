@@ -159,6 +159,7 @@ struct Inst : BSP
 
 	INST_TYPE inst_type;
 	char* name;
+	int story_id;
 
     // in BSP_Leaf::inst / BSP_NodeShare::inst
 	Inst* next;
@@ -407,9 +408,10 @@ struct World
     Inst* head_inst; 
     Inst* tail_inst;
 
-	Inst* AddInst(Item* item, int flags, float pos[3], float yaw)
+	Inst* AddInst(Item* item, int flags, float pos[3], float yaw, int story_id)
 	{
 		ItemInst* i = AllocItemInst();
+		i->story_id = story_id;
 		i->name = 0;
 		i->inst_type = Inst::INST_TYPE::ITEM;
 		i->w = this;
@@ -450,9 +452,10 @@ struct World
 		return i;
 	}
 
-	Inst* AddInst(Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name)
+	Inst* AddInst(Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name, int story_id)
 	{
 		SpriteInst* i = (SpriteInst*)malloc(sizeof(SpriteInst));
+		i->story_id = story_id;
 		i->inst_type = Inst::INST_TYPE::SPRITE;
 		i->w = this;
 		i->sprite = s;
@@ -497,13 +500,14 @@ struct World
 		return i;
 	}
 
-    Inst* AddInst(Mesh* m, int flags, const double tm[16], const char* name)
+    Inst* AddInst(Mesh* m, int flags, const double tm[16], const char* name, int story_id)
     {
         if (!m || m->world != this)
             return 0;
 
 		MeshInst* i = (MeshInst*)malloc(sizeof(MeshInst));
 
+		i->story_id = story_id;
 		i->inst_type = Inst::INST_TYPE::MESH;
 
 		if (tm)
@@ -1897,13 +1901,13 @@ struct World
 			{
 				SpriteInst* si = (SpriteInst*)i;
 				if (i->flags & INST_FLAGS::INST_VISIBLE)
-					cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
+					cb->sprite_cb(si, si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
 			}
 			else
 			if (i->inst_type == Inst::INST_TYPE::ITEM)
 			{
 				ItemInst* si = (ItemInst*)i;
-				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, -1, si->item->purpose, (int*)si->item, cookie);
+				cb->sprite_cb(si, si->item->proto->sprite_3d, si->pos, si->yaw, -1, si->item->purpose, (int*)si->item, cookie);
 			}
         }
         else
@@ -2002,13 +2006,13 @@ struct World
 			{
 				SpriteInst* si = (SpriteInst*)i;
 				if (i->flags & INST_FLAGS::INST_VISIBLE)
-					cb->sprite_cb(si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
+					cb->sprite_cb(si,si->sprite, si->pos, si->yaw, si->anim, si->frame, si->reps, cookie);
 			}
 			else
 			if (i->inst_type == Inst::INST_TYPE::ITEM)
 			{
 				ItemInst* si = (ItemInst*)i;
-				cb->sprite_cb(si->item->proto->sprite_3d, si->pos, si->yaw, -1, si->item->purpose, (int*)si->item, cookie);
+				cb->sprite_cb(si, si->item->proto->sprite_3d, si->pos, si->yaw, -1, si->item->purpose, (int*)si->item, cookie);
 			}
 		}
         else
@@ -2294,7 +2298,7 @@ static void CloneItemInsts(World* w, BSP* bsp)
 					memcpy(clone, item, sizeof(Item));
 					clone->purpose = Item::WORLD;
 					clone->inst = 0;
-					clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw);
+					clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw, ((ItemInst*)i)->story_id);
 				}
 			}
             i=i->next;
@@ -2313,7 +2317,7 @@ static void CloneItemInsts(World* w, BSP* bsp)
 				memcpy(clone, item, sizeof(Item));
 				clone->purpose = Item::WORLD;
 				clone->inst = 0;
-				clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw);
+				clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw, ((ItemInst*)i)->story_id);
 			}
 		}
 	}
@@ -2346,7 +2350,7 @@ static void CloneItemInsts(World* w, BSP* bsp)
 					memcpy(clone, item, sizeof(Item));
 					clone->purpose = Item::WORLD;
 					clone->inst = 0;
-					clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw);
+					clone->inst = CreateInst(w, clone, i->flags, ((ItemInst*)i)->pos, ((ItemInst*)i)->yaw, ((ItemInst*)i)->story_id);
 				}
 			}
 			i=i->next;
@@ -3182,25 +3186,25 @@ void DeleteMesh(Mesh* m)
     m->world->DelMesh(m);
 }
 
-Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name)
+Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name, int story_id)
 {
     if (!m)
         return 0;
-    return m->world->AddInst(m,flags,tm,name);
+    return m->world->AddInst(m,flags,tm,name,story_id);
 }
 
-Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name)
+Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int anim, int frame, int reps[4], const char* name, int story_id)
 {
 	if (!s)
 		return 0;
-	return w->AddInst(s, flags, pos, yaw, anim, frame, reps, name);
+	return w->AddInst(s, flags, pos, yaw, anim, frame, reps, name, story_id);
 }
 
-Inst* CreateInst(World* w, Item* item, int flags, float pos[3], float yaw)
+Inst* CreateInst(World* w, Item* item, int flags, float pos[3], float yaw, int story_id)
 {
 	if (!item)
 		return 0;
-	return w->AddInst(item, flags, pos, yaw);
+	return w->AddInst(item, flags, pos, yaw, story_id);
 }
 
 void DeleteInst(Inst* i)
@@ -3380,6 +3384,7 @@ static void SaveInst(Inst* inst, FILE* f)
 
 		fwrite(i->tm, 1, 16 * 8, f);
 		fwrite(&i->flags, 1, 4, f);
+		fwrite(&i->story_id, 1, 4, f);
 	}
 	else
 	if (inst->inst_type == Inst::INST_TYPE::SPRITE)
@@ -3404,6 +3409,7 @@ static void SaveInst(Inst* inst, FILE* f)
 		fwrite(&i->frame, 1, sizeof(int), f);
 		fwrite(&i->reps, 1, sizeof(int[4]), f);
 		fwrite(&i->flags, 1, 4, f);
+		fwrite(&i->story_id, 1, 4, f);
 	}
 	else
 	if (inst->inst_type == Inst::INST_TYPE::ITEM)
@@ -3431,6 +3437,7 @@ static void SaveInst(Inst* inst, FILE* f)
 			fwrite(&i->yaw, 1, sizeof(float), f);
 
 			fwrite(&i->flags, 1, 4, f);
+			fwrite(&i->story_id, 1, 4, f);
 		}
 	}
 }
@@ -3486,17 +3493,14 @@ static void SaveQueryBSP(BSP* bsp, FILE* f)
 
 void SaveWorld(World* w, FILE* f)
 {
-    /*
-    int num_of_instances;
-    {
-        int mesh_id_len;
-        char mesh_id[mesh_id_len];
-        int inst_name_len;
-        char inst_name[inst_name_len];
-        double tm[16];
-        int flags;
-    } [num_of_instances];
-    */
+	int format_version = -1;
+
+	/*
+		VERSION: -1 
+		- adds format_version (before num_of_instances which must be >= 0 and version must be < 0) 
+		- adds per instance: Inst::story_id
+	*/
+	fwrite(&format_version, 1, 4, f);
 
     int num_of_instances = w->insts - w->temp_insts;
     fwrite(&num_of_instances,1,4,f);
@@ -3531,6 +3535,18 @@ World* LoadWorld(FILE* f, bool editor)
         DeleteWorld(w);
         return 0;
     }
+
+	int format_version = 0; // all till y4
+
+	if (num_of_instances < 0)
+	{
+		format_version = -num_of_instances;
+		if (1 != fread(&num_of_instances, 4, 1, f))
+		{
+			DeleteWorld(w);
+			return 0;
+		}
+	}
     
     for (int i=0; i<num_of_instances; i++)
     {
@@ -3545,11 +3561,13 @@ World* LoadWorld(FILE* f, bool editor)
 		{
 			char mesh_id[256] = "";
 			if (mesh_id_len)
+			{
 				if (1 != fread(mesh_id, mesh_id_len, 1, f))
 				{
 					DeleteWorld(w);
 					return 0;
 				}
+			}
 			mesh_id[mesh_id_len] = 0;
 
 			int inst_name_len = 0;
@@ -3561,11 +3579,13 @@ World* LoadWorld(FILE* f, bool editor)
 
 			char inst_name[256] = "";
 			if (inst_name_len)
+			{
 				if (1 != fread(inst_name, inst_name_len, 1, f))
 				{
 					DeleteWorld(w);
 					return 0;
 				}
+			}
 			inst_name[inst_name_len] = 0;
 
 			double tm[16] = { 0 };
@@ -3582,6 +3602,16 @@ World* LoadWorld(FILE* f, bool editor)
 				return 0;
 			}
 
+			int story_id = -1;
+			if (format_version > 0)
+			{
+				if (1 != fread(&story_id, 4, 1, f))
+				{
+					DeleteWorld(w);
+					return 0;
+				}
+			}
+
 			// mesh id lookup
 			Mesh* m = w->head_mesh;
 			while (m && strcmp(m->name, mesh_id))
@@ -3590,7 +3620,7 @@ World* LoadWorld(FILE* f, bool editor)
 			if (!m)
 				m = w->AddMesh(mesh_id);
 
-			Inst* inst = CreateInst(m, flags, tm, inst_name);
+			Inst* inst = CreateInst(m, flags, tm, inst_name, story_id);
 		}
 		else
 		if (mesh_id_len == -1)
@@ -3624,12 +3654,22 @@ World* LoadWorld(FILE* f, bool editor)
 			fread(reps, 1, sizeof(int[4]), f);
 			fread(&flags, 1, 4, f);
 
+			int story_id = -1;
+			if (format_version > 0)
+			{
+				if (1 != fread(&story_id, 4, 1, f))
+				{
+					DeleteWorld(w);
+					return 0;
+				}
+			}
+
 			Sprite* s = GetFirstSprite();
 			while (s)
 			{
 				if (strcmp(inst_name, s->name) == 0)
 				{
-					CreateInst(w, s, flags, pos, yaw, anim, frame, reps, 0);
+					CreateInst(w, s, flags, pos, yaw, anim, frame, reps, 0, story_id);
 					break;
 				}
 
@@ -3654,6 +3694,16 @@ World* LoadWorld(FILE* f, bool editor)
 			int flags;
 			fread(&flags, 1, 4, f);
 
+			int story_id = -1;
+			if (format_version > 0)
+			{
+				if (1 != fread(&story_id, 4, 1, f))
+				{
+					DeleteWorld(w);
+					return 0;
+				}
+			}
+
 			Item* item = CreateItem();
 
 			if (!editor)
@@ -3662,7 +3712,7 @@ World* LoadWorld(FILE* f, bool editor)
 			item->count = count;
 			item->proto = item_proto_lib + item_proto_index;
 			item->purpose = editor ? Item::EDIT : Item::WORLD;
-			item->inst = CreateInst(w, item, flags, pos, yaw);
+			item->inst = CreateInst(w, item, flags, pos, yaw, story_id);
 
 			if (editor)
 			{
@@ -3670,7 +3720,7 @@ World* LoadWorld(FILE* f, bool editor)
 				Item* clone = CreateItem(); // (Item*)malloc(sizeof(Item));
 				memcpy(clone, item, sizeof(Item));
 				clone->purpose = Item::WORLD;
-				clone->inst = CreateInst(w, clone, flags | INST_FLAGS::INST_VOLATILE, pos, yaw);
+				clone->inst = CreateInst(w, clone, flags | INST_FLAGS::INST_VOLATILE, pos, yaw, story_id);
 			}
 		}
     }
@@ -3694,6 +3744,11 @@ Mesh* GetInstMesh(Inst* i)
 int GetInstFlags(Inst* i)
 {
 	return i->flags;
+}
+
+int GetInstStoryID(Inst* i)
+{
+	return i->story_id;
 }
 
 bool GetInstTM(Inst* i, double tm[16])

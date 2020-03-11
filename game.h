@@ -186,9 +186,6 @@ struct Game
 
 	TalkMem talk_mem[4];
 
-	int npcs;
-	Character* npc;
-
 	Inst* player_inst;
 
 	void CancelItemContacts();

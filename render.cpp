@@ -2,6 +2,7 @@
 // this is CPU scene renderer into ANSI framebuffer
 #include "render.h"
 #include "sprite.h"
+//#include "game.h"
 
 #include <stdint.h>
 #include <malloc.h>
@@ -301,15 +302,20 @@ struct Renderer
 	SpriteRenderBuf* sprites_alloc;
 
 	static const int max_items = 9; // picking with keyb: 1-9, 0-drop
-	int items, sorts;
+	int items;
 	Item* item_sort[max_items+1]; // +1 for null-terminator
 	float item_dist[max_items];
+
+	static const int max_npcs = 3;
+	int npcs;
+	Inst* npc_sort[max_npcs+1]; // (SpriteInst) non players!  +1 for null-terminator
+	float npc_dist[max_npcs];
 
 	uint8_t* buffer;
 	int buffer_size; // ansi_buffer allocation size in cells (minimize reallocs)
 
 	static void RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie /*Renderer*/);
-	static void RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/);
+	static void RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/);
 	static void RenderMesh(Mesh* m, double* tm, void* cookie /*Renderer*/);
 	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie /*Renderer*/);
 	
@@ -665,11 +671,11 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	}
 }
 
-void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/)
+void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie /*Renderer*/)
 {
 	Renderer* r = (Renderer*)cookie;
 
-	if (anim < 0)
+	if (anim < 0) // ITEM!
 	{
 		int purpose = frame;
 		Item* item = (Item*)reps;
@@ -701,7 +707,6 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 						int last = r->items < r->max_items ? r->items : r->max_items - 1;
 						for (int move = last; move > sort; move--)
 						{
-							r->sorts++;
 							r->item_sort[move] = r->item_sort[move - 1];
 							r->item_dist[move] = r->item_dist[move - 1];
 						}
@@ -715,6 +720,40 @@ void Renderer::RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int fr
 					if (r->items < r->max_items)
 						r->items++;
 				}
+			}
+		}
+	}
+	else // NPC
+	{
+		float dx = r->pos[0] - pos[0];
+		float dy = r->pos[1] - pos[1];
+		float dz = (r->pos[2] + 3 * HEIGHT_SCALE - pos[2]) / HEIGHT_SCALE;
+
+		float dist = dx * dx + dy * dy + dz * dz;
+
+		float max_item_dist = 100;
+		if (dist < max_item_dist)
+		{
+			int sort = 0;
+			for (; sort < r->npcs; sort++)
+			{
+				if (dist < r->npc_dist[sort])
+				{
+					int last = r->npcs < r->max_npcs ? r->npcs : r->max_npcs - 1;
+					for (int move = last; move > sort; move--)
+					{
+						r->npc_sort[move] = r->npc_sort[move - 1];
+						r->npc_dist[move] = r->npc_dist[move - 1];
+					}
+					break;
+				}
+			}
+			if (sort < r->max_npcs)
+			{
+				r->npc_sort[sort] = inst;
+				r->npc_dist[sort] = dist;
+				if (r->npcs < r->max_npcs)
+					r->npcs++;
 			}
 		}
 	}
@@ -1857,7 +1896,17 @@ void DeleteRenderer(Renderer* r)
 	free(r);
 }
 
-Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Inst* inst, const int scene_shift[2])
+Item** GetNearbyItems(Renderer* r)
+{
+	return r->item_sort;
+}
+
+Inst** GetNearbyCharacters(Renderer* r)
+{
+	return r->npc_sort;
+}
+
+void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Inst* inst, const int scene_shift[2])
 {
 
 	if (inst)
@@ -2069,7 +2118,7 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 	}
 
 	r->items = 0;
-	r->sorts = 0;
+	r->npcs = 0;
 
 	r->sprites = 0;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
@@ -2890,8 +2939,6 @@ Item** Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, fl
 	r->add[0] = proj_tm[6]; 
 	r->add[1] = proj_tm[7]; 
 	r->add[2] = proj_tm[8];
-
-	return r->item_sort;
 }
 
 void ProjectCoords(Renderer* r, const float pos[3], int view[3])

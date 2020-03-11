@@ -54,3 +54,4 @@ void PaintFrame(AnsiCell* ptr, int width, int height, int x, int y, int w, int h
 void FillRect(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, AnsiCell ac);
 
 int AverageGlyph(const AnsiCell* ptr, int mask);
+int DarkenGlyph(const AnsiCell* ptr);

@@ -783,11 +783,13 @@ int ServerLoop(const char* port)
 		return 1;
 	}
 
+	#ifndef _WIN32
     int optval = 1;
-    if (setsockopt(ListenSocket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval)) != 0)
+    if (setsockopt(ListenSocket, SOL_SOCKET, SO_REUSEPORT, (const char*)&optval, sizeof(optval)) != 0)
 	{
 		// ok we can live without it
 	}
+	#endif
 
 	// Setup the TCP listening socket
 	iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
@@ -827,7 +829,7 @@ int ServerLoop(const char* port)
 		if (ClientSocket != INVALID_TCP_SOCKET)
 		{
 			int optval = 1;
-			if (setsockopt(ClientSocket, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) != 0)
+			if (setsockopt(ClientSocket, SOL_SOCKET, SO_KEEPALIVE, (const char*)&optval, sizeof(optval)) != 0)
 			{
 				// ok we can live without it
 			}

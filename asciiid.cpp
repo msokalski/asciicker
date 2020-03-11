@@ -171,7 +171,7 @@ struct Merge
 		}
 	}
 
-	static void CommitSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+	static void CommitSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
 	{
 		assert(0);
 	}
@@ -197,7 +197,7 @@ struct Merge
 			if (strcmp(mesh_name, mesh_name2) == 0)
 			{
 				//CreateInst(m2, flags, ttm, 0);
-				URDO_Create(m2, flags, ttm);
+				URDO_Create(m2, flags, ttm, -1/*dont merge story_id*/);
 				break;
 			}
 
@@ -2119,54 +2119,9 @@ struct RenderContext
 		}
 	}
 
-	static void RenderSprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+	static void RenderFrame(Sprite::Frame* f, float pos[3], void* cookie)
 	{
-		if (anim<0)
-		{
-			int purpose = frame;
-			Item* item = (Item*)reps;
-			if (purpose != Item::EDIT)
-				return;
-			anim = frame = 0;
-
-			static int _reps[4] = { -1,-1,-1,-1 };
-			reps = _reps;
-		}
-
 		RenderContext* rc = (RenderContext*)cookie;
-
-		if (rc->mesh_faces)
-		{
-			// flush
-			glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
-			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
-			rc->mesh_faces = 0;
-		}
-
-		// flushed, safe to change uniforms
-
-
-		float ftm[16] = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
-		glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, ftm);
-
-		/*
-		if (GetMeshWorld(m) == merge._world)
-		{
-			ftm[12] += merge.dx * VISUAL_CELLS;
-			ftm[13] += merge.dy * VISUAL_CELLS;
-		}
-		*/
-
-
-		// draw temporarily a black billboard 
-		float angle = yaw;
-		int ang = (int)floor((angle - rot_yaw) * s->angles / 360.0f + 0.5f);
-		ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
-
-		int i = frame + ang * s->anim[anim].length;
-		//if (proj && s->projs > 1)
-		//	i += s->anim[anim].length * s->angles;
-		Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
 
 		float zoom = 2.0 / 3.0;
 		float cos30 = cosf(30 * M_PI / 180);
@@ -2230,12 +2185,12 @@ struct RenderContext
 
 		glUniform2i(rc->mesh_sprite_wh_loc, f->width, f->height);
 		glUniform2i(rc->mesh_ansi_wh_loc, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
-		glUniform2i(rc->mesh_ansi_depth_ofs_loc, (int)floorf(pos[2]+0.5), f->ref[2] );
+		glUniform2i(rc->mesh_ansi_depth_ofs_loc, (int)floorf(pos[2] + 0.5), f->ref[2]);
 
 		for (int face = 0; face < 2; face++)
 		{
-			memcpy(rc->mesh_map[rc->mesh_faces].abc, (float*)coords + 9*face, sizeof(float[9]));
-			memcpy(rc->mesh_map[rc->mesh_faces].clr, (uint8_t*)colors + 12*face, sizeof(uint8_t[12]));
+			memcpy(rc->mesh_map[rc->mesh_faces].abc, (float*)coords + 9 * face, sizeof(float[9]));
+			memcpy(rc->mesh_map[rc->mesh_faces].clr, (uint8_t*)colors + 12 * face, sizeof(uint8_t[12]));
 			rc->mesh_map[rc->mesh_faces].visual = 1; // MatID!=0 -> sprite
 			rc->mesh_faces++;
 		}
@@ -2262,10 +2217,87 @@ struct RenderContext
 			glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, f->width, cpy_h, GL_RGBA, GL_UNSIGNED_BYTE, f->cell);
 		}
 
-		// flush
+
 		glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
 		glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
 		rc->mesh_faces = 0;
+	}
+
+	static void RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+	{
+		if (anim<0)
+		{
+			int purpose = frame;
+			Item* item = (Item*)reps;
+			if (purpose != Item::EDIT)
+				return;
+			anim = frame = 0;
+
+			static int _reps[4] = { -1,-1,-1,-1 };
+			reps = _reps;
+		}
+
+		RenderContext* rc = (RenderContext*)cookie;
+
+		if (rc->mesh_faces)
+		{
+			// flush
+			glBufferSubData(GL_ARRAY_BUFFER, 0, rc->mesh_faces * sizeof(Face), rc->mesh_map);
+			glDrawArrays(GL_POINTS, 0, rc->mesh_faces);
+			rc->mesh_faces = 0;
+		}
+
+		// flushed, safe to change uniforms
+
+
+		float ftm[16] = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+		glUniformMatrix4fv(rc->mesh_inst_tm_loc, 1, GL_FALSE, ftm);
+
+		/*
+		if (GetMeshWorld(m) == merge._world)
+		{
+			ftm[12] += merge.dx * VISUAL_CELLS;
+			ftm[13] += merge.dy * VISUAL_CELLS;
+		}
+		*/
+
+		// draw temporarily a black billboard 
+		float angle = yaw;
+		int ang = (int)floor((angle - rot_yaw) * s->angles / 360.0f + 0.5f);
+		ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
+
+		int i = frame + ang * s->anim[anim].length;
+		//if (proj && s->projs > 1)
+		//	i += s->anim[anim].length * s->angles;
+		Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
+
+		RenderFrame(f, pos, cookie);
+
+		if (inst)
+		{
+			AnsiCell id[32];
+			Sprite::Frame id_frame;
+			char idstr[16];
+
+			int len = sprintf(idstr, "%d", GetInstStoryID(inst));
+
+			id_frame.cell = id;
+			id_frame.width = len;
+			id_frame.height = 1;
+			id_frame.ref[0] = len;
+			id_frame.ref[1] = +3;
+			id_frame.ref[2] = +4;
+
+			for (int x = 0; x < len; x++)
+			{
+				id[x].fg = 16 + 215;
+				id[x].gl = idstr[x];
+				id[x].bk = 16;
+				id[x].spare = 0;
+			}
+
+			RenderFrame(&id_frame, pos, cookie);
+		}
 	}
 
 	static void RenderMesh(Mesh* m, double tm[16], void* cookie)
@@ -3570,7 +3602,7 @@ void TranslateMap(int delta_z, bool water_limit)
 			UpdateTerrainHeightMap(p);
 		}
 
-		static void QuerySprite(Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
+		static void QuerySprite(Inst* inst, Sprite* s, float pos[3], float yaw, int anim, int frame, int reps[4], void* cookie)
 		{
 			assert(0);
 		}
@@ -6554,11 +6586,13 @@ void my_render(A3D_WND* wnd)
 							MatProduct(ztm, ptm, tm2);
 							MatProduct(tm1, tm2, inst_tm);
 
+							int story_id = -1; // READ IT FROM UI
+
 							if (!inst_added && io.MouseDown[0])
 							{
 								int flags = INST_USE_TREE | INST_VISIBLE;
 								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
-								inst = URDO_Create(active_mesh, flags, inst_tm);
+								inst = URDO_Create(active_mesh, flags, inst_tm, story_id);
 
 								inst_added = true;
 								RebuildWorld(world);
@@ -6641,7 +6675,9 @@ void my_render(A3D_WND* wnd)
 							int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
 							float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
 
-							inst = URDO_Create(world, active_sprite, flags, pos, _yaw, _anim, _frame, sp->t);
+							int story_id = -1; // READ IT FROM UI
+
+							inst = URDO_Create(world, active_sprite, flags, pos, _yaw, _anim, _frame, sp->t, story_id);
 
 							inst_added = true;
 							RebuildWorld(world);
@@ -6724,12 +6760,14 @@ void my_render(A3D_WND* wnd)
 
 							float pos[3] = { hit[0], hit[1], hit[2] };
 
+							int story_id = -1; // READ IT FROM UI
+
 							Item* item = CreateItem();
 							item->proto = item_proto_lib + active_item;
 							item->count = 1;
 							item->purpose = Item::EDIT;
 							item->inst = 0;
-							item->inst = URDO_Create(world, item, flags, pos, 0);
+							item->inst = URDO_Create(world, item, flags, pos, 0, story_id);
 
 							// and world clone
 							Item* clone = CreateItem();
@@ -6737,7 +6775,7 @@ void my_render(A3D_WND* wnd)
 							clone->count = 1;
 							clone->purpose = Item::WORLD;
 							clone->inst = 0;
-							clone->inst = CreateInst(world, clone, flags | INST_VOLATILE, pos, 0);
+							clone->inst = CreateInst(world, clone, flags | INST_VOLATILE, pos, 0, story_id);
 
 							inst_added = true;
 							RebuildWorld(world);
@@ -6933,7 +6971,7 @@ void my_render(A3D_WND* wnd)
 	{
 		if (item_preview_sprite)
 		{
-			RenderContext::RenderSprite(item_preview_sprite, sprite_preview_pos, 0, -1, Item::EDIT, 0, rc);
+			RenderContext::RenderSprite(0, item_preview_sprite, sprite_preview_pos, 0, -1, Item::EDIT, 0, rc);
 		}
 		else
 		{
@@ -6941,7 +6979,7 @@ void my_render(A3D_WND* wnd)
 			int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
 			int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
 			float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
-			RenderContext::RenderSprite(active_sprite, sprite_preview_pos, _yaw, _anim, _frame, sp->t, rc);
+			RenderContext::RenderSprite(0, active_sprite, sprite_preview_pos, _yaw, _anim, _frame, sp->t, rc);
 		}
 	}
 
