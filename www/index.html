@@ -1,108 +1,238 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <link href="style.css" rel="stylesheet">  
+	<meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ASCIICKER - Let's kick some ASCII</title>
+    <style>
+
+
+        @font-face {
+            font-family: "myfont";
+            src: url("PxPlus_IBM_CGAthin.woff") format('woff'),
+                 url("PxPlus_IBM_CGAthin.ttf") format('ttf');
+        }
+
+        h1
+        {
+		  max-width: 600px;
+		
+            font-family: myfont;
+            font-size: 30px;
+			line-height: 70px;
+        }
+		
+        h2
+        {
+		  max-width: 600px;
+		
+            font-family: myfont;
+            font-size: 24px;
+			line-height: 56px;
+        }		
+
+		a
+		{
+		  text-shadow: 0px 5px 5px rgba(0,0,0,1.0);
+		  padding: 15px;
+		  background-color: rgba(0,0,0,0.0);
+		  transition: background-color 0.5s ease;
+		}
+
+		h1 > a
+		{
+			color: #ffa;
+		}
+
+		h2 > a
+		{
+			color: #dda;
+		}
+		
+		h1 > a:hover, h2 > a:hover
+		{
+		    background-color: rgba(0,0,0,0.5);
+			transition: background-color 0.1s ease;
+		}
+		
+
+        html, body
+		{
+			margin: 0;
+			padding: 0;
+			border: 0;
+            overflow-x: hidden;
+		}
+		
+		body
+		{
+			background-color:#000000;
+		}
+		
+		.thing 
+		{
+		  display: flex;
+		  flex-direction: column;
+		  justify-content: center;
+		  align-items: center;
+		  text-align: center;
+		  min-height: 100vh;
+		  
+		  background-image: url(background.png);
+		  background-repeat: no-repeat;
+		  background-position: center;
+		  background-size: cover;
+		}
+
+		#panel
+		{
+			position:absolute; 
+			top:0px; 
+			left: 0px; 
+			overflow-x: hidden; 
+			overflow-y: hidden; 
+			height:100%; 
+			transform:translate(-100%,0); 
+			transition: transform 0.3s ease;"
+		}
+		
+		#tw_but
+		{
+			position:absolute; 
+			top:0; 
+			left:0; 
+			width:64px; 
+			height:64px; 
+			background-image:url(twitter.png); 
+			background-size: cover;"
+		}
+		
+		#dc_but
+		{
+			position:absolute; 
+			top:0; 
+			right:0; 
+			width:64px; 
+			height:64px; 
+			background-image:url(discord.png); 
+			background-size: cover;
+		}
+		
+		#rd_but
+		{
+			position:absolute; 
+			top:0; 
+			left:50%; 
+			transform: translate(-50%,0); 
+			width:64px; 
+			height:64px; 
+			background-image:url(reddit.png); 
+			background-size: cover;"
+		}
+
+    </style>
+	
+	<script>
+		window.twttr = (function (d, s, id) {
+			var js, fjs = d.getElementsByTagName(s)[0],
+				t = window.twttr || {};
+			if (d.getElementById(id)) return;
+			js = d.createElement(s);
+			js.id = id;
+			js.src = "https://platform.twitter.com/widgets.js";
+			fjs.parentNode.insertBefore(js, fjs);
+
+			t._e = [];
+			t.ready = function (f) {
+				t._e.push(f);
+			};
+
+			return t;
+		}(document, "script", "twitter-wjs"));
+
+		twttr.ready(function (twttr) {
+			twttr.events.bind("rendered", function (event) {
+				var frameDoc = event.target.contentDocument;
+
+				// initially hide retweets
+				var hideRetweets = function () {
+					var retweets = frameDoc.querySelectorAll('div.timeline-Tweet--isRetweet');
+					retweets.forEach(function (node) {
+						if (node.parentNode && node.parentNode.style !== 'display: none;') { // (in)sanity check
+							node.parentNode.style = 'display: none;' // hide entire parent li tag
+						}
+					});
+				};
+
+				hideRetweets();
+
+				// Twitter widget emitts no events on updates so we hook up ourselves to ol element to listen on it for additions of children
+				var watcher = new MutationObserver(function (mutations) {
+					// check whether new tweets arrived
+					var hasNewTweets = mutations.some(function (mutation) {
+						return mutation.addedNodes.length > 0;
+					});
+					if (hasNewTweets) {
+						hideRetweets(); // rescan all tweets as it is easier
+					}
+				});
+				watcher.observe(frameDoc.querySelector('ol.timeline-TweetList'), { childList: true });
+			});
+		});	
+
+		function click_off(e)
+		{
+			e.stopPropagation();
+			var panel = document.getElementById("panel");
+			if (panel)
+			{
+				var but = document.getElementById("tw_but");
+				if (but)
+					but.style.visibility = "visible";
+				panel.style.transform = "translate(-100%,0)";
+				window.onclick = null;
+			}
+		}
+
+		function click_on(e)
+		{
+			e.stopPropagation();
+			var panel = document.getElementById("panel");
+			if (panel)
+			{
+				var but = document.getElementById("tw_but");
+				if (but)
+					but.style.visibility = "hidden";
+				panel.style.transform = "translate(0%,0)";
+				window.onclick = click_off;
+			}
+		}		
+	</script>
+	
   </head>
-  <body>
 
+  <body >
 
-    <div style="float:right;">
-      <a href="https://discord.gg/BKhcutP">
-        <img style="float:right;width:100px;height:100px;border:0;" src="discord.png" alt="discord logo">
-      </a>
-    </div>
+    <a id="tw_but" href="#" onclick="click_on(event);"></a>
+    <a id="dc_but" href="https://discordapp.com/invite/DzSuhHs"></a>
+    <a id="rd_but" href="https://www.reddit.com/r/asciicker/"></a>
 
-
-    <table height="100%" width="100%">
-      <tr valign="center">
-        <td align="top">
-          <h1 style="margin-top:-80px;text-align:center;">
-            <a href="http://asciicker.com/">
-              <b>ASCIICKER VERSIONS</b> 
-            </a>
-            <br/>
-          
-            <a href="x1">X1</a> 
-            <a href="x2">X2</a> 
-            <a href="x3">X3</a> 
-            <a href="x4">X4</a> 
-            <a href="x5">X5</a> 
-            <a href="x6">X6</a> 
-            <a href="x7">X7</a>
-            <br/>
-            <a href="x8">X8</a> 
-            <a href="x9">X9</a> 
-            <a href="x10">X10</a> 
-            <a href="x11"><b>X11</b></a> 
-            <a href="x12">X12</a> 
-            <a href="x13"><b>X13</b></a> 
-            <a href="yy">YY</a> 
-            <a href="xx">XX</a>
-            <br/>
-            <a href="y0">Y0</a> 
-            <a href="y1">Y1</a> 
-            <a href="y2">Y2</a> 
-            <a href="y3"><b>Y3</b></a>
-          </h1>
-        </td>
-      </tr>
-    </table>
-
-
-    <font size="-5">
-      <h2 id="copyright">
-        <a>ASCIICKER name, images,copyright and intellectual propety owned by gumix</a>
-      </h2>
-    </font>
-
-    <div id="twitter-band"></div>
-    <div id="twitter-button" onclick="display_twitter_embed()" style="left: 0%;">
-
-    </div>
-
-    </div>
-
-    <div id="twitter-embed" style="left: -50%; width: 0vw; height: 0vh;">
-      <font size="-5">
-        <h2 style="text-align:left;position:absolute;top:1px;">
-          <a id="twitter" class="twitter-timeline" data-width="300" data-height="510" data-dnt="true" data-theme="dark" href="https://twitter.com/MrGumix?ref_src=twsrc%5Etfw">Tweets & likes from MrGumix</a> <script async src="https://platform.twitter.com/widgets.js" charset="UTF-8"></script>
-        </h2>
-      </font>
-    </div>
-
-
-    <font color="#ffffaa">
-      <div class="box">
-    	  <a style="text-align:right;position:absolute;right:13px;bottom:0px" class="button" href="#popup1"><h2>Credits</h2></a>
-      </div>
-      <h2>
-        <div align="center" id="popup1" class="overlay">
-    	    <div class="popup">
-    	  	  <br/>Special Thanks to:<br/>
-    	  	  <a class="close" href="#">
-              &times;
-            </a>
-    	  	  <div class="content">
-    	  		   __________________		 
-    	  		   Chuck_Norris_#4886
-    	  		   [Web Design / Discord Moderator]      
-    	  		   __________________
-                                 Gabrieldd001#4922 
-    	  		   [Discord Server/ Discord Moderator]
-    	  		   __________________
-                                 TomiPepi#0646
-                                 [Discord Moderator]
-    	  		   __________________
-    	  	  </div>
-    	    </div>
-        </div>
-      </h2>
-    </font>
-
-    <script src="main.js"></script>
-    
+	<div id="panel">
+        <a id="twitter" class="twitter-timeline" data-height="100%" data-theme="dark" href="https://twitter.com/MrGumix"></a>
+	</div>
+	
+	<div class="thing"">
+		<h1>
+		  <a href="y0">Y0</a> <a href="y1">Y1</a> <a href="y2">Y2</a> <a href="y3"><b>Y3</b></a>
+		</h1>
+		  <br/><br/>
+		<h2>
+		  <a href="x1">X1</a> <a href="x2">X2</a> <a href="x3">X3</a> <a href="x4">X4</a> <a href="x5">X5</a> <a href="x6">X6</a> 
+		  <a href="x7">X7</a> <a href="x8">X8</a> <a href="x9">X9</a> <a href="x10">X10</a> <a href="x11"><b>X11</b></a> 
+		  <a href="x12">X12</a> <a href="x13"><b>X13</b></a> <a href="xx">XX</a> <a href="yy">YY</a>
+		</h2>
+	</div>
+	
   </body>
 </html>
