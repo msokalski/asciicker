@@ -184,6 +184,7 @@
 		function click_off(e)
 		{
 			e.stopPropagation();
+			e.preventDefault();
 			var panel = document.getElementById("panel");
 			if (panel)
 			{
@@ -198,6 +199,7 @@
 		function click_on(e)
 		{
 			e.stopPropagation();
+			e.preventDefault();
 			var panel = document.getElementById("panel");
 			if (panel)
 			{
