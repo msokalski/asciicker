@@ -70,6 +70,24 @@
 			background-color:#000000;
 		}
 		
+		@keyframes anim_loop {
+		  from {
+			background-image: url(a0.png);
+		  }
+		  
+		  33% {
+			background-image: url(a1.png);
+		  }
+
+		  67% {
+			background-image: url(a2.png);
+		  }
+
+		  to {
+			background-image: url(a0.png);
+		  }
+		}
+		
 		.thing 
 		{
 		  display: flex;
@@ -79,12 +97,16 @@
 		  text-align: center;
 		  min-height: 100vh;
 		  
-		  background-image: url(background.png);
+		  /*background-image: url(a0.png);*/
+		  opacity:0.001;
+		  transition: opacity 0.5s ease;
+		   
+		  background-color: #000;
 		  background-repeat: no-repeat;
 		  background-position: center;
 		  background-size: cover;
 		}
-
+		
 		#panel
 		{
 			position:absolute; 
@@ -180,6 +202,18 @@
 				watcher.observe(frameDoc.querySelector('ol.timeline-TweetList'), { childList: true });
 			});
 		});	
+		
+		/*
+		function play_vid(e)
+		{
+			window.onclick = null;
+			var vid = document.getElementById("vid");
+			if (vid)
+				vid.play();
+		}
+		
+		window.onclick = play_vid;
+		*/
 
 		function click_off(e)
 		{
@@ -198,6 +232,7 @@
 
 		function click_on(e)
 		{
+			//play_vid(e);
 			e.stopPropagation();
 			e.preventDefault();
 			var panel = document.getElementById("panel");
@@ -209,7 +244,37 @@
 				panel.style.transform = "translate(0%,0)";
 				window.onclick = click_off;
 			}
-		}		
+		}
+
+		var loaded=0;
+		function onLoaded(e)
+		{
+		  loaded++;
+		  if (loaded==3)
+		  {
+			  var c = document.getElementById("c");
+			  if (c)
+			  {
+				  c.style.animationIterationCount="infinite";
+				  c.style.animationDuration="1s";
+				  c.style.animationName="anim_loop";
+			  }
+			  
+			  window.setTimeout(function() { c.style.opacity="1.0"; }, 1100);
+		  }
+		}
+		
+		if (document.images) 
+		{
+			for (var i=0; i<3; i++)
+			{
+				var img = new Image();
+				img.onload = onLoaded;
+				img.src = "a"+i+".png";
+			}
+		}
+		
+		
 	</script>
 	
   </head>
@@ -224,9 +289,9 @@
         <a id="twitter" class="twitter-timeline" data-height="100%" data-theme="dark" href="https://twitter.com/MrGumix"></a>
 	</div>
 	
-	<div class="thing"">
+	<div id="c" class="thing">
 		<h1>
-		  <a href="y0">Y0</a> <a href="y1">Y1</a> <a href="y2">Y2</a> <a href="y3"><b>Y3</b></a>
+		  <br/><a href="y0">Y0</a> <a href="y1">Y1</a> <a href="y2">Y2</a> <a href="y3"><b>Y3</b></a>
 		</h1>
 		  <br/><br/>
 		<h2>
@@ -235,6 +300,10 @@
 		  <a href="x12">X12</a> <a href="x13"><b>X13</b></a> <a href="xx">XX</a> <a href="yy">YY</a>
 		</h2>
 	</div>
+	
+	<!--div class="thing" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:-1">
+	<video id="vid" src="test.mp4" loop="true"></video>
+	</div-->
 	
   </body>
 </html>
