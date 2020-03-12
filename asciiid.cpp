@@ -2288,12 +2288,25 @@ struct RenderContext
 			id_frame.ref[1] = +3;
 			id_frame.ref[2] = +4;
 
-			for (int x = 0; x < len; x++)
+			if (inst == rc->hover_inst)
 			{
-				id[x].fg = 16 + 215;
-				id[x].gl = idstr[x];
-				id[x].bk = 16;
-				id[x].spare = 0;
+				for (int x = 0; x < len; x++)
+				{
+					id[x].fg = 16;
+					id[x].gl = idstr[x];
+					id[x].bk = 16 + 215;
+					id[x].spare = 0;
+				}
+			}
+			else
+			{
+				for (int x = 0; x < len; x++)
+				{
+					id[x].fg = 16 + 215;
+					id[x].gl = idstr[x];
+					id[x].bk = 16;
+					id[x].spare = 0;
+				}
 			}
 
 			RenderFrame(&id_frame, pos, cookie);
@@ -2594,7 +2607,7 @@ struct RenderContext
 	GLuint ansi_vao;
 	GLuint ansi_vbo;
 
-	 
+	Inst* hover_inst;
 
 	TexPage* page_tex;
 	TexPage* head;
@@ -6627,92 +6640,72 @@ void my_render(A3D_WND* wnd)
 				else
 				if (edit_mode == 4)
 				{
-					if (!inst_added || !io.MouseDown[0])
+					if (!inst_added)
 					{
-						Inst* inst = HitWorld(world, ray_p, ray_v, hit, hit_nrm);
+						Inst* inst = HitWorld(world, ray_p, ray_v, hit, 0);
+						Sprite* sprite = inst ? GetInstSprite(inst,0,0,0,0,0) : 0;
 
-						/*
-						if (io.KeyCtrl || io.KeyShift)
+						if (io.KeyCtrl)
 						{
-							// HITTEST!
-							inst = HitWorld(world, ray_p, ray_v, hit, hit_nrm);
+							// with ctrl don't paint sprite_preview !!!
+							inst_preview = false;
 
-							if (inst)
+							if (sprite)
 								printf("HIT !!!\n");
 							else
 								printf("miss\n");
 
-							// and set this inst for hover hilight
-							hover_inst = inst;
-						}
-
-						if (io.KeyShift)
-						{
-							// pick, works also with CTRL (delete)
-							inst_preview = 0;
-
-							if (inst && !inst_added && io.MouseDown[0])
+							if (!inst_added && sprite)
 							{
-								active_mesh = GetInstMesh(inst);
-								inst_added = true;
-							}
-						}
-						else
-						if (!io.KeyCtrl)
-						{
-						*/
-
-						SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
-
-						if (!inst_added && io.MouseDown[0])
-						{
-							int flags = INST_USE_TREE | INST_VISIBLE;
-							// inst = CreateInst(active_mesh, flags, inst_tm, 0);
-
-							float pos[3] = { hit[0], hit[1], hit[2] };
-
-							int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
-							int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
-							float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
-
-							int story_id = -1; // READ IT FROM UI
-
-							inst = URDO_Create(world, active_sprite, flags, pos, _yaw, _anim, _frame, sp->t, story_id);
-
-							inst_added = true;
-							RebuildWorld(world);
-						}
-						else
-						{
-							// we'll need to paint active_mesh with inst_tm
-							sprite_preview = true;
-							sprite_preview_pos[0] = hit[0];
-							sprite_preview_pos[1] = hit[1];
-							sprite_preview_pos[2] = hit[2];
-						}
-
-						/*
-						}
-
-						if (io.KeyCtrl)
-						{
-							inst_preview = 0;
-
-							if (inst)
-							{
-								if (!inst_added && io.MouseDown[0])
+								if (io.MouseDown[0])
 								{
-									// delete this inst (clear hilight too)
-									hover_inst = 0;
-
-									//DeleteInst(inst);
+									// delete it 
 									URDO_Delete(inst);
-
 									inst_added = true;
+									hover_inst = 0;
+								}
+								else
+								{
+									// and set this inst for hover hilight
+									hover_inst = inst;
 								}
 							}
+							else
+							{
+								hover_inst = 0;
+							}
 						}
-						*/
+						else
+						{
+							SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(active_sprite);
+
+							if (!inst_added && io.MouseDown[0])
+							{
+								int flags = INST_USE_TREE | INST_VISIBLE;
+								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
+
+								float pos[3] = { hit[0], hit[1], hit[2] };
+
+								int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
+								int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
+								float _yaw = sp->rand_yaw ? fast_rand() % 360 : sp->yaw;
+
+								int story_id = -1; // TODO: READ IT FROM UI
+
+								Inst* inst = URDO_Create(world, active_sprite, flags, pos, _yaw, _anim, _frame, sp->t, story_id);
+
+								inst_added = true;
+								RebuildWorld(world);
+							}
+							else
+							{
+								// we'll need to paint active_mesh with inst_tm
+								sprite_preview = true;
+								sprite_preview_pos[0] = hit[0];
+								sprite_preview_pos[1] = hit[1];
+								sprite_preview_pos[2] = hit[2];
+							}
+						}
 					}
 				}
 				else
@@ -6846,6 +6839,8 @@ void my_render(A3D_WND* wnd)
 			}
 		}
 	}
+
+	render_context.hover_inst = hover_inst;
 
 	if (panning || spinning)
 	{
@@ -7001,35 +6996,66 @@ void my_render(A3D_WND* wnd)
 
 	if (hover_inst)
 	{
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glEnable(GL_POLYGON_OFFSET_LINE);
-		glPolygonOffset(1, -1);
+		Mesh* hover_mesh = GetInstMesh(hover_inst);
+		if (hover_mesh)
+		{
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+			glEnable(GL_POLYGON_OFFSET_LINE);
+			glPolygonOffset(1, -1);
 
-		rc->BeginMeshes(tm, lt);
-		glEnable(GL_CULL_FACE);
+			rc->BeginMeshes(tm, lt);
+			glEnable(GL_CULL_FACE);
 
-		float dif[4] = { 0,0,0,1 };
-		glUniform4fv(rc->mesh_lt_dif_clr, 1, dif);
+			float dif[4] = { 0,0,0,1 };
+			glUniform4fv(rc->mesh_lt_dif_clr, 1, dif);
 
-		float amb[4] = { 1,0,0,1 };
-		glUniform4fv(rc->mesh_lt_amb_clr, 1, amb);
+			float amb[4] = { 1,0,0,1 };
+			glUniform4fv(rc->mesh_lt_amb_clr, 1, amb);
 
-		if (io.KeyCtrl)
-			glLineWidth(3);
-		else
+			if (io.KeyCtrl)
+				glLineWidth(3);
+			else
+				glLineWidth(1);
+
+			double itm[16];
+			GetInstTM(hover_inst, itm);
+			RenderContext::RenderMesh(hover_mesh, itm, rc);
+			rc->EndMeshes();
+
+
+			glDisable(GL_CULL_FACE);
+			glPolygonOffset(0, 0);
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			glDisable(GL_POLYGON_OFFSET_LINE);
 			glLineWidth(1);
+		}
+		// CURRENTLY ONLY ID IS HIGHLIGHTED
+		/*
+		else // so it must be Item or Sprite
+		{
+			float pos[3], yaw;
+			int anim = 0, frame = 0, reps[4] = { 0 };
+			Sprite* s = 0;
+			Item* item = GetInstItem(hover_inst, pos, &yaw);
+			if (item)
+				s = item->proto->sprite_3d;
+			else // so it must be Sprite
+				s = GetInstSprite(hover_inst, pos, &yaw, &anim, &frame, reps);
 
-		double itm[16];
-		GetInstTM(hover_inst,itm);
-		RenderContext::RenderMesh(GetInstMesh(hover_inst), itm, rc);
-		rc->EndMeshes();
+			float angle = yaw;
+			int ang = (int)floor((angle - rot_yaw) * s->angles / 360.0f + 0.5f);
+			ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
 
+			int i = frame + ang * s->anim[anim].length;
+			//if (proj && s->projs > 1)
+			//	i += s->anim[anim].length * s->angles;
+			Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
 
-		glDisable(GL_CULL_FACE);
-		glPolygonOffset(0,0);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		glDisable(GL_POLYGON_OFFSET_LINE);
-		glLineWidth(1);
+			// TODO:
+			// frame it
+			// ...
+		}
+		*/
 	}
 
 	if (create_preview)

@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <assert.h>
 
@@ -250,6 +252,90 @@ struct MeshInst : Inst
 	}
 };
 
+inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float yaw, double ray[6], double ret[3], bool interval_only)
+{
+	// calc 4 xyz corners of sprite rect aligned up +Z and ray_xy being perpendicular to it
+
+	// maybe just plane equation first (must pass through pos and its normal is {-ray_x,-ray_y,0}
+	double plane[4] = { -ray[3],-ray[4],0,0 };
+	double dpos[3] = { pos[0],pos[1],pos[2] };
+	plane[3] = -DotProduct(plane, dpos);
+
+	// so we can calc plane ray intersection
+	double d = ray[3] * plane[0] + ray[4] * plane[1] + ray[5] * plane[2];
+	if (fabs(d) < 0.001)
+		return false;
+	double n = ray[6] * plane[0] + ray[7] * plane[1] + ray[8] * plane[2] + plane[3];
+	double q = -n / d;
+	double p[3] =
+	{
+		ray[6] + q * ray[3],
+		ray[7] + q * ray[4],
+		ray[8] + q * ray[5]
+	};
+
+	// get frame from sprite
+
+	double rot_yaw = atan2(ray[4], ray[3]) * 180 / M_PI - 90;
+	Sprite* s = sprite;
+	float angle = yaw;
+	int ang = (int)floor((angle - rot_yaw) * s->angles / 360.0f + 0.5f);
+	ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
+
+	int i = frame + ang * s->anim[anim].length;
+	//if (proj && s->projs > 1)
+	//	i += s->anim[anim].length * s->angles;
+	Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
+
+	// transform intersection to cell coords
+	float zoom = 2.0 / 3.0;
+	float cos30 = cosf(30 * M_PI / 180);
+	float dwx = zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180);
+	float dwy = zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180);
+	float dlz = zoom * -f->ref[1] * 0.5f / cos30 * HEIGHT_SCALE;
+	float dhz = zoom * (f->height - f->ref[1] * 0.5f) / cos30 * HEIGHT_SCALE;
+
+	float ds = 2.0 * (/*zoom*/ 1.0 * /*scale*/ 3.0) / VISUAL_CELLS * 0.5 /*we're not dbl_wh*/;
+	float dz_dy = HEIGHT_SCALE / (cos30 * HEIGHT_CELLS * ds);
+
+	double left = (pos[0] - dwx)*dwx + (pos[1] - dwy)*dwy;
+	double right = (pos[0] + dwx)*dwx + (pos[1] + dwy)*dwy;
+	double bottom = (pos[2] + dlz);
+	double top = (pos[2] + dhz);
+
+	double dot_xy = p[0] * dwx + p[1] * dwy;
+	double dot_z = p[2];
+
+	int x = (int)floor((dot_xy - left) / (right - left) * f->width);
+	int y = (int)floor((dot_z - bottom) / (top - bottom) * f->height);
+
+	if (x >= 0 && x < f->width && y >= 0 && y < f->height)
+	{
+		// inside rect
+		AnsiCell* ac = f->cell + x + y * f->width;
+		if (ac->bk != 255 && ac->gl != 219 || ac->fg != 255 && ac->gl != 0 && ac->gl != 32)
+		{
+			// not transparent
+
+			// todo later
+			// we could do raster check using current font if either fg or bk is transparant
+			// ...
+
+			float h = HEIGHT_SCALE / 4 + pos[2] + (2.0*ac->spare + f->ref[2]) * 0.5 * dz_dy;
+			if (ret[2] < h)
+			{
+				printf("%d,%d\n", x, y);
+				ret[0] = p[0];
+				ret[1] = p[1];
+				ret[2] = h;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 struct SpriteInst : Inst
 {
 	World* w;
@@ -259,6 +345,11 @@ struct SpriteInst : Inst
 	int reps[4];
 	float yaw;
 	float pos[3];
+
+	bool Hit(double ray[6], double ret[3], bool interval_only)
+	{
+		return HitSprite(sprite, anim, frame, pos, yaw, ray, ret, interval_only);
+	}
 };
 
 struct ItemInst : Inst
@@ -267,6 +358,12 @@ struct ItemInst : Inst
 	Item* item;
 	float yaw;
 	float pos[3];
+
+	bool Hit(double ray[6], double ret[3], bool interval_only)
+	{
+		return HitSprite(item->proto->sprite_3d, 0/*anim*/, 0/*frame*/, pos, yaw, ray, ret, interval_only);
+	}
+
 };
 
 ItemInst* item_inst_cache = 0;
@@ -1450,7 +1547,22 @@ struct World
 					return 0;
 			}
 			else
-				return 0;
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+			return 0;
 		}
         else
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
@@ -1478,6 +1590,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
                 j=j->next;
             }
             return i;
@@ -1496,6 +1621,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
                 j=j->next;
             }
             return i;
@@ -1537,7 +1675,22 @@ struct World
 					return 0;
 			}
 			else
-				return 0;
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+			return 0;
 		}
         else
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
@@ -1565,6 +1718,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
 				j = j->next;
             }
             return i;
@@ -1583,6 +1749,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
                 j=j->next;
             }
             return i;
@@ -1624,7 +1803,22 @@ struct World
 					return 0;
 			}
 			else
-				return 0;
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+			return 0;
 		}
         else
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
@@ -1652,6 +1846,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
 				j = j->next;
 			}
             return i;
@@ -1670,6 +1877,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
 				j = j->next;
             }
             return i;
@@ -1711,7 +1931,23 @@ struct World
 					return 0;
 			}
 			else
-				return 0;
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+					return inst;
+				else
+					return 0;
+			}
+
+			return 0;
 		}
         else
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
@@ -1739,6 +1975,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
 				j = j->next;
             }
             return i;
@@ -1757,6 +2006,19 @@ struct World
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
 						i = j;
 				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+						i = j;
+				}
+
 				j = j->next;
             }
             return i;
@@ -3777,9 +4039,23 @@ void GetInstBBox(Inst* i, double bbox[6])
 	bbox[5] = i->bbox[5];
 }
 
+World* GetInstWorld(Inst* i)
+{
+	if (!i)
+		return 0;
+	if (i->inst_type == Inst::INST_TYPE::SPRITE)
+		return ((SpriteInst*)i)->w;
+	if (i->inst_type == Inst::INST_TYPE::ITEM)
+		return ((ItemInst*)i)->w;
+	if (i->inst_type == Inst::INST_TYPE::MESH)
+		return ((MeshInst*)i)->mesh ? ((MeshInst*)i)->mesh->world : 0;
+	return 0;
+}
+
 Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, int reps[4])
 {
-	assert(i->inst_type == Inst::SPRITE);
+	if (i->inst_type != Inst::SPRITE)
+		return 0;
 	SpriteInst* si = (SpriteInst*)i;
 	if (pos)
 	{
@@ -3806,7 +4082,9 @@ Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, 
 
 Item* GetInstItem(Inst* i, float pos[3], float* yaw)
 {
-	assert(i->inst_type == Inst::ITEM);
+	if (i->inst_type != Inst::ITEM)
+		return 0;
+
 	ItemInst* ii = (ItemInst*)i;
 	if (pos)
 	{
@@ -4100,4 +4378,61 @@ void UpdateSpriteInst(World* world, Inst* i, Sprite* sprite, const float pos[3],
 	si->reps[3] = reps[3];
 
 	AttachInst(world, i);
+}
+
+// undo/redo only!!!
+void SoftInstAdd(Inst* i)
+{
+	World* w = GetInstWorld(i);
+
+	// it is external thing
+
+	i->next = w->head_inst;
+	if (w->head_inst)
+		w->head_inst->prev = i;
+	else
+		w->tail_inst = i;
+	w->head_inst = i;
+
+	// it is in flat list now
+
+	AttachInst(w, i);
+
+	// if there was place it is in bsp otherwise in flat list
+	w->insts++;
+}
+
+void SoftInstDel(Inst* i)
+{
+	World* w = GetInstWorld(i);
+
+	// it is in bsp or flat
+
+	DetachInst(w, i);
+
+	// it is in flat list now.
+
+	if (i->prev)
+		i->prev->next = i->next;
+	else
+		w->head_inst = i->next;
+
+	if (i->next)
+		i->next->prev = i->prev;
+	else
+		w->tail_inst = i->prev;
+
+	// now it is external
+	i->next = 0;
+	i->prev = 0;
+
+	w->insts--;
+}
+
+void HardInstDel(Inst* i)
+{
+	// assuming it is external !!!
+	if (i->inst_type == Inst::INST_TYPE::ITEM)
+		DestroyItem(((ItemInst*)i)->item);
+	free(i);
 }

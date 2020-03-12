@@ -4896,6 +4896,10 @@ void Game::MoveContact(int id, int x, int y)
 
 					// dragged out of the list
 					con->action = Input::Contact::ITEM_LIST_DRAG;
+
+					if (!show_inventory)
+						show_inventory = true;
+
 					return;
 				}
 			}

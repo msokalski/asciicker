@@ -36,6 +36,8 @@ Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int an
 Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name, int story_id);
 void DeleteInst(Inst* i);
 
+World* GetInstWorld(Inst* i);
+
 Mesh* GetInstMesh(Inst* i);
 int GetInstFlags(Inst* i);
 int GetInstStoryID(Inst* i);
@@ -79,22 +81,9 @@ World* LoadWorld(FILE* f, bool editor);
 void PurgeItemInstCache();
 void ResetItemInsts(World* w);
 
-bool AttachInst(World* w, Inst* i);
+bool AttachInst(World* w, Inst* i); // tries to move from flat list to bsp
 
-/*
-int AddInstDataProvider(World* w, void (*on_newinst)(Inst* i), void (*on_delinst)(Inst* i));
-void DelInstDataProvider(World* w, int provider);
-void SetInstData(World* w, Inst* i, int provider, void* data);
-void* GetInstData(World* w, Inst* i, int provider);
-*/
-
-// during save:
-// save those meshes that have instances only (with file names)
-
-// during load:
-// load embedded meshes saved in file
-// later asciiid can add meshes from external files
-// ... then it can ask what to do with collisions (keep embedded, replace with externals)
-//     but it should compare them if they really differ (so need to load them regardless everything)
-
-
+// undo/redo only!!!
+void SoftInstAdd(Inst* i);
+void SoftInstDel(Inst* i);
+void HardInstDel(Inst* i);

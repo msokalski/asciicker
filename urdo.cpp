@@ -76,39 +76,28 @@ struct URDO_PatchDiag : URDO
 
 struct URDO_InstCreate : URDO
 {
-	int mode;
+	Inst* inst;
+	bool attached;
 
+	/*
 	int flags;
 	Inst* inst;
 	int story_id;
 
-	union
-	{
-		struct
-		{
-			Mesh* mesh;
-			double tm[16];
-		};
+	Mesh* mesh;
+	double tm[16];
 
+	World* w;
+	float pos[3];
 
+	Sprite* s; // anim >= 0
+	Item* item; // anim < 0
 
-		struct
-		{
-			World* w;
-			float pos[3];
-
-			union
-			{
-				Sprite* s; // anim >=0
-				Item* item; // anim < 0
-			};
-
-			float yaw;
-			int anim;
-			int frame;
-			int reps[4];
-		};
-	};
+	float yaw;
+	int anim;
+	int frame;
+	int reps[4];
+	*/
 
 	static void Delete(Inst* i);
 	static Inst* Create(Mesh* m, int flags, double tm[16], int story_id);
@@ -179,15 +168,8 @@ void URDO::Free()
 		case CMD_INST_CREATE:
 		{
 			URDO_InstCreate* ic = (URDO_InstCreate*)this;
-			if (ic->mode == 2) // item
-			{
-				if (ic->item)
-				{
-					int a=0;
-					ic->item->inst = 0;
-					DestroyItem(ic->item);
-				}
-			}
+			if (!ic->attached)
+				HardInstDel(ic->inst);
 			bytes -= sizeof(URDO_InstCreate);
 			break;
 		}
@@ -699,16 +681,9 @@ void URDO_InstCreate::Delete(Inst* i)
 
 	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
 
-	urdo->story_id = GetInstStoryID(i);
-	urdo->mesh = GetInstMesh(i); // needed?
-	urdo->flags = GetInstFlags(i);
-	GetInstTM(i, urdo->tm);
-
-	// if this is item, we need to remove it from someones inventory!
-	// !!!
-
-	DeleteInst(i);
-	urdo->inst = 0;
+	urdo->inst = i;
+	SoftInstDel(i);
+	urdo->attached = false;
 }
 
 Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16], int story_id)
@@ -718,11 +693,8 @@ Inst* URDO_InstCreate::Create(Mesh* m, int flags, double tm[16], int story_id)
 
 	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
 
-	urdo->mode = 0; // mesh
-	urdo->mesh = 0;
-	urdo->flags = 0;
-	memset(urdo->tm, 0, sizeof(double[16]));
 	urdo->inst = CreateInst(m,flags,tm,0,story_id);
+	urdo->attached = true;
 
 	return urdo->inst;
 }
@@ -734,10 +706,8 @@ Inst* URDO_InstCreate::Create(World* w, Sprite* s, int flags, float pos[3], floa
 
 	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
 
-	urdo->mode = 1; // sprite
-	urdo->w = w;
-	urdo->flags = 0;
 	urdo->inst = CreateInst(w,s,flags,pos,yaw,anim,frame,reps,0,story_id);
+	urdo->attached = true;
 
 	return urdo->inst;
 }
@@ -749,10 +719,8 @@ Inst* URDO_InstCreate::Create(World* w, Item* item, int flags, float pos[3], flo
 
 	URDO_InstCreate* urdo = (URDO_InstCreate*)Alloc(CMD_INST_CREATE);
 
-	urdo->mode = 2; // item
-	urdo->w = w;
-	urdo->flags = 0;
 	urdo->inst = CreateInst(w, item, flags, pos, yaw, story_id);
+	urdo->attached = true;
 
 	return urdo->inst;
 }
@@ -760,58 +728,14 @@ Inst* URDO_InstCreate::Create(World* w, Item* item, int flags, float pos[3], flo
 
 void URDO_InstCreate::Do(bool un)
 {
-	if (mode == 0)
+	if (attached)
 	{
-		if (!inst)
-		{
-			inst = CreateInst(mesh, flags, tm, 0, story_id);
-		}
-		else
-		{
-			story_id = GetInstStoryID(inst);
-			mesh = GetInstMesh(inst);
-			flags = GetInstFlags(inst);
-			GetInstTM(inst, tm);
-			DeleteInst(inst);
-			inst = 0;
-		}
-
-		RebuildWorld(GetMeshWorld(mesh));
+		SoftInstDel(inst);
+		attached = false;
 	}
 	else
-	if (mode == 1)
 	{
-		if (!inst)
-		{
-			inst = CreateInst(w,s,flags, pos,yaw,anim,frame,reps,0,story_id);
-		}
-		else
-		{
-			story_id = GetInstStoryID(inst);
-			s = GetInstSprite(inst, pos,&yaw,&anim,&frame,reps);
-			flags = GetInstFlags(inst);
-			DeleteInst(inst);
-			inst = 0;
-		}
-
-		RebuildWorld(w);
-	}
-	else
-	if (mode == 2)
-	{
-		if (!inst)
-		{
-			inst = CreateInst(w, item, flags, pos, yaw, story_id);
-		}
-		else
-		{
-			story_id = GetInstStoryID(inst);
-			item = GetInstItem(inst, pos, &yaw);
-			flags = GetInstFlags(inst);
-			DeleteInst(inst);
-			inst = 0;
-		}
-
-		RebuildWorld(w);
+		SoftInstAdd(inst);
+		attached = true;
 	}
 }
