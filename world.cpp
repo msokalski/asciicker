@@ -1473,6 +1473,10 @@ struct World
             Inst* next = inst->next;
             if (inst->flags & INST_USE_TREE)
             {
+				if (count==insts)
+				{
+					int defect=0;
+				}
                 arr[count++].inst = inst;
 
                 // extract!
@@ -1514,7 +1518,7 @@ struct World
         }
     }
 
-	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
+	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1539,6 +1543,10 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
 				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
@@ -1568,8 +1576,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -1578,13 +1586,20 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -1616,6 +1631,13 @@ struct World
             Inst* j = l->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -1642,7 +1664,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
+	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1667,6 +1689,10 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
 				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
@@ -1696,8 +1722,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -1706,13 +1732,20 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -1744,6 +1777,13 @@ struct World
             Inst* j = l->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -1770,7 +1810,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
+	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1795,6 +1835,10 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
 				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
@@ -1824,8 +1868,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -1834,13 +1878,20 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -1872,6 +1923,13 @@ struct World
             Inst* j = l->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -1898,7 +1956,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only)
+	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1923,6 +1981,10 @@ struct World
 		if (q->type == BSP::TYPE::BSP_TYPE_INST)
 		{
 			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
 				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
@@ -1953,8 +2015,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -1963,13 +2025,20 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, interval_only);
-            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, interval_only);
+            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
+            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
             i = j ? j : i;
 
             j = s->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -2001,6 +2070,13 @@ struct World
             Inst* j = l->head;
             while (j)
             {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
 					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
@@ -2028,7 +2104,7 @@ struct World
 	}
 
     // RAY HIT using plucker
-    Inst* HitWorld(double p[3], double v[3], double ret[4], double nrm[3], bool interval_only)
+    Inst* HitWorld(double p[3], double v[3], double ret[4], double nrm[3], bool interval_only, bool editor)
     {
 		if (!root)
 			return 0;
@@ -2064,7 +2140,7 @@ struct World
 
 		assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
 
-		static Inst* (*const func_vect[])(BSP* q, double ray[6], double ret[3], double nrm[3], bool) =
+		static Inst* (*const func_vect[])(BSP* q, double ray[6], double ret[3], double nrm[3], bool, bool) =
 		{
 			HitWorld0,
 			HitWorld1,
@@ -2082,7 +2158,7 @@ struct World
 		}
 		*/
 
-		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, interval_only);
+		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, interval_only, editor);
 		return inst;
     }
 
@@ -3991,9 +4067,9 @@ World* LoadWorld(FILE* f, bool editor)
 }
 
 
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool interval_only)
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool interval_only, bool editor)
 {
-    return w->HitWorld(p,v,ret,nrm, interval_only);
+    return w->HitWorld(p,v,ret,nrm, interval_only, editor);
 }
 
 Mesh* GetInstMesh(Inst* i)
@@ -4433,6 +4509,10 @@ void HardInstDel(Inst* i)
 {
 	// assuming it is external !!!
 	if (i->inst_type == Inst::INST_TYPE::ITEM)
+	{
 		DestroyItem(((ItemInst*)i)->item);
-	free(i);
+		FreeItemInst((ItemInst*)i);
+	}
+	else
+		free(i);
 }

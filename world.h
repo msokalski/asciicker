@@ -70,7 +70,7 @@ struct QueryWorldCB
 void QueryWorld(World* w, int planes, double plane[][4], QueryWorldCB* cb, void* cookie);
 void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level, const float bbox[6], void* cookie), void* cookie);
 
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only = false);
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only = false, bool editor = false);
 
 void SaveWorld(World* w, FILE* f);
 
@@ -87,3 +87,4 @@ bool AttachInst(World* w, Inst* i); // tries to move from flat list to bsp
 void SoftInstAdd(Inst* i);
 void SoftInstDel(Inst* i);
 void HardInstDel(Inst* i);
+
