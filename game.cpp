@@ -2466,6 +2466,31 @@ bool Game::CheckDrop(int c, int drop_xy[2], AnsiCell* ptr, int width, int height
 		}
 		else
 		{
+			if (ptr && input.contact[c].action == Input::Contact::ITEM_LIST_DRAG)
+			{
+				if (cp[0] < inventory.layout_x || 
+					cp[0] >= inventory.layout_x + inventory.layout_width || 
+					cp[1] < inventory.layout_y || 
+					cp[1] >= inventory.layout_y + inventory.layout_height)
+				{
+					Item* item = input.contact[c].item;
+					Sprite::Frame* frame = item->proto->sprite_2d->atlas;
+					int y = cp[1] - frame->height/2 - 1;
+					if (y>=0 && y<height)
+					for (int i = 0; i < 5; i++)
+					{
+						int x = i + cp[0] - 2;
+						if (x >= 0 && x < width)
+						{
+							AnsiCell* ind = ptr + x + y * width;
+							ind->bk = AverageGlyph(ind, 0xF);
+							ind->gl = "\x11PICK"[i];
+							ind->fg = white;
+						}
+					}					
+				}				
+			}
+			else
 			// check if we can remove item from inventory
 			// indicate it by returning true and xy set to -1
 			if (input.contact[c].action == Input::Contact::ITEM_GRID_DRAG)
@@ -2481,7 +2506,7 @@ bool Game::CheckDrop(int c, int drop_xy[2], AnsiCell* ptr, int width, int height
 					// and check if they are getters (characters)
 					// PlayerHit(g)
 
-					if (ptr)
+					if (ptr && !inventory.my_item[input.contact[c].my_item].in_use)
 					{
 						Item* item = input.contact[c].item;
 						Sprite::Frame* frame = item->proto->sprite_2d->atlas;
@@ -3639,6 +3664,22 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		if (ic==0) // if dragged by touch, leave it above finger 
 			cp[1] -= frame->height / 2;
+
+		// if this item is currently in use
+		// trap it inside inventory
+		if (input.contact[in_contact].action == Input::Contact::ITEM_GRID_DRAG &&
+			inventory.my_item[input.contact[in_contact].my_item].in_use)
+		{
+			if (cp[0] < inventory.layout_x)
+				cp[0] = inventory.layout_x;
+			if (cp[0] + frame->width > inventory.layout_x + inventory.layout_width)
+				cp[0] = inventory.layout_x + inventory.layout_width - frame->width;
+
+			if (cp[1] < inventory.layout_y)
+				cp[1] = inventory.layout_y;
+			if (cp[1] + frame->height > inventory.layout_y + inventory.layout_height)
+				cp[1] = inventory.layout_y + inventory.layout_height - frame->height;
+		}
 
 		BlitSprite(ptr, width, height, frame, cp[0], cp[1]);
 	}
