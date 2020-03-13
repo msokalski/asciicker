@@ -592,6 +592,13 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
 	Colormap cmap = XCreateColormap(dpy, root, vi->visual, AllocNone);
 
+	if (!cmap)
+	{
+
+		XCloseDisplay(dpy);
+		return 0;
+	}
+
 	XSetWindowAttributes swa;
 	swa.colormap = cmap;
 	swa.event_mask = 
