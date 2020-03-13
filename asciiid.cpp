@@ -7329,9 +7329,10 @@ void my_close(A3D_WND* wnd)
 		m = GetNextMesh(m);
 	}
 
-	DeleteWorld(world);
-	
 	URDO_Purge();
+
+	DeleteWorld(world);
+
 	DeleteTerrain(terrain);
 
 	PurgeItemInstCache();

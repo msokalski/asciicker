@@ -4508,11 +4508,29 @@ void SoftInstDel(Inst* i)
 void HardInstDel(Inst* i)
 {
 	// assuming it is external !!!
+
 	if (i->inst_type == Inst::INST_TYPE::ITEM)
 	{
+		// it destroys inst too!
+		((ItemInst*)i)->item->inst = 0;
 		DestroyItem(((ItemInst*)i)->item);
-		FreeItemInst((ItemInst*)i);
 	}
 	else
-		free(i);
+	if (i->inst_type == Inst::INST_TYPE::MESH)
+	{
+		MeshInst* m = (MeshInst*)i;
+		// unref
+		if (m->mesh)
+		{
+			MeshInst** s = &m->mesh->share_list;
+			while (*s != m)
+				s = &(*s)->share_next;
+			*s = (*s)->share_next;
+		}
+	}
+
+	if (i->name)
+		free(i->name);
+
+	free(i);
 }
