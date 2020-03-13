@@ -790,6 +790,8 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
 	return gs;
 }
 
+extern "C" void DumpLeakCounter();
+
 int main(int argc, char* argv[])
 {
 #ifdef _WIN32
@@ -1026,6 +1028,8 @@ int main(int argc, char* argv[])
 		PurgeItemInstCache();
 
 		FreeSprites();
+
+		DumpLeakCounter();
 
 #ifdef _WIN32
 		_CrtDumpMemoryLeaks();

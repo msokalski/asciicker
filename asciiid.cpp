@@ -1763,7 +1763,7 @@ struct RenderContext
 
 		glLinkProgram(bsp_prg);
 
-		for (int i = 0; i < 2; i++)
+		for (int i = 0; i < 3; i++)
 			glDeleteShader(shader[i]);
 
 		loglen = 999;
@@ -1799,7 +1799,7 @@ struct RenderContext
 
 		glLinkProgram(mesh_prg);
 
-		for (int i = 0; i < 2; i++)
+		for (int i = 0; i < 3; i++)
 			glDeleteShader(shader[i]);
 
 		loglen = 999;
@@ -1917,6 +1917,17 @@ struct RenderContext
 		glDeleteVertexArrays(1, &ghost_vao);
 		glDeleteBuffers(1, &ghost_vbo);
 		glDeleteProgram(ghost_prg);
+
+		glDeleteBuffers(1, &mesh_vbo);
+		glDeleteVertexArrays(1, &mesh_vao);
+		glDeleteProgram(mesh_prg);
+		
+		glDeleteProgram(bsp_prg);
+
+		glDeleteTextures(1, &ansi_tex);
+		glDeleteBuffers(1, &ansi_vbo);
+		glDeleteVertexArrays(1, &ansi_vao);
+		glDeleteProgram(ansi_prg);
 
 		if (ansi_buf)
 			free(ansi_buf);
@@ -7320,6 +7331,10 @@ void my_close(A3D_WND* wnd)
 {
 	TermCloseAll();
 
+	if (pal_tex)
+		glDeleteTextures(1, &pal_tex);
+	pal_tex = 0;
+
 	// free mesh prefs !!!
 	Mesh* m = GetFirstMesh(world);
 	while (m)
@@ -7363,6 +7378,7 @@ void my_close(A3D_WND* wnd)
 	a3dClose(wnd);
 }
 
+extern "C" void DumpLeakCounter();
 
 int main(int argc, char *argv[]) 
 {
@@ -7408,6 +7424,8 @@ int main(int argc, char *argv[])
 	}
 
 	FreeSprites();
+
+	DumpLeakCounter();
 
 #ifdef _WIN32
 	_CrtDumpMemoryLeaks();
