@@ -22,6 +22,8 @@ struct TERM_LIST
 	TERM_LIST* next;
 	A3D_WND* wnd;
 
+	void(*close)();
+
 	Game* game;
 	//Physics* phys;
 
@@ -424,6 +426,9 @@ void term_close(A3D_WND* wnd)
 	glDeleteBuffers(1, &term->vbo);
 	glDeleteProgram(term->prg);
 
+	if (term->close)
+		term->close();
+
 	a3dClose(wnd);
 
 	if (term->prev)
@@ -439,7 +444,7 @@ void term_close(A3D_WND* wnd)
 	free(term);
 }
 
-bool TermOpen(A3D_WND* share, float yaw, float pos[3])
+bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 {
 	PlatformInterface pi;
 	pi.close = term_close;
@@ -473,6 +478,7 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3])
 	//a3dSetVisible(share, false);
 
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
+	term->close = close;
 
 	/*
 	term->yaw = yaw;

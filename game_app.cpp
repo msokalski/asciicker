@@ -1005,7 +1005,7 @@ int main(int argc, char* argv[])
         global_lt[2] = lt[2];
         global_lt[3] = lt[3];
 
-        if (TermOpen(0, yaw, pos))
+        if (TermOpen(0, yaw, pos, MyFont::Free))
         {
             char font_dirname[] = "./fonts";
             fonts_loaded = 0;
