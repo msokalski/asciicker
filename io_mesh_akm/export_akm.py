@@ -50,18 +50,63 @@ for key in obj1.data.shape_keys.key_blocks:
 
 
 
-"""
-# ISOLATED EDGES AS LINES !!!
 import bpy
 import bmesh
 
+"""
+// ISOLATED EDGES ON MESH    
+print("---------------------------------")
+
+obj1 = bpy.context.selected_objects[0]
+
+msh = obj1.data
+
+edges = []
+
+for e in msh.edges:
+    edges.append( { e.vertices[0], e.vertices[1] } )
+
+for p in msh.polygons:
+    
+    l1 = p.loop_start
+    l2 = p.loop_start + p.loop_total - 1
+        
+    for l in range( l1, l2 ):
+        v1 = msh.loops[l].vertex_index
+        v2 = msh.loops[l+1].vertex_index
+        try:
+            edges.remove( {v1,v2} )
+        except:
+            pass
+        try:
+            edges.remove( {v2,v1} )
+        except:
+            pass
+        
+    v1 = msh.loops[l1].vertex_index
+    v2 = msh.loops[l2].vertex_index
+
+    try:
+        edges.remove( {v1,v2} )
+    except:
+        pass
+    try:
+        edges.remove( {v2,v1} )
+    except:
+        pass
+
+for e in edges:
+    print( e )
+"""    
+
+"""
+// ISOLATED EDGES ON BMESH    
 obj1 = bpy.context.selected_objects[0]
 
 bm = bmesh.new()
 bm.from_mesh(obj1.data)
 
 bmesh.ops.triangulate(bm, faces=bm.faces)
-
 
 print("---------------------------------")
 
@@ -88,8 +133,13 @@ for f in bm.faces:
                                 
 for e in edges:
     print( e )
-        
 """
+
+
+      
+    
+
+
 
 
 
@@ -281,6 +331,7 @@ def save(
     import bpy
     import bmesh
 
+    # CRUCIAL so being edited object mesh is updated!
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
