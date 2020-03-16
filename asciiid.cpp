@@ -2015,6 +2015,8 @@ struct RenderContext
 
 		glBindVertexArray(mesh_vao);
 
+		//glEnable(GL_CULL_FACE);
+
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_GEQUAL);
 		glCullFace(GL_BACK);
@@ -2066,7 +2068,7 @@ struct RenderContext
 		glBindVertexArray(0);
 		glUseProgram(0);
 
-		glDisable(GL_CULL_FACE);
+		//glDisable(GL_CULL_FACE);
 		glDisable(GL_DEPTH_TEST);
 		glDisable(GL_BLEND);
 		glDepthMask(1);
@@ -2099,10 +2101,11 @@ struct RenderContext
 		glBindTextureUnit(3, font[active_font].tex);
 		glBindTextureUnit(4, pal_tex);
 
-		glEnable(GL_CULL_FACE);
+		//glEnable(GL_CULL_FACE);
+		//glCullFace(GL_BACK);
+
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_GEQUAL);
-		glCullFace(GL_BACK);
 
 		//mesh_map=0;
 		mesh_faces=0;
@@ -2114,6 +2117,9 @@ struct RenderContext
 
 	static void RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, void* cookie)
 	{
+		if (visual&(1<<31)) // skip lines
+			return;
+
 		RenderContext* rc = (RenderContext*)cookie;
 		
 		memcpy(rc->mesh_map[rc->mesh_faces].abc, coords, sizeof(float[9]));
@@ -2369,7 +2375,7 @@ struct RenderContext
 		glBindVertexArray(0);
 		glUseProgram(0);
 
-		glDisable(GL_CULL_FACE);
+		//glDisable(GL_CULL_FACE);
 		glDisable(GL_DEPTH_TEST);
 
 		glDisable(GL_DEPTH_CLAMP);
@@ -3875,11 +3881,11 @@ void my_render(A3D_WND* wnd)
 				int prg;
 				glGetIntegerv(GL_CURRENT_PROGRAM, &prg);
 
-				bool cull_face;
-				cull_face = glIsEnabled(GL_CULL_FACE);
+				//bool cull_face;
+				//cull_face = glIsEnabled(GL_CULL_FACE);
 
-				int cull_mode;
-				glGetIntegerv(GL_CULL_FACE_MODE, &cull_mode);
+				//int cull_mode;
+				//glGetIntegerv(GL_CULL_FACE_MODE, &cull_mode);
 
 				int depth_func;
 				glGetIntegerv(GL_DEPTH_FUNC, &depth_func);
@@ -4043,10 +4049,9 @@ void my_render(A3D_WND* wnd)
 				glViewport(vp[0], vp[1], vp[2], vp[3]);
 				glScissor(sc[0], sc[1], sc[2], sc[3]);
 
-				if (!cull_face)
-					glDisable(GL_CULL_FACE);
-
-				glCullFace(cull_mode);
+				//if (!cull_face)
+				//	glDisable(GL_CULL_FACE);
+				//glCullFace(cull_mode);
 
 				if (!depth_test)
 					glDisable(GL_DEPTH_TEST);
@@ -4107,11 +4112,11 @@ void my_render(A3D_WND* wnd)
 				int prg;
 				glGetIntegerv(GL_CURRENT_PROGRAM,&prg);
 
-				bool cull_face;
-				cull_face = glIsEnabled(GL_CULL_FACE);
+				//bool cull_face;
+				//cull_face = glIsEnabled(GL_CULL_FACE);
 
-				int cull_mode;
-				glGetIntegerv(GL_CULL_FACE_MODE, &cull_mode);
+				//int cull_mode;
+				//glGetIntegerv(GL_CULL_FACE_MODE, &cull_mode);
 
 				int depth_func;
 				glGetIntegerv(GL_DEPTH_FUNC, &depth_func);
@@ -4292,10 +4297,10 @@ void my_render(A3D_WND* wnd)
 				glBindTextureUnit(3, font[active_font].tex);
 				glBindTextureUnit(4, pal_tex);
 
-				glEnable(GL_CULL_FACE);
+				//glEnable(GL_CULL_FACE);
+				//glCullFace(GL_BACK);
 				glEnable(GL_DEPTH_TEST);
 				glDepthFunc(GL_LEQUAL);
-				glCullFace(GL_BACK);
 
 				glBindBuffer(GL_ARRAY_BUFFER, rc->mesh_vbo);
 
@@ -4324,10 +4329,9 @@ void my_render(A3D_WND* wnd)
 				glViewport(vp[0],vp[1],vp[2],vp[3]);
 				glScissor(sc[0],sc[1],sc[2],sc[3]);
 
-				if (!cull_face)
-					glDisable(GL_CULL_FACE);
-
-				glCullFace(cull_mode);
+				//if (!cull_face)
+				//	glDisable(GL_CULL_FACE);
+				//glCullFace(cull_mode);
 
 				if (!depth_test)
 					glDisable(GL_DEPTH_TEST);
@@ -6995,7 +6999,7 @@ void my_render(A3D_WND* wnd)
 			glPolygonOffset(1, -1);
 
 			rc->BeginMeshes(tm, lt);
-			glEnable(GL_CULL_FACE);
+			//glEnable(GL_CULL_FACE);
 
 			float dif[4] = { 0,0,0,1 };
 			glUniform4fv(rc->mesh_lt_dif_clr, 1, dif);
@@ -7014,7 +7018,7 @@ void my_render(A3D_WND* wnd)
 			rc->EndMeshes();
 
 
-			glDisable(GL_CULL_FACE);
+			//glDisable(GL_CULL_FACE);
 			glPolygonOffset(0, 0);
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 			glDisable(GL_POLYGON_OFFSET_LINE);

@@ -30,7 +30,7 @@ extern Sprite* attack_sprite;
 extern Sprite* inventory_sprite;
 
 template <typename Sample>
-inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
+inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3], int _or)
 {
 	int sx = to[0] - from[0];
 	int sy = to[1] - from[1];
@@ -67,10 +67,10 @@ inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
 				float z = (a * sz) * n + from[2];
 				Sample* ptr = buf + w * y + x;
 				if (ptr->DepthTest_RO(z))
-					ptr->spare |= 4;
+					ptr->spare |= _or;
 				ptr++;
 				if (ptr->DepthTest_RO(z))
-					ptr->spare |= 4;
+					ptr->spare |= _or;
 			}
 		}
 	}
@@ -98,7 +98,7 @@ inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
 				float z = (a * sz)*n + from[2];
 				Sample* ptr = buf + w * y + x;
 				if (ptr->DepthTest_RO(z))
-					ptr->spare |= 4;
+					ptr->spare |= _or;
 			}
 		}
 	}
@@ -111,7 +111,7 @@ inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3])
 // we should do it also for 'z' coord
 
 template <typename Sample, typename Shader>
-inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
+inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], bool dblsided)
 {
 	// each v[i] must point to 4 ints: {x,y,z,f} where f should indicate culling bits (can be 0)
 	// shader must implement: bool Shader::Fill(Sample* s, int bc[3])
@@ -134,9 +134,9 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 		// calc all varyings at 0,0 screen coord
 		// and their dx,dy gradients
 
-		if (area > 0)
+		if (area > 0 || area<0 && dblsided)
 		{
-			assert(area < 0x10000);
+			assert(area < 0x10000 && area > -0x10000);
 			float normalizer = (1.0f - FLT_EPSILON) / area;
 
 			// canvas intersection with triangle bbox
@@ -161,11 +161,13 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 					};
 
 					// outside
+					/*
 					if (bc[0] < 0 || bc[1] < 0 || bc[2] < 0)
 					//if ((bc[0] | bc[1] | bc[2]) < 0)
 						continue;
+					*/
 
-					/*
+					
 					if (area > 0)
 					{
 						if (bc[0] < 0 || bc[1] < 0 || bc[2] < 0)
@@ -176,7 +178,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3])
 						if (bc[0] > 0 || bc[1] > 0 || bc[2] > 0)
 							continue;
 					}
-					*/
+					
 
 					// edge pairing
 					if (bc[0] == 0 && v[1][0] <= v[2][0] ||
@@ -254,7 +256,7 @@ struct Sample
 		{
 			int a = 0;
 		}
-		return height <= z;
+		return height <= z + HEIGHT_SCALE/2;
 	}
 };
 
@@ -497,7 +499,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 
 						s->visual = r5 | (g5 << 5) | (b5 << 10);
 						s->diffuse = diffuse;
-						s->spare = (s->spare & ~0x4) | 0x8 | 0x3;
+						s->spare = (s->spare & ~0x44) | 0x8 | 0x3;
 					}  
 				}
 				else 
@@ -518,7 +520,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 
 						s->visual = r5 | (g5 << 5) | (b5 << 10);
 						s->diffuse = diffuse;
-						s->spare = (s->spare & ~(0x3|0x4)) | 0x8 | 0x1;
+						s->spare = (s->spare & ~(0x3|0x44)) | 0x8 | 0x1;
 					}
 				}
 			}
@@ -607,6 +609,12 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		v[1][3] = 0; // clip flags
 	}
 
+	if (visual & (1<<31))
+	{
+		Bresenham(r->sample_buffer.ptr,r->sample_buffer.w,r->sample_buffer.h, v[0], v[1], 0x40);
+		return;
+	}
+
 	{
 		float xyzw[] = { coords[6], coords[7], coords[8], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp2);
@@ -634,6 +642,9 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 
 	float inst_n[4];
 	Product(r->inst_tm, n, inst_n);
+
+	inst_n[2] /= HEIGHT_SCALE;
+
 	float nn = 1.0f / sqrtf(inst_n[0] * inst_n[0] + inst_n[1] * inst_n[1] + inst_n[2] * inst_n[2]);
 
 	float df = nn * (inst_n[0] * r->light[0] + inst_n[1] * r->light[1] + inst_n[2] * r->light[2]);
@@ -642,6 +653,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 
 	df = df * (1.0f - 0.5f*r->light[3]) + 0.5f*r->light[3];
 	df += 0.5;
+
 	if (df > 1)
 		df = 1;
 	if (df < 0)
@@ -659,7 +671,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		//for (int i = 0; i < 12; i++)
 		//	colors[i] = colors[i] * 3 / 4;
 
-		Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
+		Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv, visual&(1<<30));
 	}
 	else
 	{
@@ -667,7 +679,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		shader.rgb[0] = colors + 0;
 		shader.rgb[1] = colors + 4;
 		shader.rgb[2] = colors + 8;
-		Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv);
+		Rasterize(r->sample_buffer.ptr, r->sample_buffer.w, r->sample_buffer.h, &shader, pv, visual&(1<<30));
 	}
 }
 
@@ -903,7 +915,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 							s->visual = map[v * VISUAL_CELLS + u];
 							s->diffuse = diffuse;
 							s->spare |= parity | 0x3;
-							s->spare &= ~(0x4|0x8); // clear mesh and lines
+							s->spare &= ~(0x44|0x8); // clear mesh and lines
 						}
 					}
 				}
@@ -934,7 +946,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 							s->visual = m;
 							s->diffuse = diffuse;
-							s->spare = (s->spare & ~(0x8|0x3|0x4)) | parity; // clear refl, mesh and line, then add parity
+							s->spare = (s->spare & ~(0x8|0x3|0x44)) | parity; // clear refl, mesh and line, then add parity
 						}
 					}
 				}
@@ -1147,7 +1159,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* lo[3] = { xyzf[dy + 1][dx], xyzf[dy][dx + 1], xyzf[dy][dx] };
 					shader.uv = lo_uv;
 					shader.Diffuse(-xyzf[dy][dx][2] + xyzf[dy][dx + 1][2], -xyzf[dy][dx][2] + xyzf[dy + 1][dx][2]);
-					Rasterize(ptr, w, h, &shader, lo);
+					Rasterize(ptr, w, h, &shader, lo, false);
 				}
 				else
 				{
@@ -1155,7 +1167,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* lo[3] = { xyzf[dy][dx], xyzf[dy][dx + 1], xyzf[dy + 1][dx] };
 					shader.uv = lo_uv;
 					shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx + 1][2], xyzf[dy][dx][2] - xyzf[dy + 1][dx][2]);
-					Rasterize(ptr, w, h, &shader, lo);
+					Rasterize(ptr, w, h, &shader, lo, false);
 				}
 
 				// .__.
@@ -1170,7 +1182,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* up[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx], xyzf[dy + 1][dx + 1] };
 					shader.uv = up_uv;
 					shader.Diffuse(-xyzf[dy + 1][dx][2] + xyzf[dy + 1][dx + 1][2], -xyzf[dy][dx + 1][2] + xyzf[dy + 1][dx + 1][2]);
-					Rasterize(ptr, w, h, &shader, up);
+					Rasterize(ptr, w, h, &shader, up, false);
 				}
 				else
 				{
@@ -1178,7 +1190,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy + 1][dx], xyzf[dy][dx + 1] };
 					shader.uv = up_uv;
 					shader.Diffuse(xyzf[dy + 1][dx][2] - xyzf[dy + 1][dx + 1][2], xyzf[dy][dx + 1][2] - xyzf[dy + 1][dx + 1][2]);
-					Rasterize(ptr, w, h, &shader, up);
+					Rasterize(ptr, w, h, &shader, up, false);
 				}
 			}
 			else
@@ -1195,7 +1207,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* lo[3] = { xyzf[dy][dx], xyzf[dy + 1][dx + 1], xyzf[dy][dx + 1] };
 					shader.uv = lo_uv;
 					shader.Diffuse(-xyzf[dy][dx][2] + xyzf[dy][dx + 1][2], -xyzf[dy][dx + 1][2] + xyzf[dy + 1][dx + 1][2]);
-					Rasterize(ptr, w, h, &shader, lo);
+					Rasterize(ptr, w, h, &shader, lo, false);
 				}
 				else
 				{
@@ -1203,7 +1215,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* lo[3] = { xyzf[dy][dx + 1], xyzf[dy + 1][dx + 1], xyzf[dy][dx] };
 					shader.uv = lo_uv;
 					shader.Diffuse(xyzf[dy][dx][2] - xyzf[dy][dx + 1][2], xyzf[dy][dx + 1][2] - xyzf[dy + 1][dx + 1][2]);
-					Rasterize(ptr, w, h, &shader, lo);
+					Rasterize(ptr, w, h, &shader, lo, false);
 				}
 
 
@@ -1219,7 +1231,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* up[3] = { xyzf[dy + 1][dx + 1], xyzf[dy][dx], xyzf[dy + 1][dx]  };
 					shader.uv = up_uv;
 					shader.Diffuse(-xyzf[dy + 1][dx][2] + xyzf[dy + 1][dx + 1][2], -xyzf[dy][dx][2] + xyzf[dy + 1][dx][2]);
-					Rasterize(ptr, w, h, &shader, up);
+					Rasterize(ptr, w, h, &shader, up, false);
 				}
 				else
 				{
@@ -1227,7 +1239,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					const int* up[3] = { xyzf[dy + 1][dx], xyzf[dy][dx], xyzf[dy + 1][dx + 1] };
 					shader.uv = up_uv;
 					shader.Diffuse(xyzf[dy + 1][dx][2] - xyzf[dy + 1][dx + 1][2], xyzf[dy][dx][2] - xyzf[dy + 1][dx][2]);
-					Rasterize(ptr, w, h, &shader, up);
+					Rasterize(ptr, w, h, &shader, up, false);
 				}
 			}
 		}
@@ -1248,8 +1260,8 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 		for (int lin = 0; lin < HEIGHT_CELLS; lin++)
 		{
-			Bresenham(ptr, w, h, xyzf[lin][mid], xyzf[lin + 1][mid]);
-			Bresenham(ptr, w, h, xyzf[mid][lin], xyzf[mid][lin + 1]);
+			Bresenham(ptr, w, h, xyzf[lin][mid], xyzf[lin + 1][mid], 0x04);
+			Bresenham(ptr, w, h, xyzf[mid][lin], xyzf[mid][lin + 1], 0x04);
 		}
 	}
 }
@@ -2182,7 +2194,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 						// if this is terrain sample, convert it to rgb first
 						// s->visual = ;
 						s->spare |= 0x8;
-						s->spare &= ~4;
+						s->spare &= ~0x44;
 						s->diffuse = dz;
 					}
 				}
@@ -2674,6 +2686,14 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 				}
 			}
 
+			int linecase = ((src[0].spare & 0x40) >> 6) | ((src[1].spare & 0x40) >> 5) | ((src[dw].spare & 0x40)>>4) | ((src[dw + 1].spare & 0x40) >> 3);
+			static const int linecase_glyph[] = { 0, ',', ',', ',', '`', ';', ';', ';', '`', ';', ';', ';', '`', ';', ';', ';' };
+			if (linecase)
+			{
+				ptr->gl = linecase_glyph[linecase];
+				ptr->fg = 16;
+			}
+			else
 			if (src[0].height < water && src[1].height < water && src[dw].height < water && src[dw+1].height < water)
 			{
 				double s[4] = { 2.0*x,2.0*y,water,1.0 };

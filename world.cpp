@@ -52,9 +52,8 @@ struct Face
 
 	uint32_t visual; // matid_8bits, 3 x {shade_7bits,elev_1bit}
 
-    bool sel;
+    bool freestyle;
 };
-
 
 struct Line
 {
@@ -68,8 +67,6 @@ struct Line
 	Line* share_next[2]; // next line sharing given vertex
 
 	uint32_t visual; // line style & height(depth) offset?
-
-    bool sel;
 };
 
 struct Inst;
@@ -2741,6 +2738,10 @@ void ResetItemInsts(World* w)
 
 bool Mesh::Update(const char* path)
 {
+	if (strstr(path,".akm"))
+	{
+		int bio = 1;
+	}
     FILE* f = fopen(path,"rt");
 	if (!f)
 		return false;
@@ -3037,65 +3038,106 @@ bool Mesh::Update(const char* path)
         int vv[4];
 		int n;
 
-		if (sscanf(buf, "%d %d %d %d %d %s", &n, vv+0,  vv+1,  vv+2,  vv+3, tail_str) < 4 || n != 3 && n != 4)
+		if (sscanf(buf, "%d %d %d %d %d %s", &n, vv+0,  vv+1,  vv+2,  vv+3, tail_str) < 3 || 
+			n != 2 && n != 3 && n != 4 && n != -3 && n != -4)
 		{
  			free(index);
 			fclose(f);
 			return false;
 		}
 
+		// FREESTYLE
+		bool freestyle = false;
+		if (n<0)
+		{
+			freestyle = true;
+			n=-n;
+		}
 
-        for (int v1=0; v1<n; v1++)
-        {
-            if (vv[v1]<0 || vv[v1]>=num_verts)
-            {
-                free(index);
-                fclose(f);
-                return false;            
-            }  
+		if (n>2)
+		{
+			for (int v1=0; v1<n; v1++)
+			{
+				if (vv[v1]<0 || vv[v1]>=num_verts)
+				{
+					free(index);
+					fclose(f);
+					return false;            
+				}  
 
-            if (v1==n-1)
-                break;
+				if (v1==n-1)
+					break;
 
-            for (int v2=v1+1; v2<n; v2++)
-            {
-                if (vv[v1]==vv[v2])
-                {
-                    free(index);
-                    fclose(f);
-                    return false;            
-                }            
-            }
-        }
-    
-		////////////////
-        for (int t=0; t<n-2; t++)
-        {
-		    Face* f = (Face*)malloc(sizeof(Face));
+				for (int v2=v1+1; v2<n; v2++)
+				{
+					if (vv[v1]==vv[v2])
+					{
+						free(index);
+						fclose(f);
+						return false;            
+					}            
+				}
+			}
+		
+			////////////////
+			for (int t=0; t<n-2; t++)
+			{
+				Face* f = (Face*)malloc(sizeof(Face));
 
-            int abc[3] = { vv[0],vv[t+1],vv[t+2] };
+				int abc[3] = { vv[0],vv[t+1],vv[t+2] };
 
-            f->visual = 0;
-            f->mesh = this;
+				f->visual = freestyle ? (1<<30) : 0; // highest bit is line, next is freestyle
+				f->mesh = this;
+				f->freestyle = freestyle;
 
-            f->next = 0;
-            f->prev = tail_face;
-            if (tail_face)
-                tail_face->next = f;
-            else
-                head_face = f;
-            tail_face = f;
+				f->next = 0;
+				f->prev = tail_face;
+				if (tail_face)
+					tail_face->next = f;
+				else
+					head_face = f;
+				tail_face = f;
 
-            for (int i = 0; i < 3; i++)
-            {
-                f->abc[i] = index[abc[i]];
-                f->share_next[i] = f->abc[i]->face_list;
-                f->abc[i]->face_list = f;
-            }
+				for (int i = 0; i < 3; i++)
+				{
+					f->abc[i] = index[abc[i]];
+					f->share_next[i] = f->abc[i]->face_list;
+					f->abc[i]->face_list = f;
+				}
 
-		    faces++;
-        }
+				faces++;
+			}
+		}
+		else
+		if (n==2)
+		{
+			if (vv[0]<0 || vv[0]>=num_verts || 
+				vv[1]<0 || vv[1]>=num_verts ||
+				vv[0] == vv[1])
+			{
+				free(index);
+				fclose(f);
+				return false;            
+			}  
 
+			Line* l = (Line*)malloc(sizeof(Line));
+			l->ab[0] = index[vv[0]];
+			l->ab[1] = index[vv[1]];
+
+			l->visual = freestyle ? (3<<30) : (2<<30); // highest bit is line, next is freestyle
+			l->mesh = this;
+
+			l->next = 0;
+			l->prev = tail_line;
+			if (tail_line)
+				tail_line->next = l;
+			else
+				head_line = l;
+			tail_line = l;
+
+			lines++;
+		}
+		
         polys++;
         if (polys == num_faces)
 			break;
@@ -3676,6 +3718,30 @@ void QueryMesh(Mesh* m, void (*cb)(float coords[9], uint8_t colors[12], uint32_t
 
         f=f->next;
     }
+
+    Line* l = m->head_line;
+    while (l)
+    {	
+        coords[0] = l->ab[0]->xyzw[0];
+        coords[1] = l->ab[0]->xyzw[1];
+        coords[2] = l->ab[0]->xyzw[2];
+		colors[0] = l->ab[0]->rgba[0];
+		colors[1] = l->ab[0]->rgba[1];
+		colors[2] = l->ab[0]->rgba[2];
+		colors[3] = l->ab[0]->rgba[3];
+
+        coords[3] = l->ab[1]->xyzw[0];
+        coords[4] = l->ab[1]->xyzw[1];
+        coords[5] = l->ab[1]->xyzw[2];
+		colors[4] = l->ab[1]->rgba[0];
+		colors[5] = l->ab[1]->rgba[1];
+		colors[6] = l->ab[1]->rgba[2];
+		colors[7] = l->ab[1]->rgba[3];		
+
+        cb(coords, colors, l->visual, cookie);
+
+        l=l->next;		
+	}
 }
 
 void* GetMeshCookie(Mesh* m)
@@ -3907,6 +3973,9 @@ World* LoadWorld(FILE* f, bool editor)
 				}
 			}
 			mesh_id[mesh_id_len] = 0;
+
+			if (mesh_id_len>=4 && strcmp(mesh_id+mesh_id_len-4,".ply")==0)
+				strcpy(mesh_id+mesh_id_len-4,".akm");
 
 			int inst_name_len = 0;
 			if (1 != fread(&inst_name_len, 4, 1, f))

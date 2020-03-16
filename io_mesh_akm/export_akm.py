@@ -157,10 +157,6 @@ def save_mesh(filepath, mesh, obj, use_normals=True, use_uv_coords=True, use_col
     def rvec2d(v):
         return round(v[0], 6), round(v[1], 6)
 
-    # NO LUCK! Be sure tessellated loop trianlges are available!
-    #if not mesh.loop_triangles and mesh.polygons:
-    #    mesh.calc_loop_triangles()
-
     if use_uv_coords and mesh.uv_layers:
         active_uv_layer = mesh.uv_layers.active.data
     else:
@@ -181,6 +177,46 @@ def save_mesh(filepath, mesh, obj, use_normals=True, use_uv_coords=True, use_col
     ply_faces = [[] for f in range(len(mesh.polygons))]
     vert_count = 0
 
+
+    #prepare edges
+    edges = []
+
+    for e in mesh.edges:
+        if e.use_freestyle_mark:
+            edges.append( [ e.vertices[0], e.vertices[1] ] )
+
+    #no need to remove shared edges with faces, we use use_freestyle_mark!
+    """
+    for p in mesh.polygons:
+        
+        l1 = p.loop_start
+        l2 = p.loop_start + p.loop_total - 1
+            
+        for l in range( l1, l2 ):
+            v1 = mesh.loops[l].vertex_index
+            v2 = mesh.loops[l+1].vertex_index
+            try:
+                edges.remove( [ v1,v2 ] )
+            except:
+                pass
+            try:
+                edges.remove( [ v2,v1 ] )
+            except:
+                pass
+            
+        v1 = mesh.loops[l1].vertex_index
+        v2 = mesh.loops[l2].vertex_index
+
+        try:
+            edges.remove( [ v1,v2 ] )
+        except:
+            pass
+        try:
+            edges.remove( [ v2,v1 ] )
+        except:
+            pass
+    """
+
     for i, f in enumerate(mesh.polygons):
 
         smooth = not use_normals or f.use_smooth
@@ -200,6 +236,12 @@ def save_mesh(filepath, mesh, obj, use_normals=True, use_uv_coords=True, use_col
             ]
 
         pf = ply_faces[i]
+
+        if f.use_freestyle_mark:
+            pf.append(-len(f.vertices))
+        else:
+            pf.append(len(f.vertices))
+
         for j, vidx in enumerate(f.vertices):
             v = mesh_verts[vidx]
 
@@ -247,6 +289,75 @@ def save_mesh(filepath, mesh, obj, use_normals=True, use_uv_coords=True, use_col
 
             pf.append(pf_vidx)
 
+    #reindex edge verts, add verts if needed
+    for e in edges:
+
+        vidx = e[0]
+
+        v = mesh_verts[vidx]
+        if smooth:
+            normal = v.normal[:]
+            normal_key = rvec3d(normal)
+        if use_uv_coords:
+            uvcoord = uv[j][0], uv[j][1]
+            uvcoord_key = rvec2d(uvcoord)
+        if use_colors:
+            weight = 0.0
+            for g in v.groups:
+                if g.group == obj.vertex_groups.active.index:
+                    weight = obj.vertex_groups.active.weight(vidx)
+                    break
+            color = col[j]
+            color = (
+                int(round(color[0] * 255.0)),
+                int(round(color[1] * 255.0)),
+                int(round(color[2] * 255.0)),
+                int(round(weight * 255.0)),
+            )
+
+        key = normal_key, uvcoord_key, color
+        vdict_local = vdict[vidx]
+        pf_vidx = vdict_local.get(key)  # Will be None initially
+        if pf_vidx is None:  # Same as vdict_local.has_key(key)
+            pf_vidx = vdict_local[key] = vert_count
+            ply_verts.append((vidx, normal, uvcoord, color))
+            vert_count += 1
+
+        e[0] = pf_vidx
+
+        vidx = e[1]
+        
+        v = mesh_verts[vidx]
+        if smooth:
+            normal = v.normal[:]
+            normal_key = rvec3d(normal)
+        if use_uv_coords:
+            uvcoord = uv[j][0], uv[j][1]
+            uvcoord_key = rvec2d(uvcoord)
+        if use_colors:
+            weight = 0.0
+            for g in v.groups:
+                if g.group == obj.vertex_groups.active.index:
+                    weight = obj.vertex_groups.active.weight(vidx)
+                    break
+            color = col[j]
+            color = (
+                int(round(color[0] * 255.0)),
+                int(round(color[1] * 255.0)),
+                int(round(color[2] * 255.0)),
+                int(round(weight * 255.0)),
+            )
+
+        key = normal_key, uvcoord_key, color
+        vdict_local = vdict[vidx]
+        pf_vidx = vdict_local.get(key)  # Will be None initially
+        if pf_vidx is None:  # Same as vdict_local.has_key(key)
+            pf_vidx = vdict_local[key] = vert_count
+            ply_verts.append((vidx, normal, uvcoord, color))
+            vert_count += 1
+
+        e[1] = pf_vidx
+
     with open(filepath, "w", encoding="utf-8", newline="\n") as file:
         fw = file.write
 
@@ -285,7 +396,7 @@ def save_mesh(filepath, mesh, obj, use_normals=True, use_uv_coords=True, use_col
                 "property uchar alpha\n"
             )
 
-        fw(f"element face {len(mesh.polygons)}\n")
+        fw(f"element face {len(mesh.polygons) + len(edges)}\n")
         fw("property list uchar uint vertex_indices\n")
 
         fw("end_header\n")
@@ -294,11 +405,11 @@ def save_mesh(filepath, mesh, obj, use_normals=True, use_uv_coords=True, use_col
         # ---------------------------
 
         for i, v in enumerate(ply_verts):
-            fw("%.6f %.6f %.6f" % mesh_verts[v[0]].co[:])
+            fw("%.3f %.3f %.3f" % mesh_verts[v[0]].co[:])
             if use_normals:
-                fw(" %.6f %.6f %.6f" % v[1])
+                fw(" %.2f %.2f %.2f" % v[1])
             if use_uv_coords:
-                fw(" %.6f %.6f" % v[2])
+                fw(" %.3f %.3f" % v[2])
             if use_colors:
                 fw(" %u %u %u %u" % v[3])
             fw("\n")
@@ -307,10 +418,19 @@ def save_mesh(filepath, mesh, obj, use_normals=True, use_uv_coords=True, use_col
         # ---------------------------
 
         for pf in ply_faces:
-            fw(f"{len(pf)}")
+            # we have len already in array of indices!
+            # fw(f"{len(pf)}")
             for v in pf:
-                fw(f" {v}")
+                fw(f"{v} ")
             fw("\n")
+
+        # Edge data
+        # ---------------------------
+
+        for e in edges:
+            fw(f"{2}")
+            fw(f" {e[0]} {e[1]} ")
+            fw("\n")            
 
         print(f"Writing {filepath!r} done")
 
