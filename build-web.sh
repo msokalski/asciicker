@@ -143,15 +143,16 @@ emcc --emrun -O3 \
     --preload-file sprites/wolfie-0000.xp \
     --preload-file sprites/wolfie-0001.xp \
     --preload-file sprites/wolfie-0010.xp \
-    --preload-file meshes/bridge-1.ply \
-    --preload-file meshes/fence.ply \
-    --preload-file meshes/rock-1.ply \
-    --preload-file meshes/bush-1.ply \
-    --preload-file meshes/house-3.ply \
-    --preload-file meshes/skull.ply \
-    --preload-file meshes/tree-1.ply \
-    --preload-file meshes/tree-2.ply \
-    --preload-file meshes/ship-1.ply 
+    --preload-file meshes/bridge-1.akm \
+    --preload-file meshes/fence.akm \
+    --preload-file meshes/rock-1.akm \
+    --preload-file meshes/bush-1.akm \
+    --preload-file meshes/house-3.akm \
+    --preload-file meshes/skull.akm \
+    --preload-file meshes/tree-1.akm \
+    --preload-file meshes/tree-2.akm \
+    --preload-file meshes/ship-1.akm \
+    --preload-file meshes/laundry-1.akm
 
 # run in mini-server
 emrun --no_browser --port 8888 .web/index.html
