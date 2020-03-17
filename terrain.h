@@ -67,6 +67,8 @@ size_t GetTerrainBytes(Terrain* t);
 
 uint16_t GetTerrainDiag(Patch* p);
 void SetTerrainDiag(Patch* p, uint16_t diag);
+uint16_t GetTerrainDark(Patch* p);
+void SetTerrainDark(Patch* p, uint16_t dark);
 
 void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
 void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, void (*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);

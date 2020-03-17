@@ -134,9 +134,9 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 		// calc all varyings at 0,0 screen coord
 		// and their dx,dy gradients
 
-		if (area > 0 || area<0 && dblsided)
+		if (area > 0)
 		{
-			assert(area < 0x10000 && area > -0x10000);
+			assert(area > -0x10000);
 			float normalizer = (1.0f - FLT_EPSILON) / area;
 
 			// canvas intersection with triangle bbox
@@ -160,25 +160,8 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 						BC_P(v[0], v[1], p)
 					};
 
-					// outside
-					/*
 					if (bc[0] < 0 || bc[1] < 0 || bc[2] < 0)
-					//if ((bc[0] | bc[1] | bc[2]) < 0)
 						continue;
-					*/
-
-					
-					if (area > 0)
-					{
-						if (bc[0] < 0 || bc[1] < 0 || bc[2] < 0)
-							continue;
-					}
-					else
-					{
-						if (bc[0] > 0 || bc[1] > 0 || bc[2] > 0)
-							continue;
-					}
-					
 
 					// edge pairing
 					if (bc[0] == 0 && v[1][0] <= v[2][0] ||
@@ -197,32 +180,60 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 						bc[2] * normalizer
 					};
 
-					// todo: calc 'z' as z @ 0,0 + x*dzdx + y*dzdy
-					// ...
-					
-					// todo: separate depth+water test from fill
-					// make test here, if it passes calc all other varyings similarly to 'z'
-					// ...
+					float z = nbc[0] * v[0][2] + nbc[1] * v[1][2] + nbc[2] * v[2][2];
+					s->Blend(row,z,nbc);
+				}
+			}
+		}
+		else
+		if (area < 0 && dblsided)
+		{
+			assert(area > -0x10000);
+			float normalizer = (1.0f - FLT_EPSILON) / area;
+
+			// canvas intersection with triangle bbox
+			int left = std::max(0, std::min(v[0][0], std::min(v[1][0], v[2][0])));
+			int right = std::min(w, std::max(v[0][0], std::max(v[1][0], v[2][0])));
+			int bottom = std::max(0, std::min(v[0][1], std::min(v[1][1], v[2][1])));
+			int top = std::min(h, std::max(v[0][1], std::max(v[1][1], v[2][1])));
+
+			Sample* col = buf + bottom * w + left;
+			for (int y = bottom; y < top; y++, col += w)
+			{
+				Sample* row = col;
+				for (int x = left; x < right; x++, row++)
+				{
+					int p[2] = { x,y };
+
+					int bc[3] =
+					{
+						BC_P(v[1], v[2], p),
+						BC_P(v[2], v[0], p),
+						BC_P(v[0], v[1], p)
+					};
+
+					if (bc[0] > 0 || bc[1] > 0 || bc[2] > 0)
+						continue;
+
+					// edge pairing
+					if (bc[0] == 0 && v[1][0] <= v[2][0] ||
+						bc[1] == 0 && v[2][0] <= v[0][0] ||
+						bc[2] == 0 && v[0][0] <= v[1][0])
+					{
+						continue;
+					}
+
+					assert(bc[0] + bc[1] + bc[2] == area);
+
+					float nbc[3] =
+					{
+						bc[0] * normalizer,
+						bc[1] * normalizer,
+						bc[2] * normalizer
+					};
 
 					float z = nbc[0] * v[0][2] + nbc[1] * v[1][2] + nbc[2] * v[2][2];
-					//float z = (bc[0] * v[0][2] + bc[1] * v[1][2] + bc[2] * v[2][2]) * normalizer;
-
-					// currently we have 3 muls (normalization) and 3 muls, 2 adds per varying
-					// that for {z,r,g,b} results in: 15 muls and 8 adds
-
-					// if we use gradients, we'd have: 2 muls and 2 adds per varying
-					// resulting in: 8 muls and 8 adds
-
-					s->Blend(row,z,nbc);
-					/*
-					if (row->DepthTest_RW(z))
-					{
-						if (global_refl_mode)
-							s->Refl(row, nbc);
-						else
-							s->Fill(row, nbc);
-					}
-					*/
+					s->Blend(row, z, nbc);
 				}
 			}
 		}

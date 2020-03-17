@@ -84,11 +84,12 @@ struct Node : QuadItem
 
 struct Patch : QuadItem // 564 bytes (512x512 'raster' map would require 564KB)
 {
+	uint64_t dark; // (8x8)
 	// visual contains:                grass, sand, rock,
 	// 1bit elevation, 6bit material
 	uint16_t visual[VISUAL_CELLS][VISUAL_CELLS];
 	uint16_t height[HEIGHT_CELLS + 1][HEIGHT_CELLS + 1];
-	uint16_t diag;
+	uint16_t diag; // (4x4)
 
 #ifdef TEXHEAP
 	TexAlloc* ta; // MUST BE AT THE TAIL OF STRUCT !!!
@@ -149,6 +150,7 @@ Terrain* CreateTerrain(int z)
 		p->lo = z;
 		p->hi = z;
 		p->flags = 0; // (no neighbor)
+		p->dark = 0;
 
 		for (int y = 0; y <= HEIGHT_CELLS; y++)
 			for (int x = 0; x <= HEIGHT_CELLS; x++)
@@ -653,6 +655,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 		p->lo = z;
 		p->hi = z;
 		p->flags = 0; // no neighbor
+		p->dark = 0;
 
 		for (int y = 0; y <= HEIGHT_CELLS; y++)
 			for (int x = 0; x <= HEIGHT_CELLS; x++)
@@ -905,6 +908,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			n->quad[i] = p;
 			p->parent = n;
 			p->flags = 0;
+			p->dark = 0;
 
 			p->diag = 0;
 
@@ -1398,6 +1402,132 @@ uint16_t GetTerrainDiag(Patch* p)
 void SetTerrainDiag(Patch* p, uint16_t diag)
 {
 	p->diag = diag;
+}
+
+uint16_t GetTerrainDark(Patch* p)
+{
+	return p->dark;
+}
+
+void SetTerrainDark(Patch* p, uint16_t dark)
+{
+	p->dark = dark;
+}
+
+void QueryTerrainSample(Patch* p, int x, int y, void(*cb)(Patch* p, int u, int v, double coords[3], void* cookie), void* cookie)
+{
+	static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
+
+	for (int v = 0; v < VISUAL_CELLS; v++)
+	{
+		double fv = (2 * v + 1) * HEIGHT_CELLS / (2.0 * VISUAL_CELLS);
+		int hy = (int)floor(fv);
+		fv -= hy;
+
+		for (int u = 0; u < VISUAL_CELLS; u++)
+		{
+			// get the geometry triangle for visual uv
+
+			double fu = (2 * u + 1) * HEIGHT_CELLS / (2.0 * VISUAL_CELLS);
+			int hx = (int)floor(fu);
+			fu -= hx;
+
+			double h;
+
+			bool rot = p->diag & (1 << (hx + hy * HEIGHT_CELLS));
+
+			if (rot)
+			{
+				if (u < VISUAL_CELLS - v)
+				{
+					// v[2], v[0], v[1]
+					h = p->height[hy][hx] +
+						fu * (p->height[hy][hx + 1] - p->height[hy][hx]) +
+						fv * (p->height[hy + 1][hx] - p->height[hy][hx]);
+				}
+				else
+				{
+					// v[2], v[1], v[3]
+					h = p->height[hy + 1][hx + 1] +
+						(1 - fu) * (p->height[hy + 1][hx] - p->height[hy + 1][hx + 1]) +
+						(1 - fv) * (p->height[hy][hx + 1] - p->height[hy + 1][hx + 1]);
+				}
+			}
+			else
+			{
+				if (u < y)
+				{
+					// v[0], v[3], v[2]
+					h = p->height[hy][hx] +
+						fu * (p->height[hy + 1][hx + 1] - p->height[hy + 1][hx]) +
+						fv * (p->height[hy + 1][hx] - p->height[hy][hx]);
+				}
+				else
+				{
+					// v[0], v[1], v[3]
+					h = p->height[hy][hx] +
+						fu * (p->height[hy][hx + 1] - p->height[hy][hx]) +
+						fv * (p->height[hy + 1][hx + 1] - p->height[hy][hx + 1]);
+				}
+			}
+
+			double pnt[] = { x + u + 0.5, y + v + 0.5, h / HEIGHT_SCALE };
+			cb(p, u,v, pnt, cookie);
+		}
+	}
+}
+
+void QueryTerrainSample(QuadItem* q, int x, int y, int range, void(*cb)(Patch* p, int u, int v, double coords[3], void* cookie), void* cookie)
+{
+	if (range > VISUAL_CELLS)
+	{
+		range >>= 1;
+		Node* n = (Node*)q;
+		if (n->quad[0])
+			QueryTerrainSample(n->quad[0], x, y, range, cb, cookie);
+		if (n->quad[1])
+			QueryTerrainSample(n->quad[1], x + range, y, range, cb, cookie);
+		if (n->quad[2])
+			QueryTerrainSample(n->quad[2], x, y + range, range, cb, cookie);
+		if (n->quad[3])
+			QueryTerrainSample(n->quad[3], x + range, y + range, range, cb, cookie);
+	}
+	else
+		QueryTerrainSample((Patch*)q, x, y, cb, cookie);
+}
+
+void UpdateDark(Terrain* t, float lightpos[3])
+{
+	struct Updater
+	{
+		static void cb(Patch* p, int u, int v, double coords[3], void* cookie)
+		{
+			Updater* updater = (Updater*)cookie;
+
+			double hit[3];
+			Patch* q = HitTerrain(updater->t, coords, updater->lightdir, hit, 0);
+
+			uint64_t mask = ((uint64_t)1) << (u + VISUAL_CELLS * v);
+
+			if (q)
+			{
+				if (q != p || hit[2] > coords[2] + 0.01)
+					p->dark |= mask;
+				else
+					p->dark &= ~mask;
+			}
+			else
+				p->dark &= ~mask;
+		}
+
+		Terrain* t;
+		double lightdir[3];
+	};
+
+	Updater updater = { t, {-lightpos[0], -lightpos[1], -lightpos[2]} };
+
+	if (t->root)
+		QueryTerrainSample(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, Updater::cb, &updater);
 }
 
 static inline /*__forceinline*/ void QueryTerrain(QuadItem* q, int x, int y, int range, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie)

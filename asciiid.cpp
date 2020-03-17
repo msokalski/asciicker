@@ -3750,6 +3750,16 @@ void Load(const char* path)
 	//TranslateMap(-100, false);
 }
 
+void CastShadows()
+{
+	// for every single terrain's visual cell 
+	// do ray cast in direction of light and check if it hits something else above
+	// if so, set dark bit
+
+	// then for every mesh instance (with preallocated bit array for vertices)
+	// to same and store 
+}
+
 void my_render(A3D_WND* wnd)
 {
 
@@ -4451,6 +4461,11 @@ void my_render(A3D_WND* wnd)
 		if (ImGui::Button(io.KeyShift ? "DEPALETTIZE" : "PALETTIZE"))
 		{
 			Palettize(io.KeyShift ? 0 : pal[active_palette].rgb);
+		}
+
+		if (ImGui::Button("CAST SHADOWS"))
+		{
+			CastShadows();
 		}
 
 		if (!save)
