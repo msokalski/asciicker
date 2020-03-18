@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdio.h>
+#include "world.h"
 
 #define HEIGHT_SCALE 16 // how may z-steps produces 1 visual cell
 #define HEIGHT_CELLS 4 // num of verts -1 along patch X and Y axis
@@ -67,8 +68,12 @@ size_t GetTerrainBytes(Terrain* t);
 
 uint16_t GetTerrainDiag(Patch* p);
 void SetTerrainDiag(Patch* p, uint16_t diag);
-uint16_t GetTerrainDark(Patch* p);
-void SetTerrainDark(Patch* p, uint16_t dark);
+
+#ifdef DARK_TERRAIN
+uint64_t GetTerrainDark(Patch* p);
+void SetTerrainDark(Patch* p, uint64_t dark);
+void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3]);
+#endif
 
 void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);
 void QueryTerrain(Terrain* t, int planes, double plane[][4], int view_flags, void (*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);

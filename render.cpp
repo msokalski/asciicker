@@ -951,12 +951,21 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 						else
 						*/
 						{
-							uint16_t m = map[v * VISUAL_CELLS + u];
+							int visual_idx = v * VISUAL_CELLS + u;
+							uint16_t m = map[visual_idx];
 							if (m & 0x8000)
 								s->height += HEIGHT_SCALE;
 
 							s->visual = m;
 							s->diffuse = diffuse;
+
+							/*
+							if (dark&(((uint64_t)1) << visual_idx))
+								s->diffuse /= 4;
+							else
+								s->diffuse *= 16;
+							*/
+
 							s->spare = (s->spare & ~(0x8|0x3|0x44)) | parity; // clear refl, mesh and line, then add parity
 						}
 					}
@@ -1026,6 +1035,9 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 		float light[4];
 		uint8_t diffuse; // shading experiment
 		uint8_t parity;
+#ifdef DARK_TERRAIN
+		uint64_t dark;
+#endif
 	} shader;
 
 	Renderer* r = (Renderer*)cookie;
@@ -1124,6 +1136,11 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 	// 1 - odd
 	// 2 - even
 	// 3 - under water
+
+#ifdef DARK_TERRAIN
+	shader.dark = GetTerrainDark(p);
+#endif
+
 	shader.parity = (((x^y)/VISUAL_CELLS) & 1) + 1; 
 	shader.water = r->water;
 	shader.map = GetTerrainVisualMap(p);
@@ -2168,6 +2185,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 			left=0;
 		if (right>=dw)
 			right=dw-1;
+
 		for (int x = left; x <= right; x++)
 		{
 			Sample* s = r->sample_buffer.ptr + x + y * dw;
@@ -2180,6 +2198,18 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 				double dx = world_space[0]/HEIGHT_CELLS - pos[0];
 				double dy = world_space[1]/HEIGHT_CELLS - pos[1];
 				double sq_xy = dx*dx + dy*dy;
+
+				// de-elevation
+				if (sq_xy <= 3.50 && s->height > pos[2])
+				{
+					s->visual &= ~(1 << 15); // its fine even for rgb (15 bits)
+					s->diffuse = 0;
+					s->height -= HEIGHT_SCALE;
+				}
+
+				// continue;
+
+
 				if (sq_xy <= 2.00)
 				{
 					int dz = (int)(2*(pos[2] - s->height) + 2*sq_xy);
