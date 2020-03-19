@@ -960,8 +960,12 @@ def save(
 							break
 
 					if c.type == 'IK':
-						if not c.target or not c.pole_target:
-							print("skipping - constraint target or pole target is missing for",o.name,".",b.name)
+						if not c.target:
+							print("skipping - constraint target is missing for",o.name,".",b.name)
+							ok = False
+						elif not c.pole_target:
+							print("skipping - constraint pole_target is missing for",o.name,".",b.name)
+							ok = False
 						
 				if not ok:
 					break
