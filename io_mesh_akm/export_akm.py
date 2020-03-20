@@ -18,168 +18,6 @@
 
 # <pep8-80 compliant>
 
-"""
-	enum ConstraintType
-	{
-		CON_FOLLOW_PATH = 1,
-		CON_IK = 2
-	};
-
-	enum ObjectType
-	{
-		OBJ_MESH = 1,
-		OBJ_CURVE = 2,
-		OBJ_ARMATURE = 3,
-	};
-
-	enum ParentType
-	{
-		PAR_OBJECT = 1,
-		PAR_BONE = 2,
-		PAR_ARMATURE = 3,
-		PAR_VERTEX = 4,
-		PAR_VERTEX_3 = 5,
-	};
-
-	struct Constraint
-	{
-		ConstraintType type;
-	};
-
-	struct Armature
-	{
-		struct Bone
-		{
-			int parent_index;
-			int constraints;
-			int constraint_table_offset;
-			int bone_children;
-			int object_children;
-			int child_index[1]; // bones first then objects
-		};
-
-		int bones;
-		int bone_offset[1];
-
-		Bone* GetBone(int index)
-		{
-			if (index<0 || index>=bones)
-				return 0;
-			return (Bone*) ( (char*)this + bone_offset[index] );
-		}
-	};
-
-	struct Object
-	{
-		ObjectType type;
-
-		int parent_index;
-		ParentType parent_type;
-
-		union
-		{
-			struct // parent_type == PAR_BONE
-			{
-				int parent_bone_index;
-			};
-
-			struct // parent_type == PAR_VERTEX
-			{
-				int parent_vertex;
-			};
-
-			struct // parent_type == PAR_VERTEX_3
-			{
-				int parent_vertex_3[3];
-			};
-		};
-
-		int constraints;
-		int constraint_table_offset;
-
-		int object_data_offset;
-
-		int children;
-		int child_index[1];
-
-		Constraint* GetConstraint(int index)
-		{
-			if (index < 0 || index >= constraints)
-				return 0;
-			int* table = (char*)this + constraint_table_offset;
-			return (Constraint*) ( (char*)this + table[index] );
-		}
-
-		void* GetObjectData() // cast onto Mesh/Curve/Armature (depending on object_type)
-		{
-			return (char*)this + object_data_offset;
-		}
-	};
-
-	struct Scene
-	{
-		int objects;
-		int object_offset[1];
-
-		void Free() const
-		{
-			free(this);
-		}
-
-		static const Scene* Load(const char* path)
-		{
-			FILE* f = fopen(path,"rb");
-			if (!f)
-				return 0;
-
-			char type_ver[8];
-			if (fread(type_ver, 1, 8, f) != 8)
-			{
-				fclose(f);
-				return 0;
-			}
-
-			if (memcmp(type_ver,"AKM-1000",8))
-			{
-				fclose(f);
-				return 0;
-			}
-
-			int size;
-			if (fread(&size, 1, 4, f) != 4)
-			{
-				fclose(f);
-				return 0;
-			}
-
-			Scene* s = (Scene*)malloc(size);
-			if (!s)
-			{
-				fclose(f);
-				return 0;
-			}
-
-			if (fread(s, 1, size, f) != size)
-			{
-				free(s);
-				fclose(f);
-				return 0;
-			}
-
-			fclose(f);
-			return s;
-		}
-
-		Object* GetObject(int index) const
-		{
-			if (index < 0 || index >= objects)
-				return 0;
-			return (Object*) ( (char*)this + obj_ofs[index] );
-		}
-	};
-
-"""
-
 import os
 import types
 import struct
@@ -787,33 +625,31 @@ def save_obj(fout, obj, idx_dict):
 		size += wr_int(fout,obj.parent_vertices[1])
 		size += wr_int(fout,obj.parent_vertices[2])
 
-	num_con = len(obj.constraints)
+	#find smallest index of child object
+	first_child = -1
+	num_children = 0
+	for c in idx_dict:
+		if c.parent == obj:
+			num_children += 1
+			if idx_dict[c] < first_child or first_child < 0:
+				first_child = idx_dict[c]
 
-	# NUM OF CONSTRAINTS
-	size += wr_int(fout,num_con)
+	# FIRST CHILD INDEX
+	size += wr_int(fout,first_child)
 
-	# offset to array of offsets to constraints
-	con_arr_ofs = wr_ref(fout)
-	size += 4
+	# NUM OF CHILDREN
+	size += wr_int(fout,num_children)
 
 	# offset to obj data (type dependent)
 	obj_data_ofs = wr_ref(fout)
 	size += 4
 
-	ch_idx = []
-	for c in idx_dict:
-		if c.parent == obj:
-			ch_idx.append(idx_dict[c])
+	num_con = len(obj.constraints)
 
-	# NUM OF CHILDREN
-	size += wr_int(fout,len(ch_idx))
+	# NUM OF CONSTRAINTS
+	size += wr_int(fout,num_con)
 
-	# CHILDREN IDX ARRAY
-	for c in ch_idx:
-		size += wr_int(fout,c)
-
-	# array of offsets into each constraint from beginning of object
-	wr_int(con_arr_ofs,size)
+	# array of offsets to constraints
 	con_ofs = wr_ref(fout)
 	size += 4*num_con
 
@@ -938,6 +774,14 @@ def save(
 				ok = False
 				break
 
+			# ensure target is not descendant
+			t = c.target
+			while t:
+				if t == o:
+					print("WARNING - constraint target points to descendant",o.name,"->",c.target)
+					break
+				t=t.parent
+
 		if not ok:
 			continue #unknown constraint type, sorry
 
@@ -950,7 +794,7 @@ def save(
 				for c in b.constraints:
 					if c.type != 'FOLLOW_PATH' and c.type != 'IK':
 						ok = False
-						print("skipping - unsupported constraint",c.type,"in",o.name,".",b.name)
+						print("SKIPPING - unsupported constraint",c.type,"in",o.name,".",b.name)
 						break
 
 					if c.type == 'FOLLOW_PATH':
@@ -958,14 +802,37 @@ def save(
 							print("skipping - constraint target is missing or is not CURVE for",o.name,".",b.name)
 							ok = False
 							break
+						# ensure target is not descendant
+						t = c.target
+						while t:
+							if t == o:
+								print("WARNING - constraint target points to descendant",o.name,".",b.name,"->",c.target)
+								break
+							t=t.parent
 
 					if c.type == 'IK':
 						if not c.target:
-							print("skipping - constraint target is missing for",o.name,".",b.name)
+							print("SKIPPING - constraint target is missing for",o.name,".",b.name)
 							ok = False
+							break
 						elif not c.pole_target:
-							print("skipping - constraint pole_target is missing for",o.name,".",b.name)
+							print("SKIPPING - constraint pole_target is missing for",o.name,".",b.name)
 							ok = False
+							break
+						# warn if target is not descendant of bone
+						t = c.target
+						while t:
+							if t == o:
+								print("WARNING - constraint target points to descendant",o.name,".",b.name,"->",c.target)
+								break
+							t=t.parent
+						# warn if pole_target is descendant of bone
+						t = c.pole_target
+						while t:
+							if t == o:
+								print("WARNING - constraint pole_target points to descendant",o.name,".",b.name,"->",c.pole_target)
+								break
+							t=t.parent
 						
 				if not ok:
 					break
@@ -974,9 +841,6 @@ def save(
 			continue #unknown bone's constraint type, sorry
 
 		obj_list.append(o)
-
-	# now we have to check obj references
-	# - parent, bone name exist
 
 	ok = False
 	while not ok:
@@ -987,7 +851,7 @@ def save(
 				try:
 					idx = obj_list.index(o.parent)
 				except:
-					print("skipping - skipped parent",o.parent.name,"of",o.name)
+					print("SKIPPING - skipped parent",o.parent.name,"of",o.name)
 					ok = False
 					continue
 
@@ -996,7 +860,7 @@ def save(
 					try:
 						idx = obj_list.index(c.target)
 					except:
-						print("skipping - constraint target is skipped for in",o.name)
+						print("SKIPPING - constraint target is skipped for in",o.name)
 						ok = False
 					if not ok:
 						break
@@ -1010,7 +874,7 @@ def save(
 							try:
 								idx = obj_list.index(c.target)
 							except:
-								print("skipping - constraint target is skipped for",o.name,".",b.name)
+								print("SKIPPING - constraint target is skipped for",o.name,".",b.name)
 								ok = False
 								break
 
@@ -1018,13 +882,13 @@ def save(
 							try:
 								idx = obj_list.index(c.target)
 							except:
-								print("skipping - constraint target is skipped for",o.name,".",b.name)
+								print("SKIPPING - constraint target is skipped for",o.name,".",b.name)
 								ok = False
 								break
 							try:
 								idx = obj_list.index(c.pole_target)
 							except:
-								print("skipping - constraint pole_target is skipped for",o.name,".",b.name)
+								print("SKIPPING - constraint pole_target is skipped for",o.name,".",b.name)
 								ok = False
 								break
 						
@@ -1037,6 +901,26 @@ def save(
 		obj_list = obj_check_list
 			
 	print("-------------------------")
+
+	def sort_obj(obj_curr,obj_root,obj_desc):
+		i1 = len(obj_root)
+		for o in obj_desc:
+			if o.parent == obj_curr:
+				obj_root.append(o)
+		i2 = len(obj_root)
+		for i in range(i1,i2):
+			sort_obj(obj_root[i],obj_root,obj_desc)
+		return i2-i1
+
+	obj_root = []
+	root_num = sort_obj(None,obj_root,obj_list)
+
+	# now we need to (at least try to) sub-sort siblings
+	# warn if constraint cycyles are detected
+
+	if len(obj_root) != len(obj_list):
+		print("SORT ERROR")
+	obj_list = obj_root
 
 	obj_dict = dict()
 	obj_num = 0
@@ -1058,8 +942,11 @@ def save(
 
 	# from now (after 12 bytes) we start accumulating fpos	
 
-	# num of objects in scene
-	fpos += wr_int(fout,len(obj_list))
+	# num of root objects
+	fpos += wr_int(fout,root_num)
+
+	# num of all objects in scene
+	fpos += wr_int(fout,obj_num)
 
 	# placeholder for array of offsets to each object
 	obj_ofs = wr_ref(fout)

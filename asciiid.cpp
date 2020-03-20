@@ -7392,8 +7392,63 @@ void my_close(A3D_WND* wnd)
 
 extern "C" void DumpLeakCounter();
 
+#include "mesh.h"
+
 int main(int argc, char *argv[]) 
 {
+	Scene* scene = Scene::Load("./meshes/untitled.akm");
+
+	for (int i = 0; i < scene->objects; i++)
+	{
+		Object* object = scene->GetObjectPtr(i);
+
+		Object* parent = scene->GetObjectPtr(object->parent_index);
+
+		printf("obj:%d par:%d children:%d {", i, object->parent_index, object->children);
+
+		for (int c = 0; c < object->children; c++)
+		{
+			int child_index = object->first_child_index + c;
+			Object* child = scene->GetObjectPtr( child_index );
+			printf(c == object->children-1 ? "%d" : "%d,", child_index);
+		}
+
+		printf("}\n");
+	}
+
+	struct ObjPrint
+	{
+		static void print(Scene* scene, int index, int indent)
+		{
+			const char* par_types[] = { "","PAR_OBJECT","PAR_BONE","PAR_ARMATURE","PAR_VERTEX","PAR_VERTEX_3" };
+			const char* obj_types[] = { "","OBJ_MESH","OBJ_CURVE","OBJ_ARMATURE" };
+			const char* con_types[] = { "","CON_FOLLOW_PATH","CON_IK" };
+			Object* object = scene->GetObjectPtr(index);
+			for (int i = 0; i < 2 * indent; i++)
+				printf("%c", ' ');
+			printf("(%s,%d,%d,%d) <- %d: (%s)", 
+				par_types[object->parent_type], 
+				object->parent_vertex_3[0], 
+				object->parent_vertex_3[1], 
+				object->parent_vertex_3[2],
+				index, 
+				obj_types[object->type]);
+			for (int c = 0; c < object->constraints; c++)
+			{
+				Constraint* con = object->GetConstraintPtr(c);
+				printf(" + (%s)", con_types[con->type]);
+			}
+			printf("\n");
+			for (int c = 0; c < object->children; c++)
+				print(scene, c + object->first_child_index, indent + 1);
+		}
+	};
+
+	for (int i = 0; i < scene->roots; i++)
+	{
+		ObjPrint::print(scene, i, 0);
+	}
+
 #ifdef _WIN32
 	//_CrtSetBreakAlloc(11952);
 #endif

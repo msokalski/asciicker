@@ -176,6 +176,7 @@
   <ItemGroup>
     <ClInclude Include="game.h" />
     <ClInclude Include="inventory.h" />
+    <ClInclude Include="mesh.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="term.h" />
@@ -203,6 +204,7 @@
     <ClCompile Include="asciiid.cpp" />
     <ClCompile Include="game.cpp" />
     <ClCompile Include="inventory.cpp" />
+    <ClCompile Include="mesh.cpp" />
     <ClCompile Include="mswin.cpp" />
     <ClCompile Include="render.cpp" />
     <ClCompile Include="term.cpp" />
