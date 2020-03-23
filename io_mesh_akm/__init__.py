@@ -7,7 +7,7 @@ bl_info = {
     "location": "File > Import-Export",
     "description": "Import-Export AKM mesh data",
     "wiki_url": "https://asciicker.com/",
-    "support": 'YOURSELF',
+    "support": 'OFFICIAL',
     "category": "Import-Export",
 }
 

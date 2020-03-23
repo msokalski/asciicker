@@ -7,12 +7,16 @@ enum ConstraintType
 	CON_IK = 2
 };
 
+extern const char* ConstraintType_Names[];
+
 enum ObjectType
 {
 	OBJ_MESH = 1,
 	OBJ_CURVE = 2,
 	OBJ_ARMATURE = 3,
 };
+
+extern const char* ObjectType_Names[];
 
 enum ParentType
 {
@@ -23,9 +27,33 @@ enum ParentType
 	PAR_VERTEX_3 = 5,
 };
 
+extern const char* ParentType_Names[];
+
+enum RotationType
+{
+	ROT_QUATERNION = 1,
+	ROT_AXISANGLE = 2,
+	ROT_EULER_XYZ = 3,
+	ROT_EULER_YZX = 4,
+	ROT_EULER_ZXY = 5,
+	ROT_EULER_ZYX = 6,
+	ROT_EULER_YXZ = 7,
+	ROT_EULER_XZY = 8,
+};
+
+extern const char* RotationType_Names[];
+
 struct Constraint
 {
 	ConstraintType type;
+};
+
+struct Transform
+{
+	float position[3];
+	RotationType rot_type;
+	float rotation[4];
+	float scale[3];
 };
 
 struct Armature
@@ -33,13 +61,25 @@ struct Armature
 	struct Bone
 	{
 		int parent_index;
+		int first_child_index;
+		int children;
+
+		Transform transform;
+		// bone data here
+		// ...
+
 		int constraints;
-		int constraint_table_offset;
-		int bone_children;
-		int object_children;
-		int child_index[1]; // bones first then objects
+		int constraint_offset[1];
+
+		Constraint* GetConstraintPtr(int index)
+		{
+			if (index < 0 || index >= constraints)
+				return 0;
+			return (Constraint*)((char*)this + constraint_offset[index]);
+		}
 	};
 
+	int roots;
 	int bones;
 	int bone_offset[1];
 
@@ -79,6 +119,8 @@ struct Object
 	int first_child_index;
 	int children;
 
+	Transform transform;
+	Transform delta_transform;
 	int object_data_offset;
 
 	int constraints;

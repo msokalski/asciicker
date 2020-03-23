@@ -481,8 +481,160 @@ def wr_save(fout,path):
 	file.close()
 	return size
 
-def save_msh(fout, msh, idx_dict):
+def proc_msh(obj):
+
+	# here we need to determine which vertices are necessary
+	# - are referenced by polygons
+	# - or are used as parents for other objects
+
+	grp_dict = dict()
+	idx = 0
+	for g in obj.vertex_groups:
+		grp_dict[g] = idx
+		idx += 1
+
+	# fmt_dict[sorted[g1,g2,g3]] = [v1,v2,...]
+	fmt_dict = dict()
+
+	# construct fromats from sorted groups
+	for v in msh.vertices:
+		f = []
+		for g in v.groups:
+			f.append(grp_dict[g])
+		f.sort()
+		if not f in fmt_dict:
+			fmt_dict[f] = [v]
+		else:
+			fmt_dict[f].append(v)
+
+	# sort vertices by fmt index
+	vtx_dict = dict()
+	idx = 0
+	for f in fmt_dict:
+		for v in f:
+			vtx_dict[v] = idx
+			idx += 1
+
+	return [ obj, grp_dict, fmt_dict, vtx_dict ]
+
+def save_msh(fout, processed_mesh, idx_dict):
 	print("Saving Mesh Data");
+
+	size = 0
+
+	obj = processed_mesh[0]
+	msh = obj.data
+
+	grp_dict = processed_mesh[1]
+	fmt_dict = processed_mesh[2]
+	vtx_dict = processed_mesh[3]
+
+	# num texture coords
+	size += wr_int(fout, len(msh.uv_layers))
+
+	# num vertex colors
+	size += wr_int(fout, len(msh.vertex_colors))
+
+	# num vertex_groups (weight channels)
+	size += wr_int(fout, len(grp_dict))
+	# write offset to groups info
+	# ...
+
+	# num shape_keys (morph targets)
+	keys = len(msh.shape_keys.key_blocks)
+	size += wr_int(fout, keys)
+	# write offset to keys info
+	# ...
+
+	# num verts
+	size += wr_int(fout, len(msh.vertices))
+	# write offset to vertex data (groupped by fmt)
+	# ...
+
+	# num free style edges
+	# ...
+	# write offset to free style edges data
+	# ...
+
+	# num polygons (we don't triangulate, it should be done after all verts are transformed)
+	size += wr_int(fout, len(msh.polygons))
+	# write offset to polygon data
+	# ...
+
+	# HERE WE CAN STILL MAKE USE OF "tail[1]" array
+	# ...
+
+	# GROUPS INFO
+	for g in grp_dict:
+		bone_idx = -1
+		if obj.parent and obj.parent.type == 'ARMATURE':
+			for b in obj.parent.pose.bones:
+				if b.name == g.name:
+					bone_idx = idx_dict[b]
+					break
+		size += wr_int(fout,bone_idx)
+
+	# KEYS INFO
+	print("EVALTIME:",msh.eval_time)
+	print("REFERENVE_KEY",msh.shape_keys.reference_key)
+	print("USER_RELATIVE",msh.shape_keys.use_relative)
+	for k in msh.shape_keys.key_blocks:
+		# per key
+		print("NAME:", k.name)
+		print("INTERPOLATION:", k.interpolation)
+		print("MUTE:", k.mute)
+		print("RELATIVE_TO:", k.relative_k.name)
+		print("SLIDER_MAX:", k.slider_max)
+		print("SLIDER_MIN:", k.slider_min)
+		print("SLIDER_VAL:", k.value)
+		print("VERTEX_GROUP:", k.vertex_group)
+
+	# VERTEX DATA
+	for f in fmt_dict:
+		# write format length (num of used vertex_groups)
+		size += wr_int(fout,len(f))
+		for g in f:
+			# write vertex group index
+			size += wr_int(fout,g) 
+
+		vtx_sublist = fmt_dict[f]
+		# num of vertices in this format
+		size += wr_int(fout,len(vtx_sublist))
+		for v in vtx_sublist:
+			
+			if keys == 0:
+				# base_coords
+				size += wr_fp3(fout, v.co)
+			else:
+				# ALL shape_keys coords (should we exclude first 'basis')?
+				for k in msh.shape_keys.key_blocks:
+					size += wr_fp3(fout,k.data[v.index].co)
+
+			# ALL texture coords
+			for uvl in msh.uv_layers:
+				size += wr_fp2(fout,uvl.data[v.index].uv)
+
+			# ALL vertex colors 
+			for col in msh.vertex_colors:
+				size += wr_fp4(fout,col.data[v.index].color)
+
+			# weights from groups included in format
+			for g in f:
+				size += wr_flt(fout,obj.vertex_groups[g].weight(v.index))
+
+	# FREE STYLE EDGES
+	# ....
+
+	# POLYGON DATA
+	for poly in msh.polygons:
+		size += wr_int(poly.loop_start) #should be rather offset (instead of index)
+		size += wr_int(poly.loop_total)
+		# is free style!
+		# ...
+
+	for loop in msh.loops:
+		wr_int(vtx_dict[loop]) # loop = poly.loop_start + 0,1,2,...,poly.loop_total-1
+
 	return 0
 
 def save_cur(fout, cur, idx_dict):
@@ -503,70 +655,116 @@ def save_con(fout, con, idx_dict):
 
 	return size
 
+def save_tfm(fout, o, delta):
+	size = 0
+	print('ROTATION',o.rotation_mode);
+	p = o.delta_location if delta else o.location
+	s = o.delta_scale if delta else o.scale
+	if o.rotation_mode == 'QUATERNION':
+		r = o.delta_rotation_quaternion if delta else o.rotation_quaternion
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],1,r[0],r[1],r[2],r[3],s[0],s[1],s[2])
+	elif o.rotation_mode == 'AXIS_ANGLE':
+		r = o.delta_rotation_axis_angle if delta else o.rotation_axis_angle
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],2,r[0],r[1],r[2],r[3],s[0],s[1],s[2])
+	elif o.rotation_mode == 'XYZ':
+		r = o.delta_rotation_euler if delta else o.rotation_euler
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],3,r[0],r[1],r[2],0,s[0],s[1],s[2])
+	elif o.rotation_mode == 'YZX':
+		r = o.delta_rotation_euler if delta else o.rotation_euler
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],4,r[0],r[1],r[2],0,s[0],s[1],s[2])
+	elif o.rotation_mode == 'ZXY':
+		r = o.delta_rotation_euler if delta else o.rotation_euler
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],5,r[0],r[1],r[2],0,s[0],s[1],s[2])
+	elif o.rotation_mode == 'ZYX':
+		r = o.delta_rotation_euler if delta else o.rotation_euler
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],6,r[0],r[1],r[2],0,s[0],s[1],s[2])
+	elif o.rotation_mode == 'YZX':
+		r = o.delta_rotation_euler if delta else o.rotation_euler
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],7,r[0],r[1],r[2],0,s[0],s[1],s[2])
+	elif o.rotation_mode == 'ZXY':
+		r = o.delta_rotation_euler if delta else o.rotation_euler
+		chunk = struct.pack('<fffifffffff',p[0],p[1],p[2],8,r[0],r[1],r[2],0,s[0],s[1],s[2])
+	else:
+		chunk = struct.pack('<fffifffffff',0,0,0,0,0,0,0,0,0,0,0)
+
+	fout.append(chunk)
+	return 44
+
+
 def save_arm(fout, arm, pose, idx_dict):
 	print("Saving Armature Data");
 
-	bones = pose.bones
-
 	size = 0
+
+	# export bones in exact idx_dict order
+	bones = sorted(pose.bones, key=lambda b: idx_dict[b])
+
 	num_bones = len(bones)
+
+	# num of root bones
+	num_roots = 0
+	for b in bones:
+		if b.parent:
+			break
+		num_roots += 1
+	size += wr_int(fout,num_roots)
 
 	# num of bones
 	size += wr_int(fout,num_bones)
 
-	bone_dict = dict()
-	bone_idx = 0
-	for b in bones:
-		bone_dict[b] = bone_idx
-		bone_idx += 1
+	# bone offs array
+	bone_ofs = wr_ref(fout)
+	size += 4*num_bones
 
 	for b in bones:
 		print("Saving Bone",b.name);
+
+		wr_int(bone_ofs, size)
 		
+		# parent bone index
 		if b.parent:
-			size += wr_int(fout,bone_dict[b.parent])
+			size += wr_int(fout,idx_dict[b.parent])
 		else:
 			size += wr_int(fout,-1)
+
+		first_child = -1
+		num_children = 0
+		for c in bones:
+			if c.parent == b:
+				num_children +=1
+				if idx_dict[c] < first_child or first_child < 0:
+					first_child = idx_dict[c]
+
+		# FIRST CHILD INDEX
+		size += wr_int(fout,first_child)
+
+		# NUM OF CHILDREN
+		size += wr_int(fout,num_children)
+
+		size += save_tfm(fout, b, False)
+
+		# BONE'S DATA (here, directly without offset)
+		# ...
 
 		num_con = len(b.constraints)
 
 		# NUM OF CONSTRAINTS
 		size += wr_int(fout,num_con)
 
-		# offset to array of offsets to constraints
-		con_arr_ofs = wr_ref(fout)
-		size += 4
-
-		child_idx = []
-		for c in bone_dict:
-			if c.parent == b:
-				child_idx.append(bone_dict[c])
-
-		num_child_bones = len(child_idx)
-		size += wr_int(fout,num_child_bones)
-
-		for o in idx_dict:
-			if o.parent == b:
-				child_idx.append(idx_dict[o])
-
-		num_child_objs = len(child_idx) - num_child_bones
-		size += wr_int(fout,num_child_objs)
-
-		for c in child_idx:
-			size += wr_int(fout,c)
-
-		wr_int(con_arr_ofs, size)
-
-		con_ofs_table = wr_ref(fout)
+		# array of offsets to constraints
+		con_ofs = wr_ref(fout)
 		size += 4*num_con
 
+		# CONSTRAINTS
 		for c in b.constraints:
-			wr_int(con_ofs_table,size)
+			wr_int(con_ofs,size)
 			size += save_con(fout,c,idx_dict)
+
+		# wr_int(obj_data_ofs,size)
 
 	return size
 
-def save_obj(fout, obj, idx_dict):
+def save_obj(fout, obj, idx_dict, obj_list, msh_dict):
 	print("Saving Object:",obj.name,"(",obj.type,")");
 
 	size = 0
@@ -601,11 +799,14 @@ def save_obj(fout, obj, idx_dict):
 	elif obj.parent_type == 'BONE':
 		size += wr_int(fout,2)
 		armature = obj.parent.data
-		bone_idx = 0
-		for b in armature.edit_bones:
+		bone_idx = -1
+		print("bone lookup for",obj.parent_bone)
+		for b in obj.parent.pose.bones:
+			print("maybe",b.name)
 			if b.name == obj.parent_bone:
-				break;
-			bone_idx+=1
+				bone_idx = idx_dict[b]
+				break
+
 		size += wr_int(fout,bone_idx)
 		size += wr_int(fout,-1)
 		size += wr_int(fout,-1)
@@ -628,7 +829,7 @@ def save_obj(fout, obj, idx_dict):
 	#find smallest index of child object
 	first_child = -1
 	num_children = 0
-	for c in idx_dict:
+	for c in obj_list:
 		if c.parent == obj:
 			num_children += 1
 			if idx_dict[c] < first_child or first_child < 0:
@@ -639,6 +840,9 @@ def save_obj(fout, obj, idx_dict):
 
 	# NUM OF CHILDREN
 	size += wr_int(fout,num_children)
+
+	size += save_tfm(fout, obj, False)
+	size += save_tfm(fout, obj, True)
 
 	# offset to obj data (type dependent)
 	obj_data_ofs = wr_ref(fout)
@@ -663,7 +867,7 @@ def save_obj(fout, obj, idx_dict):
 	# depending on object type, save_msh, save_cur or save_arm
 
 	if obj.type == 'MESH':
-		size += save_msh(fout,obj.data,idx_dict)
+		size += save_msh(fout,msh_dict[obj])
 	elif obj.type == 'CURVE':
 		size += save_cur(fout,obj.data,idx_dict)
 	elif obj.type == 'ARMATURE':
@@ -733,10 +937,16 @@ def save(
 				print("skipping - BONE relation requires ARMATURE parent for",o.name)
 				continue
 			armature = o.parent.data
-			for b in armature.edit_bones:
+
+			print("bone lookup for",o.parent_bone)
+
+			ok = False
+			for b in o.parent.pose.bones:
+				print("maybe",b.name)
 				if b.name == o.parent_bone:
-					ok = False
+					ok = True
 					break
+
 			if not ok:
 				print("skipping - BONE not found in parent ARMATURE for",o.name)
 				continue
@@ -915,9 +1125,6 @@ def save(
 	obj_root = []
 	root_num = sort_obj(None,obj_root,obj_list)
 
-	# now we need to (at least try to) sub-sort siblings
-	# warn if constraint cycyles are detected
-
 	if len(obj_root) != len(obj_list):
 		print("SORT ERROR")
 	obj_list = obj_root
@@ -928,9 +1135,26 @@ def save(
 		obj_dict[o] = obj_num
 		obj_num += 1
 
-	#fout = open(filepath, 'wb')
-	#if not fout:
-	#	return {'FINISHED'}
+	msh_dict = dict()
+
+	# similary to sorting objects we need to sort bones in each armature
+	# and add them right into obj_dict (but keyed with PoseBone and with index value local in its armature)
+	# it must be done prior to saving anything so we have access to
+	# reindexed dictionary of everything
+	for o in obj_list:
+		if o.type == 'ARMATURE':
+			bone_root = []
+			bone_root_num = sort_obj(None,bone_root,o.pose.bones)
+			if len(bone_root) != len(o.pose.bones):
+				print("SORT ERROR")
+			bone_num = 0
+			for b in o.pose.bones:
+				obj_dict[b] = bone_num
+				bone_num += 1
+		if o.type == 'MESH':
+			# time to process meshes and store them in mesh_dict[obj]
+			# so writing VERTEX parenting can use reindexed vertices
+			msh_dict[o] = proc_msh(o)
 
 	fout = []
 	fpos = 0
@@ -954,7 +1178,7 @@ def save(
 
 	for o in obj_list:
 		wr_int(obj_ofs,fpos)
-		fpos += save_obj(fout,o,obj_dict)
+		fpos += save_obj(fout,o,obj_dict,obj_list,msh_dict)
 
 	wr_int(size_of_scene_data, fpos)
 
@@ -962,7 +1186,7 @@ def save(
 
 	if size != fpos + 12:
 		print("EXPORT ERROR!")
-		return {'ERROR'}
+		return {'FINISHED'}
 
 	print("EXPORT OK!")
 	return {'FINISHED'}

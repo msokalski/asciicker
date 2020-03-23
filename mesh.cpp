@@ -2,6 +2,10 @@
 #include <string.h>
 #include "mesh.h"
 
+const char* ParentType_Names[] = { "","PAR_OBJECT","PAR_BONE","PAR_ARMATURE","PAR_VERTEX","PAR_VERTEX_3" };
+const char* ObjectType_Names[] = { "","OBJ_MESH","OBJ_CURVE","OBJ_ARMATURE" };
+const char* ConstraintType_Names[] = { "","CON_FOLLOW_PATH","CON_IK" };
+
 Scene* Scene::Load(const char* path)
 {
 	FILE* f = fopen(path, "rb");
