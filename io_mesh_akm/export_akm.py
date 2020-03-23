@@ -552,7 +552,11 @@ def save_msh(fout, processed_mesh, idx_dict):
 	# ...
 
 	# num free style edges
-	# ...
+	edg_list = []
+	for edge in msh.edges:
+		if edge.use_free_style:
+			edge_list.append(edge)
+	size += wr_int(fout,len(edg_list))
 	# write offset to free style edges data
 	# ...
 
@@ -610,32 +614,63 @@ def save_msh(fout, processed_mesh, idx_dict):
 				for k in msh.shape_keys.key_blocks:
 					size += wr_fp3(fout,k.data[v.index].co)
 
-			# ALL texture coords
-			for uvl in msh.uv_layers:
-				size += wr_fp2(fout,uvl.data[v.index].uv)
-
-			# ALL vertex colors 
-			for col in msh.vertex_colors:
-				size += wr_fp4(fout,col.data[v.index].color)
-
 			# weights from groups included in format
 			for g in f:
 				size += wr_flt(fout,obj.vertex_groups[g].weight(v.index))
 
 	# FREE STYLE EDGES
-	# ....
+	for edge in edg_list:
+		flags = 0
+		if edge.use_freestyle_mark: #MANDATORY!
+			mat_and_flags |= 1<<16
+		if not edge.use_edge_sharp:
+			mat_and_flags |= 2<<16
+		if edge.select:
+			mat_and_flags |= 4<<16
+		if edge.hide:
+			mat_and_flags |= 8<<16
+		if edge.use_seam:
+			mat_and_flags |= 16<<16
+		if edge.is_loose:
+			mat_and_flags |= 32<<16
+		size += wr_int(fout, flags)
+		size += wr_int(fout,vtx_dict[edge.vertices[0]])
+		size += wr_int(fout,vtx_dict[edge.vertices[1]])
+
 
 	# POLYGON DATA
 	for poly in msh.polygons:
-		size += wr_int(poly.loop_start) #should be rather offset (instead of index)
-		size += wr_int(poly.loop_total)
-		# is free style!
-		# ...
+		# poly poly.material_index (0..32767)
+		mat_and_flags = poly.material_index
+		# we use upper 16 bits for flags:
+		if poly.use_freestyle_mark:
+			mat_and_flags |= 1<<16
+		if poly.use_smooth:
+			mat_and_flags |= 2<<16
+		if poly.select:
+			mat_and_flags |= 4<<16
+		if poly.hide:
+			mat_and_flags |= 8<<16
 
-	for loop in msh.loops:
-		wr_int(vtx_dict[loop]) # loop = poly.loop_start + 0,1,2,...,poly.loop_total-1
+		size += wr_int(fout, mat_and_flags)
 
-	return 0
+		# todo: we should rotate loop indices in nicest possible way
+		# this is to help build a nice 'fan' if engine can't triangulate dynamicaly
+		# estimate/get polygon normal, cast vertices onto plane perpendicular to it
+		# choose vertex that can 'see' all others in most possible monotonic angle increments
+		# (use 'worth' factor proportional to sum of min(ith_angle, 360/(N-1))
+
+		size += wr_int(fout,poly.loop_total)
+		for loop in range(poly.loop_start,poly.loop_start+poly.loop_total):
+			size += wr_int(vtx_dict[msh.loops[loop]])
+			for uvl in msh.uv_layers:
+				size += wr_fp2(fout,uvl.data[loop].uv)
+			for col in msh.vertex_colors:
+				size += wr_fp4(fout,col.data[loop].color)
+	return size
+
+def save_emp(fout, emp, idx_dict):
+
 
 def save_cur(fout, cur, idx_dict):
 	print("Saving Curve Data");
@@ -779,6 +814,8 @@ def save_obj(fout, obj, idx_dict, obj_list, msh_dict):
 		type = 2
 	elif obj.type == 'ARMATURE':
 		type = 3
+	elif obj.type == 'EMPTY':
+		type = 4
 
 	# OBJ TYPE
 	size += wr_int(fout,type)
@@ -867,11 +904,13 @@ def save_obj(fout, obj, idx_dict, obj_list, msh_dict):
 	# depending on object type, save_msh, save_cur or save_arm
 
 	if obj.type == 'MESH':
-		size += save_msh(fout,msh_dict[obj])
+		size += save_msh(fout,msh_dict[obj],idx_dict)
 	elif obj.type == 'CURVE':
 		size += save_cur(fout,obj.data,idx_dict)
 	elif obj.type == 'ARMATURE':
 		size += save_arm(fout,obj.data,obj.pose,idx_dict)
+	elif obj.type == 'EMPTY':
+		size += save_emp(fout,obj.data,idx_dict)
 
 	return size
 
