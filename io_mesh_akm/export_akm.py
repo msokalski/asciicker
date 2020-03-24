@@ -1,22 +1,3 @@
-# ##### BEGIN GPL LICENSE BLOCK #####
-#
-#  This program is free software; you can redistribute it and/or
-#  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
-#  of the License, or (at your option) any later version.
-#
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program; if not, write to the Free Software Foundation,
-#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# ##### END GPL LICENSE BLOCK #####
-
-# <pep8-80 compliant>
 
 import os
 import types
@@ -24,437 +5,46 @@ import struct
 import bpy
 import bmesh
 
-
-"""
-This script exports Stanford PLY files from Blender. It supports normals,
-colors, and texture coordinates per face or per vertex.
-"""
-
-
-
-"""
-# SHAPE KEYS AS MORPH TARGETS
-import bpy
-
-obj1 = bpy.context.selected_objects[0]
-
-for key in obj1.data.shape_keys.key_blocks:
-	print("NAME:", key.name)
-	print("INTERPOLATION:", key.interpolation)
-	print("MUTE:", key.mute)
-	print("RELATIVE_TO:", key.relative_key.name)
-	print("SLIDER_MAX:", key.slider_max)
-	print("SLIDER_MIN:", key.slider_min)
-	print("SLIDER_VAL:", key.value)
-	print("VERTEX_GROUP:", key.vertex_group)
-....
-	for v in key.data:
-		print(v.co)
-
-#for vert in obj1.data.vertices:
-#    print(vert.co)  # this is a vertex coord of the mesh
-"""
-
-
-"""
-// ISOLATED EDGES ON MESH    
-print("---------------------------------")
-
-obj1 = bpy.context.selected_objects[0]
-
-msh = obj1.data
-
-edges = []
-
-for e in msh.edges:
-	edges.append( { e.vertices[0], e.vertices[1] } )
-
-for p in msh.polygons:
-	
-	l1 = p.loop_start
-	l2 = p.loop_start + p.loop_total - 1
-		
-	for l in range( l1, l2 ):
-		v1 = msh.loops[l].vertex_index
-		v2 = msh.loops[l+1].vertex_index
-		try:
-			edges.remove( {v1,v2} )
-		except:
-			pass
-		try:
-			edges.remove( {v2,v1} )
-		except:
-			pass
-		
-	v1 = msh.loops[l1].vertex_index
-	v2 = msh.loops[l2].vertex_index
-
-	try:
-		edges.remove( {v1,v2} )
-	except:
-		pass
-	try:
-		edges.remove( {v2,v1} )
-	except:
-		pass
-
-for e in edges:
-	print( e )
-"""    
-
-"""
-// ISOLATED EDGES ON BMESH    
-obj1 = bpy.context.selected_objects[0]
-
-bm = bmesh.new()
-bm.from_mesh(obj1.data)
-
-bmesh.ops.triangulate(bm, faces=bm.faces)
-
-print("---------------------------------")
-
-edges = []
-
-for e in bm.edges:
-	edges.append( { e.verts[0].index, e.verts[1].index } )
-	
-for f in bm.faces:
-	for r in f.edges:
-		
-		r1 = { r.verts[0].index, r.verts[1].index }
-		r2 = { r.verts[1].index, r.verts[0].index }
-		
-		try:
-			edges.remove(r1);
-		except:
-			pass
-
-		try:
-			edges.remove(r2);
-		except:
-			pass
-								
-for e in edges:
-	print( e )
-"""
-
-def save_mesh(filepath, mesh, obj): 
-# , use_normals=True, use_uv_coords=True, use_colors=True):
-	import os
-	import bpy
-
-	def rvec3d(v):
-		return round(v[0], 6), round(v[1], 6), round(v[2], 6)
-
-#    def rvec2d(v):
-#        return round(v[0], 6), round(v[1], 6)
-#
-#    if use_uv_coords and mesh.uv_layers:
-#        active_uv_layer = mesh.uv_layers.active.data
-#    else:
-#        use_uv_coords = False
-#
-#    if use_colors and mesh.vertex_colors:
-#        active_col_layer = mesh.vertex_colors.active.data
-#    else:
-#        use_colors = False
-
-	active_col_layer = None
-
-	if mesh.vertex_colors:
-		active_col_layer = mesh.vertex_colors.active.data
-
-	# in case
-	# color = uvcoord = uvcoord_key = normal = normal_key = None
-	color = None
-
-	mesh_verts = mesh.vertices
-	# vdict = {} # (index, normal, uv) -> new index
-	vdict = [{} for i in range(len(mesh_verts))]
-	ply_verts = []
-	ply_faces = [[] for f in range(len(mesh.polygons))]
-	vert_count = 0
-
-
-	#prepare edges
-	edges = []
-
-	for e in mesh.edges:
-		if e.use_freestyle_mark:
-			edges.append( [ e.vertices[0], e.vertices[1] ] )
-
-	#no need to remove shared edges with faces, we use use_freestyle_mark!
-
-#    for p in mesh.polygons:
-#        
-#        l1 = p.loop_start
-#        l2 = p.loop_start + p.loop_total - 1
-#            
-#        for l in range( l1, l2 ):
-#            v1 = mesh.loops[l].vertex_index
-#            v2 = mesh.loops[l+1].vertex_index
-#            try:
-#                edges.remove( [ v1,v2 ] )
-#            except:
-#                pass
-#            try:
-#                edges.remove( [ v2,v1 ] )
-#            except:
-#                pass
-#            
-#        v1 = mesh.loops[l1].vertex_index
-#        v2 = mesh.loops[l2].vertex_index
-#
-#        try:
-#            edges.remove( [ v1,v2 ] )
-#        except:
-#            pass
-#        try:
-#            edges.remove( [ v2,v1 ] )
-#        except:
-#            pass
-
-	for i, f in enumerate(mesh.polygons):
-
-#        smooth = not use_normals or f.use_smooth
-#        if not smooth:
-#            normal = f.normal[:]
-#            normal_key = rvec3d(normal)
-#
-#        if use_uv_coords:
-#            uv = [
-#                active_uv_layer[l].uv[:]
-#                for l in range(f.loop_start, f.loop_start + f.loop_total)
-#            ]
-#
-#        if use_colors:
-#            col = [
-#                active_col_layer[l].color[:]
-#                for l in range(f.loop_start, f.loop_start + f.loop_total)
-#            ]
-
-		if active_col_layer:
-			col = [
-				active_col_layer[l].color[:]
-				for l in range(f.loop_start, f.loop_start + f.loop_total)
-			]
-
-		pf = ply_faces[i]
-
-		if f.use_freestyle_mark:
-			pf.append(-len(f.vertices))
-		else:
-			pf.append(len(f.vertices))
-
-		for j, vidx in enumerate(f.vertices):
-			v = mesh_verts[vidx]
-
-#            if smooth:
-#                normal = v.normal[:]
-#                normal_key = rvec3d(normal)
-#
-#            if use_uv_coords:
-#                uvcoord = uv[j][0], uv[j][1]
-#                uvcoord_key = rvec2d(uvcoord)
-#            if use_colors:
-
-			weight = 0.0
-			for g in v.groups:
-				if g.group == obj.vertex_groups.active.index:
-					weight = obj.vertex_groups.active.weight(vidx)
-					break
-
-			if active_col_layer:
-				color = col[j]
-				color = (
-					int(round(color[0] * 255.0)),
-					int(round(color[1] * 255.0)),
-					int(round(color[2] * 255.0)),
-					int(round(weight * 255.0)),
-				)
-			else:
-				color = ( 255,255,255, int(round(weight * 255.0)) )
-
-			# key = normal_key, uvcoord_key, color
-			key = color
-
-			vdict_local = vdict[vidx]
-			pf_vidx = vdict_local.get(key)  # Will be None initially
-
-			if pf_vidx is None:  # Same as vdict_local.has_key(key)
-				pf_vidx = vdict_local[key] = vert_count
-				#ply_verts.append((vidx, normal, uvcoord, color))
-				ply_verts.append((vidx, color))
-				vert_count += 1
-
-			pf.append(pf_vidx)
-
-	#reindex edge verts, add verts if needed
-	for e in edges:
-
-		vidx = e[0]
-		v = mesh_verts[vidx]
-
-#        if smooth:
-#            normal = v.normal[:]
-#            normal_key = rvec3d(normal)
-#        if use_uv_coords:
-#            uvcoord = uv[j][0], uv[j][1]
-#            uvcoord_key = rvec2d(uvcoord)
-#        if use_colors:
-
-		weight = 0.0
-		for g in v.groups:
-			if g.group == obj.vertex_groups.active.index:
-				weight = obj.vertex_groups.active.weight(vidx)
-				break
-		color = col[j]
-		color = (
-			int(round(color[0] * 255.0)),
-			int(round(color[1] * 255.0)),
-			int(round(color[2] * 255.0)),
-			int(round(weight * 255.0)),
-		)
-
-		# key = normal_key, uvcoord_key, color
-		key = color
-
-		vdict_local = vdict[vidx]
-		pf_vidx = vdict_local.get(key)  # Will be None initially
-		if pf_vidx is None:  # Same as vdict_local.has_key(key)
-			pf_vidx = vdict_local[key] = vert_count
-			#ply_verts.append((vidx, normal, uvcoord, color))
-			ply_verts.append((vidx, color))
-			vert_count += 1
-
-		e[0] = pf_vidx
-
-		vidx = e[1]
-		
-		v = mesh_verts[vidx]
-
-#        if smooth:
-#            normal = v.normal[:]
-#            normal_key = rvec3d(normal)
-#        if use_uv_coords:
-#            uvcoord = uv[j][0], uv[j][1]
-#            uvcoord_key = rvec2d(uvcoord)
-#        if use_colors:
-
-		weight = 0.0
-		for g in v.groups:
-			if g.group == obj.vertex_groups.active.index:
-				weight = obj.vertex_groups.active.weight(vidx)
-				break
-		color = col[j]
-		color = (
-			int(round(color[0] * 255.0)),
-			int(round(color[1] * 255.0)),
-			int(round(color[2] * 255.0)),
-			int(round(weight * 255.0)),
-		)
-
-		# key = normal_key, uvcoord_key, color
-		key = color
-
-		vdict_local = vdict[vidx]
-		pf_vidx = vdict_local.get(key)  # Will be None initially
-		if pf_vidx is None:  # Same as vdict_local.has_key(key)
-			pf_vidx = vdict_local[key] = vert_count
-			#ply_verts.append((vidx, normal, uvcoord, color))
-			ply_verts.append((vidx, color))
-			vert_count += 1
-
-		e[1] = pf_vidx
-
-	with open(filepath, "w", encoding="utf-8", newline="\n") as file:
-		fw = file.write
-
-		# Header
-		# ---------------------------
-
-		fw("ply\n")
-		fw("format ascii 1.0\n")
-		fw(
-			f"comment Created by Blender {bpy.app.version_string} - "
-			f"www.blender.org, source file: {os.path.basename(bpy.data.filepath)!r}\n"
-		)
-
-		fw(f"element vertex {len(ply_verts)}\n")
-		fw(
-			"property float x\n"
-			"property float y\n"
-			"property float z\n"
-		)
-
-#        if use_normals:
-#            fw(
-#                "property float nx\n"
-#                "property float ny\n"
-#                "property float nz\n"
-#            )
-#        if use_uv_coords:
-#            fw(
-#                "property float s\n"
-#                "property float t\n"
-#            )
-#        if use_colors:
-
-		fw(
-			"property uchar red\n"
-			"property uchar green\n"
-			"property uchar blue\n"
-			"property uchar alpha\n"
-		)
-
-		fw(f"element face {len(mesh.polygons) + len(edges)}\n")
-		fw("property list uchar uint vertex_indices\n")
-
-		fw("end_header\n")
-
-		# Vertex data
-		# ---------------------------
-
-		for i, v in enumerate(ply_verts):
-			fw("%.3f %.3f %.3f" % mesh_verts[v[0]].co[:])
-			#if use_normals:
-			#    fw(" %.2f %.2f %.2f" % v[1])
-			#if use_uv_coords:
-			#    fw(" %.3f %.3f" % v[2])
-			#if use_colors:
-			#fw(" %u %u %u %u" % v[3])
-			fw(" %u %u %u %u" % v[1])
-			fw("\n")
-
-		# Face data
-		# ---------------------------
-
-		for pf in ply_faces:
-			# we have len already in array of indices!
-			# fw(f"{len(pf)}")
-			for v in pf:
-				fw(f"{v} ")
-			fw("\n")
-
-		# Edge data
-		# ---------------------------
-
-		for e in edges:
-			fw(f"{2}")
-			fw(f" {e[0]} {e[1]} ")
-			fw("\n")            
-
-		print(f"Writing {filepath!r} done")
-
-	return {'FINISHED'}
-
-def wr_str(fout,s,l):
-	chunk = struct.pack('<'+str(l)+'s',bytearray(s))
-	fout.append(chunk)
-	return l
-
 def wr_int(fout,i):
 	chunk = struct.pack('<i',i)
+	fout.append(chunk)
+	return 4
+
+def wr_col(fout,f):
+	r = int(round(f[0] * 255.0))
+	g = int(round(f[1] * 255.0))
+	b = int(round(f[2] * 255.0))
+	a = int(round(f[3] * 255.0))
+	chunk = struct.pack('<I', r | (g<<8) | (b<<16) | (a<<24))
+	fout.append(chunk)
+	return 4
+
+def wr_fp2(fout,f):
+	chunk = struct.pack('<ff',f[0],f[1])
+	fout.append(chunk)
+	return 8
+
+def wr_fp3(fout,f):
+	chunk = struct.pack('<fff',f[0],f[1],f[2])
+	fout.append(chunk)
+	return 12
+
+def wr_fp4(fout,f):
+	chunk = struct.pack('<ffff',f[0],f[1],f[2],f[3])
+	fout.append(chunk)
+	return 16
+
+def wr_mtx(fout,f):
+	chunk = struct.pack('<ffffffffffffffff',
+						f[0][0],f[0][1],f[0][2],f[0][3], 
+						f[1][0],f[1][1],f[1][2],f[1][3], 
+						f[2][0],f[2][1],f[2][2],f[2][3], 
+						f[3][0],f[3][1],f[3][2],f[3][3])
+	fout.append(chunk)
+	return 64
+
+def wr_flt(fout,f):
+	chunk = struct.pack('<f',f)
 	fout.append(chunk)
 	return 4
 
@@ -463,23 +53,51 @@ def wr_ref(fout):
 	fout.append(chunk)
 	return chunk
 
-def wr_save(fout,path):
+import zlib
 
-	def wr_save_file(fout,file):
-		size = 0
-		for i in fout:
+def wr_save(data,path):
+
+	# b'AKM-1000' 8 bytes header
+	# placeholder for UNCOMPRESSED scene bytes to allocate (4 bytes)
+	# placeholder for COMPRESSED bytes to read from file (4 bytes)
+
+	press = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+
+	def wr_press(press,fin,fout):
+		size = (0,0)
+		for i in fin:
 			if type(i) is bytes:
-				size += file.write(i)
+				o = press.compress(i)
+				fout.append(o)
+				size = (size[0]+len(i),size[1]+len(o))
 			else:
-				size += wr_save_file(i,file)
+				delta = wr_press(press,i,fout)
+				size = (size[0]+delta[0],size[1]+delta[1])
 		return size
+
+	def wr_flush(press,size,fout):
+		o = press.flush()
+		fout.append(o)
+		size = (size[0],size[1]+len(o))
+		return size
+
+	fout = []
+	size = wr_press(press,data,fout)
+	size = wr_flush(press,size,fout)
 
 	file = open(path, 'wb')
 	if not file:
 		return -1
-	size = wr_save_file(fout,file)
+
+	file.write( struct.pack('<8s', b'AKM-1000') )
+	file.write( struct.pack('<I', size[0]) )
+	file.write( struct.pack('<I', size[1]) )
+
+	for c in fout:
+		file.write(c)
+
 	file.close()
-	return size
+	return size[0]
 
 def proc_msh(obj):
 
@@ -489,7 +107,7 @@ def proc_msh(obj):
 
 	grp_dict = dict()
 	idx = 0
-	for g in obj.vertex_groups:
+	for g in obj.vertex_groups: # g is VertexGroup
 		grp_dict[g] = idx
 		idx += 1
 
@@ -497,11 +115,30 @@ def proc_msh(obj):
 	fmt_dict = dict()
 
 	# construct fromats from sorted groups
-	for v in msh.vertices:
-		f = []
-		for g in v.groups:
-			f.append(grp_dict[g])
-		f.sort()
+	for v in obj.data.vertices:
+
+		# split f into 2 parts:
+		# - first must include sorted groups with active bones
+		# - second one must contain all other groups sorted
+		f1 = []
+		f2 = []
+		for g in v.groups: # g is VertexGroupElement, g.group is index to msh.vertex_groups!
+			group = obj.vertex_groups[g.group]
+			# check if g has active bone
+			active = False
+			if obj.parent and obj.parent.type == 'ARMATURE':
+				for b in obj.parent.pose.bones:
+					if b.name == group.name:
+						active = True
+						break
+
+			if active: 
+				f1.append(grp_dict[ group ])
+			else:
+				f2.append(grp_dict[ group ])
+
+		f = tuple(sorted(f1)) + tuple(sorted(f2))
+
 		if not f in fmt_dict:
 			fmt_dict[f] = [v]
 		else:
@@ -511,7 +148,7 @@ def proc_msh(obj):
 	vtx_dict = dict()
 	idx = 0
 	for f in fmt_dict:
-		for v in f:
+		for v in fmt_dict[f]:
 			vtx_dict[v] = idx
 			idx += 1
 
@@ -538,37 +175,48 @@ def save_msh(fout, processed_mesh, idx_dict):
 	# num vertex_groups (weight channels)
 	size += wr_int(fout, len(grp_dict))
 	# write offset to groups info
-	# ...
+	groups_offs = wr_ref(fout)
+	size += 4
 
 	# num shape_keys (morph targets)
-	keys = len(msh.shape_keys.key_blocks)
+	keys = len(msh.shape_keys.key_blocks) if msh.shape_keys else 0
 	size += wr_int(fout, keys)
 	# write offset to keys info
-	# ...
+	shapes_offs = wr_ref(fout)
+	size += 4
 
 	# num verts
 	size += wr_int(fout, len(msh.vertices))
 	# write offset to vertex data (groupped by fmt)
-	# ...
+	vertex_offs = wr_ref(fout)
+	size += 4
 
-	# num free style edges
-	edg_list = []
+	# num edges
+	edg_list = [] # just in case we'd like to sort'em
 	for edge in msh.edges:
-		if edge.use_free_style:
-			edge_list.append(edge)
+		edg_list.append(edge)
 	size += wr_int(fout,len(edg_list))
-	# write offset to free style edges data
-	# ...
+	# write offset edges data
+	edge_offs = wr_ref(fout)
+	size += 4
 
+	ply_list = [] # just in case we'd like to sort'em
+	for poly in msh.polygons:
+		ply_list.append(poly)
 	# num polygons (we don't triangulate, it should be done after all verts are transformed)
-	size += wr_int(fout, len(msh.polygons))
+	size += wr_int(fout, len(ply_list))
 	# write offset to polygon data
-	# ...
+	poly_offs = wr_ref(fout)
+	size += 4
 
 	# HERE WE CAN STILL MAKE USE OF "tail[1]" array
-	# ...
+	# let's use this for material index array
+	# size += wr_int(fout, len(msh.materials))
+	# for m in msh.materials:
+	size += wr_int(fout, 0)
 
 	# GROUPS INFO
+	wr_int(groups_offs,size)
 	for g in grp_dict:
 		bone_idx = -1
 		if obj.parent and obj.parent.type == 'ARMATURE':
@@ -578,32 +226,72 @@ def save_msh(fout, processed_mesh, idx_dict):
 					break
 		size += wr_int(fout,bone_idx)
 
-	# KEYS INFO
-	print("EVALTIME:",msh.eval_time)
-	print("REFERENVE_KEY",msh.shape_keys.reference_key)
-	print("USER_RELATIVE",msh.shape_keys.use_relative)
-	for k in msh.shape_keys.key_blocks:
-		# per key
-		print("NAME:", k.name)
-		print("INTERPOLATION:", k.interpolation)
-		print("MUTE:", k.mute)
-		print("RELATIVE_TO:", k.relative_k.name)
-		print("SLIDER_MAX:", k.slider_max)
-		print("SLIDER_MIN:", k.slider_min)
-		print("SLIDER_VAL:", k.value)
-		print("VERTEX_GROUP:", k.vertex_group)
+	# SHAPES INFO
+	wr_int(shapes_offs,size)
+	if msh.shape_keys:
+		shp_dict = dict()
+		key_idx = 0
+		for k in msh.shape_keys.key_blocks:
+			shp_dict[k] = key_idx
+			key_idx += 1
+
+		size += wr_flt(fout,msh.shape_keys.eval_time)
+		size += wr_int(fout,shp_dict[msh.shape_keys.reference_key])
+		if msh.shape_keys.use_relative:
+			size += wr_int(fout,1)
+		else:
+			size += wr_int(fout,0)
+		for k in msh.shape_keys.key_blocks:
+			interp = 0
+			if k.interpolation == 'KEY_LINEAR':
+				interp = 1
+			elif k.interpolation == 'KEY_CARDINAL':
+				interp = 2
+			elif k.interpolation == 'KEY_CATMULL_ROM':
+				interp = 3
+			elif k.interpolation == 'KEY_BSPLINE':
+				interp = 4
+
+			size += wr_int(fout,interp)
+			if k.mute:
+				size += wr_int(fout,1)
+			else:
+				size += wr_int(fout,0)
+
+			size += wr_int(fout, shp_dict[k.relative_key])
+			size += wr_flt(fout, k.slider_max)
+			size += wr_flt(fout, k.slider_min)
+			size += wr_flt(fout, k.value)
+
+			grp = None
+			for g in obj.vertex_groups:
+				if g.name == k.vertex_group:
+					grp = g
+					break
+			if grp:
+				size += wr_int(fout, grp_dict[grp])
+			else:
+				size += wr_int(fout, -1)
+	else:
+		size += wr_flt(fout,0.0)
+		size += wr_int(fout,-1)
+		size += wr_int(fout,0)
 
 	# VERTEX DATA
+	wr_int(vertex_offs,size)
+	print("NUM FORMATS:",len(fmt_dict))
 	for f in fmt_dict:
+		vtx_sublist = fmt_dict[f]
+		print("  NUM VERTS:",len(vtx_sublist),", fmt:",f)
+		# num of vertices in this format
+		size += wr_int(fout,len(vtx_sublist))
+
 		# write format length (num of used vertex_groups)
 		size += wr_int(fout,len(f))
 		for g in f:
 			# write vertex group index
 			size += wr_int(fout,g) 
 
-		vtx_sublist = fmt_dict[f]
-		# num of vertices in this format
-		size += wr_int(fout,len(vtx_sublist))
 		for v in vtx_sublist:
 			
 			if keys == 0:
@@ -618,28 +306,32 @@ def save_msh(fout, processed_mesh, idx_dict):
 			for g in f:
 				size += wr_flt(fout,obj.vertex_groups[g].weight(v.index))
 
-	# FREE STYLE EDGES
+	# EDGE DATA
+	wr_int(edge_offs,size)
+	print("NUM EDGES:",len(edg_list))
 	for edge in edg_list:
 		flags = 0
-		if edge.use_freestyle_mark: #MANDATORY!
-			mat_and_flags |= 1<<16
+		if edge.use_freestyle_mark:
+			flags |= 1<<16
 		if not edge.use_edge_sharp:
-			mat_and_flags |= 2<<16
+			flags |= 2<<16
 		if edge.select:
-			mat_and_flags |= 4<<16
+			flags |= 4<<16
 		if edge.hide:
-			mat_and_flags |= 8<<16
+			flags |= 8<<16
 		if edge.use_seam:
-			mat_and_flags |= 16<<16
+			flags |= 16<<16
 		if edge.is_loose:
-			mat_and_flags |= 32<<16
+			flags |= 32<<16
 		size += wr_int(fout, flags)
-		size += wr_int(fout,vtx_dict[edge.vertices[0]])
-		size += wr_int(fout,vtx_dict[edge.vertices[1]])
+		size += wr_int(fout,vtx_dict[ msh.vertices[edge.vertices[0]] ])
+		size += wr_int(fout,vtx_dict[ msh.vertices[edge.vertices[1]] ])
 
 
-	# POLYGON DATA
-	for poly in msh.polygons:
+	# POLY DATA
+	wr_int(poly_offs,size)
+	print("NUM POLYS:",len(ply_list))
+	for poly in ply_list:
 		# poly poly.material_index (0..32767)
 		mat_and_flags = poly.material_index
 		# we use upper 16 bits for flags:
@@ -662,15 +354,33 @@ def save_msh(fout, processed_mesh, idx_dict):
 
 		size += wr_int(fout,poly.loop_total)
 		for loop in range(poly.loop_start,poly.loop_start+poly.loop_total):
-			size += wr_int(vtx_dict[msh.loops[loop]])
+			size += wr_int(fout,vtx_dict[ msh.vertices[ msh.loops[loop].vertex_index] ])
+			size += wr_int(fout,msh.loops[loop].edge_index) # WARNING: in future it may require reindexing!
 			for uvl in msh.uv_layers:
 				size += wr_fp2(fout,uvl.data[loop].uv)
 			for col in msh.vertex_colors:
-				size += wr_fp4(fout,col.data[loop].color)
+				size += wr_col(fout,col.data[loop].color)
 	return size
 
-def save_emp(fout, emp, idx_dict):
-
+def save_emp(fout, obj):
+	type = 0
+	if obj.empty_draw_type == 'PLAIN_AXES':
+		type = 1
+	elif obj.empty_draw_type == 'ARROWS':
+		type = 2
+	elif obj.empty_draw_type == 'SINGLE_ARROW':
+		type = 3
+	elif obj.empty_draw_type == 'CUBE':
+		type = 4
+	elif obj.empty_draw_type == 'SPHERE':
+		type = 5
+	elif obj.empty_draw_type == 'CONE':
+		type = 6
+	elif obj.empty_draw_type == 'IMAGE':
+		type = 7
+	wr_int(fout, type)
+	wr_flt(fout, obj.empty_draw_size)
+	wr_fp2(fout, obj.empty_image_offset)
 
 def save_cur(fout, cur, idx_dict):
 	print("Saving Curve Data");
@@ -725,8 +435,11 @@ def save_tfm(fout, o, delta):
 	fout.append(chunk)
 	return 44
 
+tm_slot = 0
 
 def save_arm(fout, arm, pose, idx_dict):
+
+	global tm_slot
 	print("Saving Armature Data");
 
 	size = 0
@@ -755,6 +468,10 @@ def save_arm(fout, arm, pose, idx_dict):
 		print("Saving Bone",b.name);
 
 		wr_int(bone_ofs, size)
+
+		# tm_slot
+		size += wr_int(fout, tm_slot)
+		tm_slot += 1
 		
 		# parent bone index
 		if b.parent:
@@ -800,6 +517,8 @@ def save_arm(fout, arm, pose, idx_dict):
 	return size
 
 def save_obj(fout, obj, idx_dict, obj_list, msh_dict):
+
+	global tm_slot
 	print("Saving Object:",obj.name,"(",obj.type,")");
 
 	size = 0
@@ -819,6 +538,10 @@ def save_obj(fout, obj, idx_dict, obj_list, msh_dict):
 
 	# OBJ TYPE
 	size += wr_int(fout,type)
+
+	# tm_slot
+	size += wr_int(fout, tm_slot)
+	tm_slot += 1
 
 	if obj.parent:
 		# PARENT IDX
@@ -881,6 +604,10 @@ def save_obj(fout, obj, idx_dict, obj_list, msh_dict):
 	size += save_tfm(fout, obj, False)
 	size += save_tfm(fout, obj, True)
 
+	# parenting inverse
+	print(len(obj.matrix_parent_inverse))
+	size += wr_mtx(fout, obj.matrix_parent_inverse)
+
 	# offset to obj data (type dependent)
 	obj_data_ofs = wr_ref(fout)
 	size += 4
@@ -925,6 +652,7 @@ def save(
 #    use_colors=True,
 #    global_matrix=None
 ):
+	global tm_slot
 
 	# CRUCIAL so being edited object mesh is updated!
 	if bpy.ops.object.mode_set.poll():
@@ -1176,12 +904,20 @@ def save(
 
 	msh_dict = dict()
 
+	# extra hints for allocating engine's buffers
+	num_transforms = 0
+	num_vertices = 0
+	num_indices = 0
+
 	# similary to sorting objects we need to sort bones in each armature
 	# and add them right into obj_dict (but keyed with PoseBone and with index value local in its armature)
 	# it must be done prior to saving anything so we have access to
 	# reindexed dictionary of everything
+
 	for o in obj_list:
+		num_transforms += 1
 		if o.type == 'ARMATURE':
+			num_transforms += len(o.pose.bones)
 			bone_root = []
 			bone_root_num = sort_obj(None,bone_root,o.pose.bones)
 			if len(bone_root) != len(o.pose.bones):
@@ -1194,16 +930,20 @@ def save(
 			# time to process meshes and store them in mesh_dict[obj]
 			# so writing VERTEX parenting can use reindexed vertices
 			msh_dict[o] = proc_msh(o)
+			num_vertices += len(o.data.vertices)
+			for poly in o.data.polygons:
+				num_indices += poly.loop_total
 
 	fout = []
 	fpos = 0
+	
+	# every object and every bone will come with its own tm_slot index
+	tm_slot = 0 # GLOBAL VARIABLE !!!!
 
-	wr_str(fout,b'AKM-1000',8)
-
-	# placeholder for scene bytes to read
-	size_of_scene_data = wr_ref(fout)
-
-	# from now (after 12 bytes) we start accumulating fpos	
+	# hints first
+	fpos += wr_int(fout,num_vertices)
+	fpos += wr_int(fout,num_indices)
+	fpos += wr_int(fout,num_bones)
 
 	# num of root objects
 	fpos += wr_int(fout,root_num)
@@ -1219,62 +959,11 @@ def save(
 		wr_int(obj_ofs,fpos)
 		fpos += save_obj(fout,o,obj_dict,obj_list,msh_dict)
 
-	wr_int(size_of_scene_data, fpos)
-
 	size = wr_save(fout,filepath)
 
-	if size != fpos + 12:
+	if size != fpos or tm_slot != obj_num + num_bones:
 		print("EXPORT ERROR!")
 		return {'FINISHED'}
 
 	print("EXPORT OK!")
 	return {'FINISHED'}
-
-	depsgraph = context.evaluated_depsgraph_get()
-	bm = bmesh.new()
-
-	for ob in obs:
-
-#        if use_mesh_modifiers:
-#            ob_eval = ob.evaluated_get(depsgraph)
-#        else:
-
-		ob_eval = ob
-
-		try:
-			me = ob_eval.to_mesh()
-		except RuntimeError:
-			continue
-
-		me.transform(ob.matrix_world)
-		bm.from_mesh(me)
-		ob_eval.to_mesh_clear()
-
-	mesh = bpy.data.meshes.new("TMP PLY EXPORT")
-
-	#pray!
-	bmesh.ops.triangulate(bm, faces=bm.faces)
-	#, quad_method=0, ngon_method=0)
-
-	bm.to_mesh(mesh)
-	bm.free()
-
-#    if global_matrix is not None:
-#        mesh.transform(global_matrix)
-#    if use_normals:
-#        mesh.calc_normals()
-
-	obj = context.active_object
-
-	ret = save_mesh(
-		filepath,
-		mesh,
-		obj
-		# use_normals=use_normals,
-		# use_uv_coords=use_uv_coords,
-		# use_colors=use_colors,
-	)
-
-	bpy.data.meshes.remove(mesh)
-
-	return ret
