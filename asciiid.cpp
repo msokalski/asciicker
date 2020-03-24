@@ -7396,87 +7396,13 @@ extern "C" void DumpLeakCounter();
 
 int main(int argc, char *argv[]) 
 {
-	Scene* scene = Scene::Load("./meshes/untitled.akm");
+	Scene* scene = Scene::Load("./meshes/tree-cut-1.akm");
 
-	for (int i = 0; i < scene->objects; i++)
-	{
-		Object* object = scene->GetObjectPtr(i);
+	Pump pump;
+	pump.Init(Pump::std_flush,stderr);
+	scene->Dump(&pump);
 
-		Object* parent = scene->GetObjectPtr(object->parent_index);
-
-		printf("obj:%d par:%d children:%d {", i, object->parent_index, object->children);
-
-		for (int c = 0; c < object->children; c++)
-		{
-			int child_index = object->first_child_index + c;
-			Object* child = scene->GetObjectPtr( child_index );
-			printf(c == object->children-1 ? "%d" : "%d,", child_index);
-		}
-
-		printf("}\n");
-	}
-
-	struct BonePrint
-	{
-		static void print(Scene* scene, Armature* arm, int index, int indent)
-		{
-			Armature::Bone* bone = arm->GetBonePtr(index);
-			for (int i = 0; i < 2 * indent; i++)
-				printf("%c", ' ');
-			printf("Bone %d", index);
-
-			for (int c = 0; c < bone->constraints; c++)
-			{
-				Constraint* con = bone->GetConstraintPtr(c);
-				printf(" + (%s)", ConstraintType_Names[con->type]);
-			}
-
-			printf("\n");
-
-			for (int c = 0; c < bone->children; c++)
-				print(scene, arm, bone->first_child_index + c, indent + 1);
-		}
-	};
-
-	struct ObjPrint
-	{
-		static void print(Scene* scene, int index, int indent)
-		{
-			Object* object = scene->GetObjectPtr(index);
-			for (int i = 0; i < 2 * indent; i++)
-				printf("%c", ' ');
-			printf("(%s,%d,%d,%d) <- %d: (%s)", 
-				ParentType_Names[object->parent_type],
-				object->parent_vertex_3[0], 
-				object->parent_vertex_3[1], 
-				object->parent_vertex_3[2],
-				index, 
-				ObjectType_Names[object->type]);
-			for (int c = 0; c < object->constraints; c++)
-			{
-				Constraint* con = object->GetConstraintPtr(c);
-				printf(" + (%s)", ConstraintType_Names[con->type]);
-			}
-			printf("\n");
-
-			if (object->type == OBJ_ARMATURE)
-			{
-				Armature* arm = (Armature*)object->GetObjectData();
-				for (int b = 0; b < arm->roots; b++)
-				{
-					BonePrint::print(scene, arm, b, indent + 1);
-				}
-			}
-
-			for (int c = 0; c < object->children; c++)
-				print(scene, c + object->first_child_index, indent + 1);
-		}
-	};
-
-	for (int i = 0; i < scene->roots; i++)
-	{
-		ObjPrint::print(scene, i, 0);
-	}
+	scene->Free();
 
 #ifdef _WIN32
 	//_CrtSetBreakAlloc(11952);

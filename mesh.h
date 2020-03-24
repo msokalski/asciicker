@@ -67,9 +67,12 @@ enum KeyInterp
 
 extern const char* KeyInterp_Names[];
 
+struct Pump;
+
 struct Constraint
 {
 	ConstraintType type;
+	void Dump(Pump* pump);
 };
 
 struct Transform
@@ -78,6 +81,7 @@ struct Transform
 	RotationType rot_type;
 	float rotation[4];
 	float scale[3];
+	void Dump(Pump* pump);
 };
 
 struct Empty
@@ -85,6 +89,7 @@ struct Empty
 	EmptyType type;
 	float size;
 	float image_ofs[2];
+	void Dump(Pump* pump);
 };
 
 struct ShapeKeys
@@ -102,6 +107,8 @@ struct ShapeKeys
 		float max_value;
 		float value;
 		int vtx_group;
+
+		void Dump(Pump* pump);
 	};
 
 	Key key[1];
@@ -119,12 +126,14 @@ struct VertexData
 
 	// followed by next VertexData(s) ...
 	// until sum of vertex_num is Mesh::vertices
+	void Dump(Pump* pump);
 };
 
 struct Edge
 {
 	int flags;
 	int vertices[2];
+	void Dump(Pump* pump);
 };
 
 struct PolyData
@@ -140,10 +149,12 @@ struct PolyData
 
 		// followed by float[2] coords on all Mesh::tex_channels
 		// followed by uint32 colors on all Mesh::col_channels
+		void Dump(Pump* pump);
 	};
 
 	// followed by next PolyData(s) ...
 	// until have all Mesh::polys 
+	void Dump(Pump* pump);
 };
 
 struct Mesh
@@ -174,7 +185,9 @@ struct Mesh
 	// by pointers
 	void TransformVerts(float xyz[][3], const float* bone_tm[/*all_bones_in_parent_armature*/]);
 	// or by continous float array
-	void TransformVerts(float xyz[][3], const float bone_tm[/*all_bones_in_parent_armature*/][16]);
+	// void TransformVerts(float xyz[][3], const float bone_tm[/*all_bones_in_parent_armature*/][16]);
+
+	void Dump(Pump* pump);
 };
 
 struct Armature
@@ -199,6 +212,8 @@ struct Armature
 				return 0;
 			return (Constraint*)((char*)this + constraint_offset[index]);
 		}
+
+		void Dump(Pump* pump);
 	};
 
 	int roots;
@@ -211,6 +226,8 @@ struct Armature
 			return 0;
 		return (Bone*)((char*)this + bone_offset[index]);
 	}
+
+	void Dump(Pump* pump);
 };
 
 struct Object
@@ -263,7 +280,9 @@ struct Object
 		return (char*)this + object_data_offset;
 	}
 
-	void CalcLocalTransform(float tm[16]);
+	// void CalcLocalTransform(float tm[16]);
+
+	void Dump(Pump* pump);
 };
 
 struct Scene
@@ -297,4 +316,18 @@ struct Scene
 			return 0;
 		return (Object*)((char*)this + object_offset[index]);
 	}
+
+	void Dump(Pump* pump);
+};
+
+struct Pump
+{
+	void Init(void(*f)(Pump* pump, const char* fmt, ...) = Pump::std_flush, void* u = stdout);
+
+	void(*flush)(Pump* pump, const char* fmt, ...);
+	Scene* scene;
+	void* user;
+	int indent;
+
+	static void std_flush(Pump* pump, const char* fmt, ...);
 };

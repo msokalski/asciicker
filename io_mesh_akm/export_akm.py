@@ -941,9 +941,9 @@ def save(
 	tm_slot = 0 # GLOBAL VARIABLE !!!!
 
 	# hints first
+	fpos += wr_int(fout,num_transforms)
 	fpos += wr_int(fout,num_vertices)
 	fpos += wr_int(fout,num_indices)
-	fpos += wr_int(fout,num_bones)
 
 	# num of root objects
 	fpos += wr_int(fout,root_num)
@@ -961,7 +961,7 @@ def save(
 
 	size = wr_save(fout,filepath)
 
-	if size != fpos or tm_slot != obj_num + num_bones:
+	if size != fpos or tm_slot != num_transforms:
 		print("EXPORT ERROR!")
 		return {'FINISHED'}
 
