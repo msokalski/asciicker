@@ -144,18 +144,6 @@ struct PolyData
 
 	// followed by next PolyData(s) ...
 	// until have all Mesh::polys 
-
-	PolyData* Next(int tex_channels, int col_channels)
-	{
-		size_t size = 
-			sizeof(PolyData) + 
-			indices * (
-				sizeof(Indice) + 
-				sizeof(float[2]) * tex_channels + 
-				sizeof(int) * col_channels);
-
-		return (PolyData*)((char*)this + size);
-	}
 };
 
 struct Mesh
@@ -276,7 +264,6 @@ struct Object
 	}
 
 	void CalcLocalTransform(float tm[16]);
-	void GetParentTransform(float tm[16]);
 };
 
 struct Scene
