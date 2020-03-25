@@ -5,6 +5,12 @@ import struct
 import bpy
 import bmesh
 
+
+def wr_str(fout,s):
+	chunk = (s + '\0').encode('utf8')
+	fout.append(chunk)
+	return len(chunk)
+
 def wr_int(fout,i):
 	chunk = struct.pack('<i',i)
 	fout.append(chunk)
@@ -516,15 +522,18 @@ def save_arm(fout, arm, pose, idx_dict):
 
 	return size
 
-def save_obj(fout, obj, idx_dict, obj_list, msh_dict):
+def save_obj(fout, obj, idx_dict, obj_list, msh_dict, names):
 
 	global tm_slot
 	print("Saving Object:",obj.name,"(",obj.type,")");
 
 	size = 0
 
-	# ----------------------------------
-	# BEGIN OBJ HEADER (8 ints)
+	# write name offs and store name
+	name_ofs = wr_ref(fout)
+	size += 4
+
+	names.append( (name_ofs,obj.name) )
 
 	type = 0
 	if obj.type == 'MESH':
@@ -940,6 +949,10 @@ def save(
 	# every object and every bone will come with its own tm_slot index
 	tm_slot = 0 # GLOBAL VARIABLE !!!!
 
+	# placeholder for beginning of names block
+	names_block_offset = wr_ref(fout)
+	fpos += 4
+
 	# hints first
 	fpos += wr_int(fout,num_transforms)
 	fpos += wr_int(fout,num_vertices)
@@ -955,9 +968,18 @@ def save(
 	obj_ofs = wr_ref(fout)
 	fpos += 4 * obj_num
 
+	names = [] # tuples ( wr_ref, string )
 	for o in obj_list:
 		wr_int(obj_ofs,fpos)
-		fpos += save_obj(fout,o,obj_dict,obj_list,msh_dict)
+		fpos += save_obj(fout,o,obj_dict,obj_list,msh_dict,names)
+
+
+	names_base = fpos
+	wr_int(names_block_offset,names_base)
+
+	for n in names:
+		wr_int(n[0], fpos - names_base)
+		fpos += wr_str(fout, n[1])
 
 	size = wr_save(fout,filepath)
 

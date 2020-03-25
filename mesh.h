@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 #include "matrix.h"
 
 enum ConstraintType
@@ -14,7 +15,7 @@ enum ObjectType
 	OBJ_MESH = 1,
 	OBJ_CURVE = 2,
 	OBJ_ARMATURE = 3,
-	OBJ_EMPTY = 4,
+	OBJ_EMPTY = 4
 };
 
 extern const char* ObjectType_Names[];
@@ -25,7 +26,7 @@ enum ParentType
 	PAR_BONE = 2,
 	PAR_ARMATURE = 3,
 	PAR_VERTEX = 4,
-	PAR_VERTEX_3 = 5,
+	PAR_VERTEX_3 = 5
 };
 
 extern const char* ParentType_Names[];
@@ -39,7 +40,7 @@ enum RotationType
 	ROT_EULER_ZXY = 5,
 	ROT_EULER_ZYX = 6,
 	ROT_EULER_YXZ = 7,
-	ROT_EULER_XZY = 8,
+	ROT_EULER_XZY = 8
 };
 
 extern const char* RotationType_Names[];
@@ -57,28 +58,41 @@ enum EmptyType
 
 extern const char* EmptyType_Names[];
 
-enum KeyInterp
+enum KeyInterpType
 {
 	KEY_LINEAR = 1,
 	KEY_CARDINAL = 2,
 	KEY_CATMULL_ROM = 3,
-	KEY_BSPLINE = 4,
+	KEY_BSPLINE = 4
 };
 
-extern const char* KeyInterp_Names[];
+extern const char* KeyInterpType_Names[];
 
 struct Pump;
 
+#pragma pack(push,4)
+
+struct Header
+{
+	char sign_ver[8];
+	uint32_t inflate_size;
+	uint32_t deflate_size;
+};
+
 struct Constraint
 {
-	ConstraintType type;
+	uint32_t type; // ConstraintType
+
+	// constraint data here
+	// ...
+
 	void Dump(Pump* pump);
 };
 
 struct Transform
 {
 	float position[3];
-	RotationType rot_type;
+	uint32_t rot_type; // RotationType
 	float rotation[4];
 	float scale[3];
 	void Dump(Pump* pump);
@@ -86,39 +100,39 @@ struct Transform
 
 struct Empty
 {
-	EmptyType type;
+	uint32_t type; // EmptyType
 	float size;
 	float image_ofs[2];
+	void Dump(Pump* pump);
+};
+
+struct ShapeKey
+{
+	uint32_t interp; // KeyInterpType 
+	int32_t mute;
+	int32_t relative_key;
+	float min_value;
+	float max_value;
+	float value;
+	int32_t vtx_group;
+
 	void Dump(Pump* pump);
 };
 
 struct ShapeKeys
 {
 	float eval_time;
-	int reference_key;
-	int use_relative;
+	int32_t reference_key;
+	int32_t use_relative;
 
-	struct Key
-	{
-		KeyInterp interp;
-		int mute;
-		int relative_key;
-		float min_value;
-		float max_value;
-		float value;
-		int vtx_group;
-
-		void Dump(Pump* pump);
-	};
-
-	Key key[1];
+	ShapeKey key[1];
 };
 
 struct VertexData
 {
-	int vertices;
-	int vtx_groups;
-	int vtx_group_index[1];
+	int32_t vertices;
+	int32_t vtx_groups;
+	int32_t vtx_group_index[1];
 
 	// then for each vertex:
 	// - float[3] coords for every shape_key in mesh
@@ -131,54 +145,58 @@ struct VertexData
 
 struct Edge
 {
-	int flags;
-	int vertices[2];
+	int32_t flags;
+	int32_t vertices[2];
+	void Dump(Pump* pump);
+};
+
+struct Indice
+{
+	int32_t vertex;
+	int32_t edge;
+
+	// followed by float[2] coords on all Mesh::tex_channels
+	// followed by uint32 colors on all Mesh::col_channels
 	void Dump(Pump* pump);
 };
 
 struct PolyData
 {
-	int mat_and_flags;
-	int indices;
+	int32_t mat_and_flags;
+	int32_t indices;
+	Indice indice[1]; 
+	// every indice has size = 
+	//   sizeof(Indice) + 
+	//   Mesh::tex_channels*sizeof(float[2]) + 
+	//   Mesh::col_channels*sizeof(uint32_t)
 
-	// followed by array of
-	struct Indice
-	{
-		int vertex;
-		int edge;
-
-		// followed by float[2] coords on all Mesh::tex_channels
-		// followed by uint32 colors on all Mesh::col_channels
-		void Dump(Pump* pump);
-	};
-
-	// followed by next PolyData(s) ...
+	// array is followed by next PolyData(s) ...
 	// until have all Mesh::polys 
 	void Dump(Pump* pump);
 };
 
 struct Mesh
 {
-	int tex_channels;
-	int col_channels;
+	int32_t tex_channels;
+	int32_t col_channels;
 	
-	int vtx_groups;
-	int vtx_groups_offset; // -> array of integers representing bone indices
+	int32_t vtx_groups;
+	int32_t vtx_groups_offset; // -> array of integers representing bone indices
 
-	int shp_keys;
-	int shp_keys_offset; // -> ShapeKeys
+	int32_t shp_keys;
+	int32_t shp_keys_offset; // -> ShapeKeys
 
-	int vertices;
-	int vertices_offset; // -> VertexData list
+	int32_t vertices;
+	int32_t vertices_offset; // -> VertexData list
 
-	int edges;
-	int edges_offset; // -> Edge[edges]
+	int32_t edges;
+	int32_t edges_offset; // -> Edge[edges]
 
-	int polys;
-	int polys_offset; // -> PolyData list
+	int32_t polys;
+	int32_t polys_offset; // -> PolyData list
 
-	int materials;
-	int material_index[1];
+	int32_t materials;
+	int32_t material_index[1];
 
 	// needed only if shape keys > 1 or has vtx_groups with active bones in parent armature
 	// hint: bone_tm should point to first bone's tm buffer (which is right after armature object's tm_slot)
@@ -190,35 +208,35 @@ struct Mesh
 	void Dump(Pump* pump);
 };
 
+struct Bone
+{
+	int32_t tm_slot;
+	int32_t parent_index;
+	int32_t first_child_index;
+	int32_t children;
+
+	Transform transform;
+	// bone data here
+	// ...
+
+	int32_t constraints;
+	int32_t constraint_offset[1];
+
+	Constraint* GetConstraintPtr(int index)
+	{
+		if (index < 0 || index >= constraints)
+			return 0;
+		return (Constraint*)((char*)this + constraint_offset[index]);
+	}
+
+	void Dump(Pump* pump);
+};
+
 struct Armature
 {
-	struct Bone
-	{
-		int tm_slot;
-		int parent_index;
-		int first_child_index;
-		int children;
-
-		Transform transform;
-		// bone data here
-		// ...
-
-		int constraints;
-		int constraint_offset[1];
-
-		Constraint* GetConstraintPtr(int index)
-		{
-			if (index < 0 || index >= constraints)
-				return 0;
-			return (Constraint*)((char*)this + constraint_offset[index]);
-		}
-
-		void Dump(Pump* pump);
-	};
-
-	int roots;
-	int bones;
-	int bone_offset[1];
+	int32_t roots;
+	int32_t bones;
+	int32_t bone_offset[1];
 
 	Bone* GetBonePtr(int index)
 	{
@@ -232,41 +250,27 @@ struct Armature
 
 struct Object
 {
-	ObjectType type;
+	int32_t name_offs; // relative to beginning of the names_block
 
-	int tm_slot;
-	int parent_index;
-	ParentType parent_type;
+	uint32_t type; // ObjectType 
 
-	union
-	{
-		struct // parent_type == PAR_BONE
-		{
-			int parent_bone_index;
-		};
+	int32_t tm_slot;
+	int32_t parent_index;
+	uint32_t parent_type; // ParentType 
 
-		struct // parent_type == PAR_VERTEX
-		{
-			int parent_vertex;
-		};
+	int32_t parent_bone_or_vert[3];
 
-		struct // parent_type == PAR_VERTEX_3
-		{
-			int parent_vertex_3[3];
-		};
-	};
-
-	int first_child_index;
-	int children;
+	int32_t first_child_index;
+	int32_t children;
 
 	Transform transform;
 	Transform delta_transform;
 	float matrix_parent_inverse[16];
 
-	int object_data_offset;
+	int32_t object_data_offset;
 
-	int constraints;
-	int constraint_offset[1];
+	int32_t constraints;
+	int32_t constraint_offset[1];
 
 	Constraint* GetConstraintPtr(int index)
 	{
@@ -282,30 +286,23 @@ struct Object
 
 	// void CalcLocalTransform(float tm[16]);
 
+
 	void Dump(Pump* pump);
 };
 
 struct Scene
 {
+	uint32_t names_block_offset; // do not swapbytes after this position!
+
 	// hints
-	int num_transforms; // all tm_slots
-	int num_vertices;
-	int num_indices;
+	int32_t num_transforms; // all tm_slots
+	int32_t num_vertices;
+	int32_t num_indices;
 
 	// objects
-	int roots;
-	int objects;
-	int object_offset[1];
-
-	/*
-		add bufsize hints like:
-		- max num bones, 
-		- max verts_buf, 
-		- max polyverts_buf
-		- render_cache size
-		
-		so after loading all meshes we can allocate single worst case tmp buf
-	*/
+	int32_t roots;
+	int32_t objects;
+	int32_t object_offset[1];
 
 	static Scene* Load(const char* path);
 	void Free();
@@ -317,16 +314,45 @@ struct Scene
 		return (Object*)((char*)this + object_offset[index]);
 	}
 
+	Object* FindObjectPtr(const char* name)
+	{
+		return GetObjectPtr(FindObjectIdx(name));
+	}
+
+	int FindObjectIdx(const char* name)
+	{
+		char* names_block = (char*)this + names_block_offset;
+		for (int i = 0; i < objects; i++)
+		{
+			Object* obj = (Object*)((char*)this + object_offset[i]);
+			if (strcmp(name, names_block + obj->name_offs) == 0)
+				return i;
+		}
+		return -1;
+	}
+
 	void Dump(Pump* pump);
+
+	// RETHINK IT:
+	struct SceneInstance
+	{
+		// must contain inputs (map and values), temporal storage for matrices, temporal storage for vertices
+	};
+
+	template <typename custom_pipe> void Update(SceneInstance* inst);
+	template <typename custom_pipe> void Render(SceneInstance* inst);
 };
+
+#pragma pack(pop)
 
 struct Pump
 {
 	void Init(void(*f)(Pump* pump, const char* fmt, ...) = Pump::std_flush, void* u = stdout);
 
 	void(*flush)(Pump* pump, const char* fmt, ...);
-	Scene* scene;
 	void* user;
+
+	Scene* scene;
 	int indent;
 
 	static void std_flush(Pump* pump, const char* fmt, ...);

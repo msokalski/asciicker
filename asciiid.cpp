@@ -7396,17 +7396,21 @@ extern "C" void DumpLeakCounter();
 
 int main(int argc, char *argv[]) 
 {
-	Scene* scene = Scene::Load("./meshes/tree-cut-1.akm");
+#ifdef _WIN32
+	//_CrtSetBreakAlloc(11952);
+	SetConsoleOutputCP(65001/*aka CP_UTF8*/);
+#endif
+
+	Scene* scene = Scene::Load("./meshes/untitled.akm");
 
 	Pump pump;
-	pump.Init(Pump::std_flush,stderr);
+	pump.Init(Pump::std_flush,stdout);
 	scene->Dump(&pump);
+
+	Object* obj = scene->FindObjectPtr("\xc5\xbc\xc3\xb3\xc5\x82\xc4\x87");
 
 	scene->Free();
 
-#ifdef _WIN32
-	//_CrtSetBreakAlloc(11952);
-#endif
 	LoadSprites();
 
 	PlatformInterface pi;
