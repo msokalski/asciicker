@@ -11,21 +11,34 @@ const char* RotationType_Names[] = { "", "ROT_QUATERNION", "ROT_AXISANGLE", "ROT
 const char* EmptyType_Names[] = { "", "EMP_PLAIN_AXES", "EMP_ARROWS", "EMP_SINGLE_ARROW", "EMP_CUBE", "EMP_SPHERE", "EMP_CONE", "EMP_IMAGE" };
 const char* KeyInterpType_Names[] = { "", "KEY_LINEAR", "KEY_CARDINAL", "KEY_CATMULL_ROM", "KEY_BSPLINE" };
 
+#define ECMA_404
+
 #ifdef ECMA_404 // (ISO/IEC 21778) -> { "prop_enum": "enum", "prop_flag": 3243343 }
 #define $K "\""     // "prop":
 #define $T "\"%s\"" // "enum"
 #define $X "%d"     // 23423242125
+#define $F "%10f"	// pretty
 #else // ECMA_262 (ISO/IEC 16262)  -> { prop_enum: 'enum', prop_flag: 0x0000ABCD }
 #define $K          // prop:
 #define $T "'%s'"   // 'enum'
 #define $X "0x%08X" // 0x001abc43
+#define $F "%10f"	// pretty
 #endif
 
 void Pump::std_flush(Pump* pump, const char* fmt, ...)
 {
+	static const char indent[] = "                                ";
 	FILE* f = (FILE*)pump->user;
-	for (int i=0; i<pump->indent; i++)
-		fprintf(f," ");
+
+	int left = 2 * pump->indent;
+	while (left)
+	{
+		int advance = left;
+		if (advance >= sizeof(indent))
+			advance = sizeof(indent) - 1;
+		fprintf(f, "%.*s",advance,indent);
+		left -= advance;
+	}
 
 	va_list a;
 	va_start(a, fmt);
@@ -40,6 +53,8 @@ void Pump::Init(void(*f)(Pump* pump, const char* fmt, ...), void* u)
 	flush = f;
 	user = u;
 	indent = 0;
+	scene = 0;
+	object = 0;
 }
 
 extern "C"
@@ -209,6 +224,9 @@ void Scene::Dump(Pump* pump)
 
 void Object::Dump(Pump* pump)
 {
+	Object* push = pump->object;
+	pump->object = this;
+
 	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
 	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
 	pump->flush(pump, $K "type" $K ": " $T ",", ObjectType_Names[type]);
@@ -254,7 +272,7 @@ void Object::Dump(Pump* pump)
 	for (int row = 0; row < 4; row++)
 	{
 		float* r = matrix_parent_inverse + 4*row;
-		const char* fmt = row < 3 ? "%8.3f, %8.3f, %8.3f, %8.3f," : "%8.3f, %8.3f, %8.3f, %8.3f";
+		const char* fmt = row < 3 ? $F ", " $F ", " $F ", " $F "," : "" $F ", " $F ", " $F ", " $F;
 		pump->flush(pump, fmt, r[0],r[1],r[2],r[3]);
 	}
 	pump->indent--;
@@ -269,8 +287,14 @@ void Object::Dump(Pump* pump)
 		case OBJ_EMPTY:
 			((Empty*)data)->Dump(pump);
 			break;
+		case OBJ_CURVE:
+			((Curve*)data)->Dump(pump);
+			break;
 		case OBJ_MESH:
 			((Mesh*)data)->Dump(pump);
+			break;
+		case OBJ_ARMATURE:
+			((Armature*)data)->Dump(pump);
 			break;
 	}
 	pump->indent--;
@@ -290,7 +314,7 @@ void Object::Dump(Pump* pump)
 			GetConstraintPtr(c)->Dump(pump);
 
 			pump->indent--;
-			pump->flush(pump, "}");
+			pump->flush(pump, c == constraints - 1 ? "}" : "},");
 		}
 		pump->indent--;
 		pump->flush(pump, "],");
@@ -318,47 +342,178 @@ void Object::Dump(Pump* pump)
 	{
 		pump->flush(pump, $K "num_children" $K ": %d", children);
 	}
+
+	pump->object = push;
 }
 
 void Empty::Dump(Pump* pump)
 {
 	pump->flush(pump, $K "type" $K ": " $T ",", EmptyType_Names[type]);
-	pump->flush(pump, $K "size" $K ": %f,", size);
-	pump->flush(pump, $K "image_ofs" $K ": [%f, %f]", image_ofs[0], image_ofs[1]);
+	pump->flush(pump, $K "size" $K ": " $F ",", size);
+	pump->flush(pump, $K "image_ofs" $K ": [" $F ", " $F "]", image_ofs[0], image_ofs[1]);
+}
+
+void Curve::Dump(Pump* pump)
+{
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\"", utf8_name);
+}
+
+void Bone::Dump(Pump* pump)
+{
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
+
+	pump->flush(pump, $K "tm_slot" $K ": %d,", tm_slot);
+	pump->flush(pump, $K "parent_index" $K ": %d,", parent_index);
+
+	pump->flush(pump, $K "transform" $K ": ");
+	pump->flush(pump, "{");
+	pump->indent++;
+	transform.Dump(pump);
+	pump->indent--;
+	pump->flush(pump, "},");
+
+	pump->flush(pump, $K "num_constraints" $K ": %d,", constraints);
+	if (constraints)
+	{
+		pump->flush(pump, $K "Constraints" $K ": ");
+		pump->flush(pump, "[");
+		pump->indent++;
+		for (int c = 0; c < constraints; c++)
+		{
+			pump->flush(pump, "{");
+			pump->indent++;
+
+			GetConstraintPtr(c)->Dump(pump);
+
+			pump->indent--;
+			pump->flush(pump, c == constraints-1 ? "}":"},");
+		}
+		pump->indent--;
+		pump->flush(pump, "],");
+	}
+
+	if (children)
+	{
+		Armature* arm = (Armature*)pump->object->GetObjectData();
+		pump->flush(pump, $K "num_children" $K ": %d,", children);
+		pump->flush(pump, $K "Children" $K ": ");
+		pump->flush(pump, "[");
+		pump->indent++;
+
+		for (int c = 0; c < children; c++)
+		{
+			Bone* bone =  arm->GetBonePtr(first_child_index + c);
+			pump->flush(pump, "{");
+			pump->indent++;
+
+			bone->Dump(pump);
+
+			pump->indent--;
+			pump->flush(pump, c == children - 1 ? "}" : "},");
+		}
+
+		pump->indent--;
+		pump->flush(pump, "]");
+	}
+	else
+	{
+		pump->flush(pump, $K "num_children" $K ": %d", children);
+	}
+}
+
+void Armature::Dump(Pump* pump)
+{
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
+
+	pump->flush(pump, $K "num_bones" $K ": %d,", bones);
+
+	if (roots)
+	{
+		pump->flush(pump, $K "num_roots" $K ": %d,", roots);
+		pump->flush(pump, $K "Roots" $K ": ");
+		pump->flush(pump, "[");
+		pump->indent++;
+
+		for (int b = 0; b < roots; b++)
+		{
+			pump->flush(pump, "{");
+			pump->indent++;
+
+			Bone* bone = GetBonePtr(b);
+			bone->Dump(pump);
+
+			pump->indent--;
+			pump->flush(pump, b == roots - 1 ? "}" : "},");
+		}
+
+		pump->indent--;
+		pump->flush(pump, "]");
+	}
+	else
+	{
+		pump->flush(pump, $K "num_roots" $K ": %d", roots);
+	}
 }
 
 void ShapeKey::Dump(Pump* pump)
 {
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
+
 	pump->flush(pump, $K "interp" $K ": " $T ",", KeyInterpType_Names[interp]);
 	pump->flush(pump, $K "mute" $K ": %s,", mute ? "true" : "false");
 	pump->flush(pump, $K "relative_key" $K ": %d,", relative_key);
-	pump->flush(pump, $K "min_value" $K ": %f,", min_value);
-	pump->flush(pump, $K "max_value" $K ": %f,", max_value);
-	pump->flush(pump, $K "value" $K ": %f,", value);
+	pump->flush(pump, $K "min_value" $K ": " $F ",", min_value);
+	pump->flush(pump, $K "max_value" $K ": " $F ",", max_value);
+	pump->flush(pump, $K "value" $K ": " $F ",", value);
 	pump->flush(pump, $K "vtx_group" $K ": %d", vtx_group);
+};
+
+void VertexGroup::Dump(Pump* pump)
+{
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
+	pump->flush(pump, $K "bone" $K ": %d,", bone);
 };
 
 void Mesh::Dump(Pump* pump)
 {
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
+
 	pump->flush(pump, $K "tex_channels" $K ": %d,", tex_channels);
 	pump->flush(pump, $K "col_channels" $K ": %d,", col_channels);
 
 	pump->flush(pump, $K "vtx_groups" $K ": %d,", vtx_groups);
-	pump->flush(pump, $K "BoneIndex" $K ": ");
-	int32_t* bone_idx = (int32_t*)((char*)this + vtx_groups_offset);
-	pump->flush(pump, "[");
-	pump->indent++;
-	for (int g = 0; g < vtx_groups; g++)
-		pump->flush(pump, g == vtx_groups-1 ? "%d" : "%d,", bone_idx[g]);
-	pump->indent--;
-	pump->flush(pump, "],");
+	if (vtx_groups)
+	{
+		pump->flush(pump, $K "VertexGroup" $K ": ");
+		VertexGroup* grp = (VertexGroup*)((char*)this + vtx_groups_offset);
+		pump->flush(pump, "[");
+		pump->indent++;
+		for (int g = 0; g < vtx_groups; g++)
+		{
+			pump->flush(pump, "{");
+			pump->indent++;
+
+			grp[g].Dump(pump);
+			
+			pump->indent--;
+			pump->flush(pump, g == vtx_groups - 1 ? "}" : "},");
+		}
+		pump->indent--;
+		pump->flush(pump, "],");
+	}
 
 	pump->flush(pump, $K "ShapeKeys" $K ": ");
 	pump->flush(pump, "{");
 	pump->indent++;
 
 	ShapeKeys* sk = (ShapeKeys*)((char*)this + shp_keys_offset);
-	pump->flush(pump, $K "eval_time" $K ": %f,", sk->eval_time);
+	pump->flush(pump, $K "eval_time" $K ": " $F ",", sk->eval_time);
 	pump->flush(pump, $K "reference_key" $K ": %d,", sk->reference_key);
 	pump->flush(pump, $K "use_relative" $K ": %s,", sk->use_relative ? "true" : "false");
 	pump->flush(pump, shp_keys ? $K "num_keys" $K ": %d," : $K "num_keys" $K ": %d", shp_keys);
@@ -393,6 +548,8 @@ void Mesh::Dump(Pump* pump)
 		pump->flush(pump, "[");
 		pump->indent++;
 
+		int num_keys = shp_keys ? shp_keys : 1;
+
 		VertexData* vd = (VertexData*)((char*)this + vertices_offset);
 		int idx = 0;
 		while (idx < vertices)
@@ -414,7 +571,7 @@ void Mesh::Dump(Pump* pump)
 			}
 
 			float* data = (float*)((char*)vd + sizeof(VertexData) + sizeof(int32_t) * (vd->vtx_groups - 1));
-			int advance1 = 3 * shp_keys;
+			int advance1 = 3 * num_keys;
 			int advance2 = advance1 + vd->vtx_groups;
 
 			pump->flush(pump, $K "Vertices" $K ": ");
@@ -428,10 +585,10 @@ void Mesh::Dump(Pump* pump)
 				pump->flush(pump, $K "KeyCoords" $K ": ", vd->vtx_groups);
 				pump->flush(pump, "[");
 				pump->indent++;
-				for (int k = 0; k < shp_keys; k++)
+				for (int k = 0; k < num_keys; k++)
 				{
 					float* key = data + 3 * k;
-					pump->flush(pump, k == shp_keys - 1 ? "[%f, %f, %f]" : "[%f, %f, %f],", key[0], key[1], key[2]);
+					pump->flush(pump, k == num_keys - 1 ? "[" $F ", " $F ", " $F "]" : "[" $F ", " $F ", " $F "],", key[0], key[1], key[2]);
 				}
 				pump->indent--;
 				pump->flush(pump, idx==end-1 && !vd->vtx_groups ? "]":"],");
@@ -445,7 +602,7 @@ void Mesh::Dump(Pump* pump)
 					float* weights = data + advance1;
 
 					for (int g = 0; g < vd->vtx_groups; g++)
-						pump->flush(pump, g == vd->vtx_groups-1 ? "%f": "%f,", weights[g]);
+						pump->flush(pump, g == vd->vtx_groups-1 ? "" $F "": "" $F ",", weights[g]);
 
 					pump->indent--;
 					pump->flush(pump, "]");
@@ -523,7 +680,7 @@ void Mesh::Dump(Pump* pump)
 
 					for (int t = 0; t < tex_channels; t++)
 					{
-						const char* fmt = t == tex_channels - 1 ? "[%f, %f]" : "[%f, %f],";
+						const char* fmt = t == tex_channels - 1 ? "[" $F ", " $F "]" : "[" $F ", " $F "],";
 						pump->flush(pump, fmt, data[0], data[1]);
 						data += 2;
 					}
@@ -597,88 +754,24 @@ void Edge::Dump(Pump* pump)
 
 void Constraint::Dump(Pump* pump)
 {
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
 	pump->flush(pump, $K "type" $K ": " $T, ConstraintType_Names[type]);
 }
 
 void Transform::Dump(Pump* pump)
 {
-	pump->flush(pump, $K "position" $K ": [%f, %f, %f],", position[0], position[1], position[2]);
+	pump->flush(pump, $K "position" $K ": [" $F ", " $F ", " $F "],", position[0], position[1], position[2]);
 	pump->flush(pump, $K "rot_type" $K ": " $T ",", RotationType_Names[rot_type]);
 	switch (rot_type)
 	{
 		case ROT_QUATERNION:
 		case ROT_AXISANGLE:
-			pump->flush(pump, $K "rotation" $K ": [%f, %f, %f, %f],", rotation[0], rotation[1], rotation[2], rotation[3]);
+			pump->flush(pump, $K "rotation" $K ": [" $F ", " $F ", " $F ", " $F "],", rotation[0], rotation[1], rotation[2], rotation[3]);
 			break;
 
 		default:
-			pump->flush(pump, $K "rotation" $K ": [%f, %f, %f],", rotation[0], rotation[1], rotation[2]);
+			pump->flush(pump, $K "rotation" $K ": [" $F ", " $F ", " $F "],", rotation[0], rotation[1], rotation[2]);
 	}
-	pump->flush(pump, $K "scale   " $K ": [%f, %f, %f]", scale[0], scale[1], scale[2]);
-}
-
-void Mesh::TransformVerts(float xyz[][3], const float* bone_tm[/*all_bones_in_parent_armature*/])
-{
-	int32_t* bone_ids = (int32_t*)((char*)this + vtx_groups_offset);
-	ShapeKeys* sk = (ShapeKeys*)((char*)this + shp_keys_offset);
-	VertexData* vd = (VertexData*)((char*)this + vertices_offset);
-	int idx = 0;
-	while (idx < vertices)
-	{
-		float* data = (float*)((char*)vd + sizeof(VertexData) + sizeof(int32_t) * (vd->vtx_groups - 1));
-		int advance1 = 3 * shp_keys;
-		int advance2 = advance1 + vd->vtx_groups;
-
-		for (int end = idx + vd->vertices; idx < end; idx++, data += advance2)
-		{
-			float pos[3] = { data[0],data[1],data[2] };
-			for (int k = 1; k < shp_keys; k++)
-			{
-				float* key = data + 3 * k;
-				float* ref = data + 3 * sk->key[k].relative_key;
-				float w = sk->key[k].value;
-				pos[0] += w * (key[0] - ref[0]);
-				pos[1] += w * (key[1] - ref[1]);
-				pos[2] += w * (key[2] - ref[2]);
-			}
-
-			if (vd->vtx_groups)
-			{
-				float* weights = data + advance1;
-
-				float acc[3] = { 0,0,0 };
-				float tmp[3];
-				for (int g = 0; g < vd->vtx_groups; g++)
-				{
-					int bone = bone_ids[vd->vtx_group_index[g]];
-					if (bone >= 0)
-					{
-						Product(bone_tm[bone], pos, tmp);
-						float w = weights[g];
-						acc[0] += w * tmp[0];
-						acc[1] += w * tmp[1];
-						acc[2] += w * tmp[2];
-					}
-					else
-					{
-						// it is guaranteed that all groups in format attached to parent armature's bone
-						// come first, so if we reach non-bone group we can skip all other groups in format
-						break;
-					}
-				}
-
-				xyz[idx][0] = acc[0];
-				xyz[idx][1] = acc[1];
-				xyz[idx][2] = acc[2];
-			}
-			else
-			{
-				xyz[idx][0] = pos[0];
-				xyz[idx][1] = pos[1];
-				xyz[idx][2] = pos[2];
-			}
-		}
-
-		vd = (VertexData*)data;
-	}
+	pump->flush(pump, $K "scale   " $K ": [" $F ", " $F ", " $F "]", scale[0], scale[1], scale[2]);
 }

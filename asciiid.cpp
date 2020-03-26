@@ -7403,11 +7403,42 @@ int main(int argc, char *argv[])
 
 	Scene* scene = Scene::Load("./meshes/untitled.akm");
 
+	FILE* f = fopen("dump.js", "wt");
 	Pump pump;
-	pump.Init(Pump::std_flush,stdout);
+	pump.Init(Pump::std_flush,f);
 	scene->Dump(&pump);
+	fclose(f);
 
-	Object* obj = scene->FindObjectPtr("\xc5\xbc\xc3\xb3\xc5\x82\xc4\x87");
+	Object* obj = scene->FindObjectPtr("tree1-opt");
+
+	struct Pipe
+	{
+		void vertex(int vtx, Vector3 shape_coords[], int groups, int group_indexes[], float group_weights[])
+		{
+			int a = 0;
+		}
+		void triangle(int mat_and_flags, int vertex[3], Vector2* uv[3], uint32_t* colors[3])
+		{
+			int b = 0;
+		}
+
+		Mesh* mesh;
+	};
+
+	Pipe pipe;
+	pipe.mesh = (Mesh*)((char*)obj + obj->object_data_offset);
+
+	float ar1[33][2];
+	float ar2[55][2];
+	float ar3[55][2];
+
+	float(*my_arr_of_3_ptrs[3])[2];
+	my_arr_of_3_ptrs[0] = ar1;
+	my_arr_of_3_ptrs[1] = ar2;
+	my_arr_of_3_ptrs[2] = ar3;
+
+	pipe.mesh->EnumVertices(&pipe);
+	pipe.mesh->EnumTriangles(&pipe);
 
 	scene->Free();
 
