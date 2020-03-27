@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include "mesh.h"
 
+const char* ModifierType_Names[] = { "", "MOD_ARMATURE", "MOD_HOOK" };
 const char* ParentType_Names[] = { "","PAR_OBJECT","PAR_BONE","PAR_ARMATURE","PAR_VERTEX","PAR_VERTEX_3" };
 const char* ObjectType_Names[] = { "","OBJ_MESH","OBJ_CURVE","OBJ_ARMATURE","OBJ_EMPTY" };
 const char* ConstraintType_Names[] = { "","CON_FOLLOW_PATH","CON_IK" };
@@ -11,7 +12,7 @@ const char* RotationType_Names[] = { "", "ROT_QUATERNION", "ROT_AXISANGLE", "ROT
 const char* EmptyType_Names[] = { "", "EMP_PLAIN_AXES", "EMP_ARROWS", "EMP_SINGLE_ARROW", "EMP_CUBE", "EMP_SPHERE", "EMP_CONE", "EMP_IMAGE" };
 const char* KeyInterpType_Names[] = { "", "KEY_LINEAR", "KEY_CARDINAL", "KEY_CATMULL_ROM", "KEY_BSPLINE" };
 
-#define ECMA_404
+// #define ECMA_404
 
 #ifdef ECMA_404 // (ISO/IEC 21778) -> { "prop_enum": "enum", "prop_flag": 3243343 }
 #define $K "\""     // "prop":
@@ -200,7 +201,7 @@ void Scene::Dump(Pump* pump)
 	pump->flush(pump, $K "num_objects" $K ": %d,", objects);
 	pump->flush(pump, $K "num_roots" $K ": %d,", roots);
 
-	pump->flush(pump, $K "Roots" $K ": ");
+	pump->flush(pump, $K "Roots" $K ":");
 	pump->flush(pump, "[");
 	pump->indent++;
 	for (int i = 0; i < roots; i++)
@@ -252,21 +253,21 @@ void Object::Dump(Pump* pump)
 			break;
 	}
 
-	pump->flush(pump, $K "transform" $K ": ");
+	pump->flush(pump, $K "transform" $K ":");
 	pump->flush(pump, "{");
 	pump->indent++;
 	transform.Dump(pump);
 	pump->indent--;
 	pump->flush(pump, "},");
 
-	pump->flush(pump, $K "delta_transform" $K ": ");
+	pump->flush(pump, $K "delta_transform" $K ":");
 	pump->flush(pump, "{");
 	pump->indent++;
 	delta_transform.Dump(pump);
 	pump->indent--;
 	pump->flush(pump, "},");
 
-	pump->flush(pump, $K "matrix_parent_inverse" $K ": ");
+	pump->flush(pump, $K "matrix_parent_inverse" $K ":");
 	pump->flush(pump, "[");
 	pump->indent++;
 	for (int row = 0; row < 4; row++)
@@ -303,7 +304,7 @@ void Object::Dump(Pump* pump)
 	pump->flush(pump, $K "num_constraints" $K ": %d,", constraints);
 	if (constraints)
 	{
-		pump->flush(pump, $K "Constraints" $K ": ");
+		pump->flush(pump, $K "Constraints" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 		for (int c = 0; c < constraints; c++)
@@ -320,10 +321,31 @@ void Object::Dump(Pump* pump)
 		pump->flush(pump, "],");
 	}
 
+	pump->flush(pump, $K "num_modifiers" $K ": %d,", modifiers);
+	if (modifiers)
+	{
+		pump->flush(pump, $K "Modifiers" $K ":");
+		pump->flush(pump, "[");
+		pump->indent++;
+		for (int m = 0; m < modifiers; m++)
+		{
+			pump->flush(pump, "{");
+			pump->indent++;
+
+			Modifier* mod = GetModifierPtr(m);
+			mod->Dump(pump);
+
+			pump->indent--;
+			pump->flush(pump, m == modifiers - 1 ? "}" : "},");
+		}
+		pump->indent--;
+		pump->flush(pump, "],");
+	}
+
 	if (children)
 	{
 		pump->flush(pump, $K "num_children" $K ": %d,", children);
-		pump->flush(pump, $K "Children" $K ": ");
+		pump->flush(pump, $K "Children" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 		for (int i = 0; i < children; i++)
@@ -349,6 +371,8 @@ void Object::Dump(Pump* pump)
 void Empty::Dump(Pump* pump)
 {
 	pump->flush(pump, $K "type" $K ": " $T ",", EmptyType_Names[type]);
+	pump->flush(pump, $K "image_size" $K ": %d,", image_side);
+	pump->flush(pump, $K "image_depth" $K ": %d,", image_depth);
 	pump->flush(pump, $K "size" $K ": " $F ",", size);
 	pump->flush(pump, $K "image_ofs" $K ": [" $F ", " $F "]", image_ofs[0], image_ofs[1]);
 }
@@ -367,7 +391,7 @@ void Bone::Dump(Pump* pump)
 	pump->flush(pump, $K "tm_slot" $K ": %d,", tm_slot);
 	pump->flush(pump, $K "parent_index" $K ": %d,", parent_index);
 
-	pump->flush(pump, $K "transform" $K ": ");
+	pump->flush(pump, $K "transform" $K ":");
 	pump->flush(pump, "{");
 	pump->indent++;
 	transform.Dump(pump);
@@ -377,7 +401,7 @@ void Bone::Dump(Pump* pump)
 	pump->flush(pump, $K "num_constraints" $K ": %d,", constraints);
 	if (constraints)
 	{
-		pump->flush(pump, $K "Constraints" $K ": ");
+		pump->flush(pump, $K "Constraints" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 		for (int c = 0; c < constraints; c++)
@@ -398,7 +422,7 @@ void Bone::Dump(Pump* pump)
 	{
 		Armature* arm = (Armature*)pump->object->GetObjectData();
 		pump->flush(pump, $K "num_children" $K ": %d,", children);
-		pump->flush(pump, $K "Children" $K ": ");
+		pump->flush(pump, $K "Children" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 
@@ -433,7 +457,7 @@ void Armature::Dump(Pump* pump)
 	if (roots)
 	{
 		pump->flush(pump, $K "num_roots" $K ": %d,", roots);
-		pump->flush(pump, $K "Roots" $K ": ");
+		pump->flush(pump, $K "Roots" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 
@@ -468,7 +492,7 @@ void ShapeKey::Dump(Pump* pump)
 	pump->flush(pump, $K "relative_key" $K ": %d,", relative_key);
 	pump->flush(pump, $K "min_value" $K ": " $F ",", min_value);
 	pump->flush(pump, $K "max_value" $K ": " $F ",", max_value);
-	pump->flush(pump, $K "value" $K ": " $F ",", value);
+	pump->flush(pump, $K "value" $K ":     " $F ",", value);
 	pump->flush(pump, $K "vtx_group" $K ": %d", vtx_group);
 };
 
@@ -476,7 +500,7 @@ void VertexGroup::Dump(Pump* pump)
 {
 	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
 	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
-	pump->flush(pump, $K "bone" $K ": %d,", bone);
+	pump->flush(pump, $K "parent_bone" $K ": %d,", bone);
 };
 
 void Mesh::Dump(Pump* pump)
@@ -490,7 +514,7 @@ void Mesh::Dump(Pump* pump)
 	pump->flush(pump, $K "vtx_groups" $K ": %d,", vtx_groups);
 	if (vtx_groups)
 	{
-		pump->flush(pump, $K "VertexGroup" $K ": ");
+		pump->flush(pump, $K "VertexGroup" $K ":");
 		VertexGroup* grp = (VertexGroup*)((char*)this + vtx_groups_offset);
 		pump->flush(pump, "[");
 		pump->indent++;
@@ -508,7 +532,7 @@ void Mesh::Dump(Pump* pump)
 		pump->flush(pump, "],");
 	}
 
-	pump->flush(pump, $K "ShapeKeys" $K ": ");
+	pump->flush(pump, $K "ShapeKeys" $K ":");
 	pump->flush(pump, "{");
 	pump->indent++;
 
@@ -520,7 +544,7 @@ void Mesh::Dump(Pump* pump)
 
 	if (shp_keys)
 	{
-		pump->flush(pump, $K "Keys" $K ": ");
+		pump->flush(pump, $K "Keys" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 		for (int i = 0; i < shp_keys; i++)
@@ -544,11 +568,9 @@ void Mesh::Dump(Pump* pump)
 
 	if (vertices)
 	{
-		pump->flush(pump, $K "VertexData" $K ": ");
+		pump->flush(pump, $K "VertexData" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
-
-		int num_keys = shp_keys ? shp_keys : 1;
 
 		VertexData* vd = (VertexData*)((char*)this + vertices_offset);
 		int idx = 0;
@@ -557,52 +579,78 @@ void Mesh::Dump(Pump* pump)
 			pump->flush(pump, "{");
 			pump->indent++;
 
-			pump->flush(pump, $K "num_vertices" $K ": %d,", vd->vertices);
-			pump->flush(pump, $K "num_groups" $K ": %d,", vd->vtx_groups);
-			if (vd->vtx_groups)
+			int keys = vd->keys_and_groups & 0xFFFF;
+			int grps = (vd->keys_and_groups >> 16) & 0xFFFF;
+			int flen = keys + grps;
+
+			pump->flush(pump, $K "num_vertices" $K ": %d,", vd->range - idx);
+
+			int fi = 0;
+
+			pump->flush(pump, $K "num_shapes" $K ": %d,", keys);
+			if (keys)
 			{
-				pump->flush(pump, $K "Groups" $K ": ");
+				pump->flush(pump, $K "Shapes" $K ":");
 				pump->flush(pump, "[");
 				pump->indent++;
-				for (int g = 0; g < vd->vtx_groups; g++)
-					pump->flush(pump, g == vd->vtx_groups - 1 ? "%d" : "%d,", vd->vtx_group_index[g]);
+				for (; fi < keys; fi++)
+					pump->flush(pump, fi == keys - 1 ? "%d" : "%d,", vd->indexes[fi]);
 				pump->indent--;
 				pump->flush(pump, "],");
 			}
 
-			float* data = (float*)((char*)vd + sizeof(VertexData) + sizeof(int32_t) * (vd->vtx_groups - 1));
-			int advance1 = 3 * num_keys;
-			int advance2 = advance1 + vd->vtx_groups;
+			pump->flush(pump, $K "num_groups" $K ": %d,", grps);
+			if (grps)
+			{
+				pump->flush(pump, $K "Groups" $K ":");
+				pump->flush(pump, "[");
+				pump->indent++;
+				for (; fi < flen; fi++)
+					pump->flush(pump, fi == flen - 1 ? "%d" : "%d,", vd->indexes[fi]);
+				pump->indent--;
+				pump->flush(pump, "],");
+			}
 
-			pump->flush(pump, $K "Vertices" $K ": ");
+			float* data = (float*)((char*)vd + sizeof(VertexData) + sizeof(int32_t) * (flen - 1));
+			int advance1 = 3 * (keys + 1);
+			int advance2 = advance1 + grps;
+
+			pump->flush(pump, $K "Vertices" $K ":");
 			pump->flush(pump, "[");
 			pump->indent++;
-			for (int end = idx + vd->vertices; idx < end; idx++, data += advance2)
+			for (int end = vd->range; idx < end; idx++, data += advance2)
 			{
 				pump->flush(pump, "{");
 				pump->indent++;
 
-				pump->flush(pump, $K "KeyCoords" $K ": ", vd->vtx_groups);
-				pump->flush(pump, "[");
-				pump->indent++;
-				for (int k = 0; k < num_keys; k++)
-				{
-					float* key = data + 3 * k;
-					pump->flush(pump, k == num_keys - 1 ? "[" $F ", " $F ", " $F "]" : "[" $F ", " $F ", " $F "],", key[0], key[1], key[2]);
-				}
-				pump->indent--;
-				pump->flush(pump, idx==end-1 && !vd->vtx_groups ? "]":"],");
+				pump->flush(pump, $K "vertex" $K ": [%10f, %10f, %10f],", data[0],data[1],data[2]);
 
-				if (vd->vtx_groups)
+				if (keys)
 				{
-					pump->flush(pump, $K "GroupWeights" $K ": ", vd->vtx_groups);
+					pump->flush(pump, $K "KeyShapes" $K ":");
+					pump->flush(pump, "[");
+					pump->indent++;
+
+					float* shapes = data + 3;
+					for (int k = 0; k < keys; k++)
+					{
+						float* key = shapes + 3 * k;
+						pump->flush(pump, k == keys - 1 ? "[" $F ", " $F ", " $F "]" : "[" $F ", " $F ", " $F "],", key[0], key[1], key[2]);
+					}
+					pump->indent--;
+					pump->flush(pump, idx == end - 1 && !grps ? "]" : "],");
+				}
+
+				if (grps)
+				{
+					pump->flush(pump, $K "GroupWeights" $K ":");
 					pump->flush(pump, "[");
 					pump->indent++;
 
 					float* weights = data + advance1;
 
-					for (int g = 0; g < vd->vtx_groups; g++)
-						pump->flush(pump, g == vd->vtx_groups-1 ? "" $F "": "" $F ",", weights[g]);
+					for (int g = 0; g < grps; g++)
+						pump->flush(pump, g == grps-1 ? "" $F "": "" $F ",", weights[g]);
 
 					pump->indent--;
 					pump->flush(pump, "]");
@@ -628,7 +676,7 @@ void Mesh::Dump(Pump* pump)
 	pump->flush(pump, $K "num_edges" $K ": %d,", edges);
 	if (edges)
 	{
-		pump->flush(pump, $K "Edges" $K ": ");
+		pump->flush(pump, $K "Edges" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 		for (int e = 0; e < edges; e++)
@@ -648,7 +696,7 @@ void Mesh::Dump(Pump* pump)
 	pump->flush(pump, $K "num_polys" $K ": %d,", polys);
 	if (polys)
 	{
-		pump->flush(pump, $K "Polys" $K ": ");
+		pump->flush(pump, $K "Polys" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 		PolyData* pd = (PolyData*)((char*)this + polys_offset);
@@ -659,7 +707,7 @@ void Mesh::Dump(Pump* pump)
 
 			pump->flush(pump, $K "mat_and_flags" $K ": " $X ",", pd->mat_and_flags);
 			pump->flush(pump, $K "num_indices" $K ": %d,", pd->indices);
-			pump->flush(pump, $K "Indices" $K ": ");
+			pump->flush(pump, $K "Indices" $K ":");
 			pump->flush(pump, "[");
 			pump->indent++;
 			Indice* ind = pd->indice;
@@ -672,7 +720,7 @@ void Mesh::Dump(Pump* pump)
 
 				if (tex_channels)
 				{
-					pump->flush(pump, $K "TexCoords" $K ": ");
+					pump->flush(pump, $K "TexCoords" $K ":");
 					pump->flush(pump, "[");
 					pump->indent++;
 
@@ -691,7 +739,7 @@ void Mesh::Dump(Pump* pump)
 
 				if (col_channels)
 				{
-					pump->flush(pump, $K "Colors" $K ": ");
+					pump->flush(pump, $K "Colors" $K ":");
 					pump->flush(pump, "[");
 					pump->indent++;
 
@@ -734,7 +782,7 @@ void Mesh::Dump(Pump* pump)
 	if (materials)
 	{
 		pump->flush(pump, $K "num_materials" $K ": %d,", materials);
-		pump->flush(pump, $K "Materials" $K ": ");
+		pump->flush(pump, $K "Materials" $K ":");
 		pump->flush(pump, "[");
 		pump->indent++;
 		pump->indent--;
@@ -757,6 +805,14 @@ void Constraint::Dump(Pump* pump)
 	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
 	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
 	pump->flush(pump, $K "type" $K ": " $T, ConstraintType_Names[type]);
+}
+
+void Modifier::Dump(Pump* pump)
+{
+	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
+	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
+	pump->flush(pump, $K "type" $K ": " $T ",", ModifierType_Names[type]);
+	pump->flush(pump, $K "flags" $K ": " $X, flags); // add comma when adding mod-data dump!
 }
 
 void Transform::Dump(Pump* pump)

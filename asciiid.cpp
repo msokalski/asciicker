@@ -7409,11 +7409,11 @@ int main(int argc, char *argv[])
 	scene->Dump(&pump);
 	fclose(f);
 
-	Object* obj = scene->FindObjectPtr("tree1-opt");
+	Object* obj = scene->FindObjectPtr("TOP");
 
 	struct Pipe
 	{
-		void vertex(int vtx, Vector3 shape_coords[], int groups, int group_indexes[], float group_weights[])
+		void vertex(int vtx, int keys, int grps, int indexes[], float* data)
 		{
 			int a = 0;
 		}
@@ -7427,15 +7427,6 @@ int main(int argc, char *argv[])
 
 	Pipe pipe;
 	pipe.mesh = (Mesh*)((char*)obj + obj->object_data_offset);
-
-	float ar1[33][2];
-	float ar2[55][2];
-	float ar3[55][2];
-
-	float(*my_arr_of_3_ptrs[3])[2];
-	my_arr_of_3_ptrs[0] = ar1;
-	my_arr_of_3_ptrs[1] = ar2;
-	my_arr_of_3_ptrs[2] = ar3;
 
 	pipe.mesh->EnumVertices(&pipe);
 	pipe.mesh->EnumTriangles(&pipe);

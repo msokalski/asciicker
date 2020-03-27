@@ -5,6 +5,13 @@ import struct
 import bpy
 import bmesh
 
+# -----------------------------------------------------------
+# for use in blender for attributes discovery
+def dump(obj):
+   for attr in dir(obj):
+       if hasattr( obj, attr ):
+           print( "obj.%s = %s" % (attr, getattr(obj, attr)))
+# -----------------------------------------------------------
 
 def wr_str(fout,s):
 	chunk = (s + '\0').encode('utf8')
@@ -105,11 +112,168 @@ def wr_save(data,path):
 	file.close()
 	return size[0]
 
+def save_arm_mod(fout,obj,arm_mod,idx_dict):
+
+	size = 0
+
+	# armature object
+	arm = None
+	if arm_mod.object and arm_mod.object.type == 'ARMATURE':
+		arm = arm_mod.object
+
+	# ensure arm is on our export list!
+	if arm and not arm in idx_dict:
+		arm = None
+
+	if arm:
+		size += wr_int(fout, idx_dict[arm])
+	else:
+		size += wr_int(-1)
+
+	infl_grp = -1
+	idx = 0
+	for g in obj.vertex_groups:
+		if g.name == arm_mod.vertex_group:
+			infl_grp = idx
+			break
+		idx += 1
+
+	size += wr_int(fout, infl_grp)
+
+	flags = 0
+	if arm_mod.invert_vertex_group:
+		flags |= 1<<16
+	if arm_mod.use_bone_envelopes:
+		flags |= 1<<17
+	if arm_mod.use_deform_preserve_volume:
+		flags |= 1<<18
+	if arm_mod.use_vertex_groups:
+		flags |= 1<<19
+
+	size += wr_int(fout, flags)
+
+	# big thing, if we have armature, write our vtxgrp to its bone idx mappings
+	if arm:
+		for g in obj.vertex_groups:
+			bone_idx = -1
+			for b in arm.pose.bones:
+				if b.name == g.name:
+					bone_idx = idx_dict[b]
+					break
+			size += wr_int(fout,bone_idx)
+
+	return size
+
+def save_hook_mod(fout,obj,hook_mod,idx_dict):
+
+	size = 0
+
+	if hook_mod.object and hook_mod.object in idx_dict:
+		size += wr_int(fout, idx_dict[hook_mod.object])
+		sub = -1
+		if hook_mod.subtarget and hook_mod.object.type == 'ARMATURE':
+			for b in hook_mod.object.pose.bones:
+				if b.name == hook_mod.subtarget:
+					sub = idx_dict[b]
+					break;
+		size += wr_int(fout, sub) # bone (subtarget)
+
+	else:
+		size += wr_int(fout, -1) # obj
+		size += wr_int(fout, -1) # bone (subtarget)
+
+	infl_grp = -1
+	idx = 0
+	for g in obj.vertex_groups:
+		if g.name == hook_mod.vertex_group:
+			infl_grp = idx
+			break
+		idx += 1
+	size += wr_int(fout, infl_grp)
+
+	size += wr_fp3(fout, hook_mod.center)
+	size += wr_flt(fout, hook_mod.falloff_radius)
+	size += wr_flt(fout, hook_mod.strength)
+	
+	type = 0
+	if hook_mod.falloff_type == 'NONE':
+		type = 1
+	elif hook_mod.falloff_type == 'CURVE':
+		type = 2
+	elif hook_mod.falloff_type == 'SMOOTH':
+		type = 3
+	elif hook_mod.falloff_type == 'SPHERE':
+		type = 4
+	elif hook_mod.falloff_type == 'ROOT':
+		type = 5
+	elif hook_mod.falloff_type == 'INVERSE_SQUARE':
+		type = 6
+	elif hook_mod.falloff_type == 'SHARP':
+		type = 7
+	elif hook_mod.falloff_type == 'LINEAR':
+		type = 8
+	elif hook_mod.falloff_type == 'CONSTANT':
+		type = 9
+
+	if hook_mod.use_falloff_uniform:
+		type |= 1<<16
+
+	size += wr_int(fout, type)
+
+	# todo falloff_curve
+	# ...
+
+	return size
+
+def save_mod(fout,obj,mod,idx_dict,names):
+
+	size = 0
+
+	# write name offs and store name
+	name_ofs = wr_ref(fout)
+	size += 4
+	names.append( (name_ofs,mod.name) )
+
+	type = 0
+	if mod.type == 'ARMATURE':
+		type = 1
+	elif mod.type == 'HOOK':
+		type = 2
+
+	size += wr_int(fout,type)
+
+	flags = 0
+	if mod.show_viewport:
+		flags |= 1<<16
+	elif mod.show_render:
+		flags |= 1<<17
+	elif mod.show_in_editmode:
+		flags |= 1<<18
+	elif mod.show_on_cage:
+		flags |= 1<<19
+
+	size += wr_int(fout,flags)
+
+	if type == 0:
+		return size
+		
+	# MOD DATA
+
+	if type==1:
+		size += save_arm_mod(fout,obj,mod,idx_dict)
+	elif type==2:
+		size += save_hook_mod(fout,obj,mod,idx_dict)
+
+	return size
+
+
 def proc_msh(obj):
 
 	# here we need to determine which vertices are necessary
 	# - are referenced by polygons
 	# - or are used as parents for other objects
+
+	msh = obj.data
 
 	grp_dict = dict()
 	idx = 0
@@ -122,28 +286,51 @@ def proc_msh(obj):
 
 	# construct fromats from sorted groups
 	for v in obj.data.vertices:
+		#	# split f into 2 parts:
+		#	# - first must include sorted groups with active bones
+		#	# - second one must contain all other groups sorted
+		#	f1 = []
+		#	f2 = []
+		#	for g in v.groups: # g is VertexGroupElement, g.group is index to msh.vertex_groups!
+		#		group = obj.vertex_groups[g.group]
+		#		# check if g has active bone
+		#		active = False
+		#		if obj.parent and obj.parent.type == 'ARMATURE':
+		#			for b in obj.parent.pose.bones:
+		#				if b.name == group.name:
+		#					active = True
+		#					break
+		#		if active: 
+		#			f1.append(grp_dict[ group ])
+		#		else:
+		#			f2.append(grp_dict[ group ])
+		#	f = tuple(sorted(f1)) + tuple(sorted(f2))
 
-		# split f into 2 parts:
-		# - first must include sorted groups with active bones
-		# - second one must contain all other groups sorted
-		f1 = []
-		f2 = []
-		for g in v.groups: # g is VertexGroupElement, g.group is index to msh.vertex_groups!
+		fk = []
+		fg = []
+
+		for g in v.groups:
 			group = obj.vertex_groups[g.group]
-			# check if g has active bone
-			active = False
-			if obj.parent and obj.parent.type == 'ARMATURE':
-				for b in obj.parent.pose.bones:
-					if b.name == group.name:
-						active = True
-						break
+			fg.append(grp_dict[ group ])
 
-			if active: 
-				f1.append(grp_dict[ group ])
-			else:
-				f2.append(grp_dict[ group ])
+		key_idx = 0
+		if msh.shape_keys:
+			for k in msh.shape_keys.key_blocks:
+				if v.co[0] != k.data[v.index].co[0] or v.co[1] != k.data[v.index].co[1] or v.co[2] != k.data[v.index].co[2]:
+					fk.append(key_idx)
+				key_idx += 1
 
-		f = tuple(sorted(f1)) + tuple(sorted(f2))
+		keys = len(fk)
+		grps = len(fg)
+
+		if keys>0xFFFF or grps>0xFFFF:
+			return None
+
+		f = tuple([keys|(grps<<16)])
+		if len(fk):
+			f = f + tuple(sorted(fk))
+		if len(fg):
+			f = f + tuple(sorted(fg))
 
 		if not f in fmt_dict:
 			fmt_dict[f] = [v]
@@ -197,6 +384,7 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 
 	# num verts
 	size += wr_int(fout, len(msh.vertices))
+
 	# write offset to vertex data (groupped by fmt)
 	vertex_offs = wr_ref(fout)
 	size += 4
@@ -234,8 +422,8 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 		size += 4
 		names.append( (name_ofs,g.name) )
 
-		bone_idx = -1
-		if obj.parent and obj.parent.type == 'ARMATURE':
+		bone_idx = -1 # confirmed, we need it (at least for 'ARMATURE' parenting type)
+		if obj.parent and obj.parent.type == 'ARMATURE' and obj.parent_type == 'ARMATURE':
 			for b in obj.parent.pose.bones:
 				if b.name == g.name:
 					bone_idx = idx_dict[b]
@@ -301,30 +489,35 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 
 	# VERTEX DATA
 	wr_int(vertex_offs,size)
+	end_index = 0
 	for f in fmt_dict:
 		vtx_sublist = fmt_dict[f]
-		# num of vertices in this format
-		size += wr_int(fout,len(vtx_sublist))
 
-		# write format length (num of used vertex_groups)
-		size += wr_int(fout,len(f))
-		for g in f:
-			# write vertex group index
-			size += wr_int(fout,g) 
+		# first vertex index that does not fit in this format
+		end_index += len(vtx_sublist)
+		size += wr_int(fout, end_index)
+
+		# write format lengths (packed num of used keys & vertex_groups)
+		# followed by all keys then groups indexes
+		for i in f:
+			size += wr_int(fout,i) 
+
+		keys = range(1,1+f[0]&0xFFFF)
+		grps = range(1+(f[0]&0xFFFF),1+(f[0]&0xFFFF)+((f[0]>>16)&0xFFFF))
 
 		for v in vtx_sublist:
+
+			# always write base_coords
+			size += wr_fp3(fout, v.co)
 			
-			if keys == 0:
-				# base_coords
-				size += wr_fp3(fout, v.co)
-			else:
-				# ALL shape_keys coords (should we exclude first 'basis')?
-				for k in msh.shape_keys.key_blocks:
-					size += wr_fp3(fout,k.data[v.index].co)
+			# shape_keys coords
+			for j in keys:
+				k = msh.shape_keys.key_blocks[f[j]]
+				size += wr_fp3(fout,k.data[v.index].co)
 
 			# weights from groups included in format
-			for g in f:
-				size += wr_flt(fout,obj.vertex_groups[g].weight(v.index))
+			for j in grps:
+				size += wr_flt(fout,obj.vertex_groups[f[j]].weight(v.index))
 
 	# EDGE DATA
 	wr_int(edge_offs,size)
@@ -385,22 +578,32 @@ def save_emp(fout, obj):
 	size = 0
 
 	type = 0
-	if obj.empty_draw_type == 'PLAIN_AXES':
+	if obj.empty_display_type == 'PLAIN_AXES':
 		type = 1
-	elif obj.empty_draw_type == 'ARROWS':
+	elif obj.empty_display_type == 'ARROWS':
 		type = 2
-	elif obj.empty_draw_type == 'SINGLE_ARROW':
+	elif obj.empty_display_type == 'SINGLE_ARROW':
 		type = 3
-	elif obj.empty_draw_type == 'CUBE':
+	elif obj.empty_display_type == 'CUBE':
 		type = 4
-	elif obj.empty_draw_type == 'SPHERE':
+	elif obj.empty_display_type == 'SPHERE':
 		type = 5
-	elif obj.empty_draw_type == 'CONE':
+	elif obj.empty_display_type == 'CONE':
 		type = 6
-	elif obj.empty_draw_type == 'IMAGE':
+	elif obj.empty_display_type == 'IMAGE':
 		type = 7
+	elif obj.empty_display_type == 'CIRCLE':
+		type = 8
+
 	size += wr_int(fout, type)
-	size += wr_flt(fout, obj.empty_draw_size)
+
+	image_side = 0 # TODO! empty_image_side ['DOUBLE_SIDED', 'FRONT', 'BACK'], default 'DOUBLE_SIDED'
+	size += wr_int(fout, image_side)
+
+	image_depth = 0 # TODO! empty_image_depth ['DEFAULT', 'FRONT', 'BACK']
+	size += wr_int(fout, image_depth)
+
+	size += wr_flt(fout, obj.empty_display_size)
 	size += wr_fp2(fout, obj.empty_image_offset)
 
 	return size
@@ -653,6 +856,12 @@ def save_obj(fout, obj, idx_dict, obj_list, msh_dict, names):
 	obj_data_ofs = wr_ref(fout)
 	size += 4
 
+	# modifiers stack size
+	size += wr_int( fout, len(obj.modifiers) )
+	# offset to modifiers stack
+	modifier_stack_offs = wr_ref(fout)
+	size += 4
+
 	num_con = len(obj.constraints)
 
 	# NUM OF CONSTRAINTS
@@ -678,7 +887,15 @@ def save_obj(fout, obj, idx_dict, obj_list, msh_dict, names):
 	elif obj.type == 'ARMATURE':
 		size += save_arm(fout,obj.data,obj.pose,idx_dict,names)
 	elif obj.type == 'EMPTY':
-		size += save_emp(fout,obj.data,idx_dict) # NO NAME!
+		size += save_emp(fout,obj) # NO NAME!
+
+	wr_int(modifier_stack_offs,size)
+	modifier_offs = wr_ref(fout)
+	size += 4*len(obj.modifiers)
+
+	for m in obj.modifiers:
+		wr_int(modifier_offs,size)
+		size += save_mod(fout,obj,m,idx_dict,names)
 
 	return size
 
@@ -718,7 +935,7 @@ def save(
 	for o in obs:
 
 		# ensure object type
-		if o.type != 'ARMATURE' and o.type != 'MESH' and o.type != 'CURVE':
+		if o.type != 'ARMATURE' and o.type != 'MESH' and o.type != 'CURVE' and o.type != 'EMPTY':
 			print(o.name, "skipping - unsupported type", o.type, "of", o.name)
 			continue #unknown object type, sorry
 
@@ -961,7 +1178,12 @@ def save(
 		if o.type == 'MESH':
 			# time to process meshes and store them in mesh_dict[obj]
 			# so writing VERTEX parenting can use reindexed vertices
-			msh_dict[o] = proc_msh(o)
+			processed = proc_msh(o)
+			if not processed:
+				print("EXPORT ERROR! Mesh inside",o.name,"uses too many groups or shapes at once")
+				return {'FINISHED'}
+
+			msh_dict[o] = processed
 			num_vertices += len(o.data.vertices)
 			for poly in o.data.polygons:
 				num_indices += poly.loop_total

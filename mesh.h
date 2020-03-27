@@ -2,6 +2,14 @@
 #include <stdint.h>
 #include "matrix.h"
 
+enum ModifierType
+{
+	MOD_ARMATURE = 1,
+	MOD_HOOK = 2
+};
+
+extern const char* ModifierType_Names[];
+
 enum ConstraintType
 {
 	CON_FOLLOW_PATH = 1,
@@ -111,8 +119,9 @@ struct Curve
 
 struct Empty
 {
-	int32_t name_offs;
 	uint32_t type; // EmptyType
+	uint32_t image_side; // todo!
+	uint32_t image_depth; // todo!
 	float size;
 	Vector2 image_ofs;
 	void Dump(Pump* pump);
@@ -143,13 +152,14 @@ struct ShapeKeys
 
 struct VertexData
 {
-	int32_t vertices;
-	int32_t vtx_groups;
-	int32_t vtx_group_index[1];
+	int32_t range; // first vertex NOT in this format
+	uint32_t keys_and_groups; // number of keys is lower 16 bits, groups is higher 16 bits
+	int32_t indexes[1]; // keys first then groups
 
 	// then for each vertex:
-	// - float[3] coords for every shape_key in mesh
-	// - all vertex weights listed in vtx_group_index[]
+	// - base float[3] vertex coords
+	// - float[3] coords for listed shapes in indexes
+	// - float vertex weights listed in indexes
 
 	// followed by next VertexData(s) ...
 	// until sum of vertex_num is Mesh::vertices
@@ -188,7 +198,7 @@ struct PolyData
 struct VertexGroup
 {
 	int32_t name_offs;
-	int32_t bone;
+	int32_t bone; // must be here at least when we have parent type 'ARMATURE' (w/o mod)
 
 	void Dump(Pump* pump);
 };
@@ -222,31 +232,26 @@ struct Mesh
 	// void E::vertex(int vtx, Vector3 shape_coords[], int groups, int group_indexes[], float group_weights[])
 	template <typename E> void EnumVertices(E* e)
 	{
-		ShapeKeys* sk = (ShapeKeys*)((char*)this + shp_keys_offset);
 		VertexData* vd = (VertexData*)((char*)this + vertices_offset);
 		int idx = 0;
 		while (idx < vertices)
 		{
-			float* data = (float*)((char*)vd + sizeof(VertexData) + sizeof(int32_t) * (vd->vtx_groups - 1));
-			int advance1 = 3 * shp_keys;
-			int advance2 = advance1 + vd->vtx_groups;
+			int keys = vd->keys_and_groups & 0xFFFF;
+			int grps = (vd->keys_and_groups>>16) & 0xFFFF;
+			int flen = keys + grps;
 
-			if (vd->vtx_groups)
-			{
-				for (int end = idx + vd->vertices; idx < end; idx++, data += advance2)
-				{
-					float* weights = data + advance1;
-					e->vertex(idx, (Vector3*)data, vd->vtx_groups, vd->vtx_group_index, weights);
-				}
-			}
+			float* data = (float*)((char*)vd + sizeof(VertexData) + sizeof(int32_t) * (flen - 1));
+			int advance1 = 3 * (keys+1);
+			int advance2 = advance1 + grps;
+
+			if (flen)
+				for (int end = vd->range; idx < end; idx++, data += advance2)
+					e->vertex(idx, keys, grps, vd->indexes, data);
 			else
-			{
-				for (int end = idx + vd->vertices; idx < end; idx++, data += advance2)
-				{
-					float* weights = data + advance1;
-					e->vertex(idx, (Vector3*)data, 0, 0, 0);
-				}
-			}
+				for (int end = vd->range; idx < end; idx++, data += advance2)
+					e->vertex(idx, keys, grps, 0, data);
+
+			vd = (VertexData*)data;
 		}
 	}
 
@@ -462,6 +467,46 @@ struct Armature
 	void Dump(Pump* pump);
 };
 
+struct ModArmature
+{
+	int32_t armature_obj;
+	int32_t influence_grp;
+	int32_t flags; // ModArmatureFlags
+	int32_t bone_idx[1]; // [vtx_groups] present only if armature_obj != -1
+};
+
+struct ModHook
+{
+	int32_t target_obj;
+	int32_t bone_idx; // only if target_obj is armature
+	int32_t influence_grp;
+
+	int32_t flags; // ModHookFalloffType
+
+	Vector3 center;
+	float falloff_radius;
+	float strength;
+
+	int32_t falloff_curve_offset; // todo falloff_curve
+
+	// undocumented but required!!!
+	float matrix_inverse[16];
+	int vertices;
+	int vertex_index[1];
+};
+
+struct Modifier
+{
+	int32_t name_offs;
+	uint32_t type; // ModifierType
+	int32_t flags; // ModifierFlags
+
+	// followed by type specific data
+	// ...
+
+	void Dump(Pump* pump);
+};
+
 struct Object
 {
 	int32_t name_offs; // relative to beginning of the names_block
@@ -483,6 +528,9 @@ struct Object
 
 	int32_t object_data_offset;
 
+	int32_t modifiers;
+	int32_t mod_stack_offset; // -> array of offsets to each modifier
+
 	int32_t constraints;
 	int32_t constraint_offset[1];
 
@@ -491,6 +539,14 @@ struct Object
 		if (index < 0 || index >= constraints)
 			return 0;
 		return (Constraint*)((char*)this + constraint_offset[index]);
+	}
+
+	Modifier* GetModifierPtr(int index)
+	{
+		if (index < 0 || index >= modifiers)
+			return 0;
+		int32_t* stack = (int32_t*)((char*)this + mod_stack_offset);
+		return (Modifier*)((char*)this + stack[index]);
 	}
 
 	void* GetObjectData() // cast onto Mesh/Curve/Armature/Empty (depending on object_type)
