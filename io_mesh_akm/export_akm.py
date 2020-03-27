@@ -190,10 +190,6 @@ def save_hook_mod(fout,obj,hook_mod,idx_dict):
 			break
 		idx += 1
 	size += wr_int(fout, infl_grp)
-
-	size += wr_fp3(fout, hook_mod.center)
-	size += wr_flt(fout, hook_mod.falloff_radius)
-	size += wr_flt(fout, hook_mod.strength)
 	
 	type = 0
 	if hook_mod.falloff_type == 'NONE':
@@ -220,6 +216,20 @@ def save_hook_mod(fout,obj,hook_mod,idx_dict):
 
 	size += wr_int(fout, type)
 
+	falloff_curve_offset = wr_ref(fout)
+	size += 4
+
+	size += wr_fp3(fout, hook_mod.center)
+	size += wr_flt(fout, hook_mod.falloff_radius)
+	size += wr_flt(fout, hook_mod.strength)
+
+	size += wr_mtx(fout, hook_mod.matrix_inverse)
+
+	size += wr_int(fout, len(hook_mod.vertex_indices))
+	for v in hook_mod.vertex_indices:
+		size += wr_int(fout,v)
+
+	wr_int(falloff_curve_offset,12345) #size)
 	# todo falloff_curve
 	# ...
 

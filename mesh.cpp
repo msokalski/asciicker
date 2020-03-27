@@ -11,6 +11,8 @@ const char* ConstraintType_Names[] = { "","CON_FOLLOW_PATH","CON_IK" };
 const char* RotationType_Names[] = { "", "ROT_QUATERNION", "ROT_AXISANGLE", "ROT_EULER_XYZ", "ROT_EULER_YZX", "ROT_EULER_ZXY" , "ROT_EULER_ZYX" , "ROT_EULER_YXZ" , "ROT_EULER_XZY" };
 const char* EmptyType_Names[] = { "", "EMP_PLAIN_AXES", "EMP_ARROWS", "EMP_SINGLE_ARROW", "EMP_CUBE", "EMP_SPHERE", "EMP_CONE", "EMP_IMAGE" };
 const char* KeyInterpType_Names[] = { "", "KEY_LINEAR", "KEY_CARDINAL", "KEY_CATMULL_ROM", "KEY_BSPLINE" };
+const char* ModHookFalloffType_Names[] = { "", "MOD_HOOK_NONE", "MOD_HOOK_CURVE", "MOD_HOOK_SMOOTH", "MOD_HOOK_SPHERE", "MOD_HOOK_ROOT",
+										   "MOD_HOOK_INVERSE_SQUARE", "MOD_HOOK_SHARP", "MOD_HOOK_LINEAR", "MOD_HOOK_CONSTANT" };
 
 // #define ECMA_404
 
@@ -623,7 +625,7 @@ void Mesh::Dump(Pump* pump)
 				pump->flush(pump, "{");
 				pump->indent++;
 
-				pump->flush(pump, $K "vertex" $K ": [%10f, %10f, %10f],", data[0],data[1],data[2]);
+				pump->flush(pump, $K "vertex" $K ": [" $F ", " $F ", " $F "],", data[0],data[1],data[2]);
 
 				if (keys)
 				{
@@ -807,12 +809,89 @@ void Constraint::Dump(Pump* pump)
 	pump->flush(pump, $K "type" $K ": " $T, ConstraintType_Names[type]);
 }
 
+void ModArmature::Dump(Pump* pump)
+{
+	pump->flush(pump, $K "armature_obj" $K ": %d,", armature_obj);
+	pump->flush(pump, $K "influence_grp" $K ": %d,", influence_grp);
+	pump->flush(pump, $K "flags" $K ": " $X ",", flags);
+
+	Mesh* m = (Mesh*)pump->object->GetObjectData();
+	if (armature_obj >= 0 && pump->object->type == OBJ_MESH && m && m->vtx_groups)
+	{
+		pump->flush(pump, "Bones:");
+		pump->flush(pump, "[");
+		pump->indent++;
+		for (int g = 0; g < m->vtx_groups; g++)
+		{
+			pump->flush(pump, g == m->vtx_groups - 1 ? "%d" : "%d,", bone_idx[g]);
+		}
+		pump->indent--;
+		pump->flush(pump, "]");
+	}
+}
+
+void ModHook::Dump(Pump* pump)
+{
+	pump->flush(pump, $K "target_obj" $K ": %d,", target_obj);
+	pump->flush(pump, $K "bone_idx" $K ": %d,", bone_idx);
+	pump->flush(pump, $K "influence_grp" $K ": %d,", influence_grp);
+	pump->flush(pump, $K "falloff_type" $K ": " $T ",", ModHookFalloffType_Names[falloff_type & 0xFFFF]); // +FLAG!
+	pump->flush(pump, $K "center" $K ": [" $F ", " $F ", " $F "],", center[0], center[1], center[2]);
+	pump->flush(pump, $K "falloff_radius" $K ": " $F ",", falloff_radius);
+	pump->flush(pump, $K "strength" $K ": " $F ",", strength);
+
+	// int32_t falloff_curve_offset; // todo falloff_curve
+
+	pump->flush(pump, $K "matrix_inverse" $K ":");
+	pump->flush(pump, "[");
+	pump->indent++;
+	for (int row = 0; row < 4; row++)
+	{
+		float* r = matrix_inverse + 4 * row;
+		const char* fmt = row < 3 ? $F ", " $F ", " $F ", " $F "," : "" $F ", " $F ", " $F ", " $F;
+		pump->flush(pump, fmt, r[0], r[1], r[2], r[3]);
+	}
+	pump->indent--;
+	pump->flush(pump, "],");
+
+	pump->flush(pump, $K "num_vertices" $K ": %d,", vertices);
+	if (vertices)
+	{
+		pump->flush(pump, "Vertex:");
+		pump->flush(pump, "[");
+		pump->indent++;
+		for (int v = 0; v < vertices; v++)
+		{
+			pump->flush(pump, v == vertices - 1 ? "%d" : "%d,", vertex_index[v]);
+		}
+		pump->indent--;
+		pump->flush(pump, "]");
+	}
+}
+
 void Modifier::Dump(Pump* pump)
 {
 	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
 	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
 	pump->flush(pump, $K "type" $K ": " $T ",", ModifierType_Names[type]);
-	pump->flush(pump, $K "flags" $K ": " $X, flags); // add comma when adding mod-data dump!
+	pump->flush(pump, $K "flags" $K ": " $X ",", flags); // add comma when adding mod-data dump!
+
+	pump->flush(pump, $K "modifier_data" $K ":");
+	pump->flush(pump, "{");
+	pump->indent++;
+
+	switch (type)
+	{
+		case MOD_ARMATURE:
+			((ModArmature*)((char*)this + sizeof(Modifier)))->Dump(pump);
+			break;
+		case MOD_HOOK:
+			((ModHook*)((char*)this + sizeof(Modifier)))->Dump(pump);
+			break;
+	}
+
+	pump->indent--;
+	pump->flush(pump, "}");
 }
 
 void Transform::Dump(Pump* pump)

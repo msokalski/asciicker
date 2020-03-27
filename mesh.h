@@ -2,6 +2,24 @@
 #include <stdint.h>
 #include "matrix.h"
 
+
+enum ModHookFalloffType
+{
+	MOD_HOOK_NONE = 1,
+	MOD_HOOK_CURVE = 2,
+	MOD_HOOK_SMOOTH = 3,
+	MOD_HOOK_SPHERE = 4,
+	MOD_HOOK_ROOT = 5,
+	MOD_HOOK_INVERSE_SQUARE = 6,
+	MOD_HOOK_SHARP = 7,
+	MOD_HOOK_LINEAR = 8,
+	MOD_HOOK_CONSTANT = 9,
+
+	MOD_HOOK_UNIFORM_FLAG = 1<<16
+};
+
+extern const char* ModHookFalloffType_Names[];
+
 enum ModifierType
 {
 	MOD_ARMATURE = 1,
@@ -473,6 +491,8 @@ struct ModArmature
 	int32_t influence_grp;
 	int32_t flags; // ModArmatureFlags
 	int32_t bone_idx[1]; // [vtx_groups] present only if armature_obj != -1
+
+	void Dump(Pump* pump);
 };
 
 struct ModHook
@@ -481,18 +501,18 @@ struct ModHook
 	int32_t bone_idx; // only if target_obj is armature
 	int32_t influence_grp;
 
-	int32_t flags; // ModHookFalloffType
+	int32_t falloff_type; // ModHookFalloffType | use_falloff_uniform ? 1<<16
+	int32_t falloff_curve_offset; // todo falloff_curve
 
 	Vector3 center;
 	float falloff_radius;
 	float strength;
-
-	int32_t falloff_curve_offset; // todo falloff_curve
-
-	// undocumented but required!!!
 	float matrix_inverse[16];
+
 	int vertices;
 	int vertex_index[1];
+
+	void Dump(Pump* pump);
 };
 
 struct Modifier
