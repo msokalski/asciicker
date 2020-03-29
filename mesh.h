@@ -2,6 +2,51 @@
 #include <stdint.h>
 #include "matrix.h"
 
+enum ConFollowPathForwardAxis
+{
+	CON_FOLLOW_PATH_FORWARD_X = 1,
+	CON_FOLLOW_PATH_FORWARD_Y = 2,
+	CON_FOLLOW_PATH_FORWARD_Z = 3,
+	CON_FOLLOW_PATH_TRACK_NEGATIVE_X = 4,
+	CON_FOLLOW_PATH_TRACK_NEGATIVE_Y = 5,
+	CON_FOLLOW_PATH_TRACK_NEGATIVE_Z = 6
+};
+
+extern const char* ConFollowPathForwardAxis_Names[];
+
+enum ConFollowPathUpAxis
+{
+	CON_FOLLOW_PATH_UP_X = 1,
+	CON_FOLLOW_PATH_UP_Y = 2,
+	CON_FOLLOW_PATH_UP_Z = 3
+};
+
+extern const char* ConFollowPathUpAxis_Names[];
+
+enum ConIKType
+{
+	CON_IK_COPY_POSE = 1,
+	CON_IK_DISTANCE = 2
+};
+
+extern const char* ConIKType_Names[];
+
+enum ConIKRefAxis
+{
+	CON_IK_BONE = 1,
+	CON_IK_TARGET = 2
+};
+
+extern const char* ConIKRefAxis_Names[];
+
+enum ConIKLimitMode
+{
+	CON_IK_LIMITDIST_INSIDE = 1,
+	CON_IK_LIMITDIST_OUTSIDE = 2,
+	CON_IK_LIMITDIST_ONSURFACE = 3
+};
+
+extern const char* ConIKLimitMode_Names[];
 
 enum ModHookFalloffType
 {
@@ -109,13 +154,56 @@ struct Header
 	uint32_t deflate_size;
 };
 
+
+struct ConstraintIK
+{
+	int32_t target_obj;
+	int32_t target_bone; // only if target_obj is armature
+
+	int32_t pole_target_obj;
+	int32_t pole_target_bone; // only if pole_target_obj is armature
+
+	uint32_t ik_type; // ConIKType
+	uint32_t reference_axis; // ConIKRefAxis
+	uint32_t limit_mode; // ConIKLimitMode
+
+	int32_t chain_count;
+	int32_t iterations;
+	int32_t flags;
+
+	float distance;
+	float pole_angle;
+	float orient_weight;
+	float weight;
+
+	void Dump(Pump* pump);
+};
+
+
+struct ConstraintFollowPath
+{
+	int32_t curve_obj;
+	uint32_t forward_axis; // ConFollowPathForwardAxis
+	uint32_t up_axis; // ConFollowPathUpAxis
+	float offset;
+	float offset_factor;
+
+	void Dump(Pump* pump);
+};
+
 struct Constraint
 {
 	int32_t name_offs;
 	uint32_t type; // ConstraintType
+	uint32_t flags;
 
 	// constraint data here
 	// ...
+
+	void* GetConstraintData()
+	{
+		return (void*)(this + 1);
+	}
 
 	void Dump(Pump* pump);
 };
@@ -523,6 +611,11 @@ struct Modifier
 
 	// followed by type specific data
 	// ...
+
+	void* GetModifierData()
+	{
+		return (void*)(this + 1);
+	}
 
 	void Dump(Pump* pump);
 };

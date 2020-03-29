@@ -13,6 +13,13 @@ const char* EmptyType_Names[] = { "", "EMP_PLAIN_AXES", "EMP_ARROWS", "EMP_SINGL
 const char* KeyInterpType_Names[] = { "", "KEY_LINEAR", "KEY_CARDINAL", "KEY_CATMULL_ROM", "KEY_BSPLINE" };
 const char* ModHookFalloffType_Names[] = { "", "MOD_HOOK_NONE", "MOD_HOOK_CURVE", "MOD_HOOK_SMOOTH", "MOD_HOOK_SPHERE", "MOD_HOOK_ROOT",
 										   "MOD_HOOK_INVERSE_SQUARE", "MOD_HOOK_SHARP", "MOD_HOOK_LINEAR", "MOD_HOOK_CONSTANT" };
+const char* ConFollowPathForwardAxis_Names[] = { "", "CON_FOLLOW_PATH_FORWARD_X",  "CON_FOLLOW_PATH_FORWARD_Y",  "CON_FOLLOW_PATH_FORWARD_Z",  
+												 "CON_FOLLOW_PATH_TRACK_NEGATIVE_X",  "CON_FOLLOW_PATH_TRACK_NEGATIVE_Y",  "CON_FOLLOW_PATH_TRACK_NEGATIVE_Z" };
+const char* ConFollowPathUpAxis_Names[] = { "", "CON_FOLLOW_PATH_UP_X",  "CON_FOLLOW_PATH_UP_Y",  "CON_FOLLOW_PATH_UP_Z" };
+const char* ConIKType_Names[] = { "", "CON_IK_COPY_POSE",  "CON_IK_COPY_POSE" };
+const char* ConIKRefAxis_Names[] = { "", "CON_IK_BONE",  "CON_IK_TARGET" };
+const char* ConIKLimitMode_Names[] = { "", "CON_IK_LIMITDIST_INSIDE",  "CON_IK_LIMITDIST_OUTSIDE",  "CON_IK_LIMITDIST_ONSURFACE" };
+
 
 // #define ECMA_404
 
@@ -281,7 +288,7 @@ void Object::Dump(Pump* pump)
 	pump->indent--;
 	pump->flush(pump, "],");
 
-	pump->flush(pump, $K "object_data" $K ": ", ObjectType_Names[type]);
+	pump->flush(pump, $K "Data" $K ": ", ObjectType_Names[type]);
 	pump->flush(pump, "{");
 	pump->indent++;
 	void* data = GetObjectData();
@@ -802,11 +809,55 @@ void Edge::Dump(Pump* pump)
 	pump->flush(pump, $K "verts" $K ": [%d,%d]", vertices[0], vertices[1]);
 }
 
+void ConstraintIK::Dump(Pump* pump)
+{
+	pump->flush(pump, $K "target_obj" $K ": %d,", target_obj);
+	pump->flush(pump, $K "target_bone" $K ": %d,", target_bone);
+
+	pump->flush(pump, $K "pole_target_obj" $K ": %d,", pole_target_obj);
+	pump->flush(pump, $K "pole_target_bone" $K ": %d,", pole_target_bone);
+
+	pump->flush(pump, $K "ik_type" $K ": " $T ",", ConIKType_Names[ik_type]);
+	pump->flush(pump, $K "reference_axis" $K ": " $T ",", ConIKRefAxis_Names[reference_axis]);
+	pump->flush(pump, $K "limit_mode" $K ": " $T ",", ConIKLimitMode_Names[limit_mode]);
+
+	pump->flush(pump, $K "chain_count" $K ": %d,", chain_count);
+	pump->flush(pump, $K "iterations" $K ": %d,", iterations);
+	pump->flush(pump, $K "flags" $K ": " $X ",", flags);
+
+	pump->flush(pump, $K "distance" $K ": " $F ",", distance);
+	pump->flush(pump, $K "pole_angle" $K ": " $F ",", pole_angle);
+	pump->flush(pump, $K "orient_weight" $K ": " $F ",", orient_weight);
+	pump->flush(pump, $K "weight" $K ": " $F ",", weight);
+};
+
+void ConstraintFollowPath::Dump(Pump* pump)
+{
+	pump->flush(pump, $K "curve_obj" $K ": %d,", curve_obj);
+
+	pump->flush(pump, $K "forward_axis" $K ": " $T ",", ConFollowPathForwardAxis_Names[forward_axis]);
+	pump->flush(pump, $K "up_axis" $K ": " $T ",", ConFollowPathUpAxis_Names[up_axis]);
+
+	pump->flush(pump, $K "offset" $K ": " $F ",", offset);
+	pump->flush(pump, $K "offset_factor" $K ": " $F ",", offset_factor);
+}
+
 void Constraint::Dump(Pump* pump)
 {
 	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
 	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
-	pump->flush(pump, $K "type" $K ": " $T, ConstraintType_Names[type]);
+	pump->flush(pump, $K "type" $K ": " $T ",", ConstraintType_Names[type]);
+
+	pump->flush(pump, $K "Data" $K ":");
+	pump->flush(pump, "{");
+	pump->indent++;
+	if (type == CON_FOLLOW_PATH)
+		((ConstraintFollowPath*)GetConstraintData())->Dump(pump);
+	else
+	if (type == CON_IK)
+		((ConstraintIK*)GetConstraintData())->Dump(pump);
+	pump->indent--;
+	pump->flush(pump, "}");
 }
 
 void ModArmature::Dump(Pump* pump)
@@ -876,17 +927,17 @@ void Modifier::Dump(Pump* pump)
 	pump->flush(pump, $K "type" $K ": " $T ",", ModifierType_Names[type]);
 	pump->flush(pump, $K "flags" $K ": " $X ",", flags); // add comma when adding mod-data dump!
 
-	pump->flush(pump, $K "modifier_data" $K ":");
+	pump->flush(pump, $K "Data" $K ":");
 	pump->flush(pump, "{");
 	pump->indent++;
 
 	switch (type)
 	{
 		case MOD_ARMATURE:
-			((ModArmature*)((char*)this + sizeof(Modifier)))->Dump(pump);
+			((ModArmature*)GetModifierData())->Dump(pump);
 			break;
 		case MOD_HOOK:
-			((ModHook*)((char*)this + sizeof(Modifier)))->Dump(pump);
+			((ModHook*)GetModifierData())->Dump(pump);
 			break;
 	}
 

@@ -11,6 +11,8 @@ def dump(obj):
    for attr in dir(obj):
        if hasattr( obj, attr ):
            print( "obj.%s = %s" % (attr, getattr(obj, attr)))
+obj = bpy.context.active_object
+
 # -----------------------------------------------------------
 
 def wr_str(fout,s):
@@ -536,15 +538,15 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 		if edge.use_freestyle_mark:
 			flags |= 1<<16
 		if not edge.use_edge_sharp:
-			flags |= 2<<16
+			flags |= 1<<17
 		if edge.select:
-			flags |= 4<<16
+			flags |= 1<<18
 		if edge.hide:
-			flags |= 8<<16
+			flags |= 8<<19
 		if edge.use_seam:
-			flags |= 16<<16
+			flags |= 1<<20
 		if edge.is_loose:
-			flags |= 32<<16
+			flags |= 1<<21
 		size += wr_int(fout, flags)
 		size += wr_int(fout,vtx_dict[ msh.vertices[edge.vertices[0]] ])
 		size += wr_int(fout,vtx_dict[ msh.vertices[edge.vertices[1]] ])
@@ -559,11 +561,11 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 		if poly.use_freestyle_mark:
 			mat_and_flags |= 1<<16
 		if poly.use_smooth:
-			mat_and_flags |= 2<<16
+			mat_and_flags |= 1<<17
 		if poly.select:
-			mat_and_flags |= 4<<16
+			mat_and_flags |= 1<<18
 		if poly.hide:
-			mat_and_flags |= 8<<16
+			mat_and_flags |= 1<<19
 
 		size += wr_int(fout, mat_and_flags)
 
@@ -628,6 +630,134 @@ def save_cur(fout, cur, idx_dict, names):
 
 	return size
 
+def save_follow_path_con(fout, con, idx_dict):
+	
+	size = 0
+
+	if con.target and con.target in idx_dict and con.target.type == 'CURVE':
+		size += wr_int(fout, idx_dict[con.target])
+	else:
+		size += wr_int(fout, -1)
+	
+	forward = 0
+	if con.forward_axis == 'FORWARD_X':
+		forward = 1
+	elif con.forward_axis == 'FORWARD_Y':
+		forward = 2
+	elif con.forward_axis == 'FORWARD_Z':
+		forward = 3
+	elif con.forward_axis == 'TRACK_NEGATIVE_X':
+		forward = 4
+	elif con.forward_axis == 'TRACK_NEGATIVE_Y':
+		forward = 5
+	elif con.forward_axis == 'TRACK_NEGATIVE_Z':
+		forward = 6
+
+	size += wr_int(fout, forward)
+
+	up = 0
+	if con.up_axis == 'UP_X':
+		up = 1
+	elif con.up_axis == 'UP_Y':
+		up = 2
+	elif con.up_axis == 'UP_Z':
+		up = 3
+
+	size += wr_int(fout, up)
+	
+	size += wr_flt(fout, con.offset)
+	
+	size += wr_flt(fout, con.offset_factor)
+
+	flags = 0
+
+	if con.use_curve_follow:
+		flags |= 1<<16
+	if con.use_curve_radius:
+		flags |= 1<<17
+	if con.use_fixed_location:
+		flags |= 1<<18
+
+	size += wr_int(fout, size)
+
+	return size
+
+def save_ik_con(fout, con, idx_dict):
+
+	size = 0
+	if con.target and con.target in idx_dict:
+		size += wr_int(fout, idx_dict[con.target])
+		sub = -1
+		if con.subtarget and con.target.type == 'ARMATURE':
+			for b in con.target.pose.bones:
+				if b.name == con.subtarget:
+					sub = idx_dict[b]
+					break;
+		size += wr_int(fout, sub)
+	else:
+		size += wr_int(fout, -1)
+		size += wr_int(fout, -1)
+
+	if con.pole_target and con.pole_target in idx_dict:
+		size += wr_int(fout, idx_dict[con.pole_target])
+		sub = -1
+		if con.pole_subtarget and con.pole_target.type == 'ARMATURE':
+			for b in con.pole_target.pose.bones:
+				if b.name == con.pole_subtarget:
+					sub = idx_dict[b]
+					break;
+		size += wr_int(fout, sub)
+	else:
+		size += wr_int(fout, -1)
+		size += wr_int(fout, -1)
+
+	ik_type	= 0
+	if con.ik_type == 'COPY_POSE':
+		ik_type = 1
+	elif con.ik_type == 'DISTANCE':
+		ik_type = 2
+
+	size += wr_int(fout, ik_type)
+
+	reference_axis = 0
+	if con.reference_axis == 'BONE':
+		reference_axis = 1
+	elif con.reference_axis == 'TARGET':
+		reference_axis = 2
+
+	size += wr_int(fout, reference_axis)
+
+	limit_mode = 0
+	if con.limit_mode == 'LIMITDIST_INSIDE':
+		limit_mode = 1
+	elif con.limit_mode == 'LIMITDIST_OUTSIDE':
+		limit_mode = 2
+	elif con.limit_mode == 'LIMITDIST_ONSURFACE':
+		limit_mode = 3
+
+	size += wr_int(fout, limit_mode)
+	size += wr_int(fout, con.chain_count)
+	size += wr_int(fout, con.iterations)
+
+	flags = 0
+	if con.use_location:
+		flags |= 1<<16
+	if con.use_rotation:
+		flags |= 1<<17
+	if con.use_stretch:
+		flags |= 1<<18
+	if con.use_tail:
+		flags |= 1<<19
+
+	size += wr_int(fout, flags)
+
+	size += wr_flt(fout, con.distance)
+	size += wr_flt(fout, con.pole_angle)
+	size += wr_flt(fout, con.orient_weight)
+	size += wr_flt(fout, con.weight)
+	
+	return size
+
 def save_con(fout, con, idx_dict, names):
 
 	size = 0
@@ -637,12 +767,28 @@ def save_con(fout, con, idx_dict, names):
 	size += 4
 	names.append( (name_ofs,con.name) )
 
+	type = 0
 	if con.type == 'FOLLOW_PATH':
-		size += wr_int(fout,1)
+		type = 1
 	elif con.type == 'IK':
-		size += wr_int(fout,2)
-	else:
-		size += wr_int(fout,0)
+		type = 2
+
+	size += wr_int(fout,type)
+
+	flags = 0
+	if con.is_valid:
+		flags |= 1<<16
+	if con.mute:
+		flags |= 1<<17
+	if con.is_proxy_local:
+		flags |= 1<<18
+
+	size += wr_int(fout,flags)
+
+	if type == 1:
+		size += save_follow_path_con(fout, con, idx_dict)
+	elif type == 2:
+		size += save_ik_con(fout, con, idx_dict)
 
 	return size
 
