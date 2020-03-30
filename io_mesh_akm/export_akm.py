@@ -9,8 +9,8 @@ import bmesh
 # for use in blender for attributes discovery
 def dump(obj):
    for attr in dir(obj):
-       if hasattr( obj, attr ):
-           print( "obj.%s = %s" % (attr, getattr(obj, attr)))
+	   if hasattr( obj, attr ):
+		   print( "obj.%s = %s" % (attr, getattr(obj, attr)))
 obj = bpy.context.active_object
 
 # -----------------------------------------------------------
@@ -359,6 +359,51 @@ def proc_msh(obj):
 
 	return [ obj, grp_dict, fmt_dict, vtx_dict ]
 
+def ply_rot(fan):
+
+	num = len(fan)
+	if num <= 3:
+		return 0
+
+	n = [0,0,0]
+
+	v1 = fan[num-2]
+	v2 = fan[num-1]
+
+	for i in range(0,num-1):
+		v3 = fan[i]
+		n[0] += (v1[1]-v3[1])*(v2[2]-v3[2]) - (v1[2]-v3[2])*(v2[1]-v3[1])
+		n[1] += (v1[2]-v3[2])*(v2[0]-v3[0]) - (v1[0]-v3[0])*(v2[2]-v3[2])
+		n[2] += (v1[0]-v3[0])*(v2[1]-v3[1]) - (v1[1]-v3[1])*(v2[0]-v3[0])
+		v1 = v2
+		v2 = v3
+
+	best_smallest = 0
+	best_smallest_at = -1
+	for rot in range(0,num):
+		v1 = fan[(rot + num - 2) % num]
+		v2 = fan[(rot + num - 1) % num]
+
+		smallest = 0
+		for i in range(0,num-2):
+			v3 = fan[(rot + i) % num]
+			nx = (v1[1]-v3[1])*(v2[2]-v3[2]) - (v1[2]-v3[2])*(v2[1]-v3[1])
+			ny = (v1[2]-v3[2])*(v2[0]-v3[0]) - (v1[0]-v3[0])*(v2[2]-v3[2])
+			nz = (v1[0]-v3[0])*(v2[1]-v3[1]) - (v1[1]-v3[1])*(v2[0]-v3[0])
+			dot = nx*n[0] + ny*n[1] + nz*n[2]
+
+			if dot < smallest or i == 0:
+				smallest = dot
+
+			v2 = v3
+
+		if smallest > best_smallest or rot == 0:
+			best_smallest = smallest
+			best_smallest_at = rot
+
+	rot = (best_smallest_at + num - 2) % num
+	return rot
+
 def save_msh(fout, processed_mesh, idx_dict, names):
 
 	size = 0
@@ -402,17 +447,20 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 	size += 4
 
 	# num edges
-	edg_list = [] # just in case we'd like to sort'em
-	for edge in msh.edges:
-		edg_list.append(edge)
+	edg_list = sorted(msh.edges, key=lambda e: -int(e.use_freestyle_mark))
+	edg_dict = dict()
+	eidx = 0
+	for e in edg_list:
+		edg_dict[e] = eidx
+		eidx += 1
 	size += wr_int(fout,len(edg_list))
 	# write offset edges data
 	edge_offs = wr_ref(fout)
 	size += 4
 
-	ply_list = [] # just in case we'd like to sort'em
-	for poly in msh.polygons:
-		ply_list.append(poly)
+	# group polys by material index and split each group by use_freestyle_mark
+	ply_list = sorted(msh.polygons, key=lambda p: 2*p.material_index-int(p.use_freestyle_mark))
+
 	# num polygons (we don't triangulate, it should be done after all verts are transformed)
 	size += wr_int(fout, len(ply_list))
 	# write offset to polygon data
@@ -568,21 +616,25 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 			mat_and_flags |= 1<<19
 
 		size += wr_int(fout, mat_and_flags)
+		size += wr_int(fout,poly.loop_total)
 
-		# todo: we should rotate loop indices in nicest possible way
+		# we should rotate loop indices in nicest possible way
 		# this is to help build a nice 'fan' if engine can't triangulate dynamicaly
 		# estimate/get polygon normal, cast vertices onto plane perpendicular to it
 		# choose vertex that can 'see' all others in most possible monotonic angle increments
-		# (use 'worth' factor proportional to sum of min(ith_angle, 360/(N-1))
-
-		size += wr_int(fout,poly.loop_total)
+		fan = []
 		for loop in range(poly.loop_start,poly.loop_start+poly.loop_total):
-			size += wr_int(fout,vtx_dict[ msh.vertices[ msh.loops[loop].vertex_index] ])
-			size += wr_int(fout,msh.loops[loop].edge_index) # WARNING: in future it may require reindexing!
+			fan.append( msh.vertices[msh.loops[loop].vertex_index].co )
+		rot = ply_rot(fan)
+
+		for loop in range(poly.loop_start,poly.loop_start+poly.loop_total):
+			loop_rot = (loop - poly.loop_start + rot) % poly.loop_total + poly.loop_start
+			size += wr_int(fout,vtx_dict[ msh.vertices[msh.loops[loop_rot].vertex_index] ])
+			size += wr_int(fout,edg_dict[ msh.edges[msh.loops[loop_rot].edge_index] ])
 			for uvl in msh.uv_layers:
-				size += wr_fp2(fout,uvl.data[loop].uv)
+				size += wr_fp2(fout,uvl.data[loop_rot].uv)
 			for col in msh.vertex_colors:
-				size += wr_col(fout,col.data[loop].color)
+				size += wr_col(fout,col.data[loop_rot].color)
 	return size
 
 def save_emp(fout, obj):
@@ -627,6 +679,65 @@ def save_cur(fout, cur, idx_dict, names):
 	name_ofs = wr_ref(fout)
 	size += 4
 	names.append( (name_ofs,cur.name) )
+
+	size += wr_flt(fout,cur.eval_time)
+	size += wr_flt(fout,cur.offset)
+	size += wr_flt(fout,cur.path_duration)
+	size += wr_flt(fout,cur.twist_smooth)
+
+	twist_mode = 0
+	if cur.twist_mode == 'Z_UP':
+		twist_mode = 1
+	elif cur.twist_mode == 'MINIMUM':
+		twist_mode = 2
+	elif cur.twist_mode == 'TANGENT':
+		twist_mode = 3
+	
+	size += wr_int(fout,twist_mode)
+
+	flags = 0
+
+	if cur.use_path:
+		flags |= 1 << 16
+	if cur.use_path_follow:
+		flags |= 1 << 17
+	if cur.use_radius:
+		flags |= 1 << 18
+	if cur.use_stretch:
+		flags |= 1 << 19
+
+	size += wr_int(fout,flags)
+
+	shape_keys = wr_ref(fout)
+	size += 4
+
+	wr_int(fout,len(cur.splines))
+	for s in cur.splines:
+
+		type = 0 # [‘POLY’, ‘BEZIER’, ‘BSPLINE’, ‘CARDINAL’, ‘NURBS’]
+		wr_int(fout,type)
+
+		size += wr_int(fout, s.resolution_u)
+		size += wr_int(fout, tilt_interpolation) #  [‘LINEAR’, ‘CARDINAL’, ‘BSPLINE’, ‘EASE’]
+		size += wr_int(fout, radius_interpolation) #  [‘LINEAR’, ‘CARDINAL’, ‘BSPLINE’, ‘EASE’]
+
+		mat_and_flags = s.material_index
+		if s.use_smooth:
+			mat_and_flags |= 1 << 16
+		if s.use_bezier_u
+			mat_and_flags |= 1 << 17
+		if s.use_cyclic_u
+			mat_and_flags |= 1 << 18
+		if s.use_endpoint_u
+			mat_and_flags |= 1 << 19
+		
+		size += wr_int(fout, mat_and_flags)
+
+		size += wr_int(fout, len(s.bezier_points)) # bezier OR?
+		size += wr_int(fout, len(s.points)) # poly or nurbs
+
+
+	wr_int(shape_keys,size)
 
 	return size
 
@@ -1087,6 +1198,33 @@ def save(
 
 
 	obj_list = []
+
+	# TODO: 
+	# NEW TACTICS: ----------------------------------------------------------------------------
+	
+	# use global UI flags if we want cameras, light, meshes, armatures, empties, latices etc...
+	# UI could be made automaticaly from python's enum!!!
+
+	# this flags should be overridable by adding AKM_EXPORT custom prop with 0 or 1 value
+	# also we can add such flag right into object data (if we want to export node but its mesh)
+
+	# same with constraints
+	# same with modifiers
+	# same with materials
+
+	# mesh data could also have 
+	# AKM_EXPORT_EDGES 0,1,2     (0-none, 1-all, 2-only freestyle)
+	# AKM_EXPORT_MODIFIERS 0,1,2 (0-none, 1-all, 2-apply all to mesh data)
+
+	# scene could override UI with
+	# AKM_EXPORT_CAMERAS
+	# AKM_EXPORT_MESHES
+	# AKM_EXPORT_CONSTRAINTS
+	# AKM_EXPORT_MODIFIERS
+	# AKM_EXPORT_MATERIALS
+	# ...
+
+	# -----------------------------------------------------------------------------------------
 
 	for o in obs:
 

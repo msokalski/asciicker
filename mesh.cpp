@@ -509,7 +509,7 @@ void VertexGroup::Dump(Pump* pump)
 {
 	char* utf8_name = (char*)pump->scene + pump->scene->names_block_offset + name_offs;
 	pump->flush(pump, $K "name" $K ": \"%s\",", utf8_name);
-	pump->flush(pump, $K "parent_bone" $K ": %d,", bone);
+	pump->flush(pump, $K "parent_bone" $K ": %d,", bone_idx);
 };
 
 void Mesh::Dump(Pump* pump)

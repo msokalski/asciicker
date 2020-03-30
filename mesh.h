@@ -48,6 +48,14 @@ enum ConIKLimitMode
 
 extern const char* ConIKLimitMode_Names[];
 
+enum ConIKFlags
+{
+	CON_IK_USE_LOCATION = 1 << 16,
+	CON_IK_USE_ROTATION = 1 << 17,
+	CON_IK_USE_STRETCH = 1 << 18,
+	CON_IK_USE_TAIL = 1 << 19
+};
+
 enum ModHookFalloffType
 {
 	MOD_HOOK_NONE = 1,
@@ -65,6 +73,14 @@ enum ModHookFalloffType
 
 extern const char* ModHookFalloffType_Names[];
 
+enum ModArmatureFlags
+{
+	MOD_ARM_INVERT_VERTEX_GROUP = 1 << 16,
+	MOD_ARM_USE_BONE_ENVELOPES = 1 << 17,
+	MOD_ARM_USE_DEFORM_PRESERVE_VOLUME = 1 << 18,
+	MOD_ARM_USE_VERTEX_GROUPS = 1 << 19
+};
+
 enum ModifierType
 {
 	MOD_ARMATURE = 1,
@@ -73,6 +89,14 @@ enum ModifierType
 
 extern const char* ModifierType_Names[];
 
+enum ModifierFlags
+{
+	MOD_SHOW_VIEWPORT = 1 << 16,
+	MOD_SHOW_RENDER = 1 << 17,
+	MOD_SHOW_EDIT = 1 << 18,
+	MOD_SHOW_ON_CAGE = 1 << 19
+};
+
 enum ConstraintType
 {
 	CON_FOLLOW_PATH = 1,
@@ -80,6 +104,13 @@ enum ConstraintType
 };
 
 extern const char* ConstraintType_Names[];
+
+enum ConstraintFlags
+{
+	CON_VALID = 1 << 16,
+	CON_MUTE = 1 << 17,
+	CON_PROXY_LOCAL = 1 << 18
+};
 
 enum ObjectType
 {
@@ -139,6 +170,24 @@ enum KeyInterpType
 
 extern const char* KeyInterpType_Names[];
 
+enum EdgeFlags
+{
+	EDGE_USE_FREESTYLE_MARK = 1 << 16,
+	EDGE_USE_SMOOTH = 1 << 17,
+	EDGE_SELECT = 1 << 18,
+	EDGE_HIDE = 1 << 19,
+	EDGE_USE_SEAM = 1 << 20,
+	EDGE_IS_LOOSE = 1 << 21
+};
+
+enum PolyFlags
+{
+	POLY_USE_FREESTYLE_MARK = 1 << 16,
+	POLY_USE_SMOOTH = 1 << 17,
+	POLY_SELECT = 1 << 18,
+	POLY_HIDE = 1 << 19
+};
+
 struct Pump;
 
 #pragma pack(push,4)
@@ -169,7 +218,7 @@ struct ConstraintIK
 
 	int32_t chain_count;
 	int32_t iterations;
-	int32_t flags;
+	uint32_t flags; // ConIKFlags
 
 	float distance;
 	float pole_angle;
@@ -195,7 +244,7 @@ struct Constraint
 {
 	int32_t name_offs;
 	uint32_t type; // ConstraintType
-	uint32_t flags;
+	uint32_t flags; // ConstraintFlags
 
 	// constraint data here
 	// ...
@@ -273,7 +322,7 @@ struct VertexData
 
 struct Edge
 {
-	int32_t flags;
+	uint32_t flags; // EdgeFlags
 	int32_t vertices[2];
 	void Dump(Pump* pump);
 };
@@ -289,7 +338,7 @@ struct Indice
 
 struct PolyData
 {
-	int32_t mat_and_flags;
+	uint32_t mat_and_flags; // PolyFlags | mat_idx
 	int32_t indices;
 	Indice indice[1]; 
 	// every indice has size = 
@@ -297,14 +346,14 @@ struct PolyData
 	//   Mesh::tex_channels*sizeof(float[2]) + 
 	//   Mesh::col_channels*sizeof(uint32_t)
 
-	// array is followed by next PolyData(s) ...
+	// indice array is followed by next PolyData(s) ...
 	// until have all Mesh::polys 
 };
 
 struct VertexGroup
 {
 	int32_t name_offs;
-	int32_t bone; // must be here at least when we have parent type 'ARMATURE' (w/o mod)
+	int32_t bone_idx; // must be here at least when we have parent type 'ARMATURE' (w/o mod)
 
 	void Dump(Pump* pump);
 };
@@ -326,10 +375,10 @@ struct Mesh
 	int32_t vertices_offset; // -> VertexData list
 
 	int32_t edges;
-	int32_t edges_offset; // -> Edge[edges]
+	int32_t edges_offset; // -> Edge[edges] (all freestyle edges come first)
 
 	int32_t polys;
-	int32_t polys_offset; // -> PolyData list
+	int32_t polys_offset; // -> PolyData list (sorted by mat_idx, all freestyle come first in each mat_idx)
 
 	int32_t materials;
 	int32_t material_index[1];
@@ -577,7 +626,7 @@ struct ModArmature
 {
 	int32_t armature_obj;
 	int32_t influence_grp;
-	int32_t flags; // ModArmatureFlags
+	uint32_t flags; // ModArmatureFlags
 	int32_t bone_idx[1]; // [vtx_groups] present only if armature_obj != -1
 
 	void Dump(Pump* pump);
@@ -607,7 +656,7 @@ struct Modifier
 {
 	int32_t name_offs;
 	uint32_t type; // ModifierType
-	int32_t flags; // ModifierFlags
+	uint32_t flags; // ModifierFlags
 
 	// followed by type specific data
 	// ...

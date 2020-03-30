@@ -117,7 +117,7 @@ class ExportAKM(bpy.types.Operator, ExportHelper):
 #        min=0.01, max=1000.0,
 #        default=1.0,
 #    )
-    
+
 
     def execute(self, context):
         from . import export_akm
