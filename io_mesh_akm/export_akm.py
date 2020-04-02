@@ -739,7 +739,7 @@ def save_cur(fout, cur, idx_dict, names):
 	size += 4
 
 	# num splines
-	size += wr_int(fout, len(msh.vertices))
+	size += wr_int(fout, len(cur.splines))
 
 	# write offset to spline data array
 	spline_offs = wr_ref(fout)
@@ -759,6 +759,7 @@ def save_cur(fout, cur, idx_dict, names):
 	# VERTEX DATA
 	# 1. determine format for each spline separately!
 	wr_int(vertex_offs,size)
+	end_idx = 0
 	for s in cur.splines:
 		fk = []
 		key_idx = 0
@@ -778,7 +779,6 @@ def save_cur(fout, cur, idx_dict, names):
 					p.tilt != k.data[p.index].tilt:
 						fk.append(key_idx)
 						break
-					key_idx += 1
 			else:
 				for p in s.points
 					if p.co[0] != k.data[p.index].co[0] or 
@@ -788,9 +788,11 @@ def save_cur(fout, cur, idx_dict, names):
 					p.tilt != k.data[p.index].tilt:
 						fk.append(key_idx)
 						break
-					key_idx += 1
+			
+			key_idx += 1
 
-		size += wr_int(???) # end vertex
+		end_idx += len(s.bezier_points) if s.type == 'BEZIER' else len(s.points)
+		size += wr_int(end_idx) # end point index
 
 		keys_and_groups = len(fk) # keys_and_groups (keys in lower 16 bits)
 		if s.type == 'BEZIER':
@@ -798,22 +800,28 @@ def save_cur(fout, cur, idx_dict, names):
 		size += wr_int(keys_and_groups)
 
 		for f in fk:
-			size += wr_int(f) # all keys first ...
-		# ... then groups (none)
+			size += wr_int(f) # all keys first
+		# then groups...
+		# (none)
 
 		if s.type == 'BEZIER':
 			for p in s.bezier_points
-				size += wr_bez(fout)
+				size += wr_bez(fout, p.left, p.co, p.right, p.tilt, p.radius)
+				for f in fk:
+					k = cur.shape_keys.key_blocks[f].data[p.index]
+					size += wr_bez(fout, k.left, k.co, k.right, k.tilt, k.radius)
+				# then weights...
+				# (none)
+		else:
+			for p in s.points
+				size += wr_lin(fout, p.co, p.tilt, p.radius)
+				for f in fk:
+					k = cur.shape_keys.key_blocks[f].data[p.index]
+					size += wr_lin(fout, k.co, k.tilt, k.radius)
+				# then weights...
+				# (none)
 
-
-
-
-
-
-
-
-
-	wr_int(fout,len(cur.splines))
+	wr_int(spline_offs,size)
 	for s in cur.splines:
 
 		mat_and_flags = s.material_index
@@ -857,7 +865,7 @@ def save_cur(fout, cur, idx_dict, names):
 		size += wr_int(fout, s.resolution_u)
 
 		# INDICES!
-
+		size += wr_int(
 
 		if s.type == 'BEZIER':
 			size += wr_int(fout, len(s.bezier_points)) # bezier
