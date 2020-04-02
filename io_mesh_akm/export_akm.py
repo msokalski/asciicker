@@ -49,6 +49,16 @@ def wr_fp4(fout,f):
 	fout.append(chunk)
 	return 16
 
+def wr_lin(fout,p,tilt,radius): # v3 and tilt+radius
+	chunk = struct.pack('<fffff',p[0],p[1],p[2], tilt,radius)
+	fout.append(chunk)
+	return 20
+
+def wr_bez(fout,l,p,r,tilt,radius): # v3 and tilt+radius
+	chunk = struct.pack('<fffffffffff',l[0],l[1],l[2], p[0],p[1],p[2], r[0],r[1],r[2], tilt,radius)
+	fout.append(chunk)
+	return 44
+
 def wr_mtx(fout,f):
 	chunk = struct.pack('<ffffffffffffffff',
 						f[0][0],f[0][1],f[0][2],f[0][3], 
@@ -404,6 +414,61 @@ def ply_rot(fan):
 	rot = (best_smallest_at + num - 2) % num
 	return rot
 
+def save_shp(fout, dat, obj, names):
+	shp_dict = dict()
+	key_idx = 0
+	for k in dat.shape_keys.key_blocks:
+		shp_dict[k] = key_idx
+		key_idx += 1
+
+	size += wr_flt(fout,dat.shape_keys.eval_time)
+	size += wr_int(fout,shp_dict[dat.shape_keys.reference_key])
+	if dat.shape_keys.use_relative:
+		size += wr_int(fout,1)
+	else:
+		size += wr_int(fout,0)
+	for k in dat.shape_keys.key_blocks:
+
+		# write name offs and store name
+		name_ofs = wr_ref(fout)
+		size += 4
+		names.append( (name_ofs,k.name) )
+
+		interp = 0
+		if k.interpolation == 'KEY_LINEAR':
+			interp = 1
+		elif k.interpolation == 'KEY_CARDINAL':
+			interp = 2
+		elif k.interpolation == 'KEY_CATMULL_ROM':
+			interp = 3
+		elif k.interpolation == 'KEY_BSPLINE':
+			interp = 4
+
+		size += wr_int(fout,interp)
+		if k.mute:
+			size += wr_int(fout,1)
+		else:
+			size += wr_int(fout,0)
+
+		size += wr_int(fout, shp_dict[k.relative_key])
+		size += wr_flt(fout, k.slider_min)
+		size += wr_flt(fout, k.slider_max)
+		size += wr_flt(fout, k.value)
+
+		grp = None
+		for g in obj.vertex_groups:
+			if g.name == k.vertex_group:
+				grp = g
+				break
+		if grp:
+			size += wr_int(fout, grp_dict[grp])
+		else:
+			size += wr_int(fout, -1)
+else:
+	size += wr_flt(fout,0.0)
+	size += wr_int(fout,-1)
+	size += wr_int(fout,0)
+
 def save_msh(fout, processed_mesh, idx_dict, names):
 
 	size = 0
@@ -467,10 +532,7 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 	poly_offs = wr_ref(fout)
 	size += 4
 
-	# HERE WE CAN STILL MAKE USE OF "tail[1]" array
-	# let's use this for material index array
-	# size += wr_int(fout, len(msh.materials))
-	# for m in msh.materials:
+	# MATERIALS!
 	size += wr_int(fout, 0)
 
 	# GROUPS INFO
@@ -493,59 +555,7 @@ def save_msh(fout, processed_mesh, idx_dict, names):
 	# SHAPES INFO
 	wr_int(shapes_offs,size)
 	if msh.shape_keys:
-		shp_dict = dict()
-		key_idx = 0
-		for k in msh.shape_keys.key_blocks:
-			shp_dict[k] = key_idx
-			key_idx += 1
-
-		size += wr_flt(fout,msh.shape_keys.eval_time)
-		size += wr_int(fout,shp_dict[msh.shape_keys.reference_key])
-		if msh.shape_keys.use_relative:
-			size += wr_int(fout,1)
-		else:
-			size += wr_int(fout,0)
-		for k in msh.shape_keys.key_blocks:
-
-			# write name offs and store name
-			name_ofs = wr_ref(fout)
-			size += 4
-			names.append( (name_ofs,k.name) )
-
-			interp = 0
-			if k.interpolation == 'KEY_LINEAR':
-				interp = 1
-			elif k.interpolation == 'KEY_CARDINAL':
-				interp = 2
-			elif k.interpolation == 'KEY_CATMULL_ROM':
-				interp = 3
-			elif k.interpolation == 'KEY_BSPLINE':
-				interp = 4
-
-			size += wr_int(fout,interp)
-			if k.mute:
-				size += wr_int(fout,1)
-			else:
-				size += wr_int(fout,0)
-
-			size += wr_int(fout, shp_dict[k.relative_key])
-			size += wr_flt(fout, k.slider_min)
-			size += wr_flt(fout, k.slider_max)
-			size += wr_flt(fout, k.value)
-
-			grp = None
-			for g in obj.vertex_groups:
-				if g.name == k.vertex_group:
-					grp = g
-					break
-			if grp:
-				size += wr_int(fout, grp_dict[grp])
-			else:
-				size += wr_int(fout, -1)
-	else:
-		size += wr_flt(fout,0.0)
-		size += wr_int(fout,-1)
-		size += wr_int(fout,0)
+		save_shp(fout,msh,obj,names)
 
 	# VERTEX DATA
 	wr_int(vertex_offs,size)
@@ -693,8 +703,6 @@ def save_cur(fout, cur, idx_dict, names):
 	elif cur.twist_mode == 'TANGENT':
 		twist_mode = 3
 	
-	size += wr_int(fout,twist_mode)
-
 	flags = 0
 
 	if cur.use_path:
@@ -706,35 +714,193 @@ def save_cur(fout, cur, idx_dict, names):
 	if cur.use_stretch:
 		flags |= 1 << 19
 
-	size += wr_int(fout,flags)
+	twist_mode |= flags
 
-	shape_keys = wr_ref(fout)
+	size += wr_int(fout,twist_mode)
+
+	# num vertex_groups (weight channels)
+	size += wr_int(fout, 0)
+	# write offset to groups info
+	groups_offs = wr_ref(fout)
 	size += 4
+
+	# num shape_keys (morph targets)
+	keys = len(cur.shape_keys.key_blocks) if cur.shape_keys else 0
+	size += wr_int(fout, keys)
+	# write offset to keys info
+	shapes_offs = wr_ref(fout)
+	size += 4
+
+	# num verts
+	size += wr_int(fout, len(msh.vertices))
+
+	# write offset to vertex data (groupped by fmt)
+	vertex_offs = wr_ref(fout)
+	size += 4
+
+	# num splines
+	size += wr_int(fout, len(msh.vertices))
+
+	# write offset to spline data array
+	spline_offs = wr_ref(fout)
+	size += 4
+
+	# MATERIALS!
+	size += wr_int(fout, 0)
+
+	# vertex_groups (none)
+	wr_int(groups_offs,size)
+
+	# SHAPES INFO
+	wr_int(shapes_offs,size)
+	if cur.shape_keys:
+		save_shp(fout,cur,obj,names)
+
+	# VERTEX DATA
+	# 1. determine format for each spline separately!
+	wr_int(vertex_offs,size)
+	for s in cur.splines:
+		fk = []
+		key_idx = 0
+		for k in cur.shape_keys.key_blocks:
+			if s.type == 'BEZIER':
+				for p in s.bezier_points
+					if p.co[0] != k.data[p.index].co[0] or 
+					p.co[1] != k.data[p.index].co[1] or 
+					p.co[2] != k.data[p.index].co[2] or
+					p.left[0] != k.data[p.index].left[0] or
+					p.left[1] != k.data[p.index].left[1] or
+					p.left[2] != k.data[p.index].left[2] or
+					p.right[0] != k.data[p.index].right[0] or
+					p.right[1] != k.data[p.index].right[1] or
+					p.right[2] != k.data[p.index].right[2] or
+					p.radius != k.data[p.index].tilt or
+					p.tilt != k.data[p.index].tilt:
+						fk.append(key_idx)
+						break
+					key_idx += 1
+			else:
+				for p in s.points
+					if p.co[0] != k.data[p.index].co[0] or 
+					p.co[1] != k.data[p.index].co[1] or 
+					p.co[2] != k.data[p.index].co[2] or
+					p.radius != k.data[p.index].tilt or
+					p.tilt != k.data[p.index].tilt:
+						fk.append(key_idx)
+						break
+					key_idx += 1
+
+		size += wr_int(???) # end vertex
+
+		keys_and_groups = len(fk) # keys_and_groups (keys in lower 16 bits)
+		if s.type == 'BEZIER':
+			keys_and_groups |= 1<<31 # add special flag to indicate bezier format
+		size += wr_int(keys_and_groups)
+
+		for f in fk:
+			size += wr_int(f) # all keys first ...
+		# ... then groups (none)
+
+		if s.type == 'BEZIER':
+			for p in s.bezier_points
+				size += wr_bez(fout)
+
+
+
+
+
+
+
+
 
 	wr_int(fout,len(cur.splines))
 	for s in cur.splines:
 
-		type = 0 # [‘POLY’, ‘BEZIER’, ‘BSPLINE’, ‘CARDINAL’, ‘NURBS’]
-		wr_int(fout,type)
-
-		size += wr_int(fout, s.resolution_u)
-		size += wr_int(fout, tilt_interpolation) #  [‘LINEAR’, ‘CARDINAL’, ‘BSPLINE’, ‘EASE’]
-		size += wr_int(fout, radius_interpolation) #  [‘LINEAR’, ‘CARDINAL’, ‘BSPLINE’, ‘EASE’]
-
 		mat_and_flags = s.material_index
 		if s.use_smooth:
 			mat_and_flags |= 1 << 16
-		if s.use_bezier_u
+		if s.use_bezier_u:
 			mat_and_flags |= 1 << 17
-		if s.use_cyclic_u
+		if s.use_cyclic_u:
 			mat_and_flags |= 1 << 18
-		if s.use_endpoint_u
+		if s.use_endpoint_u:
 			mat_and_flags |= 1 << 19
-		
-		size += wr_int(fout, mat_and_flags)
 
-		size += wr_int(fout, len(s.bezier_points)) # bezier OR?
-		size += wr_int(fout, len(s.points)) # poly or nurbs
+		type = 0 # [‘POLY’, ‘BEZIER’, ‘BSPLINE’, ‘CARDINAL’, ‘NURBS’]
+		mat_and_flags |= type << 20
+
+		tilt_interpolation = 0
+		if s.tilt_interpolation == 'LINEAR':
+			tilt_interpolation = 1
+		elif s.tilt_interpolation == 'CARDINAL':
+			tilt_interpolation = 2
+		elif s.tilt_interpolation == 'BSPLINE':
+			tilt_interpolation = 3
+		elif s.tilt_interpolation == 'EASE':
+			tilt_interpolation = 4
+
+		mat_and_flags |= tilt_interpolation << 24
+
+		radius_interpolation = 0
+		if s.radius_interpolation == 'LINEAR':
+			radius_interpolation = 1
+		elif s.radius_interpolation == 'CARDINAL':
+			radius_interpolation = 2
+		elif s.radius_interpolation == 'BSPLINE':
+			radius_interpolation = 3
+		elif s.radius_interpolation == 'EASE':
+			radius_interpolation = 4
+
+		mat_and_flags |= radius_interpolation << 28
+
+		size += wr_int(fout, mat_and_flags)
+		size += wr_int(fout, s.resolution_u)
+
+		# INDICES!
+
+
+		if s.type == 'BEZIER':
+			size += wr_int(fout, len(s.bezier_points)) # bezier
+			for p in s.bezier_points:
+
+				flags = 0
+				if p.handle_left_type == 'FREE':
+					flags |= 1
+				elif p.handle_left_type == 'VECTOR':
+					flags |= 2
+				elif p.handle_left_type == 'ALIGNED':
+					flags |= 3
+				elif p.handle_left_type == 'AUTO':
+					flags |= 4
+
+				if p.handle_right_type == 'FREE':
+					flags |= 1<<8
+				elif p.handle_right_type == 'VECTOR':
+					flags |= 2<<8
+				elif p.handle_right_type == 'ALIGNED':
+					flags |= 3<<8
+				elif p.handle_right_type == 'AUTO':
+					flags |= 4<<8
+
+				if p.hide:
+					flags |= 1<<16
+
+				wr_int(fout,flags)
+
+				# base
+				wr_fp3(fout,p.left)
+				wr_fp3(fout,p.co)
+				wr_fp3(fout,p.right)
+				wr_flt(fout,p.radius)
+				wr_flt(fout,p.tilt)
+
+				# num of keys something is different from base
+				# indexes of these keys
+				# data for these keys
+
+
+		else:
+			size += wr_int(fout, len(s.points)) # poly or nurbs
 
 
 	wr_int(shape_keys,size)

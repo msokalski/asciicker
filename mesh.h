@@ -266,9 +266,38 @@ struct Transform
 	void Dump(Pump* pump);
 };
 
+struct SplineData
+{
+	uint32_t mat_and_flags;  // radius_mode(4) | tilt_mode(4) | type(4) | flags(4) | mat_idx(16)
+	int32_t resolution_u;
+	int32_t first_indice;
+	int32_t num_indices; // for bezier splines it is 3x num of points!
+};
+
 struct Curve
 {
 	int32_t name_offs;
+
+	float eval_time;
+	float offset;
+	float path_duration;
+	float twist_smooth;
+
+	int32_t vtx_groups;
+	int32_t vtx_groups_offset; // -> offset to VertexGroup[] (not in blender yet)
+
+	int32_t shp_keys; // NOTE: if shp_keys==0 Mesh contains single set of vertex coords (but without ShapeKey info)
+	int32_t shp_keys_offset; // -> ShapeKeys
+
+	int32_t vertices;
+	int32_t vertices_offset; // -> VertexData list
+
+	int32_t splines;
+	int32_t splines_offset; // -> SplineData array
+
+	int32_t materials;
+	int32_t material_index[1];
+
 	void Dump(Pump* pump);
 };
 
@@ -311,7 +340,7 @@ struct VertexData
 	uint32_t keys_and_groups; // number of keys is lower 16 bits, groups is higher 16 bits
 	int32_t indexes[1]; // keys first then groups
 
-	// then for each vertex:
+	// then for each vertex: 
 	// - base float[3] vertex coords
 	// - float[3] coords for listed shapes in indexes
 	// - float vertex weights listed in indexes
@@ -366,7 +395,7 @@ struct Mesh
 	int32_t col_channels;
 	
 	int32_t vtx_groups;
-	int32_t vtx_groups_offset; // -> array of integers representing bone indices
+	int32_t vtx_groups_offset; // -> offset to VertexGroup[]
 
 	int32_t shp_keys; // NOTE: if shp_keys==0 Mesh contains single set of vertex coords (but without ShapeKey info)
 	int32_t shp_keys_offset; // -> ShapeKeys
