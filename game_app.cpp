@@ -420,8 +420,8 @@ float pos_x,pos_y,pos_z;
 float rot_yaw;
 int probe_z;
 float global_lt[4];
-World* world;
-Terrain* terrain;
+World* world=0;
+Terrain* terrain=0;
 
 int font_zoom = 0;
 
@@ -1066,8 +1066,8 @@ int main(int argc, char* argv[])
     */
 
     Game* game = 0;
-    terrain = 0;
-    world = 0;
+    //terrain = 0;
+    //world = 0;
 
     AnsiCell* buf = 0;
     int wh[2] = {-1,-1};    
