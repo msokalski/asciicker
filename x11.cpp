@@ -540,13 +540,26 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	if (!pi || !gd)
 		return 0;
 
+	#if 0
+
 	PFNGLXCREATECONTEXTATTRIBSARBPROC glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC)
 		glXGetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
 	
 	if (!glXCreateContextAttribsARB)
 		return 0;
 
-	GLint                   att[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
+	GLint att[] = 
+	{ 
+		GLX_RGBA, 
+		GLX_RED_SIZE, 1, 
+		GLX_GREEN_SIZE, 1, 
+		GLX_BLUE_SIZE, 1, 
+		GLX_ALPHA_SIZE, 0, 
+		GLX_DEPTH_SIZE, 1, 
+		GLX_STENCIL_SIZE, 1, 
+		GLX_DOUBLEBUFFER, 
+		None 
+	};
 	GLXContext              glc;
 	XWindowAttributes       gwa;
 	XEvent                  xev;
@@ -696,6 +709,113 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		return 0;
 	}
 
+	#else
+
+	if (!dpy)
+	{
+		dpy = XOpenDisplay(NULL);
+		if (!dpy)
+			return 0;	
+	}
+
+   int attribs[64];
+   int i = 0;
+
+   int scrnum;
+   XSetWindowAttributes attr;
+   unsigned long mask;
+   Window root;
+   Window win;
+   GLXContext ctx;
+   XVisualInfo *visinfo;
+
+   /* Singleton attributes. */
+   attribs[i++] = GLX_RGBA;
+   attribs[i++] = GLX_DOUBLEBUFFER;
+
+   /* Key/value attributes. */
+   attribs[i++] = GLX_RED_SIZE;
+   attribs[i++] = 1;
+   attribs[i++] = GLX_GREEN_SIZE;
+   attribs[i++] = 1;
+   attribs[i++] = GLX_BLUE_SIZE;
+   attribs[i++] = 1;
+   attribs[i++] = GLX_DEPTH_SIZE;
+   attribs[i++] = 1;
+   attribs[i++] = None;
+
+   scrnum = DefaultScreen( dpy );
+   root = RootWindow( dpy, scrnum );
+
+   visinfo = glXChooseVisual(dpy, scrnum, attribs);
+   if (!visinfo) {
+      printf("Error: couldn't get an RGB, Double-buffered");
+      printf(" visual\n");
+      exit(1);
+   }
+
+   /* window attributes */
+   attr.background_pixel = 0;
+   attr.border_pixel = 0;
+   attr.colormap = XCreateColormap( dpy, root, visinfo->visual, AllocNone);
+   attr.event_mask = StructureNotifyMask | ExposureMask | KeyPressMask;
+   /* XXX this is a bad way to get a borderless window! */
+   mask = CWBackPixel | CWBorderPixel | CWColormap | CWEventMask;
+
+	int wndrect[4];
+  	if (gd->wnd_xywh)
+	{
+		wndrect[0] = gd->wnd_xywh[0];
+		wndrect[1] = gd->wnd_xywh[1];
+		wndrect[2] = gd->wnd_xywh[2];
+		wndrect[3] = gd->wnd_xywh[3];
+	}
+	else
+	{
+		wndrect[0] = 0;
+		wndrect[1] = 0;
+		wndrect[2] = 800;
+		wndrect[3] = 600;
+	} 
+
+   win = XCreateWindow( dpy, root, wndrect[0], wndrect[1], wndrect[2], wndrect[3],
+		        0, visinfo->depth, InputOutput,
+		        visinfo->visual, mask, &attr );
+
+
+   /* set hints and properties */
+   /*
+   {
+      XSizeHints sizehints;
+      sizehints.x = x;
+      sizehints.y = y;
+      sizehints.width  = width;
+      sizehints.height = height;
+      sizehints.flags = USSize | USPosition;
+      XSetNormalHints(dpy, win, &sizehints);
+      XSetStandardProperties(dpy, win, name, name,
+                              None, (char **)NULL, 0, &sizehints);
+   }
+   */
+
+   ctx = glXCreateContext( dpy, visinfo, NULL, True );
+   if (!ctx) {
+      printf("Error: glXCreateContext failed\n");
+      exit(1);
+   }
+
+   //*winRet = win;
+   //*ctxRet = ctx;
+   //*visRet = visinfo->visualid;
+
+   GLXContext glc = ctx;
+
+   XFree(visinfo);
+   #endif	
+
+
+
+
  	if (!glXMakeCurrent(dpy, win, glc))
 	{
 		printf("CANNOT MAKE GL CONTEXT CURRENT\n");
@@ -721,7 +841,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	// we'd simply stick ascii codes 
 
 	XIC ic = 0;
- 
+ /*
 	if (im_ok)
 	{
 		im = XOpenIM(dpy, NULL, NULL, NULL);
@@ -755,7 +875,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 			}
 		}
 	}
-
+*/
 
  	/*
 	// HAS NO EFFECT, only going fullscreen on all monitors at once results in FLIP mode
@@ -786,7 +906,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->win = win;
 	wnd->rc = glc;
 	wnd->ic = ic;
-	wnd->im = im;
+	wnd->im = 0;//im;
 
 	wnd->mapped = false;
 	wnd->wndmode = gd->wnd_mode == A3D_WND_CURRENT ? A3D_WND_NORMAL : gd->wnd_mode;
@@ -815,6 +935,8 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	XSync(dpy,False);
 
 	// send initial notifications:
+		XWindowAttributes       gwa;
+
 	XGetWindowAttributes(dpy, win, &gwa);
 	wnd->gwa_width = gwa.width;
 	wnd->gwa_height = gwa.height;
