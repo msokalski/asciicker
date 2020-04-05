@@ -1201,9 +1201,7 @@ void a3dLoop()
 				}
 
 				glXMakeCurrent(dpy, wnd->win, wnd->rc);
-				//wnd->platform_api.render(wnd);
-				glClearColor(rand()/(float)RAND_MAX,rand()/(float)RAND_MAX,rand()/(float)RAND_MAX,0);
-				glClear(GL_COLOR_BUFFER_BIT);
+				wnd->platform_api.render(wnd);
 				swap = wnd->win;
 			}
 

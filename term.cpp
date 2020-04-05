@@ -211,8 +211,8 @@ void term_init(A3D_WND* wnd)
 		CODE(#version 130\n)
 		CODE(
 			/*layout(location = 0)*/ uniform ivec2 ansi_vp;  // viewport size in cells
-			/*layout(location = 0)*/ attribute vec2 uv; // normalized to viewport size
-			varying vec2 cell_coord;
+			/*layout(location = 0)*/ in vec2 uv; // normalized to viewport size
+			out vec2 cell_coord;
 			void main()
 			{
 				gl_Position = vec4(2.0*uv - vec2(1.0), 0.0, 1.0);
@@ -229,7 +229,7 @@ void term_init(A3D_WND* wnd)
 			/*layout(location = 1)*/ uniform sampler2D ansi;
 			/*layout(location = 2)*/ uniform sampler2D font;
 			/*layout(location = 3)*/ uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
-			varying vec2 cell_coord;
+			in vec2 cell_coord;
 
 			/*
 			vec3 XTermPal(int p)
