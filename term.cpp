@@ -42,6 +42,13 @@ struct TERM_LIST
 	GLuint prg;
 	GLuint vbo;
 	GLuint vao;
+
+	GLint uni_ansi_vp;
+	GLint uni_ansi;
+	GLint uni_font;
+	GLint uni_ansi_wh;
+	GLint att_uv;
+	GLint out_color;
 };
 
 // HACK: get it from editor
@@ -116,15 +123,19 @@ void term_render(A3D_WND* wnd)
 
 	glUseProgram(term->prg);
 
-	glUniform2i(0, width, height);
+	glUniform2i(/*0*/term->uni_ansi_vp, width, height);
 
-	glUniform1i(1, 0);
-	glBindTextureUnit(0, term->tex);
+	glUniform1i(/*1*/term->uni_ansi, 0);
+	//glBindTextureUnit(0, term->tex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D,term->tex);	
 
-	glUniform1i(2, 1);
-	glBindTextureUnit(1, fnt_tex);
+	glUniform1i(/*2*/term->uni_font, 1);
+	//glBindTextureUnit(1, fnt_tex);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D,fnt_tex);	
 
-	glUniform2i(3, term->max_width, term->max_height);
+	glUniform2i(/*3*/term->uni_ansi_wh, term->max_width, term->max_height);
 	
 	glBindVertexArray(term->vao);
 
@@ -132,8 +143,14 @@ void term_render(A3D_WND* wnd)
 	glUseProgram(0);
 	glBindVertexArray(0);
 
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D,0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D,0);
+	/*
 	glBindTextureUnit(0, 0);
 	glBindTextureUnit(1, 0);
+	*/
 }
 
 void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
@@ -191,11 +208,11 @@ void term_init(A3D_WND* wnd)
 	glTextureStorage2D(term->tex, 1, GL_RGBA8, term->max_width, term->max_height);
 
 	const char* term_vs_src =
-		CODE(#version 450\n)
+		CODE(#version 130\n)
 		CODE(
-			layout(location = 0) uniform ivec2 ansi_vp;  // viewport size in cells
-			layout(location = 0) in vec2 uv; // normalized to viewport size
-			out vec2 cell_coord;
+			/*layout(location = 0)*/ uniform ivec2 ansi_vp;  // viewport size in cells
+			/*layout(location = 0)*/ attribute vec2 uv; // normalized to viewport size
+			varying vec2 cell_coord;
 			void main()
 			{
 				gl_Position = vec4(2.0*uv - vec2(1.0), 0.0, 1.0);
@@ -204,15 +221,15 @@ void term_init(A3D_WND* wnd)
 		);
 
 	const char* term_fs_src =
-		CODE(#version 450\n)
+		CODE(#version 130\n)
 		DEFN(P(r, g, b), vec3(r / 6., g / 7., b / 6.))
 		CODE(
 
-			layout(location = 0) out vec4 color;
-			layout(location = 1) uniform sampler2D ansi;
-			layout(location = 2) uniform sampler2D font;
-			layout(location = 3) uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
-			in vec2 cell_coord;
+			/*layout(location = 0)*/ out vec4 color;
+			/*layout(location = 1)*/ uniform sampler2D ansi;
+			/*layout(location = 2)*/ uniform sampler2D font;
+			/*layout(location = 3)*/ uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
+			varying vec2 cell_coord;
 
 			/*
 			vec3 XTermPal(int p)
@@ -317,23 +334,37 @@ void term_init(A3D_WND* wnd)
 
 	term->prg = term_prg;
 
+	term->uni_ansi_vp = glGetUniformLocation(term_prg,"ansi_vp");
+	term->uni_ansi = glGetUniformLocation(term_prg,"ansi");
+	term->uni_font = glGetUniformLocation(term_prg,"font");
+	term->uni_ansi_wh = glGetUniformLocation(term_prg,"ansi_wh");
+	term->att_uv = glGetAttribLocation(term_prg,"uv");
+	term->out_color = glGetFragDataLocation(term_prg,"color");	
+
 	float vbo_data[] = {0,0, 1,0, 1,1, 0,1};
 
 	GLuint term_vbo = 0;
-	glCreateBuffers(1, &term_vbo);
+	//glCreateBuffers(1, &term_vbo);
+	glGenBuffers(1, &term_vbo);
+
 	if (!term_vbo)
 	{
 		printf("glCreateBuffers failed\n");
 		exit(-1);
 	}
 
-	glNamedBufferStorage(term_vbo, 4 * sizeof(float[2]), 0, GL_DYNAMIC_STORAGE_BIT);
-	glNamedBufferSubData(term_vbo, 0, 4 * sizeof(float[2]), vbo_data);
+	//glNamedBufferStorage(term_vbo, 4 * sizeof(float[2]), 0, GL_DYNAMIC_STORAGE_BIT);
+	//glNamedBufferSubData(term_vbo, 0, 4 * sizeof(float[2]), vbo_data);
+	glBindBuffer(GL_ARRAY_BUFFER, term_vbo);
+	glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(float[2]), vbo_data, GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	term->vbo = term_vbo;
 
 	GLuint term_vao = 0;
-	glCreateVertexArrays(1, &term_vao);
+	//glCreateVertexArrays(1, &term_vao);
+	glGenVertexArrays(1, &term_vao);
+
 	if (!term_vao)
 	{
 		printf("glCreateVertexArrays failed\n");
@@ -460,9 +491,11 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 
 	GraphicsDesc gd;
 	gd.color_bits = 32;
-	gd.alpha_bits = 8;
+	gd.alpha_bits = 0;
 	gd.depth_bits = 0;
 	gd.stencil_bits = 0;
+	gd.version[0]=3;
+	gd.version[1]=0;	
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
 	int rc[] = { 0,0,1920 * 2,1080 + 2 * 1080 };
@@ -479,6 +512,7 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 	term->close = close;
+	
 
 	/*
 	term->yaw = yaw;

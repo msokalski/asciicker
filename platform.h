@@ -40,6 +40,8 @@ struct GraphicsDesc
 
 	int flags;
 
+	int version[2]; // [0]:Major, [1]:Minor
+
 	int color_bits; // (incl. alpha)
 	int alpha_bits;
 	int depth_bits;

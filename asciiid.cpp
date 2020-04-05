@@ -7416,6 +7416,8 @@ int main(int argc, char *argv[])
 	gd.alpha_bits = 8;
 	gd.depth_bits = 24;
 	gd.stencil_bits = 8;
+	gd.version[0]=4;
+	gd.version[1]=5;
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
 	int rc[] = {0,0,1920*2,1080+2*1080};

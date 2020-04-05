@@ -600,6 +600,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	}
 
 	XSetWindowAttributes swa;
+
 	swa.colormap = cmap;
 	swa.event_mask = 
 		StructureNotifyMask |
@@ -670,8 +671,8 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	GLXFBConfig *fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), 0, &nelements);	
 	int attribs[] = {
 		GLX_CONTEXT_FLAGS_ARB, gd->flags & GraphicsDesc::DEBUG_CONTEXT ? GLX_CONTEXT_DEBUG_BIT_ARB : 0,
-		GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 5,
+		GLX_CONTEXT_MAJOR_VERSION_ARB, gd->version[0],
+		GLX_CONTEXT_MINOR_VERSION_ARB, gd->version[1],
 		0};
 
 	if (!fbc)
@@ -705,9 +706,9 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	}
 
 	char* ver = (char*)glGetString(GL_VERSION);
-	if (ver[0] < '4' || ver[0] > '9' || ver[1] != '.' || ver[0] == '4' && (ver[2] < '5' || ver[2] > '9'))
+	if (ver[0] < gd->version[0]+'0' || ver[0] > '9' || ver[1] != '.' || ver[0] == gd->version[0] + '0' && (ver[2] < gd->version[1] + '0' || ver[2] > '9'))
 	{
-		printf("GL_VERSION (4.5.x) requirement is not met by %s\n", ver);
+		printf("GL_VERSION (%d.%d.x) requirement is not met by %s\n", gd->version[0], gd->version[1], ver);
 
 		glXMakeCurrent(dpy, 0, 0);
 		glXDestroyContext(dpy, glc);
@@ -820,7 +821,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
 	if (wnd->platform_api.resize)
 		wnd->platform_api.resize(wnd,wnd->gwa_width,wnd->gwa_height);
-
+	
 	return wnd;
 }
 
@@ -1200,7 +1201,9 @@ void a3dLoop()
 				}
 
 				glXMakeCurrent(dpy, wnd->win, wnd->rc);
-				wnd->platform_api.render(wnd);
+				//wnd->platform_api.render(wnd);
+				glClearColor(rand()/(float)RAND_MAX,rand()/(float)RAND_MAX,rand()/(float)RAND_MAX,0);
+				glClear(GL_COLOR_BUFFER_BIT);
 				swap = wnd->win;
 			}
 
