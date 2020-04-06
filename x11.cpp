@@ -546,7 +546,44 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	if (!glXCreateContextAttribsARB)
 		return 0;
 
-	GLint                   att[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
+	int auto_bits = (gd->color_bits - gd->alpha_bits) / 3;
+	int color_bits[4] = {auto_bits,auto_bits,auto_bits,gd->alpha_bits};
+	switch (gd->color_bits)
+	{
+		case 32:
+			color_bits[0] = 8;
+			color_bits[1] = 8;
+			color_bits[2] = 8;
+			color_bits[3] = gd->alpha_bits ? 8 : 0;
+			break;
+
+		case 16:
+			color_bits[0] = 5;
+			color_bits[1] = gd->alpha_bits ? 5 : 6;
+			color_bits[2] = 5;
+			color_bits[3] = gd->alpha_bits ? 1 : 0;
+			break;
+	}
+
+	// Get a matching FB config
+	static int visual_attribs[] =
+	{
+		GLX_X_RENDERABLE    , True,
+		GLX_DRAWABLE_TYPE   , GLX_WINDOW_BIT,
+		GLX_RENDER_TYPE     , GLX_RGBA_BIT,
+		GLX_X_VISUAL_TYPE   , GLX_TRUE_COLOR,
+		GLX_RED_SIZE        , color_bits[0],
+		GLX_GREEN_SIZE      , color_bits[1],
+		GLX_BLUE_SIZE       , color_bits[2],
+		GLX_ALPHA_SIZE      , color_bits[3],
+		GLX_DEPTH_SIZE      , gd->depth_bits,
+		GLX_STENCIL_SIZE    , gd->stencil_bits,
+		GLX_DOUBLEBUFFER    , True,
+		//GLX_SAMPLE_BUFFERS  , 1,
+		//GLX_SAMPLES         , 4,
+		None
+	};
+
 	GLXContext              glc;
 	XWindowAttributes       gwa;
 	XEvent                  xev;
@@ -583,12 +620,104 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		return 0;
 	}
 
-	XVisualInfo* vi = glXChooseVisual(dpy, 0, att);
-	if (!vi)
-	{
-		XCloseDisplay(dpy);
-		return 0;
-	}
+	#if 0
+		XVisualInfo* vi = glXChooseVisual(dpy, 0, att);
+		if (!vi)
+		{
+			XCloseDisplay(dpy);
+			return 0;
+		}
+	#else
+		int fbcount;
+		GLXFBConfig* fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), visual_attribs, &fbcount);
+		if (!fbc)
+		{
+			printf( "Failed to retrieve a framebuffer config\n" );
+			exit(1);
+		}
+
+		// Pick the FB config/visual with the most samples per pixel
+		int best_fbc = -1, smallest_err = 0;
+
+		int i;
+		for (i=0; i<fbcount; ++i)
+		{
+			XVisualInfo *vi = glXGetVisualFromFBConfig( dpy, fbc[i] );
+			if ( vi )
+			{
+				int samp_buf, samples;
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_SAMPLE_BUFFERS, &samp_buf );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_SAMPLES       , &samples  );
+
+				int rgba_size[4];
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_RED_SIZE , rgba_size+0 );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_GREEN_SIZE , rgba_size+1 );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_BLUE_SIZE , rgba_size+2 );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_ALPHA_SIZE , rgba_size+3 );
+
+				int depth, stencil;
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_DEPTH_SIZE , &depth );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_STENCIL_SIZE , &stencil );
+
+				int accum_size[4], aux;
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_ACCUM_RED_SIZE , accum_size+0 );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_ACCUM_GREEN_SIZE , accum_size+1 );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_ACCUM_BLUE_SIZE , accum_size+2 );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_ACCUM_ALPHA_SIZE , accum_size+3 );
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_AUX_BUFFERS , &aux );
+
+				int draw_type;
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_DRAWABLE_TYPE , &draw_type );
+
+				int stereo;
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_STEREO , &stereo );
+
+				int vis_type;
+				glXGetFBConfigAttrib( dpy, fbc[i], GLX_X_VISUAL_TYPE, &vis_type);
+
+				int err_smp = samp_buf * samples;
+				int err_rgb = 
+					abs(rgba_size[0] - color_bits[0]) +
+					abs(rgba_size[1] - color_bits[1]) +
+					abs(rgba_size[2] - color_bits[2]) +
+					abs(rgba_size[3] - color_bits[3]);
+				int err_dps = 
+					abs(depth - gd->depth_bits) +
+					abs(stencil - gd->stencil_bits);
+
+				int err = err_smp + err_rgb + err_dps;					
+
+				int err_acc = 
+					accum_size[0] +
+					accum_size[1] +
+					accum_size[2] +
+					accum_size[3];	
+
+				err += aux + err * aux + err_acc;
+
+				err += vis_type != GLX_TRUE_COLOR;
+				err += 2 * (draw_type != GLX_WINDOW_BIT);
+				err += 4 * stereo;
+				
+				if ( best_fbc < 0 || err < smallest_err )
+				{
+					best_fbc = i;
+					smallest_err = err;
+				}
+			}
+			XFree( vi );
+		}
+
+		// GLXFBConfig bestFbc = fbc[ best_fbc ];
+		GLXFBConfig bestFbc = fbc[ best_fbc ];
+
+		// Be sure to free the FBConfig list allocated by glXChooseFBConfig()
+		XFree( fbc );
+
+		// Get a visual
+		XVisualInfo *vi = glXGetVisualFromFBConfig( dpy, bestFbc );
+		// printf( "Chosen visual ID = 0x%x\n", (unsigned)vi->visualid );
+	#endif
 
 	Colormap cmap = XCreateColormap(dpy, root, vi->visual, AllocNone);
 
@@ -600,6 +729,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	}
 
 	XSetWindowAttributes swa;
+
 	swa.colormap = cmap;
 	swa.event_mask = 
 		StructureNotifyMask |
@@ -666,25 +796,30 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	XSetClassHint(dpy, win, ch);
 	XFree(ch);
 
-	int nelements;
-	GLXFBConfig *fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), 0, &nelements);	
 	int attribs[] = {
 		GLX_CONTEXT_FLAGS_ARB, gd->flags & GraphicsDesc::DEBUG_CONTEXT ? GLX_CONTEXT_DEBUG_BIT_ARB : 0,
-		GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 5,
+		GLX_CONTEXT_MAJOR_VERSION_ARB, gd->version[0],
+		GLX_CONTEXT_MINOR_VERSION_ARB, gd->version[1],
 		0};
 
-	if (!fbc)
-	{
-		XFree(vi);
-		printf("CANNOT CHOOSE FBCONFIG\n");
-		return 0;
-	}
+	#if 0
+		int nelements;
+		GLXFBConfig *fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), 0, &nelements);	
+		if (!fbc)
+		{
+			XFree(vi);
+			printf("CANNOT CHOOSE FBCONFIG\n");
+			return 0;
+		}
 
-	glc = glXCreateContextAttribsARB(dpy, *fbc, share ? share->rc : 0, true, attribs);
- 	//glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
+		glc = glXCreateContextAttribsARB(dpy, *fbc, share ? share->rc : 0, true, attribs);
+		//glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
+		XFree(fbc);
+	#else
+		glc = glXCreateContextAttribsARB(dpy, bestFbc, share ? share->rc : 0, true, attribs);
+		//glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
+	#endif
 
-	XFree(fbc);
 	XFree(vi);
 
 	if (!glc)
@@ -694,6 +829,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		XCloseDisplay(dpy);
 		return 0;
 	}
+
 
  	if (!glXMakeCurrent(dpy, win, glc))
 	{
@@ -705,9 +841,9 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	}
 
 	char* ver = (char*)glGetString(GL_VERSION);
-	if (ver[0] < '4' || ver[0] > '9' || ver[1] != '.' || ver[0] == '4' && (ver[2] < '5' || ver[2] > '9'))
+	if (ver[0] < gd->version[0]+'0' || ver[0] > '9' || ver[1] != '.' || ver[0] == gd->version[0] + '0' && (ver[2] < gd->version[1] + '0' || ver[2] > '9'))
 	{
-		printf("GL_VERSION (4.5.x) requirement is not met by %s\n", ver);
+		printf("GL_VERSION (%d.%d.x) requirement is not met by %s\n", gd->version[0], gd->version[1], ver);
 
 		glXMakeCurrent(dpy, 0, 0);
 		glXDestroyContext(dpy, glc);
@@ -720,7 +856,6 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	// we'd simply stick ascii codes 
 
 	XIC ic = 0;
- 
 	if (im_ok)
 	{
 		im = XOpenIM(dpy, NULL, NULL, NULL);
@@ -755,7 +890,6 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		}
 	}
 
-
  	/*
 	// HAS NO EFFECT, only going fullscreen on all monitors at once results in FLIP mode
 	// anything else uses BLIT mode even with this hint enabled :(
@@ -785,7 +919,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->win = win;
 	wnd->rc = glc;
 	wnd->ic = ic;
-	wnd->im = im;
+	wnd->im = 0;//im;
 
 	wnd->mapped = false;
 	wnd->wndmode = gd->wnd_mode == A3D_WND_CURRENT ? A3D_WND_NORMAL : gd->wnd_mode;
@@ -820,7 +954,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
 	if (wnd->platform_api.resize)
 		wnd->platform_api.resize(wnd,wnd->gwa_width,wnd->gwa_height);
-
+	
 	return wnd;
 }
 
