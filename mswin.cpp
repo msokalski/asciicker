@@ -1063,6 +1063,9 @@ void a3dLoop() // infinite untill all windows are destroyed
 			wnd = wnd->next;
 		}
 
+		if (num == 1)
+			SwapBuffers(swap[0].hdc);
+		else
 		if (num)
 			wglSwapMultipleBuffers(num, swap);
 	}
