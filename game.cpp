@@ -44,6 +44,10 @@ void ReadConf(Game* g)
 
 void WriteConf(Game* g)
 {
+  char str[] = "LTS is an abbreviation for \"Long Term Support\". A new LTS version is released every two years and gets five years on five years of support and patches. The upcoming version of Ubuntu is 20.04 LTS.";
+	strcpy(g->talk_mem[0].buf,str);
+	g->talk_mem[0].len = strlen(str);
+
 	FILE* f = fopen("asciicker.cfg", "wb");
 	if (f)
 	{
@@ -439,7 +443,7 @@ struct TalkBox
 	int cursor_pos;
 	int len;
 
-	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor) const
+	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor, const char* name=0) const
 	{
 		// x,y is at smoke spot, box will be centered above it
 
@@ -500,7 +504,7 @@ struct TalkBox
 
 		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
-		assert(bl >= 0);
+		// assert(bl >= 0);
 
 		AnsiCell* ll = ptr + left + lower * width;
 		AnsiCell* bc = ptr + center + bottom * width;
@@ -578,7 +582,25 @@ struct TalkBox
 		if (upper >= 0 && upper < height)
 		{
 			AnsiCell* row = ptr + upper * width;
-			for (int i = left + 1; i < right; i++)
+			int i = left + 1;
+
+			if (name)
+			{
+				for (int j=0; i < right; i++,j++)
+				{
+					if (!name[j])
+						break;
+
+					if (i >= 0 && i < width)
+					{
+						row[i].bk = black;
+						row[i].fg = white;
+						row[i].gl = name[j];
+					}
+				}
+			}
+
+			for (; i < right; i++)
 			{
 				if (i >= 0 && i < width)
 				{
@@ -3203,14 +3225,15 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		// and should have some kind of fade out
 		for (int i = 0; i < h->talks; i++)
 		{
+			int speed = 100000 + h->talk[i].box->len*400000/255; // 100000 for len=0 , 500000 for len=255
 			int elaps = stamp - h->talk[i].stamp;
-			int dy = elaps / 100000; // 10 dy per sec
+			int dy = elaps / speed; // 10 dy per sec (len=0)
 			
-			if (dy <= 20)
+			if (dy <= 30)
 			{
 				int view[3];
 				ProjectCoords(renderer, h->talk[i].pos, view);
-				h->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false);
+				h->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false, h->name);
 			}
 			else
 			if (h == &player || server)
@@ -4291,7 +4314,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				PressKey = 0;
 
 				// here we can filter keys
-				if (key != A3D_TAB)
+				if (key != A3D_TAB && (key<A3D_F5 || key>A3D_F8))
 				{
 					PressKey = key;
 					PressStamp = stamp;
