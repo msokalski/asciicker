@@ -1871,6 +1871,7 @@ bool a3dGetCurDir(char* dir_path, int size)
 			dir_path[len+1]=0;
 		}
 	}
+	return true;
 }
 
 struct A3D_THREAD
