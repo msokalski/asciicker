@@ -491,7 +491,9 @@ struct Physics
 
 	static void FaceCollect(float coords[9], uint8_t* colors, uint32_t visual, void* cookie)
 	{
-		if (colors[3] > 128 || colors[7] > 128 || colors[11] > 128)
+		if (visual&(1 << 31)) // skip lines (but could be worked out to collide lines too!)
+			return;
+		if (colors[3] > 128 || colors[7] > 128 || colors[11] > 128) // skip leafs
 			return;
 
 		Physics* phys = (Physics*)cookie;

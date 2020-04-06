@@ -2200,12 +2200,14 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 				double sq_xy = dx*dx + dy*dy;
 
 				// de-elevation
+				/*
 				if (sq_xy <= 3.50 && s->height > pos[2])
 				{
 					s->visual &= ~(1 << 15); // its fine even for rgb (15 bits)
 					s->diffuse = 0;
 					s->height -= HEIGHT_SCALE;
 				}
+				*/
 
 				// continue;
 

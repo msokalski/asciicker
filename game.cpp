@@ -2057,7 +2057,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 	strcpy(g->player.name, player_name);
 
-	ReadConf(g);
+	ReadConf(g); 
 
 	g->player.prev = 0;
 	g->player.next = player_head;
