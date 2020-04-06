@@ -1,0 +1,11 @@
+> RUN SERVER:
+server.exe 
+
+> RUN CLIENTS connected to local server:
+game.exe -url your_nick@localhost:8080/ws/y4/
+
+> RUN CLIENTS connected to asciicker.com server:
+game.exe -url your_nick@asciicker.com:80/ws/y4/
+
+> Note that when staring game, there is also minimized console window with chat log
+> Hef vun!

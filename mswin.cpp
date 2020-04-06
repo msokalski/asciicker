@@ -1111,12 +1111,30 @@ void* a3dGetCookie(A3D_WND* wnd)
 
 uint64_t a3dGetTime()
 {
-	LARGE_INTEGER c;
-	QueryPerformanceCounter(&c);
-	uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
-	return coarse_micro + diff * 1000000 / timer_freq.QuadPart;
-	// we can handle diff upto 3 minutes @ 100GHz clock
-	// this is why we refresh coarse time every minute on WM_TIMER of wnd_head
+	struct SafeTimer
+	{
+		static uint64_t Get1()
+		{
+			QueryPerformanceFrequency(&timer_freq);
+			LARGE_INTEGER c;
+			QueryPerformanceCounter(&c);
+			uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
+			return coarse_micro + diff * 1000000 / timer_freq.QuadPart;
+		}
+
+		static uint64_t Get2()
+		{
+			QueryPerformanceFrequency(&timer_freq);
+			LARGE_INTEGER c;
+			QueryPerformanceCounter(&c);
+			uint64_t diff = c.QuadPart - coarse_perf.QuadPart;
+			return coarse_micro + diff * 1000000 / timer_freq.QuadPart;
+		}
+	};
+
+	static uint64_t(*Get)() = SafeTimer::Get1;
+	Get = SafeTimer::Get2;
+	return Get();
 }
 
 /*

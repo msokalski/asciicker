@@ -563,6 +563,8 @@ struct PlayerCon
 					broadcast->id = ID;
 					memcpy(broadcast->str, req_talk->str, req_talk->len);
 					broadcast->Send(ID);
+
+					printf("%s : %.*s\n", player_name, req_talk->len, req_talk->str);
 					break;
 				}
 
@@ -819,6 +821,8 @@ int ServerLoop(const char* port)
 		PlayerCon::client_id[i] = i;
 
 	PlayerCon::cs = RWLOCK_CREATE();
+
+	printf("SERVER awaits connections on port: %s\n", port);
 
 	while (isRunning)
 	{

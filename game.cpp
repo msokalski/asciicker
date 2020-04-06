@@ -30,6 +30,8 @@ extern World* world;
 Human* player_head = 0;
 Human* player_tail = 0;
 
+char player_name[32] = "player";
+
 void ReadConf(Game* g)
 {
 	FILE* f = fopen("asciicker.cfg", "rb");
@@ -1142,6 +1144,9 @@ bool Server::Proc(const uint8_t* ptr, int size)
 				{
 					box = (TalkBox*)malloc(sizeof(TalkBox));
 				}
+
+				Human* h = others + talk->id;
+				printf("%s : %.*s\n", h->name, talk->len, talk->str);
 				
 				memset(box, 0, sizeof(TalkBox));
 				memcpy(box->buf, talk->str, talk->len);
@@ -2049,6 +2054,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	// load defaults
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
+
+	strcpy(g->player.name, player_name);
 
 	ReadConf(g);
 
@@ -3902,6 +3909,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 						req_talk.len = player.talk[idx].box->len;
 						memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 						server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+						printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 					}
 
 					player.talks++;
@@ -4070,6 +4078,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					req_talk.len = player.talk[idx].box->len;
 					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+					printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 				}				
 
 				player.talks++;
@@ -4256,6 +4265,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					req_talk.len = player.talk[idx].box->len;
 					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+					printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 				}				
 
 				player.talks++;
@@ -4741,6 +4751,7 @@ void Game::StartContact(int id, int x, int y, int b)
 									req_talk.len = player.talk[idx].box->len;
 									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+									printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 								}
 
 								player.talks++;

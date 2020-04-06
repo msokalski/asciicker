@@ -903,6 +903,8 @@ int main(int argc, char* argv[])
 			printf("Couldn't connect to server, starting solo ...\n");
 		}
 
+		strcpy(player_name, user);
+
 		// here we should know if server is present or not
 		// so we can creare game or term with or without server
 		// ...

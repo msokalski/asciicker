@@ -9,6 +9,7 @@
 #include "inventory.h"
 #include "network.h"
 
+extern char player_name[];
 
 struct Character
 {
