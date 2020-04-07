@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdarg.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include "game.h"
@@ -32,28 +33,48 @@ Human* player_tail = 0;
 
 char player_name[32] = "player";
 
+void ChatLog(const char* fmt, ...)
+{
+	va_list args;
+	va_start(args,fmt);
+	vprintf(fmt,args);
+	va_end(args);
+}
+
+void SyncConf();
+const char* GetConfPath();
+
 void ReadConf(Game* g)
 {
-	FILE* f = fopen("asciicker.cfg", "rb");
+	FILE* f = fopen(GetConfPath(), "rb");
 	if (f)
 	{
+		//printf("ReadConf ok\n");
 		fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 		fclose(f);
+	}
+	else
+	{
+		//printf("ReadConf err\n");
 	}
 }
 
 void WriteConf(Game* g)
 {
-  char str[] = "LTS is an abbreviation for \"Long Term Support\". A new LTS version is released every two years and gets five years on five years of support and patches. The upcoming version of Ubuntu is 20.04 LTS.";
-	strcpy(g->talk_mem[0].buf,str);
-	g->talk_mem[0].len = strlen(str);
 
-	FILE* f = fopen("asciicker.cfg", "wb");
+	FILE* f = fopen(GetConfPath(), "wb");
 	if (f)
 	{
+		//printf("WriteConf ok\n");
 		fwrite(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 		fclose(f);
 	}
+	else
+	{
+		//printf("WriteConf err\n");
+	}
+	
+	SyncConf();
 }
 
 struct HPBar
@@ -1168,7 +1189,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 				}
 
 				Human* h = others + talk->id;
-				printf("%s : %.*s\n", h->name, talk->len, talk->str);
+				ChatLog("%s : %.*s\n", h->name, talk->len, talk->str);
 				
 				memset(box, 0, sizeof(TalkBox));
 				memcpy(box->buf, talk->str, talk->len);
@@ -3830,24 +3851,31 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	stamp = _stamp;
 
-	if (steps && server)
+	if (server)
 	{
-		STRUCT_REQ_POSE req_pose = { 0 };
-		req_pose.token = 'P';
-		req_pose.am = (player.req.action<<4) | player.req.mount;
-		req_pose.anim= player.anim;
-		req_pose.frame = player.frame;
-		req_pose.pos[0] = player.pos[0];
-		req_pose.pos[1] = player.pos[1];
-		req_pose.pos[2] = player.pos[2];
-		req_pose.dir = player.dir;
-		req_pose.sprite = 
-			(player.req.armor << 12) | 
-			(player.req.helmet << 8) |
-			(player.req.shield << 4) |
-			player.req.weapon; // 0xAHSW
 
-		server->Send((const uint8_t*)&req_pose, sizeof(STRUCT_REQ_POSE));
+		// send ping every 50 pose requests
+		// ...
+
+		if (steps)
+		{
+			STRUCT_REQ_POSE req_pose = { 0 };
+			req_pose.token = 'P';
+			req_pose.am = (player.req.action<<4) | player.req.mount;
+			req_pose.anim= player.anim;
+			req_pose.frame = player.frame;
+			req_pose.pos[0] = player.pos[0];
+			req_pose.pos[1] = player.pos[1];
+			req_pose.pos[2] = player.pos[2];
+			req_pose.dir = player.dir;
+			req_pose.sprite = 
+				(player.req.armor << 12) | 
+				(player.req.helmet << 8) |
+				(player.req.shield << 4) |
+				player.req.weapon; // 0xAHSW
+
+			server->Send((const uint8_t*)&req_pose, sizeof(STRUCT_REQ_POSE));
+		}
 	}
 }
 
@@ -3932,9 +3960,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 						req_talk.len = player.talk[idx].box->len;
 						memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 						server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-						printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 					}
 
+					ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 					player.talks++;
 
 					// alloc new
@@ -4101,9 +4129,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					req_talk.len = player.talk[idx].box->len;
 					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-					printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 				}				
 
+				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 				player.talks++;
 			}
 
@@ -4288,9 +4316,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					req_talk.len = player.talk[idx].box->len;
 					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-					printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 				}				
 
+				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 				player.talks++;
 			}
 
@@ -4774,9 +4802,9 @@ void Game::StartContact(int id, int x, int y, int b)
 									req_talk.len = player.talk[idx].box->len;
 									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-									printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 								}
 
+								ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 								player.talks++;
 
 								// alloc new

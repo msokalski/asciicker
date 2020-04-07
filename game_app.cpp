@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <malloc.h>
+#include <stdarg.h>
 
 #ifdef __linux__
 #include <sys/ioctl.h>
@@ -28,6 +29,15 @@
 #include "rgba8.h"
 
 #include "game.h"
+
+void SyncConf()
+{
+}
+
+const char* GetConfPath()
+{
+    return "asciicker.cfg";
+}
 
 #ifdef __linux__
 /*

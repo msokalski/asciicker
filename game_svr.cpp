@@ -11,6 +11,15 @@
 #define MAX_CLIENTS 50
 Server* server = 0; // this is to fullfil game.cpp externs!
 
+void SyncConf()
+{
+}
+
+const char* GetConfPath()
+{
+    return "asciicker.cfg";
+}
+
 bool Server::Send(const uint8_t* data, int size)
 {
 	return false;

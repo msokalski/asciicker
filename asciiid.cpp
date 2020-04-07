@@ -42,6 +42,15 @@
 #include "render.h"
 #include "game.h"
 
+void SyncConf()
+{
+}
+
+const char* GetConfPath()
+{
+    return "asciicker.cfg";
+}
+
 Server* server = 0; // this is to fullfil game.cpp externs!
 bool Server::Send(const uint8_t* ptr, int size)
 {
