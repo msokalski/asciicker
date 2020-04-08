@@ -1216,6 +1216,25 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			break;
 		}
 
+		case 'l':
+		{
+			STRUCT_RSP_LAG* lag = (STRUCT_RSP_LAG*)ptr;
+			uint32_t s1 = 0;
+			s1 |= lag->stamp[0] << 8;
+			s1 |= lag->stamp[1] << 16;
+			s1 |= lag->stamp[2] << 24;
+					
+			uint32_t s2 = (uint32_t)stamp << 8;
+
+			int latency = (s2 - s1) >> 8;
+
+			char buf[32];
+			sprintf(buf,"lag: %d\n", latency);
+			Log(buf);
+			// store it in server
+			break;
+		}
+
 	default:
 		return false;
 	}
@@ -2099,6 +2118,9 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	memset(g, 0, sizeof(Game));
 
 	strcpy(g->player.name, player_name);
+
+	if (server)
+		server->last_lag = stamp;
 
 	ReadConf(g); 
 
@@ -3853,9 +3875,19 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	if (server)
 	{
+		if (stamp - server->last_lag > 1000000)
+		{
+			server->last_lag = stamp;
 
-		// send ping every 50 pose requests
-		// ...
+			STRUCT_REQ_LAG req_lag = { 0 };
+			req_lag.token = 'L';
+			uint32_t s = (uint32_t)stamp;
+			req_lag.stamp[0] = s & 0xFF;
+			req_lag.stamp[1] = (s >> 8) & 0xFF;
+			req_lag.stamp[2] = (s >> 16) & 0xFF;
+			
+			server->Send((const uint8_t*)&req_lag, sizeof(STRUCT_REQ_LAG));
+		}
 
 		if (steps)
 		{

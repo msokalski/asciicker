@@ -121,6 +121,7 @@ struct Server
 	Human* tail;
 
 	uint64_t stamp;
+	uint64_t last_lag;
 
 	// pose->pad with hold new/del/upd flags
 };

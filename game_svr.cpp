@@ -350,6 +350,28 @@ struct PlayerCon
 
 			switch (buf[0])
 			{
+				case 'L':
+				{
+					STRUCT_REQ_LAG* req_lag = (STRUCT_REQ_LAG*)buf;
+					if (size != sizeof(STRUCT_REQ_LAG))
+					{
+						Release();
+						return;
+					}
+
+					STRUCT_RSP_LAG rsp_lag = *(STRUCT_RSP_LAG*)buf;
+					rsp_lag.token = 'l';
+
+					size = WS_WRITE(client_socket, (uint8_t*)&rsp_lag, sizeof(STRUCT_RSP_LAG), 0, 0x2);
+					if (size <= 0)
+					{
+						Release();
+						return;
+					}					
+
+					break;
+				}
+
 				case 'P':
 				{
 					RWLOCK_WRITE_LOCK(rwlock);
