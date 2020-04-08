@@ -35,6 +35,9 @@ char player_name[32] = "player";
 
 void ChatLog(const char* fmt, ...)
 {
+	// move it to game_app/web/srv and asciid
+	// we dont want to printf in -term mode!
+	
 	va_list args;
 	va_start(args,fmt);
 	vprintf(fmt,args);
@@ -1226,11 +1229,17 @@ bool Server::Proc(const uint8_t* ptr, int size)
 					
 			uint32_t s2 = (uint32_t)stamp << 8;
 
-			int latency = (s2 - s1) >> 8;
+			int latency = (s2 - s1 + 128) >> 8;
 
+			/*
 			char buf[32];
 			sprintf(buf,"lag: %d\n", latency);
 			Log(buf);
+			*/
+
+			lag_ms = (latency + 500) / 1000;
+			lag_wait = false;
+
 			// store it in server
 			break;
 		}
@@ -2120,7 +2129,11 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	strcpy(g->player.name, player_name);
 
 	if (server)
+	{
 		server->last_lag = stamp;
+		server->lag_ms = 0;
+		server->lag_wait = false;
+	}
 
 	ReadConf(g); 
 
@@ -3202,9 +3215,15 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	{
 		AnsiCell status;
-		const char* status_text = server ? " ON LINE" : "OFF LINE";
+		char status_text[32] = "OFF LINE";
+		int len_left = 4;
+		int len_right = 4;
 		if (server)
 		{
+			int len = sprintf(status_text,"ON LINE %4d", server->lag_ms);
+			len_left = len/2;
+			len_right = len - len_left;
+
 			status.fg = 16;
 			status.bk = dk_green;
 			status.gl=' ';
@@ -3219,11 +3238,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 		AnsiCell* top = ptr + (height-1)*width;
 		int x = 0;
-		for (; x<width/2 - 4; x++)
+		int center = width/2;
+		for (; x<center - len_left; x++)
 			top[x] = status;
-		for (; x<width/2 + 4; x++)
+		for (; x<center + len_right; x++)
 		{
-			int i = x - (width/2 - 4);
+			int i = x - (center - len_left);
 			status.gl = status_text[i];
 			top[x] = status;
 		}
@@ -3875,9 +3895,10 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	if (server)
 	{
-		if (stamp - server->last_lag > 1000000)
+		if (stamp - server->last_lag >= 100000 && !server->lag_wait) // 10x per sec
 		{
 			server->last_lag = stamp;
+			server->lag_wait = true;
 
 			STRUCT_REQ_LAG req_lag = { 0 };
 			req_lag.token = 'L';

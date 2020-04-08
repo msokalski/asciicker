@@ -237,6 +237,7 @@ extern "C"
             }
                return 0;
         }
+        strcpy(player_name,name);
         // alloc server, prepare for Packet()s
         GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
         memset(gs,0,sizeof(GameServer));
