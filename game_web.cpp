@@ -16,6 +16,16 @@ uint64_t GetTime()
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+void SyncConf()
+{
+    EM_ASM( FS.syncfs( function(e) {} ); );
+}
+
+const char* GetConfPath()
+{
+    return "/data/asciicker.cfg";
+}
+
 Server* server = 0; // this is to fullfil game.cpp externs!
 
 struct GameServer : Server
@@ -227,6 +237,7 @@ extern "C"
             }
                return 0;
         }
+        strcpy(player_name,name);
         // alloc server, prepare for Packet()s
         GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
         memset(gs,0,sizeof(GameServer));

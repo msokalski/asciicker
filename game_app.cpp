@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <malloc.h>
+#include <stdarg.h>
 
 #ifdef __linux__
 #include <sys/ioctl.h>
@@ -28,6 +29,15 @@
 #include "rgba8.h"
 
 #include "game.h"
+
+void SyncConf()
+{
+}
+
+const char* GetConfPath()
+{
+    return "asciicker.cfg";
+}
 
 #ifdef __linux__
 /*
@@ -794,6 +804,7 @@ extern "C" void DumpLeakCounter();
 
 int main(int argc, char* argv[])
 {
+
 #ifdef _WIN32
 	
 	PostMessage(GetConsoleWindow(), WM_SYSCOMMAND, SC_MINIMIZE, 0);
@@ -896,12 +907,14 @@ int main(int argc, char* argv[])
             path = slash + 1;
         }
 
-		gs = Connect(addr, port, path, user);
-
-		if (!gs)
-		{
-			printf("Couldn't connect to server, starting solo ...\n");
-		}
+        if (addr && addr[0])
+        {
+            gs = Connect(addr, port, path, user);
+            if (!gs)
+            {
+                printf("Couldn't connect to server, starting solo ...\n");
+            }
+        }
 
 		strcpy(player_name, user);
 
@@ -909,6 +922,11 @@ int main(int argc, char* argv[])
 		// so we can creare game or term with or without server
 		// ...
 	}
+    else
+    {
+        strcpy(player_name, "player");
+    }
+    
 
     float water = 55;
     float dir = 0;

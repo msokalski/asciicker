@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdarg.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include "game.h"
@@ -32,24 +33,51 @@ Human* player_tail = 0;
 
 char player_name[32] = "player";
 
+void ChatLog(const char* fmt, ...)
+{
+	// move it to game_app/web/srv and asciid
+	// we dont want to printf in -term mode!
+	
+	va_list args;
+	va_start(args,fmt);
+	vprintf(fmt,args);
+	va_end(args);
+}
+
+void SyncConf();
+const char* GetConfPath();
+
 void ReadConf(Game* g)
 {
-	FILE* f = fopen("asciicker.cfg", "rb");
+	FILE* f = fopen(GetConfPath(), "rb");
 	if (f)
 	{
+		//printf("ReadConf ok\n");
 		fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 		fclose(f);
+	}
+	else
+	{
+		//printf("ReadConf err\n");
 	}
 }
 
 void WriteConf(Game* g)
 {
-	FILE* f = fopen("asciicker.cfg", "wb");
+
+	FILE* f = fopen(GetConfPath(), "wb");
 	if (f)
 	{
+		//printf("WriteConf ok\n");
 		fwrite(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 		fclose(f);
 	}
+	else
+	{
+		//printf("WriteConf err\n");
+	}
+	
+	SyncConf();
 }
 
 struct HPBar
@@ -439,7 +467,7 @@ struct TalkBox
 	int cursor_pos;
 	int len;
 
-	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor) const
+	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor, const char* name=0) const
 	{
 		// x,y is at smoke spot, box will be centered above it
 
@@ -500,7 +528,7 @@ struct TalkBox
 
 		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
-		assert(bl >= 0);
+		// assert(bl >= 0);
 
 		AnsiCell* ll = ptr + left + lower * width;
 		AnsiCell* bc = ptr + center + bottom * width;
@@ -578,7 +606,25 @@ struct TalkBox
 		if (upper >= 0 && upper < height)
 		{
 			AnsiCell* row = ptr + upper * width;
-			for (int i = left + 1; i < right; i++)
+			int i = left + 1;
+
+			if (name)
+			{
+				for (int j=0; i < right; i++,j++)
+				{
+					if (!name[j])
+						break;
+
+					if (i >= 0 && i < width)
+					{
+						row[i].bk = black;
+						row[i].fg = white;
+						row[i].gl = name[j];
+					}
+				}
+			}
+
+			for (; i < right; i++)
 			{
 				if (i >= 0 && i < width)
 				{
@@ -1146,7 +1192,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 				}
 
 				Human* h = others + talk->id;
-				printf("%s : %.*s\n", h->name, talk->len, talk->str);
+				ChatLog("%s : %.*s\n", h->name, talk->len, talk->str);
 				
 				memset(box, 0, sizeof(TalkBox));
 				memcpy(box->buf, talk->str, talk->len);
@@ -1170,6 +1216,31 @@ bool Server::Proc(const uint8_t* ptr, int size)
 				h->talk[idx].stamp = stamp;
 				h->talks++;
 			}
+			break;
+		}
+
+		case 'l':
+		{
+			STRUCT_RSP_LAG* lag = (STRUCT_RSP_LAG*)ptr;
+			uint32_t s1 = 0;
+			s1 |= lag->stamp[0] << 8;
+			s1 |= lag->stamp[1] << 16;
+			s1 |= lag->stamp[2] << 24;
+					
+			uint32_t s2 = (uint32_t)stamp << 8;
+
+			int latency = (s2 - s1 + 128) >> 8;
+
+			/*
+			char buf[32];
+			sprintf(buf,"lag: %d\n", latency);
+			Log(buf);
+			*/
+
+			lag_ms = (latency + 500) / 1000;
+			lag_wait = false;
+
+			// store it in server
 			break;
 		}
 
@@ -2056,6 +2127,13 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	memset(g, 0, sizeof(Game));
 
 	strcpy(g->player.name, player_name);
+
+	if (server)
+	{
+		server->last_lag = stamp;
+		server->lag_ms = 0;
+		server->lag_wait = false;
+	}
 
 	ReadConf(g); 
 
@@ -3137,9 +3215,15 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	{
 		AnsiCell status;
-		const char* status_text = server ? " ON LINE" : "OFF LINE";
+		char status_text[32] = "OFF LINE";
+		int len_left = 4;
+		int len_right = 4;
 		if (server)
 		{
+			int len = sprintf(status_text,"ON LINE %4d", server->lag_ms);
+			len_left = len/2;
+			len_right = len - len_left;
+
 			status.fg = 16;
 			status.bk = dk_green;
 			status.gl=' ';
@@ -3154,11 +3238,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 		AnsiCell* top = ptr + (height-1)*width;
 		int x = 0;
-		for (; x<width/2 - 4; x++)
+		int center = width/2;
+		for (; x<center - len_left; x++)
 			top[x] = status;
-		for (; x<width/2 + 4; x++)
+		for (; x<center + len_right; x++)
 		{
-			int i = x - (width/2 - 4);
+			int i = x - (center - len_left);
 			status.gl = status_text[i];
 			top[x] = status;
 		}
@@ -3203,14 +3288,15 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		// and should have some kind of fade out
 		for (int i = 0; i < h->talks; i++)
 		{
+			int speed = 100000 + h->talk[i].box->len*400000/255; // 100000 for len=0 , 500000 for len=255
 			int elaps = stamp - h->talk[i].stamp;
-			int dy = elaps / 100000; // 10 dy per sec
+			int dy = elaps / speed; // 10 dy per sec (len=0)
 			
-			if (dy <= 20)
+			if (dy <= 30)
 			{
 				int view[3];
 				ProjectCoords(renderer, h->talk[i].pos, view);
-				h->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false);
+				h->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false, h->name);
 			}
 			else
 			if (h == &player || server)
@@ -3807,24 +3893,42 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	stamp = _stamp;
 
-	if (steps && server)
+	if (server)
 	{
-		STRUCT_REQ_POSE req_pose = { 0 };
-		req_pose.token = 'P';
-		req_pose.am = (player.req.action<<4) | player.req.mount;
-		req_pose.anim= player.anim;
-		req_pose.frame = player.frame;
-		req_pose.pos[0] = player.pos[0];
-		req_pose.pos[1] = player.pos[1];
-		req_pose.pos[2] = player.pos[2];
-		req_pose.dir = player.dir;
-		req_pose.sprite = 
-			(player.req.armor << 12) | 
-			(player.req.helmet << 8) |
-			(player.req.shield << 4) |
-			player.req.weapon; // 0xAHSW
+		if (stamp - server->last_lag >= 100000 && !server->lag_wait) // 10x per sec
+		{
+			server->last_lag = stamp;
+			server->lag_wait = true;
 
-		server->Send((const uint8_t*)&req_pose, sizeof(STRUCT_REQ_POSE));
+			STRUCT_REQ_LAG req_lag = { 0 };
+			req_lag.token = 'L';
+			uint32_t s = (uint32_t)stamp;
+			req_lag.stamp[0] = s & 0xFF;
+			req_lag.stamp[1] = (s >> 8) & 0xFF;
+			req_lag.stamp[2] = (s >> 16) & 0xFF;
+			
+			server->Send((const uint8_t*)&req_lag, sizeof(STRUCT_REQ_LAG));
+		}
+
+		if (steps)
+		{
+			STRUCT_REQ_POSE req_pose = { 0 };
+			req_pose.token = 'P';
+			req_pose.am = (player.req.action<<4) | player.req.mount;
+			req_pose.anim= player.anim;
+			req_pose.frame = player.frame;
+			req_pose.pos[0] = player.pos[0];
+			req_pose.pos[1] = player.pos[1];
+			req_pose.pos[2] = player.pos[2];
+			req_pose.dir = player.dir;
+			req_pose.sprite = 
+				(player.req.armor << 12) | 
+				(player.req.helmet << 8) |
+				(player.req.shield << 4) |
+				player.req.weapon; // 0xAHSW
+
+			server->Send((const uint8_t*)&req_pose, sizeof(STRUCT_REQ_POSE));
+		}
 	}
 }
 
@@ -3909,9 +4013,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 						req_talk.len = player.talk[idx].box->len;
 						memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 						server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-						printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 					}
 
+					ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 					player.talks++;
 
 					// alloc new
@@ -4078,9 +4182,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					req_talk.len = player.talk[idx].box->len;
 					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-					printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 				}				
 
+				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 				player.talks++;
 			}
 
@@ -4265,9 +4369,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					req_talk.len = player.talk[idx].box->len;
 					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-					printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 				}				
 
+				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 				player.talks++;
 			}
 
@@ -4291,7 +4395,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				PressKey = 0;
 
 				// here we can filter keys
-				if (key != A3D_TAB)
+				if (key != A3D_TAB && (key<A3D_F5 || key>A3D_F8))
 				{
 					PressKey = key;
 					PressStamp = stamp;
@@ -4751,9 +4855,9 @@ void Game::StartContact(int id, int x, int y, int b)
 									req_talk.len = player.talk[idx].box->len;
 									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
 									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-									printf("%s : %.*s\n", player.name, player.talk[idx].box->len, player.talk[idx].box->buf);
 								}
 
+								ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
 								player.talks++;
 
 								// alloc new

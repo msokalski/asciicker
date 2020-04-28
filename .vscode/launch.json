@@ -9,11 +9,11 @@
             "type": "cppdbg",
             "request": "launch",
 
-         //   /*
+            /*
             "program": "${workspaceFolder}/.run/asciiid",
             "args": [],
             "externalConsole": true,
-         //   */
+            */
 
             /*
             "program": "${workspaceFolder}/.run/game",
@@ -21,12 +21,17 @@
             "externalConsole": true,
             */
 
+         //   /*
+            "program": "${workspaceFolder}/.run/game",
+            "args": ["-url","gumix@asciicker.com:80/ws/y4/"],
+            "externalConsole": true,
+         //   */
+            
             /*
             "program": "${workspaceFolder}/.run/game",
-            "args": [],
+            "args": ["-url","gumix@localhost:8080/ws/y4/"],
             "externalConsole": true,
             */
-            
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

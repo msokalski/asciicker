@@ -137,4 +137,16 @@ struct STRUCT_BRC_TALK
 	uint8_t str[256]; // trim to actual size!
 };
 
+struct STRUCT_REQ_LAG
+{
+	uint8_t token; // 'L'
+	uint8_t stamp[3];
+};
+
+struct STRUCT_RSP_LAG
+{
+	uint8_t token; // 'l'
+	uint8_t stamp[3];
+};
+
 #pragma pack(pop)
