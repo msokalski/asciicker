@@ -159,6 +159,15 @@ void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 
 	switch (mi & 0xF)
 	{
+		case MouseInfo::MIDDLE_DN:	
+		{
+			int p[2] = { x,y };
+			term->game->ScreenToCell(p);
+			render_break_point[0] = p[0];
+			render_break_point[1] = p[1];
+			break;
+		}
+
 		case MouseInfo::MOVE:		term->game->OnMouse(Game::GAME_MOUSE::MOUSE_MOVE, x, y); break;
 		case MouseInfo::LEFT_DN:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_LEFT_BUT_DOWN, x, y); break;
 		case MouseInfo::LEFT_UP:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_LEFT_BUT_UP, x, y); break;

@@ -61,3 +61,5 @@ void ProjectCoords(Renderer* r, const float pos[3], int view[3]); // like a spri
 
 Item** GetNearbyItems(Renderer* r);
 Inst** GetNearbyCharacters(Renderer* r);
+
+extern int render_break_point[2];

@@ -1946,6 +1946,9 @@ Inst** GetNearbyCharacters(Renderer* r)
 	return r->npc_sort;
 }
 
+
+int render_break_point[2] = { -1,-1 };
+
 void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Inst* inst, const int scene_shift[2])
 {
 
@@ -2343,6 +2346,12 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	{
 		for (int x = 0; x < width; x++, ptr++)
 		{
+			if (x == render_break_point[0] && y == render_break_point[1])
+			{
+				int a = 0;
+				render_break_point[0] = -1;
+				render_break_point[1] = -1;
+			}
 			// given interpolated RGB -> round to 555, store it in visual
 			// copy to diffuse to diffuse
 			// mark mash 'auto-material' as 0x8 flag in spare
@@ -2527,9 +2536,10 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 						}
 						else
 						{
-							int r = matlib[mat[i]].shade[elv][shd].bg[0];
-							int g = matlib[mat[i]].shade[elv][shd].bg[1];
-							int b = matlib[mat[i]].shade[elv][shd].bg[2];
+							int s = dif[i] / 17;
+							int r = matlib[mat[i]].shade[elv][s].bg[0];
+							int g = matlib[mat[i]].shade[elv][s].bg[1];
+							int b = matlib[mat[i]].shade[elv][s].bg[2];
 
 							if ((spr[i] & 0x3) == 3)
 							{
@@ -2608,15 +2618,15 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 								if ((spr[i] & 0x3) == 0x3)
 								{
-									fg[0] += matlib[mat[i]].shade[elv][shd].fg[0] * 255 / 400;
-									fg[1] += matlib[mat[i]].shade[elv][shd].fg[1] * 255 / 400;
-									fg[2] += matlib[mat[i]].shade[elv][shd].fg[2] * 255 / 400;
+									fg[0] += matlib[mat[i]].shade[elv][s].fg[0] * 255 / 400;
+									fg[1] += matlib[mat[i]].shade[elv][s].fg[1] * 255 / 400;
+									fg[2] += matlib[mat[i]].shade[elv][s].fg[2] * 255 / 400;
 								}
 								else
 								{
-									fg[0] += matlib[mat[i]].shade[elv][shd].fg[0];
-									fg[1] += matlib[mat[i]].shade[elv][shd].fg[1];
-									fg[2] += matlib[mat[i]].shade[elv][shd].fg[2];
+									fg[0] += matlib[mat[i]].shade[elv][s].fg[0];
+									fg[1] += matlib[mat[i]].shade[elv][s].fg[1];
+									fg[2] += matlib[mat[i]].shade[elv][s].fg[2];
 								}
 							}
 						}
@@ -2636,8 +2646,8 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 					//  BK
 					ptr->gl = 0xDF;
 
-					int auto_mat_lo = 3 * (bg_h[0][0] / 33 + 32 * (bg_h[0][1] / 33) + 32 * 32 * (bg_h[0][2] / 33));
-					int auto_mat_hi = 3 * (bg_h[1][0] / 33 + 32 * (bg_h[1][1] / 33) + 32 * 32 * (bg_h[1][2] / 33));
+					int auto_mat_lo = 3 * ((bg_h[0][0]+20) / 33 + 32 * ((bg_h[0][1]+20) / 33) + 32 * 32 * ((bg_h[0][2]+20) / 33));
+					int auto_mat_hi = 3 * ((bg_h[1][0]+20) / 33 + 32 * ((bg_h[1][1]+20) / 33) + 32 * 32 * ((bg_h[1][2]+20) / 33));
 
 					ptr->bk = auto_mat[auto_mat_lo + 0];
 					ptr->fg = auto_mat[auto_mat_hi + 0];
@@ -2650,8 +2660,8 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 					// K|G
 					ptr->gl = 0xDE;
 
-					int auto_mat_lt = 3 * (bg_v[0][0] / 33 + 32 * (bg_v[0][1] / 33) + 32 * 32 * (bg_v[0][2] / 33));
-					int auto_mat_rt = 3 * (bg_v[1][0] / 33 + 32 * (bg_v[1][1] / 33) + 32 * 32 * (bg_v[1][2] / 33));
+					int auto_mat_lt = 3 * ((bg_v[0][0]+20) / 33 + 32 * ((bg_v[0][1]+20) / 33) + 32 * 32 * ((bg_v[0][2]+20) / 33));
+					int auto_mat_rt = 3 * ((bg_v[1][0]+20) / 33 + 32 * ((bg_v[1][1]+20) / 33) + 32 * 32 * ((bg_v[1][2]+20) / 33));
 
 					ptr->bk = auto_mat[auto_mat_lt + 0];
 					ptr->fg = auto_mat[auto_mat_rt + 0];

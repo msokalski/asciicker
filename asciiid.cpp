@@ -1525,6 +1525,8 @@ struct RenderContext
 						shade = uint(round(light * 15.0)*(1 - shade) + shade);
 					*/
 
+					shade = uint(round(15.0*light));
+
 					// if we're painting matid
 					// replace matid if we're inside the brush
 
@@ -1600,7 +1602,9 @@ struct RenderContext
 					//color = vec4(glyph_fract, 0.5, 1.0);
 
 					// if (mode == 0) // editing
-					color.rgb *= light;
+
+
+					// color.rgb *= light;
 				}
 
 				// palettize
@@ -3559,7 +3563,7 @@ void New()
 	{
 		static void cb(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 		{
-			if (f != A3D_RGB8)
+			if (f != A3D_RGB8 && f != A3D_LUMINANCE8)
 				return;
 			int patches_x = (w-1) / 4;
 			int patches_y = (h-1) / 4;
@@ -3572,12 +3576,19 @@ void New()
 				{
 					Patch* p = AddTerrainPatch(terrain, px, py, 0);
 					uint16_t* map = GetTerrainHeightMap(p);
-					const uint8_t* pix = (const uint8_t*)data + 3*(HEIGHT_CELLS * px + (HEIGHT_CELLS * py)*w);
+					const uint8_t* pix;
+					if (f != A3D_RGB8)
+						pix = (const uint8_t*)data + HEIGHT_CELLS * px + (HEIGHT_CELLS * py)*w;
+					else
+						pix = (const uint8_t*)data + 3 * (HEIGHT_CELLS * px + (HEIGHT_CELLS * py)*w);
 					for (int vy = 0; vy <= HEIGHT_CELLS; vy++)
 					{
 						for (int vx = 0; vx <= HEIGHT_CELLS; vx++)
 						{
-							map[vx + vy * (HEIGHT_CELLS + 1)] = 4*pix[3*(vx+vy*w)+2];
+							if (f == A3D_RGB8)
+								map[vx + vy * (HEIGHT_CELLS + 1)] = 4 * pix[3*(vx+vy*w)+2];
+							else
+								map[vx + vy * (HEIGHT_CELLS + 1)] = 4 * pix[vx + vy * w];
 						}
 					}
 					UpdateTerrainHeightMap(p);
@@ -3694,6 +3705,10 @@ void Load(const char* path)
 			{
 				if ( fread(mat[i].shade,1,sizeof(MatCell)*4*16,f) != sizeof(MatCell)*4*16 )
 					break;
+				/*
+				if (i == 1 || i == 3)
+					memcpy(mat[i].shade, mat[0].shade, sizeof(MatCell) * 4 * 16);
+				*/
 				mat[i].Update();
 			}
 
@@ -5596,6 +5611,33 @@ void my_render(A3D_WND* wnd)
 			if (ImGui::ArrowButton("##mat_right", ImGuiDir_Right)) { if (active_material < 0xff) active_material++; }
 			ImGui::PopButtonRepeat();
 			ImGui::SameLine();
+			if (ImGui::Button("Exp##mat"))
+			{
+				FILE* f = fopen("temp.mat", "wb");
+				if (f)
+				{
+					for (int i = 0; i < 256; i++)
+						fwrite(mat[i].shade, sizeof(MatCell), 4 * 16, f);
+					fclose(f);
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Imp##mat"))
+			{
+				FILE* f = fopen("temp.mat", "rb");
+				if (f)
+				{
+					for (int i = 0; i < 256; i++)
+					{
+						fread(mat[i].shade, sizeof(MatCell), 4 * 16, f);
+						mat[i].Update();
+					}
+					fclose(f);
+				}
+			}
+
+			ImGui::SameLine();
 			ImGui::Text("0x%02X (%d) Elevation ramps", active_material, active_material);
 
 			static bool paint_mat_glyph = true;
@@ -5742,8 +5784,44 @@ void my_render(A3D_WND* wnd)
 
 					ImGui::PopID();
 
-					if (x < 15)
-						ImGui::SameLine();
+					//if (x < 15)
+					ImGui::SameLine();
+				}
+
+				static const char* lab[4][4] =
+				{
+					{"C##0","P##0","<##0",">##0"},
+					{"C##1","P##1","<##1",">##1"},
+					{"C##2","P##2","<##2",">##2"},
+					{"C##3","P##3","<##3",">##3"}
+				};
+
+				static MatCell mat_clip[16] = { 0 };
+
+				ImGui::SameLine();
+				if (ImGui::Button(lab[y][0]))
+					memcpy(mat_clip, mat[active_material].shade[y]+0, sizeof(MatCell) * 16);
+				ImGui::SameLine();
+				if (ImGui::Button(lab[y][1]))
+				{
+					memcpy(mat[active_material].shade[y] + 0, mat_clip, sizeof(MatCell) * 16);
+					mat[active_material].Update();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button(lab[y][2]))
+				{
+					MatCell tmp = mat[active_material].shade[y][0];
+					memmove(mat[active_material].shade[y]+0, mat[active_material].shade[y]+1, sizeof(MatCell) * 15);
+					mat[active_material].shade[y][15] = tmp;
+					mat[active_material].Update();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button(lab[y][3]))
+				{
+					MatCell tmp = mat[active_material].shade[y][15];
+					memmove(mat[active_material].shade[y] + 1, mat[active_material].shade[y] + 0, sizeof(MatCell) * 15);
+					mat[active_material].shade[y][0] = tmp;
+					mat[active_material].Update();
 				}
 			}
 
@@ -6536,6 +6614,9 @@ void my_render(A3D_WND* wnd)
 						{
 							// hit against meshes, stacking?
 							inst = HitWorld(world, ray_p, ray_v, hit, 0, false, true);
+
+							if (hit[2] < probe_z)
+								hit[2] = probe_z;
 
 							// pretranslate and scale
 							MeshPrefs* mp = (MeshPrefs*)GetMeshCookie(active_mesh);

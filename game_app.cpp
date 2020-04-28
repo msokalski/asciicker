@@ -922,7 +922,7 @@ int main(int argc, char* argv[])
 	LoadSprites();
 
 	{
-		FILE* f = fopen("a3d/game_items.a3d", "rb");
+		FILE* f = fopen("a3d/game_map.a3d", "rb");
 
 		// TODO:
 		// if GameServer* gs != 0
