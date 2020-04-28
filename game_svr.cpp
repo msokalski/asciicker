@@ -176,7 +176,7 @@ struct PlayerCon
 						return -3;
 					h->parsed |= mask;
 
-					const char* match = "GET /ws/y4/ HTTP/1.1";
+					const char* match = "GET /ws/y5/ HTTP/1.1";
 
 					if (strcmp(value, match) != 0)
 						return -3;

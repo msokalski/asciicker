@@ -199,11 +199,11 @@
 
 				if (location.protocol !== 'https:') 
 				{
-					connection = new WebSocket('ws://' + location.hostname + port_override + '/ws/y4/');
+					connection = new WebSocket('ws://' + location.hostname + port_override + '/ws/y5/');
 				}
 				else
 				{
-					connection = new WebSocket('wss://' + location.hostname + port_override + '/ws/y4/');
+					connection = new WebSocket('wss://' + location.hostname + port_override + '/ws/y5/');
         }
         
         connection.binaryType = "arraybuffer";
