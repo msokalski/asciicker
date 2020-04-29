@@ -1534,7 +1534,7 @@ struct RenderContext
 						shade = uint(round(light * 15.0)*(1 - shade) + shade);
 					*/
 
-					shade = uint(round(15.0*light));
+					uint diffuse = uint(round(15.0*light));
 
 					// if we're painting matid
 					// replace matid if we're inside the brush
@@ -1582,7 +1582,7 @@ struct RenderContext
 
 					// sample material array
 					// y=0,1 -> descent; y=2,3 -> fill; y=4,5 -> ascent
-					uint mat_x = 2 * shade + 32 * elev;
+					uint mat_x = 2 * diffuse + 32 * elev;
 					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(0+mat_x, matid), 0);
 					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(1+mat_x, matid), 0);
 
@@ -1612,7 +1612,7 @@ struct RenderContext
 
 					// if (mode == 0) // editing
 
-
+					// already diffused by material ramp
 					// color.rgb *= light;
 				}
 
@@ -4478,10 +4478,17 @@ void my_render(A3D_WND* wnd)
 		}
 
 #ifdef DARK_TERRAIN
+		/* for every (maybe currently on screen?) terrain visual or maybe height sample 
+		   calculate minimum distance over this terrain sample required
+		   to see the sun (unoccluded by both terrain and meshes) 
+		   store that distance in 7bit shade part of visual
+		   possibly in linear (max 127) or exponential form (max base^127)
+		*/
+
 		if (ImGui::Button("CAST SHADOWS"))
 		{
 			UpdateTerrainDark(terrain, world, global_lt);
-			// UpdateWorldDark(world, terrain, global_lt)
+			//UpdateWorldDark(world, terrain, global_lt)
 		}
 #endif
 
@@ -7075,6 +7082,14 @@ void my_render(A3D_WND* wnd)
 //		RenderContext::RenderSprite(sprite_preview, ..., rc);
 
 	rc->EndMeshes();
+
+
+	// STENCIL PASS (terrain z-offset)
+	// (enabled depth test, disabled depth write)
+	// stencil ++ on fronface, stencil -- on backface (wrap mode)
+
+	// SHADOW PASS (screen quad)
+	// ...
 
 
 	// bsp hierarchy boxes

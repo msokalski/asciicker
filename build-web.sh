@@ -49,7 +49,7 @@ emcc --emrun -O3 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s NO_EXIT_RUNTIME=1 \
     -lidbfs.js \
-    --preload-file a3d/game_items.a3d \
+    --preload-file a3d/game_map.a3d \
     --preload-file sprites/grid-alpha-sword.xp \
     --preload-file sprites/grid-apple.xp \
     --preload-file sprites/grid-beet.xp \
@@ -154,7 +154,11 @@ emcc --emrun -O3 \
     --preload-file meshes/tree-1.akm \
     --preload-file meshes/tree-2.akm \
     --preload-file meshes/ship-1.akm \
-    --preload-file meshes/laundry-1.akm
+    --preload-file meshes/laundry-1.akm \
+    --preload-file meshes/bridge-2.akm \
+    --preload-file meshes/old-tree-1.akm \
+    --preload-file meshes/old-tree-2.akm
 
 # run in mini-server
+
 emrun --no_browser --port 8888 .web/index.html

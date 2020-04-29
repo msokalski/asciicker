@@ -1526,7 +1526,7 @@ void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3])
 
 			if (q)
 			{
-				if (/*q != p || */ hit[2] > coords[2] + 0.01)
+				if (/*q != p || */ hit[2] > coords[2] + HEIGHT_SCALE/4)
 				{
 					p->dark |= mask;
 					return;

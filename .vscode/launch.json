@@ -14,22 +14,29 @@
             "args": [],
             "externalConsole": true,
             */
+            
 
             /*
-            "program": "${workspaceFolder}/.run/game",
+            "program": "${workspaceFolder}/.run/server",
             "args": ["-term"],
             "externalConsole": true,
             */
 
-         //   /*
+           // /*
+            "program": "${workspaceFolder}/.run/game",
+            "args": ["-term"],
+            "externalConsole": true,
+           // */
+
+            /*
             "program": "${workspaceFolder}/.run/game",
             "args": ["-url","gumix@asciicker.com:80/ws/y4/"],
             "externalConsole": true,
-         //   */
+            */
             
             /*
             "program": "${workspaceFolder}/.run/game",
-            "args": ["-url","gumix@localhost:8080/ws/y4/"],
+            "args": ["-url","gumix@localhost:8080/ws/y5/"],
             "externalConsole": true,
             */
 

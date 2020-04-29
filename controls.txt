@@ -16,7 +16,7 @@ by mouse:
 by touch:
 - start touch anywhere excluding areas covered by popup elements
 - move your finger in desired direction
-- while holding move finger tap with another finger to jump
+- while holding 'move' finger tap with another finger anywhere to jump
 - hold finger on left/right screen edge to rotate view
 
 Picking up items:

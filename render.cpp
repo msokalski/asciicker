@@ -959,6 +959,14 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 							s->visual = m;
 							s->diffuse = diffuse;
 
+							#ifdef DARK_TERRAIN
+							if (dark&(((uint64_t)1) << visual_idx))
+								if (s->diffuse > 64)
+									s->diffuse -= 64;
+								else
+									s->diffuse = 0;
+							#endif
+
 							/*
 							if (dark&(((uint64_t)1) << visual_idx))
 								s->diffuse /= 4;

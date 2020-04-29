@@ -999,7 +999,12 @@ int main(int argc, char* argv[])
 		// so we need to update instance boxes with (,true)
 
 		if (world)
+        {
 			RebuildWorld(world, true);
+            #ifdef DARK_TERRAIN
+            UpdateTerrainDark(terrain, world, lt);
+            #endif
+        }
 	}
 
 	if (gs)

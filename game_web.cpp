@@ -142,7 +142,7 @@ int Main()
         }
         else
         {
-            printf("failed to open game.a3d\n");
+            printf("failed to open game_map.a3d\n");
             return -2;
         }
 
@@ -160,7 +160,13 @@ int Main()
         // so we need to update instance boxes with (,true)
 
         if (world)
+        {
             RebuildWorld(world, true);
+            #ifdef DARK_TERRAIN
+            float lt[4] = { 1,0,1,0.5 };
+            UpdateTerrainDark(terrain, world, lt);
+            #endif    
+        }
     }
 
     render_buf = (AnsiCell*)malloc(sizeof(AnsiCell) * 160 * 160);
