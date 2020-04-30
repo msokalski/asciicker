@@ -714,6 +714,7 @@ float lit_yaw = 45;
 float lit_pitch = 30;//90;
 float lit_time = 12.0f;
 float ambience = 0.5;
+float grid_alpha = 1.0f;
 
 bool spin_anim = false;
 int mouse_in = 0;
@@ -1478,6 +1479,8 @@ struct RenderContext
 			uniform vec3 pr; // .x=height , .y=alpha (alpha=0.5 when probing, otherwise 1.0), .z is br_limit direction (+1/-1 or 0 if disabled)
 			uniform float fz; // font zoom
 
+			uniform float grid_alpha;
+
 			uniform uint br_matid;
 
 			flat in vec3 normal;
@@ -1691,6 +1694,8 @@ struct RenderContext
 				grid = min(grid, Grid(d*1.50, uvh.xy, 1.0 / float(HEIGHT_CELLS)));
 				grid = min(grid, Grid(d*1.25, uvh.xy, 1.0));
 				grid = min(grid, Grid(d*1.00, uvh.xy, float(VISUAL_CELLS) / float(HEIGHT_CELLS)));
+
+				grid = 1.0 + grid_alpha*(grid - 1.0);
 
 				// color.rgb *= grid;
 
@@ -1919,6 +1924,8 @@ struct RenderContext
 		//lc_loc = glGetUniformLocation(prg, "lc");
 		fz_loc = glGetUniformLocation(prg, "fz");
 		br_matid_loc = glGetUniformLocation(prg, "br_matid");
+
+		ga_loc = glGetUniformLocation(prg, "grid_alpha");
 	}
 
 	void Delete()
@@ -2458,6 +2465,8 @@ struct RenderContext
 		glUniform1i(f_tex_loc, 3);
 		glUniform1i(p_tex_loc, 4);
 
+		glUniform1f(ga_loc, grid_alpha);
+
 		glUniform4fv(br_loc, 1, br);
 		glUniform3fv(qd_loc, 1, qd);
 		glUniform3fv(pr_loc, 1, pr);
@@ -2583,6 +2592,7 @@ struct RenderContext
 	GLint m_tex_loc;
 	GLint f_tex_loc;
 	GLint p_tex_loc;
+	GLint ga_loc;
 
 	GLint br_loc;
 	GLint qd_loc;
@@ -4673,6 +4683,8 @@ void my_render(A3D_WND* wnd)
 			ImGui::SameLine();
 			ImGui::SameLine();
 			ImGui::Text("%dx%d", (int)round(io.DisplaySize.x/font_size), (int)round(io.DisplaySize.y / font_size));
+
+			ImGui::SliderFloat("GRID", &grid_alpha, 0.0f, 1.0f);
 		}
 
 		if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen))
