@@ -23,6 +23,7 @@
 #include <string.h>
 
 #define DBL
+#define PERSPECTIVE_TEST
 
 static bool global_refl_mode = false;
 extern Sprite* player_sprite;
@@ -285,6 +286,7 @@ struct SpriteRenderBuf
 	int anim;
 	int frame;
 	int reps[4];
+	uint8_t alpha;
 	bool refl;
 };
 
@@ -342,6 +344,11 @@ struct Renderer
 	float water;
 	float light[4];
 	bool int_flag;
+
+	// perspective test
+	float view_dir[3];
+	float view_pos[3];
+	float focal;
 
 	double viewinst_tm[16];
 	const double* inst_tm;
@@ -593,6 +600,11 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	} shader;
 
 
+#ifdef PERSPECTIVE_TEST
+	if (global_refl_mode)
+		return;
+#endif
+
 	Renderer* r = (Renderer*)cookie;
 	shader.water = r->water;
 
@@ -605,19 +617,85 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	{
 		float xyzw[] = { coords[0], coords[1], coords[2], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp0);
+
+		#ifdef PERSPECTIVE_TEST // TODO put eye_to_vtx generation into viewinst_tm so we get it in w coord
+		float ws[4];
+		Product(r->inst_tm, xyzw, ws);
+		float viewer_dist; // {vx,vy,vz}  r->pos
+		float eye_to_vtx[3] =
+		{
+			ws[0] * HEIGHT_CELLS - r->view_pos[0],
+			ws[1] * HEIGHT_CELLS - r->view_pos[1],
+			ws[2] - r->view_pos[2],
+		};
+
+		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+		if (viewer_dist > 0)
+		{
+			float fx = tmp0[0];
+			float fy = tmp0[1];
+
+			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+			int tx = (int)floorf(fx + 0.5f);
+			int ty = (int)floorf(fy + 0.5f);
+
+			v[0][0] = tx;
+			v[0][1] = ty;
+			v[0][2] = (int)floor(tmp0[2] + 0.5f);
+			v[0][3] = 0; // clip flags
+		}
+		else
+			return;
+		#else
 		v[0][0] = (int)floor(tmp0[0] + 0.5f);
 		v[0][1] = (int)floor(tmp0[1] + 0.5f);
 		v[0][2] = (int)floor(tmp0[2] + 0.5f);
 		v[0][3] = 0; // clip flags
+		#endif
 	}
 
 	{
 		float xyzw[] = { coords[3], coords[4], coords[5], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp1);
+
+		#ifdef PERSPECTIVE_TEST
+		float ws[4];
+		Product(r->inst_tm, xyzw, ws);
+		float viewer_dist; // {vx,vy,vz}  r->pos
+		float eye_to_vtx[3] =
+		{
+			ws[0] * HEIGHT_CELLS - r->view_pos[0],
+			ws[1] * HEIGHT_CELLS - r->view_pos[1],
+			ws[2] - r->view_pos[2],
+		};
+
+		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+		if (viewer_dist > 0)
+		{
+			float fx = tmp1[0];
+			float fy = tmp1[1];
+
+			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+			int tx = (int)floorf(fx + 0.5f);
+			int ty = (int)floorf(fy + 0.5f);
+
+			v[1][0] = tx;
+			v[1][1] = ty;
+			v[1][2] = (int)floor(tmp1[2] + 0.5f);
+			v[1][3] = 0; // clip flags
+		}
+		else
+			return;
+		#else
 		v[1][0] = (int)floor(tmp1[0] + 0.5f);
 		v[1][1] = (int)floor(tmp1[1] + 0.5f);
 		v[1][2] = (int)floor(tmp1[2] + 0.5f);
 		v[1][3] = 0; // clip flags
+		#endif
 	}
 
 	if (visual & (1<<31))
@@ -629,10 +707,43 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 	{
 		float xyzw[] = { coords[6], coords[7], coords[8], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp2);
+
+		#ifdef PERSPECTIVE_TEST
+		float ws[4];
+		Product(r->inst_tm, xyzw, ws);
+		float viewer_dist; // {vx,vy,vz}  r->pos
+		float eye_to_vtx[3] =
+		{
+			ws[0] * HEIGHT_CELLS - r->view_pos[0],
+			ws[1] * HEIGHT_CELLS - r->view_pos[1],
+			ws[2] - r->view_pos[2],
+		};
+
+		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+		if (viewer_dist > 0)
+		{
+			float fx = tmp2[0];
+			float fy = tmp2[1];
+
+			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+			int tx = (int)floorf(fx + 0.5f);
+			int ty = (int)floorf(fy + 0.5f);
+
+			v[2][0] = tx;
+			v[2][1] = ty;
+			v[2][2] = (int)floor(tmp2[2] + 0.5f);
+			v[2][3] = 0; // clip flags
+		}
+		else
+			return;
+		#else
 		v[2][0] = (int)floor(tmp2[0] + 0.5f);
 		v[2][1] = (int)floor(tmp2[1] + 0.5f);
 		v[2][2] = (int)floor(tmp2[2] + 0.5f);
 		v[2][3] = 0; // clip flags
+		#endif
 	}
 
 	int w = r->sample_buffer.w;
@@ -797,6 +908,10 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 
 	if (global_refl_mode)
 	{
+		#ifdef PERSPECTIVE_TEST
+		return;
+		#endif
+
 		//if (r->int_flag)
 		{
 			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
@@ -822,6 +937,55 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	}
 	else
 	{
+		#ifdef PERSPECTIVE_TEST
+		float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
+		float viewer_dist; // {vx,vy,vz}  r->pos
+		float eye_to_vtx[3] =
+		{
+			vx - r->view_pos[0],
+			vy - r->view_pos[1],
+			vz - r->view_pos[2],
+		};
+
+		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+		if (viewer_dist > 0)
+		{
+			// todo: smooth fade
+			float max_scale = 1.33;
+			float hi_scale = 1.25;
+			float lo_scale = 1 / hi_scale;
+			float min_scale = 1 / max_scale;
+
+			if (viewer_dist > max_scale || viewer_dist < min_scale)
+				return;
+
+			float alpha = 1.0;
+
+			if (viewer_dist < lo_scale)
+				alpha = (viewer_dist - min_scale) / (lo_scale - min_scale);
+			else
+			if (viewer_dist > hi_scale)
+				alpha = (viewer_dist - max_scale) / (hi_scale - max_scale);
+
+			buf->alpha = (int)(alpha * 255 + 0.5f);
+
+			float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+			float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+			int tx = (int)floorf(fx + 0.5f);
+			int ty = (int)floorf(fy + 0.5f);
+
+			// convert from samples to cells
+			buf->s_pos[0] = (tx - 1) >> 1;
+			buf->s_pos[1] = (ty - 1) >> 1;
+			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+		}
+		else
+			return;
+		#else
 		//if (r->int_flag)
 		{
 			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
@@ -844,6 +1008,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
 		}
 		*/
+		#endif
 	}
 
 	int ang = (int)floor((yaw - r->yaw) * s->angles / 360.0f + 0.5f);
@@ -1077,6 +1242,9 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 			if (global_refl_mode)
 			{
+				#ifdef PERSPECTIVE_TEST
+				return;
+				#else
 				if (r->int_flag)
 				{
 					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
@@ -1103,9 +1271,45 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					// otherwise we need to check if / which screen edges cull each vertex
 					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
 				}
+				#endif
 			}
 			else
 			{
+				#ifdef PERSPECTIVE_TEST
+				float viewer_dist; // {vx,vy,vz}  r->pos
+				float eye_to_vtx[3] =
+				{
+					vx - r->view_pos[0],
+					vy - r->view_pos[1],
+					vz - r->view_pos[2],
+				};
+
+				viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+				if (viewer_dist > 0)
+				{
+					float fx = mul[0] * vx + mul[2] * vy + add[0];
+					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz + add[1];
+
+					fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+					fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+					int tx = (int)floorf(fx + 0.5f);
+					int ty = (int)floorf(fy + 0.5f);
+
+					xyzf[dy][dx][0] = tx;
+					xyzf[dy][dx][1] = ty;
+					xyzf[dy][dx][2] = vz;
+
+					// todo: if patch is known to fully fit in screen, set f=0 
+					// otherwise we need to check if / which screen edges cull each vertex
+					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+				}
+				else
+				{
+					// cull entire patch if any vertex is behind view_pos
+					return;
+				}
+				#else
 				// transform 
 				if (r->int_flag)
 				{
@@ -1133,6 +1337,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					// otherwise we need to check if / which screen edges cull each vertex
 					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
 				}
+				#endif
 			}
 		}
 	}
@@ -2134,10 +2339,11 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	double clip_world[5][4];
 
-	double clip_left[4] =   { 1, 0, 0, 1 };
-	double clip_right[4] =  {-1, 0, 0, 1 };
-	double clip_bottom[4] = { 0, 1, 0, 1 };
-	double clip_top[4] =    { 0,-1, 0, 1 };
+	double clip_left[4] =   { 1, 0, -1, 1 };
+	double clip_right[4] =  {-1, 0, -1, 1 };
+	double clip_bottom[4] = { 0, 1, -1, 1 };
+	double clip_top[4] =    { 0,-1, -1, 1 }; // +1 for prespective
+	
 	double clip_water[4] =  { 0, 0, 1, -((r->water-1)*2.0/0xffff - 1.0) };
 
 	// easier to use another transform for clipping
@@ -2172,6 +2378,23 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	r->npcs = 0;
 
 	r->sprites = 0;
+
+	r->focal = 500;
+
+	// sin/cos 30 are commented out to achieve 'architectural' perspective
+	// (all vertical lines in world space remain vertical and parallel on screen)
+
+	r->view_dir[0] = -sinyaw * 1; // cos30;
+	r->view_dir[1] = cosyaw * 1; // cos30;
+	r->view_dir[2] = 0; // -sin30;
+
+	r->view_pos[0] = HEIGHT_CELLS * pos[0] - r->view_dir[0] * r->focal; // what is 4?
+	r->view_pos[1] = HEIGHT_CELLS * pos[1] - r->view_dir[1] * r->focal; // what is 4?
+	r->view_pos[2] = pos[2] - r->view_dir[2] * r->focal;
+	r->view_dir[0] /= r->focal;
+	r->view_dir[1] /= r->focal;
+	r->view_dir[2] /= r->focal * HEIGHT_SCALE;
+
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
 	QueryWorldCB cb = { Renderer::RenderMesh , Renderer::RenderSprite };
 	QueryWorld(w, planes, clip_world, &cb, r);
@@ -2988,6 +3211,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		// IT IS PERFECTLY STICKED TO WORLD!
 		// it may not perectly stick to character but its fine! (its kinda character is not perfectly positioned)
 
+		// todo: use buf->alpha (perspective fades)
 
 		int frame = buf->frame;
 		int anim = buf->anim;
