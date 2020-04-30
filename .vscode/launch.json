@@ -9,11 +9,11 @@
             "type": "cppdbg",
             "request": "launch",
 
-           // /*
+           /*
             "program": "${workspaceFolder}/.run/asciiid",
             "args": [],
             "externalConsole": true,
-           // */
+           */
             
 
             /*
@@ -34,11 +34,11 @@
             "externalConsole": true,
             */
             
-            /*
+           // /*
             "program": "${workspaceFolder}/.run/game",
             "args": ["-url","gumix@localhost:8080/ws/y5/"],
             "externalConsole": true,
-            */
+           // */
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

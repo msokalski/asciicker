@@ -137,6 +137,8 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 
 		if (area > 0)
 		{
+			if (area > 0x10000)
+				return;			
 			assert(area > -0x10000);
 			float normalizer = (1.0f - FLT_EPSILON) / area;
 
@@ -189,6 +191,8 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 		else
 		if (area < 0 && dblsided)
 		{
+			if (area < -0x10000)
+				return;
 			assert(area > -0x10000);
 			float normalizer = (1.0f - FLT_EPSILON) / area;
 
@@ -2248,6 +2252,9 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		}
 	}
 
+	#ifdef PERSPECTIVE_TEST
+	r->int_flag = false;
+	#endif
 
 	r->pos[0] = pos[0];
 	r->pos[1] = pos[1];
