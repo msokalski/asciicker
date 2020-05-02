@@ -603,12 +603,6 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		uint8_t diffuse; // shading experiment
 	} shader;
 
-
-#ifdef PERSPECTIVE_TEST
-	if (global_refl_mode)
-		return;
-#endif
-
 	Renderer* r = (Renderer*)cookie;
 	shader.water = r->water;
 
@@ -913,9 +907,54 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	if (global_refl_mode)
 	{
 		#ifdef PERSPECTIVE_TEST
-		return;
-		#endif
+		float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
+		float viewer_dist; // {vx,vy,vz}  r->pos
+		float eye_to_vtx[3] =
+		{
+			vx - r->view_pos[0],
+			vy - r->view_pos[1],
+			vz - r->view_pos[2],
+		};
 
+		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+		if (viewer_dist > 0)
+		{
+			// todo: smooth fade
+			float max_scale = 1.33;
+			float hi_scale = 1.25;
+			float lo_scale = 1 / hi_scale;
+			float min_scale = 1 / max_scale;
+
+			if (viewer_dist > max_scale || viewer_dist < min_scale)
+				return;
+
+			float alpha = 1.0;
+
+			if (viewer_dist < lo_scale)
+				alpha = (viewer_dist - min_scale) / (lo_scale - min_scale);
+			else
+			if (viewer_dist > hi_scale)
+				alpha = (viewer_dist - max_scale) / (hi_scale - max_scale);
+
+			buf->alpha = (int)(alpha * 255 + 0.5f);
+
+			float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+			float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+			int tx = (int)floorf(fx + 0.5f);
+			int ty = (int)floorf(fy + 0.5f);
+
+			// convert from samples to cells
+			buf->s_pos[0] = (tx - 1) >> 1;
+			buf->s_pos[1] = (ty - 1) >> 1;
+			buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2);
+		}
+		else
+			return;
+		#else
 		//if (r->int_flag)
 		{
 			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
@@ -938,6 +977,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 			buf->s_pos[2] = (int)2 * r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
 		}
 		*/
+		#endif
 	}
 	else
 	{
@@ -1247,7 +1287,39 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			if (global_refl_mode)
 			{
 				#ifdef PERSPECTIVE_TEST
-				return;
+				float viewer_dist; // {vx,vy,vz}  r->pos
+				float eye_to_vtx[3] =
+				{
+					vx - r->view_pos[0],
+					vy - r->view_pos[1],
+					vz - r->view_pos[2],
+				};
+
+				viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+				if (viewer_dist > 0)
+				{
+					float fx = mul[0] * vx + mul[2] * vy + add[0];
+					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz + add[1];
+
+					fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+					fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+					int tx = (int)floorf(fx + 0.5f);
+					int ty = (int)floorf(fy + 0.5f);
+
+					xyzf[dy][dx][0] = tx;
+					xyzf[dy][dx][1] = ty;
+					xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
+
+					// todo: if patch is known to fully fit in screen, set f=0 
+					// otherwise we need to check if / which screen edges cull each vertex
+					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+				}
+				else
+				{
+					// cull entire patch if any vertex is behind view_pos
+					return;
+				}
 				#else
 				if (r->int_flag)
 				{
@@ -2346,10 +2418,10 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	double clip_world[5][4];
 
-	double clip_left[4] =   { 1, 0, -1, 1 };
-	double clip_right[4] =  {-1, 0, -1, 1 };
-	double clip_bottom[4] = { 0, 1, -1, 1 };
-	double clip_top[4] =    { 0,-1, -1, 1 }; // +1 for prespective
+	double clip_left[4] =   { 1, 0, 0, 1 };
+	double clip_right[4] =  {-1, 0, 0, 1 };
+	double clip_bottom[4] = { 0, 1, 0, 1 };
+	double clip_top[4] =    { 0,-1, 0, 1 }; // +1 for prespective
 	
 	double clip_water[4] =  { 0, 0, 1, -((r->water-1)*2.0/0xffff - 1.0) };
 
