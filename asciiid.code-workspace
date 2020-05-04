@@ -16,7 +16,8 @@
 			"**/*.cpp": "${workspaceFolder}/.o_game/${relativeFileDir}/${fileBasenameNoExtension}.s"
 		},
 		"files.associations": {
-			"cmath": "cpp"
+			"cmath": "cpp",
+			"random": "cpp"
 		}
 	}
 }

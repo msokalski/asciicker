@@ -23,7 +23,7 @@
 #include <string.h>
 
 #define DBL
-#define PERSPECTIVE_TEST
+#define PERSPECTIVE_TEST 1 // 0-off 1-unfiltered 2-snapped >2-filtered
 
 static bool global_refl_mode = false;
 extern Sprite* player_sprite;
@@ -137,9 +137,9 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 
 		if (area > 0)
 		{
-			if (area > 0x10000)
+			if (area >= 0x10000)
 				return;			
-			assert(area > -0x10000);
+
 			float normalizer = (1.0f - FLT_EPSILON) / area;
 
 			// canvas intersection with triangle bbox
@@ -174,7 +174,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 						continue;
 					}
 
-					assert(bc[0] + bc[1] + bc[2] == area);
+					// assert(bc[0] + bc[1] + bc[2] == area);
 
 					float nbc[3] =
 					{
@@ -191,7 +191,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 		else
 		if (area < 0 && dblsided)
 		{
-			if (area < -0x10000)
+			if (area <= -0x10000)
 				return;
 			assert(area > -0x10000);
 			float normalizer = (1.0f - FLT_EPSILON) / area;
@@ -228,7 +228,7 @@ inline void Rasterize(Sample* buf, int w, int h, Shader* s, const int* v[3], boo
 						continue;
 					}
 
-					assert(bc[0] + bc[1] + bc[2] == area);
+					// assert(bc[0] + bc[1] + bc[2] == area);
 
 					float nbc[3] =
 					{
@@ -616,7 +616,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		float xyzw[] = { coords[0], coords[1], coords[2], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp0);
 
-		#ifdef PERSPECTIVE_TEST // TODO put eye_to_vtx generation into viewinst_tm so we get it in w coord
+		#if PERSPECTIVE_TEST // TODO put eye_to_vtx generation into viewinst_tm so we get it in w coord
 		float ws[4];
 		Product(r->inst_tm, xyzw, ws);
 		float viewer_dist; // {vx,vy,vz}  r->pos
@@ -658,7 +658,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		float xyzw[] = { coords[3], coords[4], coords[5], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp1);
 
-		#ifdef PERSPECTIVE_TEST
+		#if PERSPECTIVE_TEST
 		float ws[4];
 		Product(r->inst_tm, xyzw, ws);
 		float viewer_dist; // {vx,vy,vz}  r->pos
@@ -706,7 +706,7 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		float xyzw[] = { coords[6], coords[7], coords[8], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp2);
 
-		#ifdef PERSPECTIVE_TEST
+		#if PERSPECTIVE_TEST
 		float ws[4];
 		Product(r->inst_tm, xyzw, ws);
 		float viewer_dist; // {vx,vy,vz}  r->pos
@@ -906,7 +906,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 
 	if (global_refl_mode)
 	{
-		#ifdef PERSPECTIVE_TEST
+		#if PERSPECTIVE_TEST
 		float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
 		float viewer_dist; // {vx,vy,vz}  r->pos
 		float eye_to_vtx[3] =
@@ -981,7 +981,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	}
 	else
 	{
-		#ifdef PERSPECTIVE_TEST
+		#if PERSPECTIVE_TEST
 		float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
 		float viewer_dist; // {vx,vy,vz}  r->pos
 		float eye_to_vtx[3] =
@@ -1286,7 +1286,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 			if (global_refl_mode)
 			{
-				#ifdef PERSPECTIVE_TEST
+				#if PERSPECTIVE_TEST
 				float viewer_dist; // {vx,vy,vz}  r->pos
 				float eye_to_vtx[3] =
 				{
@@ -1298,11 +1298,26 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 				if (viewer_dist > 0)
 				{
-					float fx = mul[0] * vx + mul[2] * vy + add[0];
-					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz + add[1];
+					#if PERSPECTIVE_TEST > 2
+					viewer_dist = pow(10.0, (floor(0.5 + log10(viewer_dist)*PERSPECTIVE_TEST))/PERSPECTIVE_TEST);
+					#endif
 
-					fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-					fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+					float fx = mul[0] * vx + mul[2] * vy;// + add[0];
+					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
+
+					fx /= viewer_dist;
+					fy /= viewer_dist;
+
+					float qx = (add[0] - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+					float qy = (add[1] - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+					#if PERSPECTIVE_TEST > 1
+					fx += 2*(int)floor(0.5 * qx + 0.5f);
+					fy += 2*(int)floor(0.5 * qy + 0.5f);
+					#else
+					fx += qx;
+					fy += qy;
+					#endif
 
 					int tx = (int)floorf(fx + 0.5f);
 					int ty = (int)floorf(fy + 0.5f);
@@ -1351,7 +1366,7 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 			}
 			else
 			{
-				#ifdef PERSPECTIVE_TEST
+				#if PERSPECTIVE_TEST
 				float viewer_dist; // {vx,vy,vz}  r->pos
 				float eye_to_vtx[3] =
 				{
@@ -1363,11 +1378,29 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 				viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 				if (viewer_dist > 0)
 				{
-					float fx = mul[0] * vx + mul[2] * vy + add[0];
-					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz + add[1];
+					#if PERSPECTIVE_TEST > 2
+					viewer_dist = pow(10.0, (floor(0.5 + log10(viewer_dist)*PERSPECTIVE_TEST))/PERSPECTIVE_TEST);
+					#endif
+					
+					float fx = mul[0] * vx + mul[2] * vy;// + add[0];
+					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
 
-					fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-					fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+					fx /= viewer_dist;
+					fy /= viewer_dist;
+
+					//fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+					//fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+					float qx = (add[0] - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
+					float qy = (add[1] - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+
+					#if PERSPECTIVE_TEST > 1
+					fx += 2*(int)floor(0.5 * qx + 0.5f);
+					fy += 2*(int)floor(0.5 * qy + 0.5f);
+					#else
+					fx += qx;
+					fy += qy;
+					#endif
 
 					int tx = (int)floorf(fx + 0.5f);
 					int ty = (int)floorf(fy + 0.5f);
@@ -2324,7 +2357,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		}
 	}
 
-	#ifdef PERSPECTIVE_TEST
+	#if PERSPECTIVE_TEST
 	r->int_flag = false;
 	#endif
 
@@ -2346,6 +2379,9 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	static const double sin30 = sin(M_PI*30.0/180.0); 
 	static const double cos30 = cos(M_PI*30.0/180.0);
+
+
+	r->focal = 500;
 
 	/*
 	static int frame = 0;
@@ -2418,6 +2454,12 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	double clip_world[5][4];
 
+	/*
+	double clip_left[4] =   { 1, 0, 0, 1-0.2 };
+	double clip_right[4] =  {-1, 0, 0, 1-0.2 };
+	double clip_bottom[4] = { 0, 1, 0, 1-0.2 };
+	double clip_top[4] =    { 0,-1, 0, 1-0.2 }; // +1 for prespective
+	*/
 	double clip_left[4] =   { 1, 0, 0, 1 };
 	double clip_right[4] =  {-1, 0, 0, 1 };
 	double clip_bottom[4] = { 0, 1, 0, 1 };
@@ -2425,6 +2467,92 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	
 	double clip_water[4] =  { 0, 0, 1, -((r->water-1)*2.0/0xffff - 1.0) };
 
+	#if PERSPECTIVE_TEST
+	planes = 5;
+	double neutral_plane[4] =
+	{
+		-sinyaw,
+		cosyaw,
+		0,
+		sinyaw*pos[0] - cosyaw*pos[1]
+	};
+
+	double test = 0;
+	double screen_corner[2][4][4]=
+	{
+		{
+			{0+test,0+test,0,1},
+			{dw-test,0+test,0,1},
+			{0+test,dh-test,0,1},
+			{dw-test,dh-test,0,1}
+		},
+		{
+			{0+test,0+test,10,1},
+			{dw-test,0+test,10,1},
+			{0+test,dh-test,10,1},
+			{dw-test,dh-test,10,1}
+		}
+	};
+
+	double clip_tm[16];
+	Invert(tm,clip_tm);
+
+	double world_corner[2][4][4];
+
+	for (int c=0; c<4; c++)
+	{
+		// transform corners from screen to premultiplied world
+		Product(clip_tm, screen_corner[0][c], world_corner[0][c]);
+		Product(clip_tm, screen_corner[1][c], world_corner[1][c]);
+
+		// from premultiplied to world
+		world_corner[0][c][0] /= HEIGHT_CELLS;
+		world_corner[0][c][1] /= HEIGHT_CELLS;
+		world_corner[1][c][0] /= HEIGHT_CELLS;
+		world_corner[1][c][1] /= HEIGHT_CELLS;
+
+		// intersect resulting corner lines with neutral_plane
+		world_corner[1][c][0] -= world_corner[0][c][0];
+		world_corner[1][c][1] -= world_corner[0][c][1];
+		world_corner[1][c][2] -= world_corner[0][c][2];
+		double a = -(DotProduct(neutral_plane,world_corner[0][c]) + neutral_plane[3])/DotProduct(neutral_plane, world_corner[1][c]);
+		world_corner[0][c][0] += a * world_corner[1][c][0];
+		world_corner[0][c][1] += a * world_corner[1][c][1];
+		world_corner[0][c][2] += a * world_corner[1][c][2];
+	}
+
+	double focus_node[3] = 
+	{
+		pos[0] + sinyaw * r->focal / HEIGHT_CELLS,
+		pos[1] - cosyaw * r->focal / HEIGHT_CELLS,
+		pos[2] + sin30 * r->focal / HEIGHT_CELLS * HEIGHT_SCALE
+	};
+
+	double* corner_ll = world_corner[0][0];
+	double* corner_lr = world_corner[0][1];
+	double* corner_ul = world_corner[0][2];
+	double* corner_ur = world_corner[0][3];
+
+	// note: for reflected planes, simply reflect corners and focal node ( z' = 2*water-z )
+
+	// left  ( focus, ll, ul )
+	PlaneFromPoints(focus_node, corner_ll, corner_ul, clip_world[0]);
+
+	// right ( focus, ur, lr )
+	PlaneFromPoints(focus_node, corner_ur, corner_lr, clip_world[1]);
+
+	// top   ( focus, ul, ur )
+	PlaneFromPoints(focus_node, corner_ul, corner_ur, clip_world[2]);
+
+	// bottom( focus, lr, ll )
+	PlaneFromPoints(focus_node, corner_lr, corner_ll, clip_world[3]);
+
+	// water
+	clip_world[4][0]=0;
+	clip_world[4][1]=0;
+	clip_world[4][2]=1;
+	clip_world[4][3]=-clip_world[0][2]*(r->water-1);
+	#else
 	// easier to use another transform for clipping
 	{
 		// somehow it works
@@ -2452,13 +2580,12 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
 		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
+	#endif
 
 	r->items = 0;
 	r->npcs = 0;
 
 	r->sprites = 0;
-
-	r->focal = 500;
 
 	// sin/cos 30 are commented out to achieve 'architectural' perspective
 	// (all vertical lines in world space remain vertical and parallel on screen)
@@ -2467,12 +2594,11 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	r->view_dir[1] = cosyaw * 1; // cos30;
 	r->view_dir[2] = 0; // -sin30;
 
-	r->view_pos[0] = HEIGHT_CELLS * pos[0] - r->view_dir[0] * r->focal; // what is 4?
-	r->view_pos[1] = HEIGHT_CELLS * pos[1] - r->view_dir[1] * r->focal; // what is 4?
-	r->view_pos[2] = pos[2] - r->view_dir[2] * r->focal;
+	r->view_pos[0] = HEIGHT_CELLS * pos[0] - r->view_dir[0] * r->focal;
+	r->view_pos[1] = HEIGHT_CELLS * pos[1] - r->view_dir[1] * r->focal;
+	r->view_pos[2] = pos[2];
 	r->view_dir[0] /= r->focal;
 	r->view_dir[1] /= r->focal;
-	r->view_dir[2] /= r->focal * HEIGHT_SCALE;
 
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
 	QueryWorldCB cb = { Renderer::RenderMesh , Renderer::RenderSprite };
@@ -2600,9 +2726,35 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	double refl_tm[] = { r->mul[0], r->mul[1], r->mul[2], r->mul[3], r->mul[4], r->mul[5], r->add[0], r->add[1], r->add[2] };
 
+	#if PERSPECTIVE_TEST
+	planes = 5;
+
+	corner_ll[2] = 2*water - corner_ll[2];
+	corner_lr[2] = 2*water - corner_lr[2];
+	corner_ul[2] = 2*water - corner_ul[2];
+	corner_ur[2] = 2*water - corner_ur[2];
+
+	focus_node[2] = 2*water - focus_node[2];
+	
+	// left  ( focus, ll, ul )
+	PlaneFromPoints(focus_node, corner_ul, corner_ll, clip_world[0]);
+
+	// right ( focus, ur, lr )
+	PlaneFromPoints(focus_node, corner_lr, corner_ur, clip_world[1]);
+
+	// top   ( focus, ul, ur )
+	PlaneFromPoints(focus_node, corner_ur, corner_ul, clip_world[2]);
+
+	// bottom( focus, lr, ll )
+	PlaneFromPoints(focus_node, corner_ll, corner_lr, clip_world[3]);	
+
+	clip_world[4][0]=0;
+	clip_world[4][1]=0;
+	clip_world[4][2]=1; // note: during refl, we again query ABOVE water!
+	clip_world[4][3]=-clip_world[0][2]*(r->water-1);
+	#else
 	clip_water[2] = -1; // was +1
 	clip_water[3] = +((r->water+1)*-2.0 / 0xffff + 1.0); // was -((r->water-1)*2.0/0xffff - 1.0)
-
 	{
 		// somehow it works
 		double clip_tm[16];
@@ -2629,6 +2781,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
 		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
+	#endif
 
 	global_refl_mode = true;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
@@ -3059,12 +3212,63 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 			else
 			if (src[0].height < water && src[1].height < water && src[dw].height < water && src[dw+1].height < water)
 			{
-				double s[4] = { 2.0*x,2.0*y,water,1.0 };
+				#if PERSPECTIVE_TEST
+
+				// WORKS but please, OPTIMIZE ME!
+				float wz = water;
+				float sx = 2.0*x;
+				float sy = 2.0*y;
+				float dx = dw/2;
+				float dy = dh/2;
+				float ex = r->view_pos[0];
+				float ey = r->view_pos[1];
+				float vx = r->view_dir[0];
+				float vy = r->view_dir[1];
+				float m00 = tm[0];
+				float m01 = tm[1];
+				float m10 = tm[4];
+				float m11 = tm[5];
+				float m20 = tm[8];
+				float m21 = tm[9];
+				float m30 = tm[12];
+				float m31 = tm[13];
+
+				/*
+				e1 = cx == m00*wx + m10*wy + m20*wz + m30
+				e2 = cy == m01*wx + m11*wy + m21*wz + m31
+				e3 = cw == (wx-ex)*vx + (wy-ey)*vy
+				e4 = (sx - dx) * cw + dx == cx
+				e5 = (sy - dy) * cw + dy == cy
+				sol = Solve[{e1, e2, e3, e4, e5}, {wx, wy, cx, cy, cw}]
+				*/
+
+				float wx = (m11*(-dx + m30) + ex*m11*(-dx + sx)*vx -
+				dx*ey*m11*vy + (ey*m11*sx + m31*sx - m30*sy +
+				dx*(-m31 + sy))*vy + (m21*(-dx + sx)*vy +
+				m20*(m11 - sy*vy))*wz -
+				m10*(m31 + ex*sy*vx + ey*sy*vy + m21*wz) +
+				dy*(m10*(1 + ex*vx + ey*vy) + vy*(m30 - sx + m20*wz)))/((dy*m10 -
+				dx*m11 + m11*sx - m10*sy)*vx + m01*(m10 + (dx - sx)*vy) -
+				m00*(m11 + dy*vy - sy*vy));
+
+				float wy = (-m01*m30 + m00*m31 - ex*m01*sx*vx - m31*sx*vx + ex*m00*sy*vx +
+				m30*sy*vx - ey*m01*sx*vy + ey*m00*sy*vy - m01*m20*wz + m00*m21*wz -
+				m21*sx*vx*wz + m20*sy*vx*wz +
+				dx*(m01 + ex*m01*vx + m31*vx - sy*vx + ey*m01*vy + m21*vx*wz) -
+				dy*(m00*(1 + ex*vx + ey*vy) + vx*(m30 - sx + m20*wz)))/((dy*m10 -
+				dx*m11 + m11*sx - m10*sy)*vx + m01*(m10 + (dx - sx)*vy) -
+				m00*(m11 + dy*vy - sy*vy));
+
+				double w[2]; 
+				w[0] = round(wx);
+				w[1] = round(wy);
+				#else
+				double s[4] = { 2.0*x, 2.0*y, water, 1.0 };
 				double w[4]; 
 				Product(inv_tm, s, w); // convert from screen to world
-
 				w[0] = round(w[0]);
 				w[1] = round(w[1]);
+				#endif
 
 				double d = r->pn.octaveNoise0_1(w[0] * 0.05, w[1] * 0.05, r->pn_time, 4);
 

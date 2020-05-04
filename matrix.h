@@ -299,6 +299,15 @@ inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], dou
 	return true;
 }
 
+template <typename V>
+inline void PlaneFromPoints(const V a[3], const V b[3], const V c[3], V p[4])
+{
+	V u[3] = { b[0]-a[0], b[1]-a[1], b[2]-a[2] };
+	V v[3] = { c[0]-a[0], c[1]-a[1], c[2]-a[2] };
+	CrossProduct(u,v,p);
+	p[3] = -DotProduct(p,a);
+}
+
 inline bool SphereIntersectTriangle(float S[4]/*center,radius*/, float v0[3], float v1[3], float v2[3])
 {
 	float A[] = { v0[0] - S[0], v0[1] - S[1], v0[2] - S[2] };

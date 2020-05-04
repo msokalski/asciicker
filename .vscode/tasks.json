@@ -4,6 +4,18 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "run",
+            "type": "shell",
+            "command": ".run/game",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
             "label": "build",
             "type": "shell",
             "command": "./build.sh",
