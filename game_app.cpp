@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <termios.h>
 #include <time.h>
+#include <gpm.h>
 #endif
 
 #include <assert.h>
@@ -806,6 +807,44 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
 
 extern "C" void DumpLeakCounter();
 
+#ifdef __linux__
+
+static int find_tty()
+{
+    char buf[256];
+    char* ptr;
+    FILE* f;
+    int r;
+    char stat;
+    int ppid,pgrp,sess,tty;
+
+    int pid = getpid();
+
+    while (pid>0)
+    {
+        sprintf(buf,"/proc/%d/stat",pid);
+        f = fopen(buf,"r");
+        if (!f)
+            return 0;
+        r = fread(buf,1,255,f);
+        fclose(f);
+        if (r<=0)
+            return 0;
+        buf[r] = 0;
+        ptr = strchr(buf,')');
+        if (!ptr || !ptr[1])
+            return 0;
+        r = sscanf(ptr+2,"%c %d %d %d %d", &stat,&ppid,&pgrp,&sess,&tty);
+        if (r!=5)
+            return 0;
+        if ( (tty&~63) == 1024 && (tty&63) )
+            return tty&63;
+        pid = ppid;
+    }
+    return 0;
+}
+#endif
+
 int main(int argc, char* argv[])
 {
 
@@ -1070,6 +1109,47 @@ int main(int argc, char* argv[])
 #endif // #ifndef PURE_TERM
 
 #ifdef __linux__
+
+    // recursively check if we are on TTY console or 'vt'
+    int tty = find_tty();
+    int gpm = 0;
+
+    if (tty > 0)
+    {
+        // ok so we will try to:
+        // 1) setup console font
+        // 2) setup console palette
+        // 3) connect to gpm and use its mouse support (instead of VT escape codes)
+        // 4) optionally if we are lucky we could use /dev/vcsa for blitting
+
+        printf("CONSOLE ATTACHED TO TTY=%d\n", tty);
+
+        Gpm_Connect conn;
+        conn.eventMask  = ~0;   /* Want to know about all the events */
+        conn.defaultMask = 0;   /* don't handle anything by default  */
+        conn.minMod     = 0;    /* want everything                   */  
+        conn.maxMod     = ~0;   /* all modifiers included            */
+        
+        struct GpmHandler
+        {
+            static int Handler(Gpm_Event *event, void *clientdata)
+            {
+                return 0;
+            }
+        };
+
+        gpm_handler = GpmHandler::Handler;        
+
+        gpm = Gpm_Open(&conn, tty);
+
+        if (gpm >=0)
+            printf("connected to gpm\n");
+    }
+    else
+        printf("VIRTUAL TERMINAL EMULGLATOR\n");
+
+    Gpm_Close();
+    return 0;
 
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;

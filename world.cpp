@@ -321,7 +321,7 @@ inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float y
 			float h = HEIGHT_SCALE / 4 + pos[2] + (2.0*ac->spare + f->ref[2]) * 0.5 * dz_dy;
 			if (ret[2] < h)
 			{
-				printf("%d,%d\n", x, y);
+				// printf("%d,%d\n", x, y);
 				ret[0] = p[0];
 				ret[1] = p[1];
 				ret[2] = h;
