@@ -164,8 +164,8 @@ void SetScreen(bool alt)
 // it's quite different than xterm!!!!!
 const uint8_t pal_rgba[256][3]=
 {
-    {  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},
-    {  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},{  0,  0,  0},
+    {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
+    {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
 
     {  0,  0,  0},{  0,  0, 51},{  0,  0,102},{  0,  0,153},{  0,  0,204},{  0,  0,255},
     {  0, 51,  0},{  0, 51, 51},{  0, 51,102},{  0, 51,153},{  0, 51,204},{  0, 51,255},
@@ -1109,7 +1109,14 @@ int main(int argc, char* argv[])
 #endif // #ifndef PURE_TERM
 
 #ifdef __linux__
-
+/*
+    for (int col = 16; col<232; col++)
+    {
+        const uint8_t* c = pal_rgba[col];
+        printf("\x1B]4;%d;#%X%X%X\a", col, c[0],c[1],c[2]);
+    }
+    printf("\n");
+*/
     // recursively check if we are on TTY console or 'vt'
     int tty = find_tty();
     int gpm = 0;
@@ -1119,6 +1126,7 @@ int main(int argc, char* argv[])
         // ok so we will try to:
         // 1) setup console font
         // 2) setup console palette
+        //    echo -ne '\e]4;16;#abcdef\a' redefines color 16 to 0xABCDEF
         // 3) connect to gpm and use its mouse support (instead of VT escape codes)
         // 4) optionally if we are lucky we could use /dev/vcsa for blitting
 
@@ -1149,7 +1157,7 @@ int main(int argc, char* argv[])
         printf("VIRTUAL TERMINAL EMULGLATOR\n");
 
     Gpm_Close();
-    return 0;
+    // return 0;
 
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;
