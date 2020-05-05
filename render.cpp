@@ -352,6 +352,7 @@ struct Renderer
 	// perspective test
 	float view_dir[3];
 	float view_pos[3];
+	float view_ofs[2]; // dw/2 + shift[0]*2, dh/2 + shift[1]*2
 	float focal;
 
 	double viewinst_tm[16];
@@ -630,11 +631,13 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 		if (viewer_dist > 0)
 		{
+			viewer_dist = 1.0/viewer_dist;
+
 			float fx = tmp0[0];
 			float fy = tmp0[1];
 
-			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
 			int tx = (int)floorf(fx + 0.5f);
 			int ty = (int)floorf(fy + 0.5f);
@@ -672,11 +675,13 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 		if (viewer_dist > 0)
 		{
+			viewer_dist = 1.0/viewer_dist;
+
 			float fx = tmp1[0];
 			float fy = tmp1[1];
 
-			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
 			int tx = (int)floorf(fx + 0.5f);
 			int ty = (int)floorf(fy + 0.5f);
@@ -720,11 +725,13 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 		if (viewer_dist > 0)
 		{
+			viewer_dist = 1.0/viewer_dist;
+
 			float fx = tmp2[0];
 			float fy = tmp2[1];
 
-			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
 			int tx = (int)floorf(fx + 0.5f);
 			int ty = (int)floorf(fy + 0.5f);
@@ -941,8 +948,10 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 			float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
 			float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
 
-			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+			viewer_dist = 1.0/viewer_dist;
+
+			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
 			int tx = (int)floorf(fx + 0.5f);
 			int ty = (int)floorf(fy + 0.5f);
@@ -1016,8 +1025,10 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 			float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
 			float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
 
-			fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-			fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+			viewer_dist = 1.0/viewer_dist;
+
+			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
 			int tx = (int)floorf(fx + 0.5f);
 			int ty = (int)floorf(fy + 0.5f);
@@ -1302,14 +1313,16 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					viewer_dist = pow(10.0, (floor(0.5 + log10(viewer_dist)*PERSPECTIVE_TEST))/PERSPECTIVE_TEST);
 					#endif
 
+					viewer_dist = 1.0/viewer_dist;
+
 					float fx = mul[0] * vx + mul[2] * vy;// + add[0];
 					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
 
-					fx /= viewer_dist;
-					fy /= viewer_dist;
+					fx *= viewer_dist;
+					fy *= viewer_dist;
 
-					float qx = (add[0] - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-					float qy = (add[1] - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+					float qx = (add[0] - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+					float qy = (add[1] - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
 					#if PERSPECTIVE_TEST > 1
 					fx += 2*(int)floor(0.5 * qx + 0.5f);
@@ -1381,18 +1394,17 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 					#if PERSPECTIVE_TEST > 2
 					viewer_dist = pow(10.0, (floor(0.5 + log10(viewer_dist)*PERSPECTIVE_TEST))/PERSPECTIVE_TEST);
 					#endif
+
+					viewer_dist = 1.0/viewer_dist;
 					
 					float fx = mul[0] * vx + mul[2] * vy;// + add[0];
 					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
 
-					fx /= viewer_dist;
-					fy /= viewer_dist;
+					fx *= viewer_dist;
+					fy *= viewer_dist;
 
-					//fx = (fx - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-					//fy = (fy - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
-
-					float qx = (add[0] - r->sample_buffer.w / 2) / viewer_dist + r->sample_buffer.w / 2;
-					float qy = (add[1] - r->sample_buffer.h / 2) / viewer_dist + r->sample_buffer.h / 2;
+					float qx = (add[0] - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+					float qy = (add[1] - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
 					#if PERSPECTIVE_TEST > 1
 					fx += 2*(int)floor(0.5 * qx + 0.5f);
@@ -2380,9 +2392,6 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	static const double sin30 = sin(M_PI*30.0/180.0); 
 	static const double cos30 = cos(M_PI*30.0/180.0);
 
-
-	r->focal = 500;
-
 	/*
 	static int frame = 0;
 	frame++;
@@ -2452,6 +2461,22 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	int planes = 5;
 	int view_flags = 0xAA; // should contain only bits that face viewing direction
 
+	// sin/cos 30 are commented out to achieve 'architectural' perspective
+	// (all vertical lines in world space remain vertical and parallel on screen)
+	r->focal = fmax(dw,dh) * 2.0; //500;
+	r->view_dir[0] = -sinyaw * 1; // cos30;
+	r->view_dir[1] = cosyaw * 1; // cos30;
+	r->view_dir[2] = 0; // -sin30;
+
+	r->view_pos[0] = HEIGHT_CELLS * pos[0] - r->view_dir[0] * r->focal;
+	r->view_pos[1] = HEIGHT_CELLS * pos[1] - r->view_dir[1] * r->focal;
+	r->view_pos[2] = pos[2];
+	r->view_dir[0] /= r->focal;
+	r->view_dir[1] /= r->focal;
+	r->view_ofs[0] = dw/2 + scene_shift[0]*2;
+	r->view_ofs[1] = dh/2 + scene_shift[1]*2;
+
+
 	double clip_world[5][4];
 
 	/*
@@ -2468,7 +2493,6 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	double clip_water[4] =  { 0, 0, 1, -((r->water-1)*2.0/0xffff - 1.0) };
 
 	#if PERSPECTIVE_TEST
-	planes = 5;
 	double neutral_plane[4] =
 	{
 		-sinyaw,
@@ -2586,19 +2610,6 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	r->npcs = 0;
 
 	r->sprites = 0;
-
-	// sin/cos 30 are commented out to achieve 'architectural' perspective
-	// (all vertical lines in world space remain vertical and parallel on screen)
-
-	r->view_dir[0] = -sinyaw * 1; // cos30;
-	r->view_dir[1] = cosyaw * 1; // cos30;
-	r->view_dir[2] = 0; // -sin30;
-
-	r->view_pos[0] = HEIGHT_CELLS * pos[0] - r->view_dir[0] * r->focal;
-	r->view_pos[1] = HEIGHT_CELLS * pos[1] - r->view_dir[1] * r->focal;
-	r->view_pos[2] = pos[2];
-	r->view_dir[0] /= r->focal;
-	r->view_dir[1] /= r->focal;
 
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
 	QueryWorldCB cb = { Renderer::RenderMesh , Renderer::RenderSprite };
@@ -2727,8 +2738,6 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	double refl_tm[] = { r->mul[0], r->mul[1], r->mul[2], r->mul[3], r->mul[4], r->mul[5], r->add[0], r->add[1], r->add[2] };
 
 	#if PERSPECTIVE_TEST
-	planes = 5;
-
 	corner_ll[2] = 2*water - corner_ll[2];
 	corner_lr[2] = 2*water - corner_lr[2];
 	corner_ul[2] = 2*water - corner_ul[2];
@@ -2803,6 +2812,28 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		}
 	}
 	*/
+
+
+	#if PERSPECTIVE_TEST
+	// screen to world water coords conversion coefficients
+	float ww_x = r->view_dir[0]*tm[5] - r->view_dir[1]*tm[1];
+	float ww_y = r->view_dir[1]*tm[0] - r->view_dir[0]*tm[4];
+	float ww_c = tm[1]*tm[4] - tm[0]*tm[5];
+	float wx_x = (r->view_pos[0]*tm[5]*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[1] + r->view_pos[1]*tm[5] + tm[13] + tm[9]*water));
+	float wx_y = (r->view_pos[0]*tm[4]*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[0] + r->view_pos[1]*tm[4] + tm[12] + tm[8]*water));
+	float wx_c = tm[5]*(-r->view_ofs[0] + tm[12] + tm[8]*water) + tm[4]*(r->view_ofs[1] - tm[13] - tm[9]*water);
+	float wy_x = (r->view_pos[1]*tm[1]*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[1] + r->view_pos[0]*tm[1] + tm[13] + tm[9]*water));
+	float wy_y = (r->view_pos[1]*tm[0]*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[0] + r->view_pos[0]*tm[0] + tm[12] + tm[8]*water));
+	float wy_c = tm[1]*(r->view_ofs[0] - tm[12] - tm[8]*water) + tm[0]*(-r->view_ofs[1] + tm[13] + tm[9]*water);
+	/*
+	e1 = cx == m00*wx + m10*wy + m20*wz + m30
+	e2 = cy == m01*wx + m11*wy + m21*wz + m31
+	e3 = cw == (wx-ex)*vx + (wy-ey)*vy
+	e4 = (sx - dx) * cw + dx == cx
+	e5 = (sy - dy) * cw + dy == cy
+	sol = Solve[{e1, e2, e3, e4, e5}, {wx, wy, cx, cy, cw}]
+	*/
+	#endif
 
 	Sample* src = r->sample_buffer.ptr + 2 + 2 * dw;
 	for (int y = 0; y < height; y++)
@@ -3213,55 +3244,24 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 			if (src[0].height < water && src[1].height < water && src[dw].height < water && src[dw+1].height < water)
 			{
 				#if PERSPECTIVE_TEST
-
-				// WORKS but please, OPTIMIZE ME!
-				float wz = water;
-				float sx = 2.0*x;
-				float sy = 2.0*y;
-				float dx = dw/2;
-				float dy = dh/2;
-				float ex = r->view_pos[0];
-				float ey = r->view_pos[1];
-				float vx = r->view_dir[0];
-				float vy = r->view_dir[1];
-				float m00 = tm[0];
-				float m01 = tm[1];
-				float m10 = tm[4];
-				float m11 = tm[5];
-				float m20 = tm[8];
-				float m21 = tm[9];
-				float m30 = tm[12];
-				float m31 = tm[13];
-
-				/*
-				e1 = cx == m00*wx + m10*wy + m20*wz + m30
-				e2 = cy == m01*wx + m11*wy + m21*wz + m31
-				e3 = cw == (wx-ex)*vx + (wy-ey)*vy
-				e4 = (sx - dx) * cw + dx == cx
-				e5 = (sy - dy) * cw + dy == cy
-				sol = Solve[{e1, e2, e3, e4, e5}, {wx, wy, cx, cy, cw}]
-				*/
-
-				float wx = (m11*(-dx + m30) + ex*m11*(-dx + sx)*vx -
-				dx*ey*m11*vy + (ey*m11*sx + m31*sx - m30*sy +
-				dx*(-m31 + sy))*vy + (m21*(-dx + sx)*vy +
-				m20*(m11 - sy*vy))*wz -
-				m10*(m31 + ex*sy*vx + ey*sy*vy + m21*wz) +
-				dy*(m10*(1 + ex*vx + ey*vy) + vy*(m30 - sx + m20*wz)))/((dy*m10 -
-				dx*m11 + m11*sx - m10*sy)*vx + m01*(m10 + (dx - sx)*vy) -
-				m00*(m11 + dy*vy - sy*vy));
-
-				float wy = (-m01*m30 + m00*m31 - ex*m01*sx*vx - m31*sx*vx + ex*m00*sy*vx +
-				m30*sy*vx - ey*m01*sx*vy + ey*m00*sy*vy - m01*m20*wz + m00*m21*wz -
-				m21*sx*vx*wz + m20*sy*vx*wz +
-				dx*(m01 + ex*m01*vx + m31*vx - sy*vx + ey*m01*vy + m21*vx*wz) -
-				dy*(m00*(1 + ex*vx + ey*vy) + vx*(m30 - sx + m20*wz)))/((dy*m10 -
-				dx*m11 + m11*sx - m10*sy)*vx + m01*(m10 + (dx - sx)*vy) -
-				m00*(m11 + dy*vy - sy*vy));
-
+				float sx_dx = 2.0*x - r->view_ofs[0];
+				float sy_dy = 2.0*y - r->view_ofs[1];
+				float ww = (sx_dx*ww_x + sy_dy*ww_y + ww_c);
 				double w[2]; 
-				w[0] = round(wx);
-				w[1] = round(wy);
+				if (ww<0)
+				{
+					ww = 1.0/ww;
+					float wx = ww * (wx_c + wx_x * sx_dx - wx_y * sy_dy);
+					float wy = ww * (wy_c - wy_x * sx_dx + wy_y * sy_dy);
+					w[0] = wx;
+					w[1] = wy;
+				}
+				else
+				{
+					ptr->gl = ' ';
+					src += 2;
+					continue;
+				}
 				#else
 				double s[4] = { 2.0*x, 2.0*y, water, 1.0 };
 				double w[4]; 
