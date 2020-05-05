@@ -471,6 +471,7 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 
 bool PrevGLFont()
 {
+    #ifndef PURE_TERM
 	font_zoom--;
 	if (font_zoom < -fonts_loaded / 2)
 	{
@@ -478,11 +479,13 @@ bool PrevGLFont()
 		return false;
 	}
 	TermResizeAll();
+    #endif
 	return true;
 }
 
 bool NextGLFont()
 {
+    #ifndef PURE_TERM
 	font_zoom++;
 	if (font_zoom > fonts_loaded/2)
 	{
@@ -490,6 +493,7 @@ bool NextGLFont()
 		return false;
 	}
 	TermResizeAll();
+    #endif
 	return true;
 }
 
@@ -1018,6 +1022,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
+    #ifndef PURE_TERM
     if (!term)
     {
         probe_z = (int)water;
@@ -1061,6 +1066,8 @@ int main(int argc, char* argv[])
 #endif
         return 0;
     }
+
+#endif // #ifndef PURE_TERM
 
 #ifdef __linux__
 
