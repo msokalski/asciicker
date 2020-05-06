@@ -164,8 +164,8 @@ void SetScreen(bool alt)
 // it's quite different than xterm!!!!!
 const uint8_t pal_rgba[256][3]=
 {
-    {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
-    {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
+    {0,0,0},{0,0,170},{0,170,0},{0,85,170},{170,0,0},{170,0,170},{170,170,0},{170,170,170},
+    {85,85,85},{85,85,255},{85,255,85},{85,255,255},{255,85,85},{255,85,255},{255,255,85},{255,255,255},
 
     {  0,  0,  0},{  0,  0, 51},{  0,  0,102},{  0,  0,153},{  0,  0,204},{  0,  0,255},
     {  0, 51,  0},{  0, 51, 51},{  0, 51,102},{  0, 51,153},{  0, 51,204},{  0, 51,255},
@@ -266,6 +266,8 @@ bool running = false;
 void exit_handler(int signum)
 {
     running = false;
+    SetScreen(false);
+    exit(0);
 }
 
 bool GetWH(int wh[2])
@@ -1109,18 +1111,29 @@ int main(int argc, char* argv[])
 #endif // #ifndef PURE_TERM
 
 #ifdef __linux__
-/*
-    for (int col = 16; col<232; col++)
-    {
-        const uint8_t* c = pal_rgba[col];
-        printf("\x1B]4;%d;#%X%X%X\a", col, c[0],c[1],c[2]);
-    }
-    printf("\n");
-*/
-    // recursively check if we are on TTY console or 'vt'
-    int tty = find_tty();
-    int gpm = 0;
 
+    // recursively check if we are on TTY console or 'vt'
+    int tty = -1;
+    int gpm = 0;
+    
+    const char* term_env = getenv("TERM");
+    if (!term_env)
+        term_env = "";
+
+    printf("TERM=%s\n",term_env);
+
+    if (strcmp( term_env, "linux" ) == 0)
+    {
+        tty = find_tty();
+
+        // set ansi pal
+        for (int i=0; i<16; i++)
+        {
+            printf("\e]P%X%02X%02X%02X", i, pal_rgba[i][2], pal_rgba[i][1], pal_rgba[i][0]);
+        }
+        printf("\n");
+    }
+    
     if (tty > 0)
     {
         // ok so we will try to:
@@ -1154,10 +1167,62 @@ int main(int argc, char* argv[])
             printf("connected to gpm\n");
     }
     else
+    if (strncmp(term_env,"xterm",5)==0)
+    {
         printf("VIRTUAL TERMINAL EMULGLATOR\n");
 
+        /*
+            1.  MANDATORY: install -gumix-*... fonts
+            
+                cd ..directory_with_fonts
+                if not exist font.dir
+                    mkfontdir
+                xset fp rehash
+
+            2.  CONFIGURING XTerm during startup
+
+                2A. CONFIGURE Xterm to use 7 gumix fonts on startup
+                    xterm \
+                    -xrm "xterm*font1: -gumix-*-*-*-*-*-8-*-*-*-*-*-*" \
+                    -xrm "xterm*font2: -gumix-*-*-*-*-*-10-*-*-*-*-*-*" \
+                    -xrm "xterm*font3: -gumix-*-*-*-*-*-12-*-*-*-*-*-*" \
+                    -xrm "xterm*font:  -gumix-*-*-*-*-*-14-*-*-*-*-*-*" \
+                    -xrm "xterm*font4: -gumix-*-*-*-*-*-16-*-*-*-*-*-*" \
+                    -xrm "xterm*font5: -gumix-*-*-*-*-*-18-*-*-*-*-*-*" \
+                    -xrm "xterm*font6: -gumix-*-*-*-*-*-20-*-*-*-*-*-*"
+
+                    user can switch between fonts using SHIFT+NUMPAD(+/-)
+
+                2B. As above but all resource strings can be stored in .Xresources
+                    optionally using asciicker as a class name (insteead of xterm)
+                    xterm -class asciicker
+
+                2C. CONFIGURE Xterm on startup to use just 1 font
+                    xterm -fn -gumix-*-*-*-*-*-14-*-*-*-*-*-*"
+
+            3.  Setting current font in RUN-TIME!
+                Possible only if xterm has 'Allow Font Ops' enabled
+                echo -ne "\e]50;-gumix-*-*-*-*-*-14-*-*-*-*-*-*-*\a"
+                
+                also  it is possible to switch between 7 fonts (replace <n> with digit):
+                echo -ne "\e]50;#<n>\a"
+
+                both methods could be uses to compensate for too small or too large resolution
+        */
+
+        // palette setup
+        for (int col = 16; col<232; col++)
+        {
+            const uint8_t* c = pal_rgba[col];
+            printf("\x1B]4;%d;#%02x%02x%02x\a", col, c[0],c[1],c[2]);
+        }
+        printf("\n");
+    }
+    else
+        printf("UNKNOWN TERMINAL\n");
+
     Gpm_Close();
-    // return 0;
+    //return 0;
 
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;

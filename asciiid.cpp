@@ -514,6 +514,42 @@ struct MyPalette
 	uint8_t rgb[3 * 256];
 } pal[256];
 
+static const uint16_t cp437[256] = 
+{
+	0x0000, 0x263A, 0x263B, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022, 
+	0x25D8, 0x25CB, 0x25D9, 0x2642, 0x2640, 0x266A, 0x266B, 0x263C,
+	0x25BA, 0x25C4, 0x2195, 0x203C, 0x00B6, 0x00A7, 0x25AC, 0x21A8, 
+	0x2191, 0x2193, 0x2192, 0x2190, 0x221F, 0x2194, 0x25B2, 0x25BC,
+	0x0020, 0x0021, 0x0022, 0x0023, 0x0024, 0x0025, 0x0026, 0x0027,
+	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F,
+	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037,
+	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F,
+	0x0040, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047,
+	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F,
+	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057,
+	0x0058, 0x0059, 0x005A, 0x005B, 0x005C, 0x005D, 0x005E, 0x005F,
+	0x0060, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067,
+	0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F,
+	0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077,
+	0x0078, 0x0079, 0x007A, 0x007B, 0x007C, 0x007D, 0x007E, 0x2302,
+	0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7, 
+	0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5, 
+	0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9, 
+	0x00FF, 0x00D6, 0x00DC, 0x00A2, 0x00A3, 0x00A5, 0x20A7, 0x0192, 
+	0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA, 
+	0x00BF, 0x2310, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB, 
+	0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556, 
+	0x2555, 0x2563, 0x2551, 0x2557, 0x255D, 0x255C, 0x255B, 0x2510, 
+	0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x255E, 0x255F, 
+	0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x2567, 
+	0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256B, 
+	0x256A, 0x2518, 0x250C, 0x2588, 0x2584, 0x258C, 0x2590, 0x2580, 
+	0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x00B5, 0x03C4, 
+	0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229, 
+	0x2261, 0x00B1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248, 
+	0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00FF
+};
+
 struct MyFont
 {
 	static bool Scan(A3D_DirItem item, const char* name, void* cookie)
@@ -525,7 +561,7 @@ struct MyFont
 		snprintf(buf,4095,"%s/%s",(char*)cookie,name);
 		buf[4095]=0;
 
-		a3dLoadImage(buf, 0, MyFont::Load);
+		a3dLoadImage(buf, buf/*path as cookie*/, MyFont::Load);
 		return true;
 	}
 
@@ -549,6 +585,198 @@ struct MyFont
 		}
 	}
 
+	static bool WritePSF(const char* path, int w, int h, uint32_t* buf, int shift)
+	{
+		FILE* f = fopen(path,"wb");
+		if (!f)
+			return false;
+
+		int cell_w = w>>4;
+		int cell_h = h>>4;
+
+		int chars = 256;
+
+		struct psf2_header 
+		{
+			unsigned char magic[4];
+			unsigned int version;
+			unsigned int headersize;    /* offset of bitmaps in file */
+			unsigned int flags;
+			unsigned int length;        /* number of glyphs */
+			unsigned int charsize;      /* number of bytes for each character */
+			unsigned int height, width; /* max dimensions of glyphs */
+			/* charsize = height * ((width + 7) / 8) */
+		};
+
+		psf2_header hdr = 
+		{
+			{0x72,0xb5,0x4a,0x86},
+			0,
+			32,
+			1, // has unicode table
+			chars,
+			cell_h * ((cell_w + 7)>>3),
+			cell_h, cell_w
+		};
+
+		fwrite(&hdr,32,1,f);
+
+		int index = 0;
+		while (index<256)
+		{
+			int gx = index&15;
+			int gy = index>>4;
+
+			for (int y=0; y<cell_h; y++)
+			{
+				uint8_t byte = 0;
+				for (int x=0; x<cell_w; x++)
+				{
+					int px = gx*cell_w + x;
+					int py = gy*cell_h + y;
+
+					int s = x&7;
+
+					if ( (buf[px + py*w] >> shift) & 0x80 )
+						byte |= 128>>s;
+
+					if (x == cell_w-1)
+						fwrite(&byte, 1, 1, f);
+					else
+					if (s == 7)
+					{
+						fwrite(&byte, 1, 1, f);
+						byte = 0;
+					}
+				}
+			}
+			index++;
+		}
+
+		// unicode table
+		index = 0;
+		while (index<256)
+		{
+			int uni = cp437[index];
+			uint8_t utf[4];
+			int len;
+
+			if (uni<0x0080)
+			{
+				utf[0]=uni&0xFF;
+				len=1;            
+			}
+			else
+			if (uni<0x0800)
+			{
+				utf[0] = 0xC0 | ( ( uni >> 6 ) & 0x1F ); 
+				utf[1] = 0x80 | ( uni & 0x3F );
+				len=2;
+			}
+			else
+			{
+				utf[0] = 0xE0 | ( ( uni >> 12 ) & 0x0F );
+				utf[1] = 0x80 | ( ( uni >> 6 ) & 0x3F );
+				utf[2] = 0x80 | ( uni & 0x3F );   
+				len=3; 
+			}
+
+			utf[len++] = 0xFF; // glyph term
+			fwrite(utf, 1, len, f);
+
+			index++;
+		}
+
+		fclose(f);
+	}
+
+	static bool WriteBDF(const char* path, int w, int h, uint32_t* buf, int shift)
+	{
+		FILE* f = fopen(path,"wb");
+		if (!f)
+			return false;
+
+		int cell_w = w>>4;
+		int cell_h = h>>4;
+
+		int chars = 256;
+
+		fprintf(f,"STARTFONT 2.1\n");
+		fprintf(f,"FONT -gumix-asciicker-medium-r-normal--%d-120-72-72-c-120-iso10646-1\n", cell_h);
+		fprintf(f,"SIZE %d 72 72\n", cell_h);
+		fprintf(f,"FONTBOUNDINGBOX %d %d 0 0\n", cell_w, cell_h);
+		
+		fprintf(f,"STARTPROPERTIES 23\n");
+		fprintf(f,"ADD_STYLE_NAME \"\"\n");
+		fprintf(f,"AVERAGE_WIDTH 120\n");
+		fprintf(f,"CHARSET_ENCODING \"1\"\n");
+		fprintf(f,"CHARSET_REGISTRY \"ISO10646\"\n");
+		fprintf(f,"COPYRIGHT \"gumix\"\n");
+		fprintf(f,"FAMILY_NAME \"asciicker\"\n");
+		fprintf(f,"FOUNDRY \"gumix\"\n");
+		fprintf(f,"MIN_SPACE %d\n", cell_w);
+		fprintf(f,"NOTICE \"Licensed\"\n");
+		fprintf(f,"PIXEL_SIZE %d\n", cell_h);
+		fprintf(f,"POINT_SIZE 120\n");
+		fprintf(f,"QUAD_WIDTH %d\n", cell_w);
+		fprintf(f,"RESOLUTION_X 72\n");
+		fprintf(f,"RESOLUTION_Y 72\n");
+		fprintf(f,"SETWIDTH_NAME \"Normal\"\n");
+		fprintf(f,"SLANT \"R\"\n");
+		fprintf(f,"SPACING \"M\"\n");
+		fprintf(f,"WEIGHT 10\n");
+		fprintf(f,"WEIGHT_NAME \"Bold\"\n");
+		fprintf(f,"X_HEIGHT 10\n");
+		fprintf(f,"DEFAULT_CHAR 33\n");
+		fprintf(f,"FONT_DESCENT %d\n", 0);
+		fprintf(f,"FONT_ASCENT %d\n", cell_h);
+		fprintf(f,"ENDPROPERTIES\n");
+
+		fprintf(f,"CHARS %d\n", chars);
+
+		int index = 0;
+		while (index<256)
+		{
+			int gx = index&15;
+			int gy = index>>4;
+
+			fprintf(f,"STARTCHAR U+%04X\n", cp437[index]);
+			fprintf(f,"ENCODING %d\n", cp437[index]);
+			fprintf(f,"SWIDTH 500 0\n");
+			fprintf(f,"DWIDTH %d 0\n", cell_w);
+			fprintf(f,"BBX %d %d 0 0\n", cell_w, cell_h);
+			fprintf(f,"BITMAP\n");
+			for (int y=0; y<cell_h; y++)
+			{
+				uint8_t byte = 0;
+				for (int x=0; x<cell_w; x++)
+				{
+					int px = gx*cell_w + x;
+					int py = gy*cell_h + y;
+
+					int s = x&7;
+
+					if ( (buf[px + py*w] >> shift) & 0x80 )
+						byte |= 128>>s;
+
+					if (x == cell_w-1)
+						fprintf(f,"%02X\n",byte);
+					else
+					if (s == 7)
+					{
+						fprintf(f,"%02X",byte);
+						byte = 0;
+					}
+				}
+			}
+			fprintf(f,"ENDCHAR\n");
+			index++;
+		}
+
+		fprintf(f,"ENDFONT\n");
+		fclose(f);
+	}
+
 	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 	{
 		if (fonts_loaded==256)
@@ -567,6 +795,13 @@ struct MyFont
 
 		uint8_t rgb[3] = { 0xff,0xff,0xff };
 		ConvertLuminance_UI32_LLZZYYXX(buf, rgb, f, w, h, data, palsize, palbuf);
+
+		char* path = (char*)cookie;
+		char export_path[1024];
+		sprintf(export_path,"%s.bdf",path);
+		WriteBDF(export_path, w,h,buf,24);
+		sprintf(export_path,"%s.psf",path);
+		WritePSF(export_path, w,h,buf,24);
 
 		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
 		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);

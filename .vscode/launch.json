@@ -9,11 +9,11 @@
             "type": "cppdbg",
             "request": "launch",
 
-           /*
+          // /*
             "program": "${workspaceFolder}/.run/asciiid",
             "args": [],
             "externalConsole": true,
-           */
+          // */
             
 
             /*
@@ -22,11 +22,11 @@
             "externalConsole": true,
             */
 
-          //  /*
+            /*
             "program": "${workspaceFolder}/.run/game",
             "args": ["-term"],
             "externalConsole": true,
-          //  */
+            */
 
             /*
             "program": "${workspaceFolder}/.run/game",
