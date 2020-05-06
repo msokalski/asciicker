@@ -162,10 +162,16 @@ void SetScreen(bool alt)
 
 // it turns out we should use our own palette
 // it's quite different than xterm!!!!!
+
+uint8_t pal_16[256];
+
 const uint8_t pal_rgba[256][3]=
 {
-    {0,0,0},{0,0,170},{0,170,0},{0,85,170},{170,0,0},{170,0,170},{170,170,0},{170,170,170},
-    {85,85,85},{85,85,255},{85,255,85},{85,255,255},{255,85,85},{255,85,255},{255,255,85},{255,255,255},
+    //{0,0,0},{0,0,170},{0,170,0},{0,85,170},{170,0,0},{170,0,170},{170,170,0},{170,170,170},
+    //{85,85,85},{85,85,255},{85,255,85},{85,255,255},{255,85,85},{255,85,255},{255,255,85},{255,255,255},
+
+    {0,0,0},{170,0,0},{0,170,0},{170,85,0},{0,0,170},{170,0,170},{0,170,170},{170,170,170},
+    {85,85,85},{255,85,85},{85,255,85},{255,255,85},{85,85,255},{255,85,255},{85,255,255},{255,255,255},
 
     {  0,  0,  0},{  0,  0, 51},{  0,  0,102},{  0,  0,153},{  0,  0,204},{  0,  0,255},
     {  0, 51,  0},{  0, 51, 51},{  0, 51,102},{  0, 51,153},{  0, 51,204},{  0, 51,255},
@@ -235,18 +241,33 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
             const char* chr = utf[ptr->gl];
             if (ptr->fg != fg)
             {
+                int fg16 = pal_16[ptr->fg];
                 if (ptr->bk != bk)
+                {
                     //WRITE("\x1B[38;5;%d;48;5;%dm%s",ptr->fg,ptr->bk,chr);
-                    WRITE("\x1B[38;2;%d;%d;%d;48;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
+                    //WRITE("\x1B[38;2;%d;%d;%d;48;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
+                 
+                    int bk16 = pal_16[ptr->bk];
+                    WRITE("\x1B[%d;%d;%s;%sm%s",fg16%8+30,bk16%8+40,fg16<8?"21":"1",bk16<8?"25":"5",chr);
+                }
                 else
+                {
                     //WRITE("\x1B[38;5;%dm%s",ptr->fg,chr);
-                    WRITE("\x1B[38;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], chr);
+                    //WRITE("\x1B[38;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], chr);
+
+                    WRITE("\x1B[%d;%s;m%s",fg16%8+30,fg16<8?"21":"1",chr);
+                }
             }
             else
             {
                 if (ptr->bk != bk)
+                {
                     //WRITE("\x1B[48;5;%dm%s",ptr->bk,chr);
-                    WRITE("\x1B[48;2;%d;%d;%dm%s",pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
+                    //WRITE("\x1B[48;2;%d;%d;%dm%s",pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
+                    
+                    int bk16 = pal_16[ptr->bk];
+                    WRITE("\x1B[%d;%sm%s",bk16%8+40,bk16<8?"25":"5",chr);
+                }
                 else
                     WRITE("%s",chr);
             }
@@ -1127,11 +1148,63 @@ int main(int argc, char* argv[])
         tty = find_tty();
 
         // set ansi pal
+        /*
         for (int i=0; i<16; i++)
         {
             printf("\e]P%X%02X%02X%02X", i, pal_rgba[i][2], pal_rgba[i][1], pal_rgba[i][0]);
         }
         printf("\n");
+        */
+
+        // prep 256->16
+        for (int i=0; i<16; i++)
+            pal_16[i] = i;
+
+        for (int i=16; i<232; i++)
+        {
+            int best_j = 0;
+            int best_e = 3*0xFFFF;
+            for (int j=0; j<16; j++)
+            {
+                int dr = pal_rgba[i][0] - pal_rgba[j][0];
+                int dg = pal_rgba[i][1] - pal_rgba[j][1];
+                int db = pal_rgba[i][2] - pal_rgba[j][2];
+                int e = dr*dr+dg*dg+db*db;
+                if (e<best_e)
+                {
+                    best_e = e;
+                    best_j = j;
+                    if (!e)
+                        break;
+                }
+            }
+
+            pal_16[i] = best_j;
+        }
+
+        for (int i=232; i<256; i++)
+        {
+            pal_16[i] = 0;
+        }
+
+        // print test colors
+        for (int i=0; i<16; i++)
+        {
+            int fg16 = 0;
+            int bk16 = i;
+            printf("\x1B[%d;%d;%s;%sm%s",fg16%8+30,bk16%8+40,fg16<8?"21":"1",bk16<8?"25":"5","XXX");            
+        }
+        printf("\x1B[%d;%d;%s;%sm\n",37,40,"21","25");
+
+        for (int i=0; i<16; i++)
+        {
+            int fg16 = i;
+            int bk16 = 0;
+            printf("\x1B[%d;%d;%s;%sm%s",fg16%8+30,bk16%8+40,fg16<8?"21":"1",bk16<8?"25":"5","XXX");            
+        }
+        printf("\x1B[%d;%d;%s;%sm\n",37,40,"21","25");
+
+        exit(0);            
     }
     
     if (tty > 0)
