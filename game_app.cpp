@@ -145,6 +145,12 @@ void SetScreen(bool alt)
     }
 }
 
+int mouse_x = -1;
+int mouse_y = -1;
+int mouse_down = 0;
+int tty = -1;
+int gpm = -1;
+
 #define FLUSH() \
     do \
     { \
@@ -234,62 +240,88 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
 
     int fg16 = 0;
     int bk16 = 1;
+
+    if (gpm>=0)
     {
-        // in linux virtual console we will use just 2 colors
-        // second is for dynamic foreground color
-        // third is for dynamic background color
-        WRITE("\x1B[%d;%d;%dm",(fg16&7)+(fg16<8?30:90),(bk16&7)+40,bk16<8?25:5);    
+        // bake mouse into buffer
+        if (mouse_x>=0 && mouse_y>=0 && mouse_x<w && mouse_y<h)
+        {
+            static const AnsiCell mouse = { 0, 231, '+', 0 };
+            buf[mouse_x + w*(h-1-mouse_y)] = mouse;
+        }
     }
 
-    for (int y = h-1; y>=0; y--)
+
+    if (tty>=0)
     {
-        AnsiCell* ptr = buf + y*w;
-        for (int x=0; x<w; x++,ptr++)
+        // in linux virtual console we will use just 2 colors
+        WRITE("\x1B[%d;%d;%dm",(fg16&7)+(fg16<8?30:90),(bk16&7)+40,bk16<8?25:5);    
+
+        for (int y = h-1; y>=0; y--)
         {
-            //const char* chr = (x+y)&1 ? "X":"Y";
-            const char* chr = utf[ptr->gl];
-            if (ptr->fg != fg)
+            AnsiCell* ptr = buf + y*w;
+            for (int x=0; x<w; x++,ptr++)
             {
-                if (ptr->bk != bk)
+                const char* chr = utf[ptr->gl];
+                if (ptr->fg != fg)
                 {
-                    //WRITE("\x1B[38;5;%d;48;5;%dm%s",ptr->fg,ptr->bk,chr);
-                    //WRITE("\x1B[38;2;%d;%d;%d;48;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
-                 
-                    //WRITE("\x1B[%d;%d;%dm%s",(fg16&7)+(fg16<8?30:90),(bk16&7)+40,bk16<8?25:5,chr);
-                    WRITE("\e]P%X%02x%02x%02x", fg16, pal_rgba[ptr->fg][0], pal_rgba[ptr->fg][1], pal_rgba[ptr->fg][2]);
-                    WRITE("\e]P%X%02x%02x%02x", bk16, pal_rgba[ptr->bk][0], pal_rgba[ptr->bk][1], pal_rgba[ptr->bk][2]);
-                    WRITE("%s", chr);
+                    if (ptr->bk != bk)
+                    {
+                        WRITE("\e]P%X%02x%02x%02x", fg16, pal_rgba[ptr->fg][0], pal_rgba[ptr->fg][1], pal_rgba[ptr->fg][2]);
+                        WRITE("\e]P%X%02x%02x%02x", bk16, pal_rgba[ptr->bk][0], pal_rgba[ptr->bk][1], pal_rgba[ptr->bk][2]);
+                        WRITE("%s", chr);
+                    }
+                    else
+                    {
+                        WRITE("\e]P%X%02x%02x%02x", fg16, pal_rgba[ptr->fg][0], pal_rgba[ptr->fg][1], pal_rgba[ptr->fg][2]);
+                        WRITE("%s", chr);
+                    }
                 }
                 else
                 {
-                    //WRITE("\x1B[38;5;%dm%s",ptr->fg,chr);
-                    //WRITE("\x1B[38;2;%d;%d;%dm%s",pal_rgba[ptr->fg][0],pal_rgba[ptr->fg][1],pal_rgba[ptr->fg][2], chr);
+                    if (ptr->bk != bk)
+                    {
+                        WRITE("\e]P%X%02x%02x%02x", bk16, pal_rgba[ptr->bk][0], pal_rgba[ptr->bk][1], pal_rgba[ptr->bk][2]);
+                        WRITE("%s", chr);
+                    }
+                    else
+                        WRITE("%s",chr);
+                }
+                bk=ptr->bk;
+                fg=ptr->fg;
+            }
 
-                    //WRITE("\x1B[%dm%s",(fg16&7)+(fg16<8?30:90),chr);
-                    WRITE("\e]P%X%02x%02x%02x", fg16, pal_rgba[ptr->fg][0], pal_rgba[ptr->fg][1], pal_rgba[ptr->fg][2]);
-                    WRITE("%s", chr);
-                }
-            }
-            else
-            {
-                if (ptr->bk != bk)
-                {
-                    //WRITE("\x1B[48;5;%dm%s",ptr->bk,chr);
-                    //WRITE("\x1B[48;2;%d;%d;%dm%s",pal_rgba[ptr->bk][0],pal_rgba[ptr->bk][1],pal_rgba[ptr->bk][2], chr);
-                    
-                    //WRITE("\x1B[%d;%dm%s",(bk16&7)+40,bk16<8?25:5,chr);
-                    WRITE("\e]P%X%02x%02x%02x", bk16, pal_rgba[ptr->bk][0], pal_rgba[ptr->bk][1], pal_rgba[ptr->bk][2]);
-                    WRITE("%s", chr);
-                }
-                else
-                    WRITE("%s",chr);
-            }
-            bk=ptr->bk;
-            fg=ptr->fg;
+            if (y)
+                WRITE("\n");
         }
+    }
+    else
+    {
+        for (int y = h-1; y>=0; y--)
+        {
+            AnsiCell* ptr = buf + y*w;
+            for (int x=0; x<w; x++,ptr++)
+            {
+                //const char* chr = (x+y)&1 ? "X":"Y";
+                const char* chr = utf[ptr->gl];
+                if (ptr->fg != fg)
+                    if (ptr->bk != bk)
+                        WRITE("\x1B[38;5;%d;48;5;%dm%s",ptr->fg,ptr->bk,chr);
+                    else
+                        WRITE("\x1B[38;5;%dm%s",ptr->fg,chr);
+                else
+                    if (ptr->bk != bk)
+                        WRITE("\x1B[48;5;%dm%s",ptr->bk,chr);
+                    else
+                        WRITE("%s",chr);
 
-        if (y)
-            WRITE("\n");
+                bk=ptr->bk;
+                fg=ptr->fg;
+            }
+
+            if (y)
+                WRITE("\n");
+        }
     }
 
     FLUSH();
@@ -1170,9 +1202,6 @@ int main(int argc, char* argv[])
 #ifdef __linux__
 
     // recursively check if we are on TTY console or 'vt'
-    int tty = -1;
-    int gpm = 0;
-    
     const char* term_env = getenv("TERM");
     if (!term_env)
         term_env = "";
@@ -1182,98 +1211,33 @@ int main(int argc, char* argv[])
     if (strcmp( term_env, "linux" ) == 0)
     {
         tty = find_tty();
-
-        // set ansi pal
-        /*
-        for (int i=0; i<16; i++)
-        {
-            printf("\e]P%X%02X%02X%02X", i, pal_rgba[i][2], pal_rgba[i][1], pal_rgba[i][0]);
-        }
-        printf("\n");
-        */
-
-        // prep 256->16
-        for (int i=0; i<16; i++)
-            pal_16[i] = i;
-
-        for (int i=16; i<232; i++)
-        {
-            int best_j = 0;
-            int best_e = 3*0xFFFF;
-            for (int j=0; j<16; j++)
-            {
-                int dr = pal_rgba[i][0] - pal_rgba[j][0];
-                int dg = pal_rgba[i][1] - pal_rgba[j][1];
-                int db = pal_rgba[i][2] - pal_rgba[j][2];
-                int e = dr*dr+dg*dg+db*db;
-                if (e<best_e)
-                {
-                    best_e = e;
-                    best_j = j;
-                    if (!e)
-                        break;
-                }
-            }
-
-            pal_16[i] = best_j;
-        }
-
-        for (int i=232; i<256; i++)
-        {
-            pal_16[i] = 0;
-        }
-
-        // print test colors
-        /*
-        for (int i=0; i<16; i++)
-        {
-            int fg16 = 0;
-            int bk16 = i;
-            printf("\x1B[%d;%d;%dm%s",(fg16&7)+(fg16<8?30:90),(bk16&7)+40,bk16<8?25:5,"XXX");
-        }
-        printf("\x1B[37;40;25\n");
-        for (int i=0; i<16; i++)
-        {
-            int fg16 = i;
-            int bk16 = 0;
-            printf("\x1B[%d;%d;%dm%s",(fg16&7)+(fg16<8?30:90),(bk16&7)+40,bk16<8?25:5,"XXX");
-        }
-        printf("\x1B[37;40;25\n");
-        exit(0);
-        */
     }
-    
+
     if (tty > 0)
     {
-        // ok so we will try to:
-        // 1) setup console font
-        // 2) setup console palette
-        //    echo -ne '\e]4;16;#abcdef\a' redefines color 16 to 0xABCDEF
-        // 3) connect to gpm and use its mouse support (instead of VT escape codes)
-        // 4) optionally if we are lucky we could use /dev/vcsa for blitting
-
-        printf("CONSOLE ATTACHED TO TTY=%d\n", tty);
-
         Gpm_Connect conn;
         conn.eventMask  = ~0;   /* Want to know about all the events */
         conn.defaultMask = 0;   /* don't handle anything by default  */
         conn.minMod     = 0;    /* want everything                   */  
         conn.maxMod     = ~0;   /* all modifiers included            */
         
-        struct GpmHandler
-        {
-            static int Handler(Gpm_Event *event, void *clientdata)
-            {
-                return 0;
-            }
-        };
-
-        gpm_handler = GpmHandler::Handler;        
-
+        gpm_handler = 0;        
+        gpm_visiblepointer = 0;
         gpm = Gpm_Open(&conn, tty);
 
         if (gpm >=0)
+        {
+            int wh[2];
+            GetWH(wh);
+            mouse_x = wh[0]/2;
+            mouse_y = wh[1]/2;
             printf("connected to gpm\n");
+        }
+        else
+        {
+            printf("failed to connect to gpm\n");
+            exit(0);
+        }
     }
     else
     if (strncmp(term_env,"xterm",5)==0)
@@ -1286,6 +1250,7 @@ int main(int argc, char* argv[])
                 cd ..directory_with_fonts
                 if not exist font.dir
                     mkfontdir
+                xset fp+ /home/user/asciiid/fonts
                 xset fp rehash
 
             2.  CONFIGURING XTerm during startup
@@ -1330,8 +1295,7 @@ int main(int argc, char* argv[])
     else
         printf("UNKNOWN TERMINAL\n");
 
-    Gpm_Close();
-    //return 0;
+    SetScreen(true);
 
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
     struct sigaction new_action, old_action;
@@ -1348,8 +1312,6 @@ int main(int argc, char* argv[])
 
     running = true;
 
-    SetScreen(true);
-
     /*
     if (!xterm_kitty)
     {
@@ -1359,9 +1321,10 @@ int main(int argc, char* argv[])
     }
     */
 
-    Game* game = 0;
     //terrain = 0;
     //world = 0;
+
+    Game* game = 0;
 
     AnsiCell* buf = 0;
     int wh[2] = {-1,-1};    
@@ -1431,6 +1394,7 @@ int main(int argc, char* argv[])
 
     while(running)
     {
+      
         bool mouse_j = false;
 
         // get time stamp
@@ -1448,13 +1412,132 @@ int main(int argc, char* argv[])
             }
         }
 
-        // prep for poll
-        struct pollfd pfds[1];
-        pfds[0].fd = STDIN_FILENO;
-        pfds[0].events = POLLIN; 
-        pfds[0].revents = 0;
+        struct pollfd pfds[2]={0};
+        if (gpm>=0)
+        {
+            pfds[0].fd = STDIN_FILENO;
+            pfds[0].events = POLLIN; 
+            pfds[0].revents = 0;
 
-        poll(pfds, 1, 0); // 0 no timeout, -1 block
+            pfds[1].fd = gpm;
+            pfds[1].events = POLLIN; 
+            pfds[1].revents = 0;
+
+            poll(pfds, 2, 0); // 0 no timeout, -1 block
+
+            if (pfds[1].revents & POLLIN)
+            {
+                static int mouse_read = 0;
+                static int mouse_write = 0;
+                static Gpm_Event mouse_buf[64];
+                int bytes = read(gpm,(char*)mouse_buf + mouse_write,32*sizeof(Gpm_Event));
+                mouse_write += bytes;
+
+                int events = mouse_write / sizeof(Gpm_Event) - mouse_read;
+
+                while (events)
+                {
+                    Gpm_Event* event = mouse_buf + mouse_read;
+
+                    events--;
+                    mouse_read++;
+
+                    mouse_x += event->dx;
+                    mouse_y += event->dy;
+
+                    if (mouse_x >= wh[0])
+                        mouse_x = wh[0]-1;
+                    if (mouse_x < 0)
+                        mouse_x = 0;
+                    if (mouse_y >= wh[1])
+                        mouse_y = wh[1]-1;
+                    if (mouse_y < 0)
+                        mouse_y = 0;
+
+                    bool xy_processed = false;
+
+                    if (event->wdy>0)
+                    {  
+                        xy_processed = true;
+                        game->OnMouse(Game::MOUSE_WHEEL_UP, mouse_x, mouse_y);
+                    }
+                    else
+                    if (event->wdy<0)
+                    {
+                        xy_processed = true;
+                        game->OnMouse(Game::MOUSE_WHEEL_DOWN, mouse_x, mouse_y);
+                    }
+
+                    if (event->type & GPM_DOWN)
+                    {
+                        if (!(mouse_down&GPM_B_LEFT) && (event->buttons & GPM_B_LEFT))
+                        {
+                            xy_processed = true;
+                            mouse_down|=GPM_B_LEFT;
+                            game->OnMouse(Game::MOUSE_LEFT_BUT_DOWN, mouse_x, mouse_y);
+                        }
+                        if (!(mouse_down&GPM_B_MIDDLE) && (event->buttons & GPM_B_MIDDLE))
+                        {
+                            xy_processed = true;
+                            mouse_down|=GPM_B_MIDDLE;
+                            game->OnMouse(Game::MOUSE_MIDDLE_BUT_DOWN, mouse_x, mouse_y);
+                        }
+                        if (!(mouse_down&GPM_B_RIGHT) && (event->buttons & GPM_B_RIGHT))
+                        {
+                            xy_processed = true;
+                            mouse_down|=GPM_B_RIGHT;
+                            game->OnMouse(Game::MOUSE_RIGHT_BUT_DOWN, mouse_x, mouse_y);
+                        }
+                    }
+
+                    if (event->type & GPM_UP)
+                    {
+                        if ((mouse_down&GPM_B_LEFT) && (event->buttons & GPM_B_LEFT))
+                        {
+                            xy_processed = true;
+                            mouse_down&=~GPM_B_LEFT;
+                            game->OnMouse(Game::MOUSE_LEFT_BUT_UP, mouse_x, mouse_y);
+                        }
+                        if ((mouse_down&GPM_B_MIDDLE) && (event->buttons & GPM_B_MIDDLE))
+                        {
+                            xy_processed = true;
+                            mouse_down&=~GPM_B_MIDDLE;
+                            game->OnMouse(Game::MOUSE_MIDDLE_BUT_UP, mouse_x, mouse_y);
+                        }
+                        if ((mouse_down&GPM_B_RIGHT) && (event->buttons & GPM_B_RIGHT))
+                        {
+                            xy_processed = true;
+                            mouse_down&=~GPM_B_RIGHT;
+                            game->OnMouse(Game::MOUSE_RIGHT_BUT_UP, mouse_x, mouse_y);
+                        }
+                    }                
+
+                    if (!xy_processed && (event->type & (GPM_MOVE|GPM_DRAG)))
+                    {
+                        xy_processed = true;
+                        game->OnMouse(Game::MOUSE_MOVE, mouse_x, mouse_y);
+                    }
+                }
+
+                if (mouse_write>=32*sizeof(Gpm_Event))
+                {
+                    size_t tail = mouse_write - sizeof(Gpm_Event)*mouse_read;
+                    if (tail)
+                        memcpy(mouse_buf,mouse_buf + mouse_read, tail);
+                    mouse_write = tail;
+                    mouse_read = 0;
+                }
+            }
+        }
+        else
+        {
+            // prep for poll
+            pfds[0].fd = STDIN_FILENO;
+            pfds[0].events = POLLIN; 
+            pfds[0].revents = 0;
+
+            poll(pfds, 1, 0); // 0 no timeout, -1 block
+        }
 
         if (pfds[0].revents & POLLIN) 
         {
@@ -2018,6 +2101,11 @@ int main(int argc, char* argv[])
     exit:
     uint64_t end = GetTime();
 
+    if (gpm>=0)
+    {
+        Gpm_Close();
+    }
+
     if (terrain)
         DeleteTerrain(terrain);
 
@@ -2032,7 +2120,6 @@ int main(int argc, char* argv[])
 
     SetScreen(false);
 
-    
     printf("FPS: %f (%dx%d)\n", frames * 1000000.0 / (end-begin), wh[0], wh[1]);
 
 #else
