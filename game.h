@@ -138,6 +138,10 @@ struct Game
 
 	uint64_t stamp;
 
+	static const int fps_window_size = 100;
+	int fps_window_pos;
+	uint64_t fps_window[fps_window_size];
+
 	int font_size[2];
 	int render_size[2];
 

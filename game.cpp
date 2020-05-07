@@ -2955,6 +2955,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (server)
 		server->stamp = _stamp;
 
+	uint64_t fps_window_time = _stamp - fps_window[fps_window_pos]; 
+	fps_window[fps_window_pos++] = _stamp;
+	if (fps_window_pos == fps_window_size)
+		fps_window_pos = 0;
+
+	int FPSx10 = (int)((fps_window_size * 10000000 + (fps_window_time>>1)) / fps_window_time);
+
 	if (_stamp-stamp > 500000) // treat lags longer than 0.5s as stall
 		stamp = _stamp;
 
@@ -3215,12 +3222,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	{
 		AnsiCell status;
-		char status_text[32] = "OFF LINE";
+		char status_text[80];
 		int len_left = 4;
 		int len_right = 4;
 		if (server)
 		{
-			int len = sprintf(status_text,"ON LINE %4d", server->lag_ms);
+			int len = sprintf(status_text,"ON LINE %4d | %d.%d fps", server->lag_ms, FPSx10/10, FPSx10%10);
 			len_left = len/2;
 			len_right = len - len_left;
 
@@ -3231,6 +3238,10 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 		else
 		{
+			int len = sprintf(status_text,"OFF LINE | %d.%d fps", FPSx10/10, FPSx10%10);
+			len_left = len/2;
+			len_right = len - len_left;
+
 			status.fg = yellow;
 			status.bk = dk_red;
 			status.gl=' ';
