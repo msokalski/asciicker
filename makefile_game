@@ -78,15 +78,15 @@ CFLAGS :=
 CXXFLAGS := 
 
 # C/C++ flags
-# CPPFLAGS := -save-temps=obj -pthread -DGAME -O3
+CPPFLAGS := -save-temps=obj -pthread -DGAME -O3
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME -O3
-CPPFLAGS := -g -save-temps=obj -pthread -DGAME
+# CPPFLAGS := -g -save-temps=obj -pthread -DGAME
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME -fsanitize=address
 
 # linker flags
-# LDFLAGS := -save-temps=obj -pthread -O3
+LDFLAGS := -save-temps=obj -pthread -O3
 # LDFLAGS := -g -save-temps=obj -pthread -O3
-LDFLAGS := -g -save-temps=obj -pthread
+# LDFLAGS := -g -save-temps=obj -pthread
 # LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address
 
 # flags required for dependency generation; passed to compilers

@@ -106,6 +106,32 @@ static int (* const CP437[256])(char*) =
 };
 
 bool xterm_kitty = false;
+int mouse_x = -1;
+int mouse_y = -1;
+int mouse_down = 0;
+int tty = -1;
+int gpm = -1;
+
+bool GetWH(int wh[2])
+{
+    struct winsize size = {0};
+    if (ioctl(0, TIOCGWINSZ, (char *)&size)>=0)
+    {
+        wh[0] = size.ws_col;
+        wh[1] = size.ws_row;
+
+        if (wh[0] > 160)
+            wh[0] = 160;
+        if (wh[1] > 90)
+            wh[1] = 90;
+    
+    	return true;
+    }
+
+	return false;
+}
+
+
 void SetScreen(bool alt)
 {
     // kitty kitty ...
@@ -142,14 +168,17 @@ void SetScreen(bool alt)
     {
         tcsetattr(STDIN_FILENO, TCSANOW, &old);
 		write(STDOUT_FILENO,off_str,off_len);
+
+        if (tty>=0)
+        {
+            int wh[2];
+            GetWH(wh);
+            char jump[64]; // jump to last line, reset palette then clear it line
+            int len = sprintf(jump,"\x1B[%d;%df\x1B]R\x1B[2K",wh[1],1);
+            write(STDOUT_FILENO,jump,len);
+        }
     }
 }
-
-int mouse_x = -1;
-int mouse_y = -1;
-int mouse_down = 0;
-int tty = -1;
-int gpm = -1;
 
 #define FLUSH() \
     do \
@@ -334,21 +363,6 @@ void exit_handler(int signum)
     running = false;
     SetScreen(false);
     exit(0);
-}
-
-bool GetWH(int wh[2])
-{
-	struct winsize size;
-	if (ioctl(0, TIOCGWINSZ, (char *)&size))
-	{
-		wh[0] = 80;
-		wh[1] = 50;
-		return false;
-	}
-
-	wh[0] = size.ws_col;
-	wh[1] = size.ws_row;
-	return true;
 }
 
 uint64_t GetTime()
@@ -2061,13 +2075,14 @@ int main(int argc, char* argv[])
             wh[0] = nwh[0];
             wh[1] = nwh[1];
 
+            /*
             if (wh[0]*wh[1]>160*90)
             {
                 float scale = sqrtf(160*90 / (wh[0]*wh[1]));
                 wh[0] = floor(wh[0] * scale + 0.5f);
                 wh[1] = floor(wh[1] * scale + 0.5f);
             }
-
+            */
             buf = (AnsiCell*)realloc(buf,wh[0]*wh[1]*sizeof(AnsiCell));
         }
 
@@ -2087,10 +2102,13 @@ int main(int argc, char* argv[])
 			server->Proc();
 
 		// render
-		game->Render(stamp,buf,wh[0],wh[1]);
+        if (wh[0]>0 && wh[1]>0)
+        {
+		    game->Render(stamp,buf,wh[0],wh[1]);
+            // write to stdout
+            Print(buf,wh[0],wh[1],CP437_UTF8);
+        }
 
-        // write to stdout
-        Print(buf,wh[0],wh[1],CP437_UTF8);
         frames++;
     }
 

@@ -3240,16 +3240,19 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		int x = 0;
 		int center = width/2;
 		for (; x<center - len_left; x++)
-			top[x] = status;
+			if (x>=0 && x<width)
+				top[x] = status;
 		for (; x<center + len_right; x++)
 		{
 			int i = x - (center - len_left);
 			status.gl = status_text[i];
-			top[x] = status;
+			if (x>=0 && x<width)
+				top[x] = status;
 		}
 		status.gl = ' ';
 		for (; x<width; x++)
-			top[x] = status;
+			if (x>=0 && x<width)
+				top[x] = status;
 	}
 	
 

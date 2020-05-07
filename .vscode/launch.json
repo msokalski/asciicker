@@ -22,15 +22,17 @@
             "externalConsole": true,
             */
 
-            /*
+           // /*
             "program": "${workspaceFolder}/.run/game",
             "args": ["-term"],
             "externalConsole": true,
-            */
+           // */
 
+            /*
             "program": "${workspaceFolder}/.run/game",
             "args": [],
             "externalConsole": true,
+            */
 
             /*
             "program": "${workspaceFolder}/.run/game",
