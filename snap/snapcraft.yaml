@@ -1,0 +1,116 @@
+name: asciicker # you probably want to 'snapcraft register <name>'
+base: core18 # the base snap is the execution environment for this snap
+version: '0.1' # just for humans, typically '1.2+git' or '1.3.2'
+summary: 3D textmode RPG prototype # 79 char long summary
+description: |
+  This is my-snap's description. You have a paragraph or two to tell the
+  most important story about your snap. Keep it under 100 words though,
+  we live in tweetspace and your description wants to look good in the snap
+  store.
+
+grade: devel # must be 'stable' to release into candidate/stable channels
+confinement: devmode # use 'strict' once you have the right plugs and slots
+
+apps:
+  term:
+    command: ./game_term
+  x11:
+    command: ./bin/game
+  edit:
+    command: ./bin/asciiid
+  server:
+    command: ./bin/server
+
+parts:
+  game-term:
+    # See 'snapcraft plugins'
+
+    build-packages:
+      - g++
+      - make
+      - libgpm-dev
+
+    stage-packages:
+      - gpm
+      - libgpm2
+
+    source: .
+    plugin: nil
+    override-build: |
+      make -f makefile_game_term
+      cp .run/game_term $SNAPCRAFT_PART_INSTALL
+
+#----- fix us as above!
+
+  game:
+    # See 'snapcraft plugins'
+
+    build-packages:
+      - g++
+      - make
+      - libgpm-dev
+      - xorg-dev
+      - libgl1-mesa-dev
+
+    stage-packages:
+      - gpm
+      - libgpm2
+      - libx11-6
+      - libx11-data
+      - libxinerama1
+      - libgl1-mesa-glx
+
+#    plugin: make
+#    makefile: makefile_game
+#    artifacts: [.run/game]
+
+    source: .
+    plugin: nil
+    override-build: |
+      make -f makefile_game
+      cp .run/game $SNAPCRAFT_PART_INSTALL/bin
+
+  asciiid:
+    # See 'snapcraft plugins'
+
+    build-packages:
+      - g++
+      - make
+      - xorg-dev
+      - libgl1-mesa-dev
+
+    stage-packages:
+      - libx11-6
+      - libx11-data
+      - libxinerama1
+      - libgl1-mesa-glx
+
+#    plugin: make
+#    makefile: makefile_asciiid
+#    artifacts: [.run/asciiid]
+
+    source: .
+    plugin: nil
+    override-build: |
+      make -f makefile_asciiid
+      cp .run/asciiid $SNAPCRAFT_PART_INSTALL/bin
+
+  server:
+    # See 'snapcraft plugins'
+
+    build-packages:
+      - g++
+      - make
+
+#    plugin: make
+#    makefile: makefile_server
+#    artifacts: [.run/server]
+
+    source: .
+    plugin: nil
+    override-build: |
+      make -f makefile_server
+      cp .run/server $SNAPCRAFT_PART_INSTALL/bin
+
+
+
