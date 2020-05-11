@@ -6,6 +6,8 @@
 #include "platform.h"
 #include "network.h"
 
+extern char base_path[];
+
 static const int stand_us_per_frame = 30000;
 static const int fall_us_per_frame = 30000;
 static const int attack_us_per_frame = 20000;
@@ -1846,7 +1848,14 @@ Sprite* player_naked = 0; // what to do?
 Sprite* character_button = 0;
 Sprite* inventory_sprite = 0;
 
-#define LOAD_SPRITE(n) LoadSprite("./sprites/" n, n, 0, false);
+Sprite* LoadSpriteBP(const char* name, const uint8_t* recolor, bool detached)
+{
+	char path[1024];
+	sprintf(path,"%ssprites/%s", base_path, name);
+	return LoadSprite(path,name,recolor,detached);
+}
+
+#define LOAD_SPRITE(n) LoadSpriteBP(n, 0, false);
 
 void LoadSprites()
 {
@@ -1855,10 +1864,10 @@ void LoadSprites()
 #endif
 
 	// main buts
-	character_button = LoadSprite("./sprites/character.xp", "character.xp", 0, false);
-	inventory_sprite = LoadSprite("./sprites/inventory.xp", "inventory.xp", 0, false);
+	character_button = LoadSpriteBP("character.xp", 0, false);
+	inventory_sprite = LoadSpriteBP("inventory.xp", 0, false);
 
-	player_nude = LoadSprite("./sprites/player-nude.xp", "player-nude.xp", 0, false);
+	player_nude = LoadSpriteBP("player-nude.xp", 0, false);
 
 	for (int a = 0; a < ARMOR::SIZE; a++)
 	{
@@ -1866,19 +1875,18 @@ void LoadSprites()
 		{
 			for (int s = 0; s < SHIELD::SIZE; s++)
 			{
-				int name = 0;
-				char path[64];
+				char name[64];
 
 				for (int w = 0; w < WEAPON::SIZE; w++)
 				{
-					sprintf(path, "./sprites/%nplayer-%x%x%x%x.xp", &name, a, h, s, w);
-					player[a][h][s][w] = LoadSprite(path, path+name, 0, false);
+					sprintf(name, "player-%x%x%x%x.xp", a, h, s, w);
+					player[a][h][s][w] = LoadSpriteBP(name, 0, false);
 
-					sprintf(path, "./sprites/%nplydie-%x%x%x%x.xp", &name, a, h, s, w);
-					player_fall[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+					sprintf(name, "plydie-%x%x%x%x.xp", a, h, s, w);
+					player_fall[a][h][s][w] = LoadSpriteBP(name, 0, false);
 
-					sprintf(path, "./sprites/%nwolfie-%x%x%x%x.xp", &name, a, h, s, w);
-					wolfie[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+					sprintf(name, "wolfie-%x%x%x%x.xp", a, h, s, w);
+					wolfie[a][h][s][w] = LoadSpriteBP(name, 0, false);
 
 					wolfie_fall[a][h][s][w] = 0;
 				}
@@ -1887,11 +1895,11 @@ void LoadSprites()
 				wolfie_attack[a][h][s][WEAPON::NONE] = 0;
 				for (int w = 1; w < WEAPON::SIZE; w++)
 				{
-					sprintf(path, "./sprites/%nattack-%x%x%x%x.xp", &name, a, h, s, w);
-					player_attack[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+					sprintf(name, "attack-%x%x%x%x.xp", a, h, s, w);
+					player_attack[a][h][s][w] = LoadSpriteBP(name, 0, false);
 
-					sprintf(path, "./sprites/%nwolack-%x%x%x%x.xp", &name, a, h, s, w);
-					wolfie_attack[a][h][s][w] = LoadSprite(path, path + name, 0, false);
+					sprintf(name, "wolack-%x%x%x%x.xp", a, h, s, w);
+					wolfie_attack[a][h][s][w] = LoadSpriteBP(name, 0, false);
 				}
 			}
 		}

@@ -15,15 +15,15 @@ apps:
   term:
     command: ./game_term
   x11:
-    command: ./bin/game
+    command: ./game
   edit:
-    command: ./bin/asciiid
+    command: ./asciiid
   server:
-    command: ./bin/server
+    command: ./server
 
 parts:
+
   game-term:
-    # See 'snapcraft plugins'
 
     build-packages:
       - g++
@@ -40,10 +40,7 @@ parts:
       make -f makefile_game_term
       cp .run/game_term $SNAPCRAFT_PART_INSTALL
 
-#----- fix us as above!
-
   game:
-    # See 'snapcraft plugins'
 
     build-packages:
       - g++
@@ -60,18 +57,13 @@ parts:
       - libxinerama1
       - libgl1-mesa-glx
 
-#    plugin: make
-#    makefile: makefile_game
-#    artifacts: [.run/game]
-
     source: .
     plugin: nil
     override-build: |
       make -f makefile_game
-      cp .run/game $SNAPCRAFT_PART_INSTALL/bin
+      cp .run/game $SNAPCRAFT_PART_INSTALL
 
   asciiid:
-    # See 'snapcraft plugins'
 
     build-packages:
       - g++
@@ -85,32 +77,43 @@ parts:
       - libxinerama1
       - libgl1-mesa-glx
 
-#    plugin: make
-#    makefile: makefile_asciiid
-#    artifacts: [.run/asciiid]
-
     source: .
     plugin: nil
     override-build: |
       make -f makefile_asciiid
-      cp .run/asciiid $SNAPCRAFT_PART_INSTALL/bin
+      cp .run/asciiid $SNAPCRAFT_PART_INSTALL
 
   server:
-    # See 'snapcraft plugins'
 
     build-packages:
       - g++
       - make
 
-#    plugin: make
-#    makefile: makefile_server
-#    artifacts: [.run/server]
-
     source: .
     plugin: nil
     override-build: |
       make -f makefile_server
-      cp .run/server $SNAPCRAFT_PART_INSTALL/bin
+      cp .run/server $SNAPCRAFT_PART_INSTALL
 
+  assets:
 
+    plugin: nil
+    override-build: |
+      
+      mkdir $SNAPCRAFT_PART_INSTALL/a3d
+      cp a3d/game_map.a3d $SNAPCRAFT_PART_INSTALL/a3d
 
+      mkdir $SNAPCRAFT_PART_INSTALL/fonts
+      cp fonts/* $SNAPCRAFT_PART_INSTALL/fonts
+
+      mkdir $SNAPCRAFT_PART_INSTALL/sprites
+      cp sprites/*.xp $SNAPCRAFT_PART_INSTALL/sprites
+
+      mkdir $SNAPCRAFT_PART_INSTALL/icons
+      cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
+
+      mkdir $SNAPCRAFT_PART_INSTALL/meshes
+      cp meshes/*.akm $SNAPCRAFT_PART_INSTALL/meshes
+
+      mkdir $SNAPCRAFT_PART_INSTALL/palettes
+      cp palettes/*.png $SNAPCRAFT_PART_INSTALL/palettes

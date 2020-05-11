@@ -9,6 +9,9 @@
 #include "render.h"
 
 #include <time.h>
+
+char base_path[1024] = "./"; // (const)
+
 uint64_t GetTime()
 {
 	static timespec ts;
@@ -114,7 +117,7 @@ int Main()
                         char mesh_name[256];
                         GetMeshName(m,mesh_name,256);
                         char obj_path[4096];
-                        sprintf(obj_path,"%smeshes/%s","./"/*root_path*/,mesh_name);
+                        sprintf(obj_path,"%smeshes/%s",base_path,mesh_name);
                         if (!UpdateMesh(m,obj_path))
                         {
                             // what now?
@@ -151,7 +154,7 @@ int Main()
 
         // add meshes from library that aren't present in scene file
         char mesh_dirname[4096];
-        sprintf(mesh_dirname,"%smeshes","./"/*root_path*/);
+        sprintf(mesh_dirname,"%smeshes",base_path);
         //a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 
         // this is the only case when instances has no valid bboxes yet

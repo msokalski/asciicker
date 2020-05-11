@@ -31,6 +31,8 @@
 
 #include "game.h"
 
+char base_path[1024] = "./";
+
 void SyncConf()
 {
 }
@@ -929,6 +931,50 @@ static int find_tty()
 
 int main(int argc, char* argv[])
 {
+    if (argc < 1)
+        strcpy(base_path,"./");
+    else
+    {
+        size_t len = 0;
+        #ifdef __linux__
+        char* last_slash = strrchr(argv[0], '/');
+        if (!last_slash)
+            strcpy(base_path,"./");
+        else
+        {
+            len = last_slash - argv[0] + 1;
+            memcpy(base_path,argv[0],len);
+            base_path[len] = 0;
+        }
+        #else
+        char* last_slash = strrchr(argv[0], '/');
+        char* last_backslash = strrchr(argv[0], '\\');
+
+        if (last_slash && last_backslash)
+        {
+            size_t len_slash = last_slash - argv[0] + 1;
+            size_t len_backslash = last_backslash - argv[0] + 1;
+            len = len_slash > len_backslash ? len_slash : len_backslash;
+        }
+        else
+        if (last_slash)
+            len = last_slash - argv[0] + 1;
+        else
+        if (last_backslash)
+            len = last_backslash - argv[0] + 1;
+
+        if (!len)
+            strcpy(base_path,"./");
+        else
+        {
+            memcpy(base_path,argv[0],len);
+            base_path[len] = 0;
+        }
+		#endif
+
+		if (len>4 && strcmp(base_path+len-5,".run/")==0)
+			base_path[len-5] = 0;
+    }
 
     /*
     int c16 = 13;
@@ -1088,7 +1134,9 @@ int main(int argc, char* argv[])
 	LoadSprites();
 
 	{
-		FILE* f = fopen("a3d/game_map.a3d", "rb");
+        char a3d_path[1024];
+        sprintf(a3d_path,"%sa3d/game_map.a3d", base_path);
+		FILE* f = fopen(a3d_path, "rb");
 
 		// TODO:
 		// if GameServer* gs != 0
@@ -1118,7 +1166,7 @@ int main(int argc, char* argv[])
 						char mesh_name[256];
 						GetMeshName(m, mesh_name, 256);
 						char obj_path[4096];
-						sprintf(obj_path, "%smeshes/%s", "./"/*root_path*/, mesh_name);
+						sprintf(obj_path, "%smeshes/%s", base_path, mesh_name);
 						if (!UpdateMesh(m, obj_path))
 						{
 							// what now?
@@ -1138,7 +1186,7 @@ int main(int argc, char* argv[])
 
 		// add meshes from library that aren't present in scene file
 		char mesh_dirname[4096];
-		sprintf(mesh_dirname, "%smeshes", "./"/*root_path*/);
+		sprintf(mesh_dirname, "%smeshes", base_path);
 		//a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 
 		// this is the only case when instances has no valid bboxes yet
@@ -1183,7 +1231,8 @@ int main(int argc, char* argv[])
 
         if (TermOpen(0, yaw, pos, MyFont::Free))
         {
-            char font_dirname[] = "./fonts";
+            char font_dirname[1024];
+            sprintf(font_dirname, "%sfonts", base_path); // = "./fonts";
             fonts_loaded = 0;
             a3dListDir(font_dirname, MyFont::Scan, font_dirname);
             a3dLoop();

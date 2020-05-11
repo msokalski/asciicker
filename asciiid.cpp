@@ -42,12 +42,15 @@
 #include "render.h"
 #include "game.h"
 
+char base_path[1024] = "./";
+
 void SyncConf()
 {
 }
 
 const char* GetConfPath()
 {
+	// USER_DIR
     return "asciicker.cfg";
 }
 
@@ -90,7 +93,6 @@ MouseQueue mouse_queue[mouse_queue_size];
 
 ImFont* pFont = 0;
 char ini_path[4096];
-char root_path[4096];
 
 Terrain* terrain = 0;
 World* world = 0;
@@ -271,7 +273,7 @@ void MergeOpen(const char* path)
 					char mesh_name[256];
 					GetMeshName(m, mesh_name, 256);
 					char obj_path[4096];
-					sprintf(obj_path, "%smeshes/%s", root_path, mesh_name);
+					sprintf(obj_path, "%smeshes/%s", base_path, mesh_name);
 					if (!UpdateMesh(m, obj_path))
 					{
 						// what now?
@@ -3694,7 +3696,7 @@ void New()
 
 	// add meshes from library that aren't present in scene file
 	char mesh_dirname[4096];
-	sprintf(mesh_dirname,"%smeshes",root_path);
+	sprintf(mesh_dirname,"%smeshes",base_path);
 	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 
 	RebuildWorld(world);
@@ -3852,7 +3854,9 @@ void New()
 		};
 	};
 
-	a3dLoadImage("./maps/new.png", 0, MAP::cb);
+	char newmap_path[1024];
+	sprintf(newmap_path, "%smaps/new.png", base_path);
+	a3dLoadImage(newmap_path, 0, MAP::cb);
 }
 
 void TranslateMap(int delta_z, bool water_limit)
@@ -3977,7 +3981,7 @@ void Load(const char* path)
 					char mesh_name[256];
 					GetMeshName(m,mesh_name,256);
 					char obj_path[4096];
-					sprintf(obj_path,"%smeshes/%s",root_path,mesh_name);
+					sprintf(obj_path,"%smeshes/%s",base_path,mesh_name);
 					if (!UpdateMesh(m,obj_path))
 					{
 						// what now?
@@ -4004,7 +4008,7 @@ void Load(const char* path)
 
 	// add meshes from library that aren't present in scene file
 	char mesh_dirname[4096];
-	sprintf(mesh_dirname,"%smeshes",root_path);
+	sprintf(mesh_dirname,"%smeshes",base_path);
 	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 
 	// this is the only case when instances has no valid bboxes yet
@@ -7531,11 +7535,13 @@ void my_init(A3D_WND* wnd)
 
 	world = CreateWorld();
 
-	char mesh_dirname[] = "./meshes";
+	char mesh_dirname[1024];
+	sprintf(mesh_dirname, "%smeshes", base_path);
 	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 	active_mesh = GetFirstMesh(world);
 
-	char sprite_dirname[] = "./sprites";
+	char sprite_dirname[1024];
+	sprintf(sprite_dirname, "%ssprites", base_path);
 	a3dListDir(sprite_dirname, SpriteScan, sprite_dirname);
 	active_sprite = GetFirstSprite(/*world*/);
 
@@ -7552,12 +7558,14 @@ void my_init(A3D_WND* wnd)
 
 	MyMaterial::Init();
 
-	char font_dirname[] = "./fonts";
+	char font_dirname[1024];
+	sprintf(font_dirname,"%sfonts",base_path);
 	fonts_loaded = 0;
 	a3dListDir(font_dirname, MyFont::Scan, font_dirname);
 
 	MyPalette::Init();
-	char pal_dirname[] = "./palettes";
+	char pal_dirname[1024];
+	sprintf(pal_dirname,"%spalettes",base_path);
 	palettes_loaded = 0;
 	a3dListDir(pal_dirname, MyPalette::Scan, pal_dirname);
 
@@ -7570,10 +7578,9 @@ void my_init(A3D_WND* wnd)
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 
-	// keep it startup dir
 	{
-		a3dGetCurDir(root_path,4096);
-		snprintf(ini_path,4096,"%s/imgui.ini",root_path);
+		// USER_DIR
+		snprintf(ini_path,4096,"./imgui.ini");
 		ini_path[4095]=0;
 		io.IniFilename = ini_path;
 	}
@@ -7611,7 +7618,9 @@ void my_init(A3D_WND* wnd)
 	ImGui_ImplOpenGL3_Init();
 
 	ImWchar range[]={0x0020, 0x03FF, 0};
-	pFont = io.Fonts->AddFontFromFileTTF("./fonts/Roboto-Medium.ttf", 16, NULL, range);	
+	char ui_font_path[1024];
+	sprintf(ui_font_path,"%sfonts/Roboto-Medium.ttf",base_path);
+	pFont = io.Fonts->AddFontFromFileTTF(ui_font_path, 16, NULL, range);	
 	io.Fonts->Build();
 
 	terrain = CreateTerrain();
@@ -7648,7 +7657,10 @@ void my_init(A3D_WND* wnd)
 	const char* utf8 = "ASCIIID Edit";
 
 	a3dSetTitle(wnd,utf8/*"ASCIIID"*/);
-	a3dSetIcon(wnd,"./icons/app.png");
+
+	char icon_path[1024];
+	sprintf(icon_path,"%sicons/app.png",base_path);
+	a3dSetIcon(wnd,icon_path);
 	a3dSetVisible(wnd,true);
 
 	//int rect[] = { 1920 * 2, 0, 1920,1080 };
@@ -7746,6 +7758,51 @@ extern "C" void DumpLeakCounter();
 
 int main(int argc, char *argv[]) 
 {
+    if (argc < 1)
+        strcpy(base_path,"./");
+    else
+    {
+        size_t len = 0;
+        #ifdef __linux__
+        char* last_slash = strrchr(argv[0], '/');
+        if (!last_slash)
+            strcpy(base_path,"./");
+        else
+        {
+            len = last_slash - argv[0] + 1;
+            memcpy(base_path,argv[0],len);
+            base_path[len] = 0;
+        }
+        #else
+        char* last_slash = strrchr(argv[0], '/');
+        char* last_backslash = strrchr(argv[0], '\\');
+
+        if (last_slash && last_backslash)
+        {
+            size_t len_slash = last_slash - argv[0] + 1;
+            size_t len_backslash = last_backslash - argv[0] + 1;
+            len = len_slash > len_backslash ? len_slash : len_backslash;
+        }
+        else
+        if (last_slash)
+            len = last_slash - argv[0] + 1;
+        else
+        if (last_backslash)
+            len = last_backslash - argv[0] + 1;
+
+        if (!len)
+            strcpy(base_path,"./");
+        else
+        {
+            memcpy(base_path,argv[0],len);
+            base_path[len] = 0;
+        }
+		#endif
+
+		if (len>4 && strcmp(base_path+len-5,".run/")==0)
+			base_path[len-5] = 0;
+    }
+
 #ifdef _WIN32
 	//_CrtSetBreakAlloc(11952);
 #endif
