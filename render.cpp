@@ -23,7 +23,7 @@
 #include <string.h>
 
 #define DBL
-#define PERSPECTIVE_TEST 1 // 0-off 1-unfiltered 2-snapped >2-filtered
+#define PERSPECTIVE_TEST 0 // 0-off 1-unfiltered 2-snapped >2-filtered
 
 static bool global_refl_mode = false;
 extern Sprite* player_sprite;
@@ -348,6 +348,7 @@ struct Renderer
 	float water;
 	float light[4];
 	bool int_flag;
+	bool perspective;
 
 	// perspective test
 	float view_dir[3];
@@ -617,88 +618,94 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		float xyzw[] = { coords[0], coords[1], coords[2], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp0);
 
-		#if PERSPECTIVE_TEST // TODO put eye_to_vtx generation into viewinst_tm so we get it in w coord
-		float ws[4];
-		Product(r->inst_tm, xyzw, ws);
-		float viewer_dist; // {vx,vy,vz}  r->pos
-		float eye_to_vtx[3] =
+		if (r->perspective) // #if PERSPECTIVE_TEST 
 		{
-			ws[0] * HEIGHT_CELLS - r->view_pos[0],
-			ws[1] * HEIGHT_CELLS - r->view_pos[1],
-			ws[2] - r->view_pos[2],
-		};
+			float ws[4];
+			Product(r->inst_tm, xyzw, ws);
+			float viewer_dist; // {vx,vy,vz}  r->pos
+			float eye_to_vtx[3] =
+			{
+				ws[0] * HEIGHT_CELLS - r->view_pos[0],
+				ws[1] * HEIGHT_CELLS - r->view_pos[1],
+				ws[2] - r->view_pos[2],
+			};
 
-		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
-		if (viewer_dist > 0)
+			viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+			if (viewer_dist > 0)
+			{
+				viewer_dist = 1.0/viewer_dist;
+
+				float fx = tmp0[0];
+				float fy = tmp0[1];
+
+				fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+				fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+
+				int tx = (int)floorf(fx + 0.5f);
+				int ty = (int)floorf(fy + 0.5f);
+
+				v[0][0] = tx;
+				v[0][1] = ty;
+				v[0][2] = (int)floor(tmp0[2] + 0.5f);
+				v[0][3] = 0; // clip flags
+			}
+			else
+				return;
+		}
+		else //#else
 		{
-			viewer_dist = 1.0/viewer_dist;
-
-			float fx = tmp0[0];
-			float fy = tmp0[1];
-
-			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
-
-			int tx = (int)floorf(fx + 0.5f);
-			int ty = (int)floorf(fy + 0.5f);
-
-			v[0][0] = tx;
-			v[0][1] = ty;
+			v[0][0] = (int)floor(tmp0[0] + 0.5f);
+			v[0][1] = (int)floor(tmp0[1] + 0.5f);
 			v[0][2] = (int)floor(tmp0[2] + 0.5f);
 			v[0][3] = 0; // clip flags
-		}
-		else
-			return;
-		#else
-		v[0][0] = (int)floor(tmp0[0] + 0.5f);
-		v[0][1] = (int)floor(tmp0[1] + 0.5f);
-		v[0][2] = (int)floor(tmp0[2] + 0.5f);
-		v[0][3] = 0; // clip flags
-		#endif
+		} //#endif
 	}
 
 	{
 		float xyzw[] = { coords[3], coords[4], coords[5], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp1);
 
-		#if PERSPECTIVE_TEST
-		float ws[4];
-		Product(r->inst_tm, xyzw, ws);
-		float viewer_dist; // {vx,vy,vz}  r->pos
-		float eye_to_vtx[3] =
+		if (r->perspective) // #if PERSPECTIVE_TEST
 		{
-			ws[0] * HEIGHT_CELLS - r->view_pos[0],
-			ws[1] * HEIGHT_CELLS - r->view_pos[1],
-			ws[2] - r->view_pos[2],
-		};
+			float ws[4];
+			Product(r->inst_tm, xyzw, ws);
+			float viewer_dist; // {vx,vy,vz}  r->pos
+			float eye_to_vtx[3] =
+			{
+				ws[0] * HEIGHT_CELLS - r->view_pos[0],
+				ws[1] * HEIGHT_CELLS - r->view_pos[1],
+				ws[2] - r->view_pos[2],
+			};
 
-		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
-		if (viewer_dist > 0)
+			viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+			if (viewer_dist > 0)
+			{
+				viewer_dist = 1.0/viewer_dist;
+
+				float fx = tmp1[0];
+				float fy = tmp1[1];
+
+				fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+				fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+
+				int tx = (int)floorf(fx + 0.5f);
+				int ty = (int)floorf(fy + 0.5f);
+
+				v[1][0] = tx;
+				v[1][1] = ty;
+				v[1][2] = (int)floor(tmp1[2] + 0.5f);
+				v[1][3] = 0; // clip flags
+			}
+			else
+				return;
+		}
+		else // #else
 		{
-			viewer_dist = 1.0/viewer_dist;
-
-			float fx = tmp1[0];
-			float fy = tmp1[1];
-
-			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
-
-			int tx = (int)floorf(fx + 0.5f);
-			int ty = (int)floorf(fy + 0.5f);
-
-			v[1][0] = tx;
-			v[1][1] = ty;
+			v[1][0] = (int)floor(tmp1[0] + 0.5f);
+			v[1][1] = (int)floor(tmp1[1] + 0.5f);
 			v[1][2] = (int)floor(tmp1[2] + 0.5f);
 			v[1][3] = 0; // clip flags
-		}
-		else
-			return;
-		#else
-		v[1][0] = (int)floor(tmp1[0] + 0.5f);
-		v[1][1] = (int)floor(tmp1[1] + 0.5f);
-		v[1][2] = (int)floor(tmp1[2] + 0.5f);
-		v[1][3] = 0; // clip flags
-		#endif
+		} //#endif
 	}
 
 	if (visual & (1<<31))
@@ -711,44 +718,47 @@ void Renderer::RenderFace(float coords[9], uint8_t colors[12], uint32_t visual, 
 		float xyzw[] = { coords[6], coords[7], coords[8], 1.0f };
 		Product(r->viewinst_tm, xyzw, tmp2);
 
-		#if PERSPECTIVE_TEST
-		float ws[4];
-		Product(r->inst_tm, xyzw, ws);
-		float viewer_dist; // {vx,vy,vz}  r->pos
-		float eye_to_vtx[3] =
+		if (r->perspective) // #if PERSPECTIVE_TEST
 		{
-			ws[0] * HEIGHT_CELLS - r->view_pos[0],
-			ws[1] * HEIGHT_CELLS - r->view_pos[1],
-			ws[2] - r->view_pos[2],
-		};
+			float ws[4];
+			Product(r->inst_tm, xyzw, ws);
+			float viewer_dist; // {vx,vy,vz}  r->pos
+			float eye_to_vtx[3] =
+			{
+				ws[0] * HEIGHT_CELLS - r->view_pos[0],
+				ws[1] * HEIGHT_CELLS - r->view_pos[1],
+				ws[2] - r->view_pos[2],
+			};
 
-		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
-		if (viewer_dist > 0)
+			viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+			if (viewer_dist > 0)
+			{
+				viewer_dist = 1.0/viewer_dist;
+
+				float fx = tmp2[0];
+				float fy = tmp2[1];
+
+				fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+				fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+
+				int tx = (int)floorf(fx + 0.5f);
+				int ty = (int)floorf(fy + 0.5f);
+
+				v[2][0] = tx;
+				v[2][1] = ty;
+				v[2][2] = (int)floor(tmp2[2] + 0.5f);
+				v[2][3] = 0; // clip flags
+			}
+			else
+				return;
+		}
+		else // #else
 		{
-			viewer_dist = 1.0/viewer_dist;
-
-			float fx = tmp2[0];
-			float fy = tmp2[1];
-
-			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
-
-			int tx = (int)floorf(fx + 0.5f);
-			int ty = (int)floorf(fy + 0.5f);
-
-			v[2][0] = tx;
-			v[2][1] = ty;
+			v[2][0] = (int)floor(tmp2[0] + 0.5f);
+			v[2][1] = (int)floor(tmp2[1] + 0.5f);
 			v[2][2] = (int)floor(tmp2[2] + 0.5f);
 			v[2][3] = 0; // clip flags
-		}
-		else
-			return;
-		#else
-		v[2][0] = (int)floor(tmp2[0] + 0.5f);
-		v[2][1] = (int)floor(tmp2[1] + 0.5f);
-		v[2][2] = (int)floor(tmp2[2] + 0.5f);
-		v[2][3] = 0; // clip flags
-		#endif
+		} // #endif
 	}
 
 	int w = r->sample_buffer.w;
@@ -913,157 +923,163 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 
 	if (global_refl_mode)
 	{
-		#if PERSPECTIVE_TEST
-		float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
-		float viewer_dist; // {vx,vy,vz}  r->pos
-		float eye_to_vtx[3] =
+		if (r->perspective) // #if PERSPECTIVE_TEST
 		{
-			vx - r->view_pos[0],
-			vy - r->view_pos[1],
-			vz - r->view_pos[2],
-		};
+			float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
+			float viewer_dist; // {vx,vy,vz}  r->pos
+			float eye_to_vtx[3] =
+			{
+				vx - r->view_pos[0],
+				vy - r->view_pos[1],
+				vz - r->view_pos[2],
+			};
 
-		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
-		if (viewer_dist > 0)
-		{
-			// todo: smooth fade
-			float max_scale = 1.33;
-			float hi_scale = 1.25;
-			float lo_scale = 1 / hi_scale;
-			float min_scale = 1 / max_scale;
+			viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+			if (viewer_dist > 0)
+			{
+				// todo: smooth fade
+				float max_scale = 1.33;
+				float hi_scale = 1.25;
+				float lo_scale = 1 / hi_scale;
+				float min_scale = 1 / max_scale;
 
-			if (viewer_dist > max_scale || viewer_dist < min_scale)
-				return;
+				if (viewer_dist > max_scale || viewer_dist < min_scale)
+					return;
 
-			float alpha = 1.0;
+				float alpha = 1.0;
 
-			if (viewer_dist < lo_scale)
-				alpha = (viewer_dist - min_scale) / (lo_scale - min_scale);
+				if (viewer_dist < lo_scale)
+					alpha = (viewer_dist - min_scale) / (lo_scale - min_scale);
+				else
+				if (viewer_dist > hi_scale)
+					alpha = (viewer_dist - max_scale) / (hi_scale - max_scale);
+
+				buf->alpha = (int)(alpha * 255 + 0.5f);
+
+				float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+				float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+				viewer_dist = 1.0/viewer_dist;
+
+				fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+				fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+
+				int tx = (int)floorf(fx + 0.5f);
+				int ty = (int)floorf(fy + 0.5f);
+
+				// convert from samples to cells
+				buf->s_pos[0] = (tx - 1) >> 1;
+				buf->s_pos[1] = (ty - 1) >> 1;
+				buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2);
+			}
 			else
-			if (viewer_dist > hi_scale)
-				alpha = (viewer_dist - max_scale) / (hi_scale - max_scale);
-
-			buf->alpha = (int)(alpha * 255 + 0.5f);
-
-			float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
-			float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
-
-			viewer_dist = 1.0/viewer_dist;
-
-			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
-
-			int tx = (int)floorf(fx + 0.5f);
-			int ty = (int)floorf(fy + 0.5f);
-
-			// convert from samples to cells
-			buf->s_pos[0] = (tx - 1) >> 1;
-			buf->s_pos[1] = (ty - 1) >> 1;
-			buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2);
+				return;
 		}
-		else
-			return;
-		#else
-		//if (r->int_flag)
+		else // #else
 		{
-			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
-			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
+			//if (r->int_flag)
+			{
+				int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
+				int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
 
-			// convert from samples to cells
-			buf->s_pos[0] = (tx - 1) >> 1;
-			buf->s_pos[1] = (ty - 1) >> 1;
-			buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2);
-		}
-		/*
-		else
-		{
-			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
-			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5) + r->add[1];
+				// convert from samples to cells
+				buf->s_pos[0] = (tx - 1) >> 1;
+				buf->s_pos[1] = (ty - 1) >> 1;
+				buf->s_pos[2] = (int)2*r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2);
+			}
+			/*
+			else
+			{
+				int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
+				int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5) + r->add[1];
 
-			// convert from samples to cells
-			buf->s_pos[0] = (tx - 1) >> 1;
-			buf->s_pos[1] = (ty - 2) >> 1;
-			buf->s_pos[2] = (int)2 * r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
-		}
-		*/
-		#endif
+				// convert from samples to cells
+				buf->s_pos[0] = (tx - 1) >> 1;
+				buf->s_pos[1] = (ty - 2) >> 1;
+				buf->s_pos[2] = (int)2 * r->water - ((int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4);
+			}
+			*/
+		} // #endif
 	}
 	else
 	{
-		#if PERSPECTIVE_TEST
-		float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
-		float viewer_dist; // {vx,vy,vz}  r->pos
-		float eye_to_vtx[3] =
+		if (r->perspective) // #if PERSPECTIVE_TEST
 		{
-			vx - r->view_pos[0],
-			vy - r->view_pos[1],
-			vz - r->view_pos[2],
-		};
+			float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
+			float viewer_dist; // {vx,vy,vz}  r->pos
+			float eye_to_vtx[3] =
+			{
+				vx - r->view_pos[0],
+				vy - r->view_pos[1],
+				vz - r->view_pos[2],
+			};
 
-		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
-		if (viewer_dist > 0)
-		{
-			// todo: smooth fade
-			float max_scale = 1.33;
-			float hi_scale = 1.25;
-			float lo_scale = 1 / hi_scale;
-			float min_scale = 1 / max_scale;
+			viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+			if (viewer_dist > 0)
+			{
+				// todo: smooth fade
+				float max_scale = 1.33;
+				float hi_scale = 1.25;
+				float lo_scale = 1 / hi_scale;
+				float min_scale = 1 / max_scale;
 
-			if (viewer_dist > max_scale || viewer_dist < min_scale)
-				return;
+				if (viewer_dist > max_scale || viewer_dist < min_scale)
+					return;
 
-			float alpha = 1.0;
+				float alpha = 1.0;
 
-			if (viewer_dist < lo_scale)
-				alpha = (viewer_dist - min_scale) / (lo_scale - min_scale);
+				if (viewer_dist < lo_scale)
+					alpha = (viewer_dist - min_scale) / (lo_scale - min_scale);
+				else
+				if (viewer_dist > hi_scale)
+					alpha = (viewer_dist - max_scale) / (hi_scale - max_scale);
+
+				buf->alpha = (int)(alpha * 255 + 0.5f);
+
+				float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+				float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+				viewer_dist = 1.0/viewer_dist;
+
+				fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+				fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+
+				int tx = (int)floorf(fx + 0.5f);
+				int ty = (int)floorf(fy + 0.5f);
+
+				// convert from samples to cells
+				buf->s_pos[0] = (tx - 1) >> 1;
+				buf->s_pos[1] = (ty - 1) >> 1;
+				buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+			}
 			else
-			if (viewer_dist > hi_scale)
-				alpha = (viewer_dist - max_scale) / (hi_scale - max_scale);
-
-			buf->alpha = (int)(alpha * 255 + 0.5f);
-
-			float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
-			float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
-
-			viewer_dist = 1.0/viewer_dist;
-
-			fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-			fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
-
-			int tx = (int)floorf(fx + 0.5f);
-			int ty = (int)floorf(fy + 0.5f);
-
-			// convert from samples to cells
-			buf->s_pos[0] = (tx - 1) >> 1;
-			buf->s_pos[1] = (ty - 1) >> 1;
-			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+				return;
 		}
-		else
-			return;
-		#else
-		//if (r->int_flag)
+		else // #else
 		{
-			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
-			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
+			//if (r->int_flag)
+			{
+				int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
+				int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
 
-			// convert from samples to cells
-			buf->s_pos[0] = (tx - 1) >> 1;
-			buf->s_pos[1] = (ty - 1) >> 1;
-			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
-		}
-		/*
-		else
-		{
-			int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
-			int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5) + r->add[1];
+				// convert from samples to cells
+				buf->s_pos[0] = (tx - 1) >> 1;
+				buf->s_pos[1] = (ty - 1) >> 1;
+				buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+			}
+			/*
+			else
+			{
+				int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5) + r->add[0];
+				int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5) + r->add[1];
 
-			// convert from samples to cells
-			buf->s_pos[0] = (tx - 1) >> 1;
-			buf->s_pos[1] = (ty - 2) >> 1;
-			buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
-		}
-		*/
-		#endif
+				// convert from samples to cells
+				buf->s_pos[0] = (tx - 1) >> 1;
+				buf->s_pos[1] = (ty - 2) >> 1;
+				buf->s_pos[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 4;
+			}
+			*/
+		} // #endif
 	}
 
 	int ang = (int)floor((yaw - r->yaw) * s->angles / 360.0f + 0.5f);
@@ -1297,168 +1313,156 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 			if (global_refl_mode)
 			{
-				#if PERSPECTIVE_TEST
-				float viewer_dist; // {vx,vy,vz}  r->pos
-				float eye_to_vtx[3] =
+				if (r->perspective) // #if PERSPECTIVE_TEST
 				{
-					vx - r->view_pos[0],
-					vy - r->view_pos[1],
-					vz - r->view_pos[2],
-				};
+					float viewer_dist; // {vx,vy,vz}  r->pos
+					float eye_to_vtx[3] =
+					{
+						vx - r->view_pos[0],
+						vy - r->view_pos[1],
+						vz - r->view_pos[2],
+					};
 
-				viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
-				if (viewer_dist > 0)
-				{
-					#if PERSPECTIVE_TEST > 2
-					viewer_dist = pow(10.0, (floor(0.5 + log10(viewer_dist)*PERSPECTIVE_TEST))/PERSPECTIVE_TEST);
-					#endif
+					viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+					if (viewer_dist > 0)
+					{
+						viewer_dist = 1.0/viewer_dist;
 
-					viewer_dist = 1.0/viewer_dist;
+						float fx = mul[0] * vx + mul[2] * vy;// + add[0];
+						float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
 
-					float fx = mul[0] * vx + mul[2] * vy;// + add[0];
-					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
+						fx *= viewer_dist;
+						fy *= viewer_dist;
 
-					fx *= viewer_dist;
-					fy *= viewer_dist;
+						float qx = (add[0] - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+						float qy = (add[1] - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
-					float qx = (add[0] - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-					float qy = (add[1] - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+						fx += qx;
+						fy += qy;
 
-					#if PERSPECTIVE_TEST > 1
-					fx += 2*(int)floor(0.5 * qx + 0.5f);
-					fy += 2*(int)floor(0.5 * qy + 0.5f);
-					#else
-					fx += qx;
-					fy += qy;
-					#endif
+						int tx = (int)floorf(fx + 0.5f);
+						int ty = (int)floorf(fy + 0.5f);
 
-					int tx = (int)floorf(fx + 0.5f);
-					int ty = (int)floorf(fy + 0.5f);
+						xyzf[dy][dx][0] = tx;
+						xyzf[dy][dx][1] = ty;
+						xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
 
-					xyzf[dy][dx][0] = tx;
-					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
-
-					// todo: if patch is known to fully fit in screen, set f=0 
-					// otherwise we need to check if / which screen edges cull each vertex
-					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+						// todo: if patch is known to fully fit in screen, set f=0 
+						// otherwise we need to check if / which screen edges cull each vertex
+						xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					}
+					else
+					{
+						// cull entire patch if any vertex is behind view_pos
+						return;
+					}
 				}
-				else
+				else // #else
 				{
-					// cull entire patch if any vertex is behind view_pos
-					return;
-				}
-				#else
-				if (r->int_flag)
-				{
-					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
-					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
+					if (r->int_flag)
+					{
+						int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
+						int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
 
-					xyzf[dy][dx][0] = tx;
-					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
+						xyzf[dy][dx][0] = tx;
+						xyzf[dy][dx][1] = ty;
+						xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
 
-					// todo: if patch is known to fully fit in screen, set f=0 
-					// otherwise we need to check if / which screen edges cull each vertex
-					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
-				}
-				else
-				{
-					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
-					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
+						// todo: if patch is known to fully fit in screen, set f=0 
+						// otherwise we need to check if / which screen edges cull each vertex
+						xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					}
+					else
+					{
+						int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
+						int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
 
-					xyzf[dy][dx][0] = tx;
-					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
+						xyzf[dy][dx][0] = tx;
+						xyzf[dy][dx][1] = ty;
+						xyzf[dy][dx][2] = (int)(2 * r->water) - vz;
 
-					// todo: if patch is known to fully fit in screen, set f=0 
-					// otherwise we need to check if / which screen edges cull each vertex
-					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
-				}
-				#endif
+						// todo: if patch is known to fully fit in screen, set f=0 
+						// otherwise we need to check if / which screen edges cull each vertex
+						xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					}
+				} // #endif
 			}
 			else
 			{
-				#if PERSPECTIVE_TEST
-				float viewer_dist; // {vx,vy,vz}  r->pos
-				float eye_to_vtx[3] =
+				if (r->perspective) // #if PERSPECTIVE_TEST
 				{
-					vx - r->view_pos[0],
-					vy - r->view_pos[1],
-					vz - r->view_pos[2],
-				};
+					float viewer_dist; // {vx,vy,vz}  r->pos
+					float eye_to_vtx[3] =
+					{
+						vx - r->view_pos[0],
+						vy - r->view_pos[1],
+						vz - r->view_pos[2],
+					};
 
-				viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
-				if (viewer_dist > 0)
-				{
-					#if PERSPECTIVE_TEST > 2
-					viewer_dist = pow(10.0, (floor(0.5 + log10(viewer_dist)*PERSPECTIVE_TEST))/PERSPECTIVE_TEST);
-					#endif
+					viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+					if (viewer_dist > 0)
+					{
+						viewer_dist = 1.0/viewer_dist;
+						
+						float fx = mul[0] * vx + mul[2] * vy;// + add[0];
+						float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
 
-					viewer_dist = 1.0/viewer_dist;
-					
-					float fx = mul[0] * vx + mul[2] * vy;// + add[0];
-					float fy = mul[1] * vx + mul[3] * vy + mul[5] * vz;// + add[1];
+						fx *= viewer_dist;
+						fy *= viewer_dist;
 
-					fx *= viewer_dist;
-					fy *= viewer_dist;
+						float qx = (add[0] - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
+						float qy = (add[1] - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
 
-					float qx = (add[0] - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-					float qy = (add[1] - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+						fx += qx;
+						fy += qy;
 
-					#if PERSPECTIVE_TEST > 1
-					fx += 2*(int)floor(0.5 * qx + 0.5f);
-					fy += 2*(int)floor(0.5 * qy + 0.5f);
-					#else
-					fx += qx;
-					fy += qy;
-					#endif
+						int tx = (int)floorf(fx + 0.5f);
+						int ty = (int)floorf(fy + 0.5f);
 
-					int tx = (int)floorf(fx + 0.5f);
-					int ty = (int)floorf(fy + 0.5f);
+						xyzf[dy][dx][0] = tx;
+						xyzf[dy][dx][1] = ty;
+						xyzf[dy][dx][2] = vz;
 
-					xyzf[dy][dx][0] = tx;
-					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = vz;
-
-					// todo: if patch is known to fully fit in screen, set f=0 
-					// otherwise we need to check if / which screen edges cull each vertex
-					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+						// todo: if patch is known to fully fit in screen, set f=0 
+						// otherwise we need to check if / which screen edges cull each vertex
+						xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					}
+					else
+					{
+						// cull entire patch if any vertex is behind view_pos
+						return;
+					}
 				}
-				else
+				else // #else
 				{
-					// cull entire patch if any vertex is behind view_pos
-					return;
-				}
-				#else
-				// transform 
-				if (r->int_flag)
-				{
-					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
-					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
+					// transform 
+					if (r->int_flag)
+					{
+						int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5 + add[0]);
+						int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5 + add[1]);
 
-					xyzf[dy][dx][0] = tx;
-					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = vz;
+						xyzf[dy][dx][0] = tx;
+						xyzf[dy][dx][1] = ty;
+						xyzf[dy][dx][2] = vz;
 
-					// todo: if patch is known to fully fit in screen, set f=0 
-					// otherwise we need to check if / which screen edges cull each vertex
-					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
-				}
-				else
-				{
-					int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
-					int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
+						// todo: if patch is known to fully fit in screen, set f=0 
+						// otherwise we need to check if / which screen edges cull each vertex
+						xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					}
+					else
+					{
+						int tx = (int)floor(mul[0] * vx + mul[2] * vy + 0.5) + iadd[0];
+						int ty = (int)floor(mul[1] * vx + mul[3] * vy + mul[5] * vz + 0.5) + iadd[1];
 
-					xyzf[dy][dx][0] = tx;
-					xyzf[dy][dx][1] = ty;
-					xyzf[dy][dx][2] = vz;
+						xyzf[dy][dx][0] = tx;
+						xyzf[dy][dx][1] = ty;
+						xyzf[dy][dx][2] = vz;
 
-					// todo: if patch is known to fully fit in screen, set f=0 
-					// otherwise we need to check if / which screen edges cull each vertex
-					xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
-				}
-				#endif
+						// todo: if patch is known to fully fit in screen, set f=0 
+						// otherwise we need to check if / which screen edges cull each vertex
+						xyzf[dy][dx][3] = (tx < 0) | ((tx > w) << 1) | ((ty < 0) << 2) | ((ty > h) << 3);
+					}
+				} // #endif
 			}
 		}
 	}
@@ -2283,12 +2287,12 @@ Inst** GetNearbyCharacters(Renderer* r)
 
 int render_break_point[2] = { -1,-1 };
 
-void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Inst* inst, const int scene_shift[2])
+void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, float zoom, float yaw, const float pos[3], const float lt[4], int width, int height, AnsiCell* ptr, Inst* inst, const int scene_shift[2], bool perspective)
 {
+	r->perspective = perspective;
 
 	if (inst)
 		HideInst(inst);
-
 
 	AnsiCell* out_ptr = ptr;
 
@@ -2369,9 +2373,10 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		}
 	}
 
-	#if PERSPECTIVE_TEST
-	r->int_flag = false;
-	#endif
+	if (r->perspective) // #if PERSPECTIVE_TEST
+	{
+		r->int_flag = false;
+	} // #endif
 
 	r->pos[0] = pos[0];
 	r->pos[1] = pos[1];
@@ -2492,59 +2497,11 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	
 	double clip_water[4] =  { 0, 0, 1, -((r->water-1)*2.0/0xffff - 1.0) };
 
-	#if PERSPECTIVE_TEST
-	double neutral_plane[4] =
-	{
-		-sinyaw,
-		cosyaw,
-		0,
-		sinyaw*pos[0] - cosyaw*pos[1]
-	};
-
-	double test = 0;
-	double screen_corner[2][4][4]=
-	{
-		{
-			{0+test,0+test,0,1},
-			{dw-test,0+test,0,1},
-			{0+test,dh-test,0,1},
-			{dw-test,dh-test,0,1}
-		},
-		{
-			{0+test,0+test,10,1},
-			{dw-test,0+test,10,1},
-			{0+test,dh-test,10,1},
-			{dw-test,dh-test,10,1}
-		}
-	};
-
-	double clip_tm[16];
-	Invert(tm,clip_tm);
-
 	double world_corner[2][4][4];
-
-	for (int c=0; c<4; c++)
-	{
-		// transform corners from screen to premultiplied world
-		Product(clip_tm, screen_corner[0][c], world_corner[0][c]);
-		Product(clip_tm, screen_corner[1][c], world_corner[1][c]);
-
-		// from premultiplied to world
-		world_corner[0][c][0] /= HEIGHT_CELLS;
-		world_corner[0][c][1] /= HEIGHT_CELLS;
-		world_corner[1][c][0] /= HEIGHT_CELLS;
-		world_corner[1][c][1] /= HEIGHT_CELLS;
-
-		// intersect resulting corner lines with neutral_plane
-		world_corner[1][c][0] -= world_corner[0][c][0];
-		world_corner[1][c][1] -= world_corner[0][c][1];
-		world_corner[1][c][2] -= world_corner[0][c][2];
-		double a = -(DotProduct(neutral_plane,world_corner[0][c]) + neutral_plane[3])/DotProduct(neutral_plane, world_corner[1][c]);
-		world_corner[0][c][0] += a * world_corner[1][c][0];
-		world_corner[0][c][1] += a * world_corner[1][c][1];
-		world_corner[0][c][2] += a * world_corner[1][c][2];
-	}
-
+	double* corner_ll = world_corner[0][0];
+	double* corner_lr = world_corner[0][1];
+	double* corner_ul = world_corner[0][2];
+	double* corner_ur = world_corner[0][3];
 	double focus_node[3] = 
 	{
 		pos[0] + sinyaw * r->focal / HEIGHT_CELLS,
@@ -2552,31 +2509,80 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		pos[2] + sin30 * r->focal / HEIGHT_CELLS * HEIGHT_SCALE
 	};
 
-	double* corner_ll = world_corner[0][0];
-	double* corner_lr = world_corner[0][1];
-	double* corner_ul = world_corner[0][2];
-	double* corner_ur = world_corner[0][3];
 
-	// note: for reflected planes, simply reflect corners and focal node ( z' = 2*water-z )
+	if (r->perspective) // #if PERSPECTIVE_TEST
+	{
+		double neutral_plane[4] =
+		{
+			-sinyaw,
+			cosyaw,
+			0,
+			sinyaw*pos[0] - cosyaw*pos[1]
+		};
 
-	// left  ( focus, ll, ul )
-	PlaneFromPoints(focus_node, corner_ll, corner_ul, clip_world[0]);
+		double test = 0;
+		double screen_corner[2][4][4]=
+		{
+			{
+				{0+test,0+test,0,1},
+				{dw-test,0+test,0,1},
+				{0+test,dh-test,0,1},
+				{dw-test,dh-test,0,1}
+			},
+			{
+				{0+test,0+test,10,1},
+				{dw-test,0+test,10,1},
+				{0+test,dh-test,10,1},
+				{dw-test,dh-test,10,1}
+			}
+		};
 
-	// right ( focus, ur, lr )
-	PlaneFromPoints(focus_node, corner_ur, corner_lr, clip_world[1]);
+		double clip_tm[16];
+		Invert(tm,clip_tm);
 
-	// top   ( focus, ul, ur )
-	PlaneFromPoints(focus_node, corner_ul, corner_ur, clip_world[2]);
+		for (int c=0; c<4; c++)
+		{
+			// transform corners from screen to premultiplied world
+			Product(clip_tm, screen_corner[0][c], world_corner[0][c]);
+			Product(clip_tm, screen_corner[1][c], world_corner[1][c]);
 
-	// bottom( focus, lr, ll )
-	PlaneFromPoints(focus_node, corner_lr, corner_ll, clip_world[3]);
+			// from premultiplied to world
+			world_corner[0][c][0] /= HEIGHT_CELLS;
+			world_corner[0][c][1] /= HEIGHT_CELLS;
+			world_corner[1][c][0] /= HEIGHT_CELLS;
+			world_corner[1][c][1] /= HEIGHT_CELLS;
 
-	// water
-	clip_world[4][0]=0;
-	clip_world[4][1]=0;
-	clip_world[4][2]=1;
-	clip_world[4][3]=-clip_world[0][2]*(r->water-1);
-	#else
+			// intersect resulting corner lines with neutral_plane
+			world_corner[1][c][0] -= world_corner[0][c][0];
+			world_corner[1][c][1] -= world_corner[0][c][1];
+			world_corner[1][c][2] -= world_corner[0][c][2];
+			double a = -(DotProduct(neutral_plane,world_corner[0][c]) + neutral_plane[3])/DotProduct(neutral_plane, world_corner[1][c]);
+			world_corner[0][c][0] += a * world_corner[1][c][0];
+			world_corner[0][c][1] += a * world_corner[1][c][1];
+			world_corner[0][c][2] += a * world_corner[1][c][2];
+		}
+
+		// note: for reflected planes, simply reflect corners and focal node ( z' = 2*water-z )
+
+		// left  ( focus, ll, ul )
+		PlaneFromPoints(focus_node, corner_ll, corner_ul, clip_world[0]);
+
+		// right ( focus, ur, lr )
+		PlaneFromPoints(focus_node, corner_ur, corner_lr, clip_world[1]);
+
+		// top   ( focus, ul, ur )
+		PlaneFromPoints(focus_node, corner_ul, corner_ur, clip_world[2]);
+
+		// bottom( focus, lr, ll )
+		PlaneFromPoints(focus_node, corner_lr, corner_ll, clip_world[3]);
+
+		// water
+		clip_world[4][0]=0;
+		clip_world[4][1]=0;
+		clip_world[4][2]=1;
+		clip_world[4][3]=-clip_world[0][2]*(r->water-1);
+	}
+	else // #else
 	// easier to use another transform for clipping
 	{
 		// somehow it works
@@ -2604,7 +2610,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
 		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
-	#endif
+	// #endif
 
 	r->items = 0;
 	r->npcs = 0;
@@ -2737,34 +2743,37 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	double refl_tm[] = { r->mul[0], r->mul[1], r->mul[2], r->mul[3], r->mul[4], r->mul[5], r->add[0], r->add[1], r->add[2] };
 
-	#if PERSPECTIVE_TEST
-	corner_ll[2] = 2*water - corner_ll[2];
-	corner_lr[2] = 2*water - corner_lr[2];
-	corner_ul[2] = 2*water - corner_ul[2];
-	corner_ur[2] = 2*water - corner_ur[2];
-
-	focus_node[2] = 2*water - focus_node[2];
-	
-	// left  ( focus, ll, ul )
-	PlaneFromPoints(focus_node, corner_ul, corner_ll, clip_world[0]);
-
-	// right ( focus, ur, lr )
-	PlaneFromPoints(focus_node, corner_lr, corner_ur, clip_world[1]);
-
-	// top   ( focus, ul, ur )
-	PlaneFromPoints(focus_node, corner_ur, corner_ul, clip_world[2]);
-
-	// bottom( focus, lr, ll )
-	PlaneFromPoints(focus_node, corner_ll, corner_lr, clip_world[3]);	
-
-	clip_world[4][0]=0;
-	clip_world[4][1]=0;
-	clip_world[4][2]=1; // note: during refl, we again query ABOVE water!
-	clip_world[4][3]=-clip_world[0][2]*(r->water-1);
-	#else
-	clip_water[2] = -1; // was +1
-	clip_water[3] = +((r->water+1)*-2.0 / 0xffff + 1.0); // was -((r->water-1)*2.0/0xffff - 1.0)
+	if (r->perspective) // #if PERSPECTIVE_TEST
 	{
+		corner_ll[2] = 2*water - corner_ll[2];
+		corner_lr[2] = 2*water - corner_lr[2];
+		corner_ul[2] = 2*water - corner_ul[2];
+		corner_ur[2] = 2*water - corner_ur[2];
+
+		focus_node[2] = 2*water - focus_node[2];
+		
+		// left  ( focus, ll, ul )
+		PlaneFromPoints(focus_node, corner_ul, corner_ll, clip_world[0]);
+
+		// right ( focus, ur, lr )
+		PlaneFromPoints(focus_node, corner_lr, corner_ur, clip_world[1]);
+
+		// top   ( focus, ul, ur )
+		PlaneFromPoints(focus_node, corner_ur, corner_ul, clip_world[2]);
+
+		// bottom( focus, lr, ll )
+		PlaneFromPoints(focus_node, corner_ll, corner_lr, clip_world[3]);	
+
+		clip_world[4][0]=0;
+		clip_world[4][1]=0;
+		clip_world[4][2]=1; // note: during refl, we again query ABOVE water!
+		clip_world[4][3]=-clip_world[0][2]*(r->water-1);
+	}
+	else // #else
+	{
+		clip_water[2] = -1; // was +1
+		clip_water[3] = +((r->water+1)*-2.0 / 0xffff + 1.0); // was -((r->water-1)*2.0/0xffff - 1.0)
+	
 		// somehow it works
 		double clip_tm[16];
 		clip_tm[0] = +cosyaw / (0.5 * dw) * ds * HEIGHT_CELLS;
@@ -2790,7 +2799,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		TransposeProduct(clip_tm, clip_top, clip_world[3]);
 		TransposeProduct(clip_tm, clip_water, clip_world[4]);
 	}
-	#endif
+	// #endif
 
 	global_refl_mode = true;
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
@@ -2813,27 +2822,29 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	}
 	*/
 
+	float ww_x, ww_y, ww_c, wx_x, wx_y, wx_c, wy_x, wy_y, wy_c;
 
-	#if PERSPECTIVE_TEST
-	// screen to world water coords conversion coefficients
-	float ww_x = r->view_dir[0]*tm[5] - r->view_dir[1]*tm[1];
-	float ww_y = r->view_dir[1]*tm[0] - r->view_dir[0]*tm[4];
-	float ww_c = tm[1]*tm[4] - tm[0]*tm[5];
-	float wx_x = (r->view_pos[0]*tm[5]*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[1] + r->view_pos[1]*tm[5] + tm[13] + tm[9]*water));
-	float wx_y = (r->view_pos[0]*tm[4]*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[0] + r->view_pos[1]*tm[4] + tm[12] + tm[8]*water));
-	float wx_c = tm[5]*(-r->view_ofs[0] + tm[12] + tm[8]*water) + tm[4]*(r->view_ofs[1] - tm[13] - tm[9]*water);
-	float wy_x = (r->view_pos[1]*tm[1]*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[1] + r->view_pos[0]*tm[1] + tm[13] + tm[9]*water));
-	float wy_y = (r->view_pos[1]*tm[0]*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[0] + r->view_pos[0]*tm[0] + tm[12] + tm[8]*water));
-	float wy_c = tm[1]*(r->view_ofs[0] - tm[12] - tm[8]*water) + tm[0]*(-r->view_ofs[1] + tm[13] + tm[9]*water);
-	/*
-	e1 = cx == m00*wx + m10*wy + m20*wz + m30
-	e2 = cy == m01*wx + m11*wy + m21*wz + m31
-	e3 = cw == (wx-ex)*vx + (wy-ey)*vy
-	e4 = (sx - dx) * cw + dx == cx
-	e5 = (sy - dy) * cw + dy == cy
-	sol = Solve[{e1, e2, e3, e4, e5}, {wx, wy, cx, cy, cw}]
-	*/
-	#endif
+	if (r->perspective) // #if PERSPECTIVE_TEST
+	{
+		// screen to world water coords conversion coefficients
+		ww_x = r->view_dir[0]*tm[5] - r->view_dir[1]*tm[1];
+		ww_y = r->view_dir[1]*tm[0] - r->view_dir[0]*tm[4];
+		ww_c = tm[1]*tm[4] - tm[0]*tm[5];
+		wx_x = (r->view_pos[0]*tm[5]*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[1] + r->view_pos[1]*tm[5] + tm[13] + tm[9]*water));
+		wx_y = (r->view_pos[0]*tm[4]*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[0] + r->view_pos[1]*tm[4] + tm[12] + tm[8]*water));
+		wx_c = tm[5]*(-r->view_ofs[0] + tm[12] + tm[8]*water) + tm[4]*(r->view_ofs[1] - tm[13] - tm[9]*water);
+		wy_x = (r->view_pos[1]*tm[1]*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[1] + r->view_pos[0]*tm[1] + tm[13] + tm[9]*water));
+		wy_y = (r->view_pos[1]*tm[0]*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[0] + r->view_pos[0]*tm[0] + tm[12] + tm[8]*water));
+		wy_c = tm[1]*(r->view_ofs[0] - tm[12] - tm[8]*water) + tm[0]*(-r->view_ofs[1] + tm[13] + tm[9]*water);
+		/*
+		e1 = cx == m00*wx + m10*wy + m20*wz + m30
+		e2 = cy == m01*wx + m11*wy + m21*wz + m31
+		e3 = cw == (wx-ex)*vx + (wy-ey)*vy
+		e4 = (sx - dx) * cw + dx == cx
+		e5 = (sy - dy) * cw + dy == cy
+		sol = Solve[{e1, e2, e3, e4, e5}, {wx, wy, cx, cy, cw}]
+		*/
+	} // #endif
 
 	Sample* src = r->sample_buffer.ptr + 2 + 2 * dw;
 	for (int y = 0; y < height; y++)
@@ -3243,32 +3254,35 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 			else
 			if (src[0].height < water && src[1].height < water && src[dw].height < water && src[dw+1].height < water)
 			{
-				#if PERSPECTIVE_TEST
-				float sx_dx = 2.0*x - r->view_ofs[0];
-				float sy_dy = 2.0*y - r->view_ofs[1];
-				float ww = (sx_dx*ww_x + sy_dy*ww_y + ww_c);
-				double w[2]; 
-				if (ww<0)
-				{
-					ww = 1.0/ww;
-					float wx = ww * (wx_c + wx_x * sx_dx - wx_y * sy_dy);
-					float wy = ww * (wy_c - wy_x * sx_dx + wy_y * sy_dy);
-					w[0] = wx;
-					w[1] = wy;
-				}
-				else
-				{
-					ptr->gl = ' ';
-					src += 2;
-					continue;
-				}
-				#else
-				double s[4] = { 2.0*x, 2.0*y, water, 1.0 };
 				double w[4]; 
-				Product(inv_tm, s, w); // convert from screen to world
-				w[0] = round(w[0]);
-				w[1] = round(w[1]);
-				#endif
+				if (r->perspective) // #if PERSPECTIVE_TEST
+				{
+					float sx_dx = 2.0*x - r->view_ofs[0];
+					float sy_dy = 2.0*y - r->view_ofs[1];
+					float ww = (sx_dx*ww_x + sy_dy*ww_y + ww_c);
+					if (ww<0)
+					{
+						ww = 1.0/ww;
+						float wx = ww * (wx_c + wx_x * sx_dx - wx_y * sy_dy);
+						float wy = ww * (wy_c - wy_x * sx_dx + wy_y * sy_dy);
+						w[0] = wx;
+						w[1] = wy;
+					}
+					else
+					{
+						ptr->gl = ' ';
+						src += 2;
+						continue;
+					}
+				}
+				else // #else
+				{
+					double s[4] = { 2.0*x, 2.0*y, water, 1.0 };
+					Product(inv_tm, s, w); // convert from screen to world
+					w[0] = round(w[0]);
+					w[1] = round(w[1]);
+				}
+				// #endif
 
 				double d = r->pn.octaveNoise0_1(w[0] * 0.05, w[1] * 0.05, r->pn_time, 4);
 

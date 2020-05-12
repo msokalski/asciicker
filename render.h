@@ -55,7 +55,8 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		//
 	float zoom, float yaw, const float pos[3], const float lt[4],	// view
 	int width, int height, AnsiCell* ptr,  // target
 	Inst* player, // player
-	const int scene_shift[2]); // special fx
+	const int scene_shift[2],
+	bool perspective);
 
 void ProjectCoords(Renderer* r, const float pos[3], int view[3]); // like a sprite!
 

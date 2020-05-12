@@ -145,6 +145,8 @@ struct Game
 	int font_size[2];
 	int render_size[2];
 
+	bool perspective;
+
 	//bool player_hit; // helper for detecting clicks on the player sprite
 	bool show_keyb; // activated together with talk_box by clicking on character
 	int keyb_hide;  // show / hide animator (vertical position)

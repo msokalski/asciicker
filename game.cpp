@@ -3224,7 +3224,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	int ss[2] = { scene_shift/2 , 0 };
 
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
-		width, height, ptr, player_inst, ss);
+		width, height, ptr, player_inst, ss, perspective);
 
 	Item** inrange = GetNearbyItems(renderer);
 
@@ -4242,6 +4242,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		{
 			if (key == '\n' || key == '\r')
 				player.SetActionAttack(stamp);
+
+			if (key == '\\' || key == '|')
+				perspective = !perspective;
 
 			if (key == '0')
 			{
