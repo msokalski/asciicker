@@ -1820,6 +1820,7 @@ struct HELMET { enum
 struct ARMOR { enum
 {
 	NONE = 0,
+	REGULAR_ARMOR,
 	SIZE
 };};
 

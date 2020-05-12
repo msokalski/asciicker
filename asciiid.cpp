@@ -690,6 +690,7 @@ struct MyFont
 		}
 
 		fclose(f);
+		return true;
 	}
 
 	static bool WriteBDF(const char* path, int w, int h, uint32_t* buf, int shift)
@@ -777,6 +778,7 @@ struct MyFont
 
 		fprintf(f,"ENDFONT\n");
 		fclose(f);
+		return true;
 	}
 
 	static void Load(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
