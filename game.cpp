@@ -1814,6 +1814,7 @@ struct SHIELD { enum
 struct HELMET { enum
 {
 	NONE = 0,
+	REGULAR_HELMET,
 	SIZE
 };};
 
@@ -2354,6 +2355,7 @@ void Game::ExecuteItem(int my_item)
 					inventory.my_item[my_item].in_use = true;
 				}
 			}
+			break;
 		}
 
 		case 'A':
@@ -2380,6 +2382,7 @@ void Game::ExecuteItem(int my_item)
 					inventory.my_item[my_item].in_use = true;
 				}
 			}
+			break;
 		}
 	}
 }
