@@ -4544,6 +4544,9 @@ void Game::StartContact(int id, int x, int y, int b)
 
 		if (cp[0] >= render_size[0] - bars_pos)
 		{
+			// temporarily switch ortho/perspective
+			perspective = !perspective;
+
 			// temporarily drop item
 			/*
 			if (inventory.my_items > 0)
