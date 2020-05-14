@@ -4054,12 +4054,14 @@ World* LoadWorld(FILE* f, bool editor)
 			int frame;
 			int reps[4];
 			int flags;
-			fread(pos, 1, sizeof(float[3]), f);
-			fread(&yaw, 1, sizeof(float), f);
-			fread(&anim, 1, sizeof(int), f);
-			fread(&frame, 1, sizeof(int), f);
-			fread(reps, 1, sizeof(int[4]), f);
-			fread(&flags, 1, 4, f);
+
+			int r;
+			r = fread(pos, 1, sizeof(float[3]), f);
+			r = fread(&yaw, 1, sizeof(float), f);
+			r = fread(&anim, 1, sizeof(int), f);
+			r = fread(&frame, 1, sizeof(int), f);
+			r = fread(reps, 1, sizeof(int[4]), f);
+			r = fread(&flags, 1, 4, f);
 
 			int story_id = -1;
 			if (format_version > 0)
@@ -4086,20 +4088,22 @@ World* LoadWorld(FILE* f, bool editor)
 		else
 		if (mesh_id_len == -2)
 		{
+			int r;
+
 			int item_proto_index = -1;
-			fread(&item_proto_index, 1, 4, f);
+			r = fread(&item_proto_index, 1, 4, f);
 
 			int count = 0;
-			fread(&count, 1, sizeof(int), f);
+			r = fread(&count, 1, sizeof(int), f);
 
 			float pos[3] = { 0,0,0 };
 			float yaw = 0;
 
-			fread(pos, 1, sizeof(float[3]), f);
-			fread(&yaw, 1, sizeof(float), f);
+			r = fread(pos, 1, sizeof(float[3]), f);
+			r = fread(&yaw, 1, sizeof(float), f);
 
 			int flags;
-			fread(&flags, 1, 4, f);
+			r = fread(&flags, 1, 4, f);
 
 			int story_id = -1;
 			if (format_version > 0)
@@ -4433,6 +4437,8 @@ bool DetachInst(World* w, Inst* inst)
 			break;
 		}
 
+		case BSP::BSP_TYPE_INST:
+			break;
 	}
 
 	inst->next = w->head_inst;

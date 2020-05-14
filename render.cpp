@@ -30,6 +30,8 @@ extern Sprite* player_sprite;
 extern Sprite* attack_sprite;
 extern Sprite* inventory_sprite;
 
+void* GetMaterialArr();
+
 template <typename Sample>
 inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3], int _or)
 {
@@ -1197,10 +1199,12 @@ void Renderer::RenderPatch(Patch* p, int x, int y, int view_flags, void* cookie 
 
 							#ifdef DARK_TERRAIN
 							if (dark&(((uint64_t)1) << visual_idx))
+							{
 								if (s->diffuse > 64)
 									s->diffuse -= 64;
 								else
 									s->diffuse = 0;
+							}
 							#endif
 
 							/*
@@ -2628,7 +2632,6 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	double inv_tm[16];
 	Invert(tm, inv_tm);
 
-	void* GetMaterialArr();
 	Material* matlib = (Material*)GetMaterialArr();
 
 	int sh_x = width+1 +scene_shift[0]*2; // & ~1;

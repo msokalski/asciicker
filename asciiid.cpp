@@ -616,9 +616,9 @@ struct MyFont
 			0,
 			32,
 			1, // has unicode table
-			chars,
-			cell_h * ((cell_w + 7)>>3),
-			cell_h, cell_w
+			(unsigned)chars,
+			(unsigned)(cell_h * ((cell_w + 7)>>3)),
+			(unsigned)cell_h, (unsigned)cell_w
 		};
 
 		fwrite(&hdr,32,1,f);
@@ -5899,7 +5899,7 @@ void my_render(A3D_WND* wnd)
 				{
 					for (int i = 0; i < 256; i++)
 					{
-						fread(mat[i].shade, sizeof(MatCell), 4 * 16, f);
+						int r = fread(mat[i].shade, sizeof(MatCell), 4 * 16, f);
 						mat[i].Update();
 					}
 					fclose(f);
@@ -7056,7 +7056,7 @@ void my_render(A3D_WND* wnd)
 								int flags = INST_USE_TREE | INST_VISIBLE;
 								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
 
-								float pos[3] = { hit[0], hit[1], hit[2] };
+								float pos[3] = { (float)hit[0], (float)hit[1], (float)hit[2] };
 
 								int _anim = sp->rand_anim ? fast_rand() % active_sprite->anims : sp->anim;
 								int _frame = sp->rand_frame ? fast_rand() % active_sprite->anim[_anim].length : sp->frame % active_sprite->anim[_anim].length;
@@ -7125,7 +7125,7 @@ void my_render(A3D_WND* wnd)
 								int flags = INST_USE_TREE | INST_VISIBLE;
 								// inst = CreateInst(active_mesh, flags, inst_tm, 0);
 
-								float pos[3] = { hit[0], hit[1], hit[2] };
+								float pos[3] = { (float)hit[0], (float)hit[1], (float)hit[2] };
 
 								int story_id = -1; // READ IT FROM UI
 

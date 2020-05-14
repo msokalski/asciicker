@@ -55,7 +55,7 @@ void ReadConf(Game* g)
 	if (f)
 	{
 		//printf("ReadConf ok\n");
-		fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+		int r = fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 		fclose(f);
 	}
 	else

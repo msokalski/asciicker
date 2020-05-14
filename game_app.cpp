@@ -141,7 +141,7 @@ void SetScreen(bool alt)
     if (term && strcmp(term,"xterm-kitty")==0)
     {
         xterm_kitty = alt;
-        write(STDOUT_FILENO, alt?"\x1B[?2017h":"\x1B[?2017l", 8);
+        int w = write(STDOUT_FILENO, alt?"\x1B[?2017h":"\x1B[?2017l", 8);
     }
     
     // // \x1B[?1002h only drags \x1B[?1003h all mouse events
@@ -164,12 +164,12 @@ void SetScreen(bool alt)
 		t.c_lflag &= ~ECHO; /* disable echo mode */
 
         tcsetattr(STDIN_FILENO, TCSANOW, &t);
-		write(STDOUT_FILENO,on_str,on_len);
+		int w = write(STDOUT_FILENO,on_str,on_len);
     }
 	else
     {
         tcsetattr(STDIN_FILENO, TCSANOW, &old);
-		write(STDOUT_FILENO,off_str,off_len);
+		int w = write(STDOUT_FILENO,off_str,off_len);
 
         if (tty>=0)
         {
@@ -177,7 +177,7 @@ void SetScreen(bool alt)
             GetWH(wh);
             char jump[64]; // jump to last line, reset palette then clear it line
             int len = sprintf(jump,"\x1B[%d;%df\x1B]R\x1B[2K",wh[1],1);
-            write(STDOUT_FILENO,jump,len);
+            w = write(STDOUT_FILENO,jump,len);
         }
     }
 }
@@ -185,7 +185,7 @@ void SetScreen(bool alt)
 #define FLUSH() \
     do \
     { \
-        write(STDOUT_FILENO,out,out_pos); \
+        int w = write(STDOUT_FILENO,out,out_pos); \
         out_pos=0; \
     } while(0)
 

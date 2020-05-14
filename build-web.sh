@@ -145,6 +145,54 @@ emcc --emrun -O3 \
     --preload-file sprites/wolfie-0000.xp \
     --preload-file sprites/wolfie-0001.xp \
     --preload-file sprites/wolfie-0010.xp \
+    --preload-file sprites/attack-0101.xp \
+    --preload-file sprites/attack-0111.xp \
+    --preload-file sprites/attack-1001.xp \
+    --preload-file sprites/attack-1011.xp \
+    --preload-file sprites/attack-1101.xp \
+    --preload-file sprites/attack-1111.xp \
+    --preload-file sprites/player-0100.xp \
+    --preload-file sprites/player-0101.xp \
+    --preload-file sprites/player-0110.xp \
+    --preload-file sprites/player-0111.xp \
+    --preload-file sprites/player-1000.xp \
+    --preload-file sprites/player-1001.xp \
+    --preload-file sprites/player-1010.xp \
+    --preload-file sprites/player-1011.xp \
+    --preload-file sprites/player-1100.xp \
+    --preload-file sprites/player-1101.xp \
+    --preload-file sprites/player-1110.xp \
+    --preload-file sprites/player-1111.xp \
+    --preload-file sprites/plydie-0100.xp \
+    --preload-file sprites/plydie-0101.xp \
+    --preload-file sprites/plydie-0110.xp \
+    --preload-file sprites/plydie-0111.xp \
+    --preload-file sprites/plydie-1000.xp \
+    --preload-file sprites/plydie-1001.xp \
+    --preload-file sprites/plydie-1010.xp \
+    --preload-file sprites/plydie-1011.xp \
+    --preload-file sprites/plydie-1100.xp \
+    --preload-file sprites/plydie-1101.xp \
+    --preload-file sprites/plydie-1110.xp \
+    --preload-file sprites/plydie-1111.xp \
+    --preload-file sprites/wolack-0101.xp \
+    --preload-file sprites/wolack-0111.xp \
+    --preload-file sprites/wolack-1001.xp \
+    --preload-file sprites/wolack-1011.xp \
+    --preload-file sprites/wolack-1101.xp \
+    --preload-file sprites/wolack-1111.xp \
+    --preload-file sprites/wolfie-0100.xp \
+    --preload-file sprites/wolfie-0101.xp \
+    --preload-file sprites/wolfie-0110.xp \
+    --preload-file sprites/wolfie-0111.xp \
+    --preload-file sprites/wolfie-1000.xp \
+    --preload-file sprites/wolfie-1001.xp \
+    --preload-file sprites/wolfie-1010.xp \
+    --preload-file sprites/wolfie-1011.xp \
+    --preload-file sprites/wolfie-1100.xp \
+    --preload-file sprites/wolfie-1101.xp \
+    --preload-file sprites/wolfie-1110.xp \
+    --preload-file sprites/wolfie-1111.xp \
     --preload-file meshes/bridge-1.akm \
     --preload-file meshes/fence.akm \
     --preload-file meshes/rock-1.akm \
