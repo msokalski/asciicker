@@ -205,7 +205,8 @@ emcc --emrun -O3 \
     --preload-file meshes/laundry-1.akm \
     --preload-file meshes/bridge-2.akm \
     --preload-file meshes/old-tree-1.akm \
-    --preload-file meshes/old-tree-2.akm
+    --preload-file meshes/old-tree-2.akm \
+    --preload-file meshes/brick-1.akm
 
 # run in mini-server
 
