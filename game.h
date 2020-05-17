@@ -171,6 +171,7 @@ struct Game
 
 	int water;
 	float prev_yaw;
+	float yaw_vel;
 
 	Renderer* renderer;
 	Physics* physics;

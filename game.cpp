@@ -3059,8 +3059,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					float sensitivity = 200.0f / input.size[0];
 					float yaw = input.contact[i].start_yaw - sensitivity * (input.contact[i].pos[0] - input.contact[i].drag_from[0]);
 					io.torque = 0;
-					SetPhysicsYaw(physics, yaw, 0);
 
+					double dt = (_stamp - stamp) * 0.000001 * 20;
+					yaw_vel = (yaw - prev_yaw); // will be set on ContactEnd
+					if (dt < 0)
+						dt = 0;
+					else
+					if (dt > 1)
+						dt = 1;
+					yaw = prev_yaw + yaw_vel*dt;
+					SetPhysicsYaw(physics, yaw, 0);
 				}
 				else
 				{
@@ -5164,6 +5172,12 @@ void Game::EndContact(int id, int x, int y)
 
 	switch (con->action)
 	{
+		case Input::Contact::TORQUE:
+		{
+			SetPhysicsYaw(physics, prev_yaw, yaw_vel);
+			break;
+		}
+
 		case Input::Contact::ITEM_GRID_CLICK:
 		{
 			// eat/use/unuse

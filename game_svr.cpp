@@ -963,8 +963,34 @@ int main(int argc, char* argv[])
         }
 		#endif
 
-		if (len>4 && strcmp(base_path+len-5,".run/")==0)
-			base_path[len-5] = 0;
+		if (len > 4)
+		{
+			char* dotrun[4] =
+			{
+				strstr(base_path, "/.run/"),
+#ifdef _WIN32
+				strstr(base_path, "\\.run\\"),
+				strstr(base_path, "\\.run/"),
+				strstr(base_path, "/.run\\"),
+#else
+				0,0,0
+#endif
+			};
+
+			int dotpos = -1;
+			for (int i = 0; i < 4; i++)
+			{
+				if (dotrun[i])
+				{
+					int pos = dotrun[i] - base_path;
+					if (dotpos < 0 || pos < dotpos)
+						dotpos = pos;
+				}
+			}
+
+			if (dotpos >= 0)
+				base_path[dotpos + 1] = 0;
+		}
     }
 	
 	LoadSprites();

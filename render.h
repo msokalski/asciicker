@@ -36,6 +36,7 @@ struct MatCell
 struct Material
 {
 	MatCell shade[4][16];
+	int mode; // mode and flags
 };
 
 struct Renderer;

@@ -2924,6 +2924,9 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 			*/
 
 			int shd = (dif[0] + dif[1] + dif[2] + dif[3] + 17 * 2) / (17 * 4); // 17: FF->F, 4: avr
+
+			
+
 			int gl = matlib[mat[0]].shade[elv][shd].gl;
 
 			int bg[3] = { 0,0,0 }; // 4
