@@ -193,8 +193,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	};
 
 	GZ gz;
-	int r;
-	r = fread(&gz, 10, 1, f);
+	fread(&gz, 10, 1, f);
 
 	/*
 	assert(gz.id1 == 31 && gz.id2 == 139 && "gz identity");
@@ -210,11 +209,11 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	if (gz.flg & (1 << 2/*FEXTRA*/))
 	{
 		int hi, lo;
-		r = fread(&hi, 1, 1, f);
-		r = fread(&lo, 1, 1, f);
+		fread(&hi, 1, 1, f);
+		fread(&lo, 1, 1, f);
 
 		int len = (hi << 8) | lo;
-		r = fseek(f, len, SEEK_CUR);
+		fseek(f, len, SEEK_CUR);
 	}
 
 	if (gz.flg & (1 << 3/*FNAME*/))
@@ -223,7 +222,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 		do
 		{
 			ch = 0;
-			r = fread(&ch, 1, 1, f);
+			fread(&ch, 1, 1, f);
 		} while (ch);
 	}
 
@@ -233,27 +232,27 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 		do
 		{
 			ch = 0;
-			r = fread(&ch, 1, 1, f);
+			fread(&ch, 1, 1, f);
 		} while (ch);
 	}
 
 	if (gz.flg & (1 << 1/*FFHCRC*/))
 	{
 		uint16_t crc;
-		r = fread(&crc, 2, 1, f);
+		fread(&crc, 2, 1, f);
 	}
 
 	// deflated data blocks ...
 	// read everything till end of file, trim tail by 8 bytes (crc32,isize)
 
 	long now = ftell(f);
-	r = fseek(f, 0, SEEK_END);
+	fseek(f, 0, SEEK_END);
 
 	unsigned long insize = ftell(f) - now - 8;
 	unsigned char* in = (unsigned char*)malloc(insize);
 	fseek(f, now, SEEK_SET);
 
-	r = fread(in, 1, insize, f);
+	fread(in, 1, insize, f);
 
 
 	size_t out_size=0;
@@ -265,8 +264,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	// GZ OUTRO:
 
 	uint32_t crc32, isize;
-	r = fread(&crc32, 4, 1, f);
-	r = fread(&isize, 4, 1, f);
+	fread(&crc32, 4, 1, f);
+	fread(&isize, 4, 1, f);
 	fclose(f);
 
 	// assert(out && isize == *(uint32_t*)out);
@@ -322,8 +321,100 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	{
 		merge = (XPCell*)((int*)(merge + cells) + 2);
 		for (int c = 0; c < cells; c++)
+		{
 			if (merge[c].bk[0] != 0xFF || merge[c].bk[1] != 0x00 || merge[c].bk[2] != 0xFF)
+			{
+				/*
+				// if this is last layer and fg is clear-cyan (not in ansi pal)
+				// pre-blend swoosh
+				if (m == layers && merge[c].fg[0] == 0 && merge[c].fg[1] == 255 && merge[c].fg[2] == 255)
+				{
+					bool fg_transp =
+						layer2[c].fg[0] == layer0[c].bk[0] &&
+						layer2[c].fg[1] == layer0[c].bk[1] &&
+						layer2[c].fg[2] == layer0[c].bk[2];
+					bool bk_transp =
+						layer2[c].bk[0] == layer0[c].bk[0] &&
+						layer2[c].bk[1] == layer0[c].bk[1] &&
+						layer2[c].bk[2] == layer0[c].bk[2];
+
+					switch (merge[c].glyph)
+					{
+						case 221: // left-half
+						{
+							// if current glyph is left:
+							// blend foreground (leave glyph)
+
+							// if current glyph is right:
+							// blend background (leave glyph)
+
+							// otherwise calc average color (on non-transparent part)
+							// set glyph to left-half, blend average color into foreground, set background to average
+						}
+
+						case 219: // full-block
+						{
+							// check full opaque
+							bool blend_bk = !bk_transp || !fg_transp && layer2[c].glyph == 219;
+							bool blend_fg = !fg_transp || !bk_transp && (layer2[c].glyph == 0 || layer2[c].glyph == 32);
+
+							int r, g, b;
+
+							if (blend_bk)
+							{
+								int r, g, b;
+								r = layer0[c].bk[0] + 51;
+								g = layer0[c].bk[1] + 51;
+								b = layer0[c].bk[2] + 51;
+								if (r > 255)
+									r = 255;
+								if (g > 255)
+									g = 255;
+								if (b > 255)
+									b = 255;
+								merge[c].bk[0] = r;
+								merge[c].bk[1] = g;
+								merge[c].bk[2] = b;
+							}
+							else
+							{
+								merge[c].bk[0] = 0;
+								merge[c].bk[1] = 255;
+								merge[c].bk[2] = 255;
+							}
+
+							if (blend_fg)
+							{
+								r = layer0[c].fg[0] + 51;
+								g = layer0[c].fg[1] + 51;
+								b = layer0[c].fg[2] + 51;
+								if (r > 255)
+									r = 255;
+								if (g > 255)
+									g = 255;
+								if (b > 255)
+									b = 255;
+								merge[c].fg[0] = r;
+								merge[c].fg[1] = g;
+								merge[c].fg[2] = b;
+							}
+							else
+							{
+								merge[c].bk[0] = 0;
+								merge[c].bk[1] = 255;
+								merge[c].bk[2] = 255;
+							}
+						}
+					}
+				}
+				else
+				{
+					layer2[c] = merge[c];
+				}
+				*/
 				layer2[c] = merge[c];
+			}
+		}
 	}
 
 	// if there is no marks on layer0 treat it as single image
@@ -488,6 +579,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 					bool bk_transp = (c2->bk[0] == c0->bk[0] && c2->bk[1] == c0->bk[1] && c2->bk[2] == c0->bk[2]);
 					bool fg_transp = (c2->fg[0] == c0->bk[0] && c2->fg[1] == c0->bk[1] && c2->fg[2] == c0->bk[2]);
 
+					bool fg_swoosh = (c2->fg[0] == 0 && c2->fg[1] == 255 && c2->fg[2] == 255);
+
 					if (c2->bk[0] == 255 && c2->bk[1] == 0 && c2->bk[2] == 255)
 					{
 						// rexpaint transp
@@ -533,6 +626,9 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 						c->bk = 16 + 36 * r + g * 6 + b;
 					}
 
+					if (fg_swoosh)
+						c->fg = 254;
+					else
 					if (fg_transp)
 						c->fg = 255;
 					else
@@ -1103,6 +1199,31 @@ static const uint16_t palette_rgb[256] =
 	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
 	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000
 };
+
+int LightenColor(int c)
+{
+	// todo make lookup table 
+	// !!!
+	c -= 16;
+	int r = c / 36;
+	c -= 36 * r;
+	int g = c / 6;
+	c -= 6 * g;
+	int b = c;
+
+	r += 1;
+	g += 1;
+	b += 1;
+
+	if (r > 5)
+		r = 5;
+	if (g > 5)
+		g = 5;
+	if (b > 5)
+		b = 5;
+
+	return 16 + r * 36 + g * 6 + b;
+}
 
 int DarkenGlyph(const AnsiCell* ptr)
 {

@@ -3146,7 +3146,10 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	{
 		case ACTION::ATTACK:
 		{
-			static const int frames[] = { 2,2,2,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,4,4,4, 4,4,4,4,4,4,4,4,4,4,4,4, 3,3,3,3,3,3,3 };
+			//static const int frames[] = { 2,2,2,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,4,4,4, 4,4,4,4,4,4,4,4,4,4,4,4, 3,3,3,3,3,3,3 };
+
+			// SWOOSH:                                                    <--------------->
+			static const int frames[] = { 7,7,7,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,4,4,4, 5,5,5,5,5,5,5,5,5,5,5,5, 6,6,6,6,6,6,6 };
 			int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
 
 			// if frameindex jumps from first half to second half of frames

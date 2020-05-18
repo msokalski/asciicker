@@ -55,3 +55,5 @@ void FillRect(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, 
 
 int AverageGlyph(const AnsiCell* ptr, int mask);
 int DarkenGlyph(const AnsiCell* ptr);
+
+int LightenColor(int c);

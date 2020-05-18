@@ -270,10 +270,6 @@ struct Sample
 
 	inline bool DepthTest_RO(float z)
 	{
-		if (height > z)
-		{
-			int a = 0;
-		}
 		return height <= z + HEIGHT_SCALE/2;
 	}
 };
@@ -1693,15 +1689,60 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 
 			// spare is in full blocks, ref in half!
 			float height = (2 * src->spare + f->ref[2]) * 0.5 * dz_dy + pos[2]; // *height_scale + pos[2]; // transform!
-			if (refl && src->gl == 31)
-			{
-				int a = 0;
-			}
 			if (!refl && height >= water || refl && height <= water)
 			{
-				if (refl)
+				if (src->fg == 254) // swoosh
 				{
-					int a = 0;
+					int mask = 0;
+					if (height >= s00->height)
+					{
+						s00->height = height;
+						mask |= 1;
+					}
+					if (height >= s01->height)
+					{
+						s01->height = height;
+						mask |= 2;
+					}
+					if (height >= s10->height)
+					{
+						s10->height = height;
+						mask |= 4;
+					}
+					if (height >= s11->height)
+					{
+						s11->height = height;
+						mask |= 8;
+					}
+
+					if (!mask)
+						continue;
+
+					switch (src->gl)
+					{
+						case 219: // fullblock
+						{
+							if (mask == 15)
+							{
+								dst->bk = LightenColor(dst->bk);
+								dst->fg = LightenColor(dst->fg);
+								break;
+							}
+
+							// no break is intentional here
+						}
+
+						default:
+							int fg = LightenColor(AverageGlyph(dst, mask));
+							if (src->bk == 255)
+								dst->bk = AverageGlyph(dst, 0xF ^ mask);
+							else
+								dst->bk = src->bk;
+							dst->fg = fg;
+							dst->gl = src->gl;
+					}
+
+					continue;
 				}
 
 				// early rejection
@@ -1890,8 +1931,9 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 
 					if (mask == 0xF)
 					{
-						dst->gl = 219;
+						dst->gl = ' ';// ooh 219;
 						dst->fg = src->bk;
+						dst->bk = src->fg;
 					}
 					else
 					if (mask == 0x0)
@@ -2856,7 +2898,6 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		{
 			if (x == render_break_point[0] && y == render_break_point[1])
 			{
-				int a = 0;
 				render_break_point[0] = -1;
 				render_break_point[1] = -1;
 			}
