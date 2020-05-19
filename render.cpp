@@ -1091,7 +1091,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	if (is_item)
 		buf->frame = frame;
 	else
-		buf->frame = AnimateSpriteInst(inst, global_refl_mode ? 0 : 1);
+		buf->frame = AnimateSpriteInst(inst, r->stamp);
 	buf->reps[0] = reps[0];
 	buf->reps[1] = reps[1];
 	buf->reps[2] = reps[2];

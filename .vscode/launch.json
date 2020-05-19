@@ -9,12 +9,15 @@
             "type": "cppdbg",
             "request": "launch",
 
-          // /*
+           /*
             "program": "${workspaceFolder}/.run/asciiid",
             "args": [],
             "externalConsole": true,
-          // */
-            
+           */
+
+           "program": "${workspaceFolder}/.run/game_term",
+           "args": [],
+           "externalConsole": true,           
 
             /*
             "program": "${workspaceFolder}/.run/server",

@@ -7,6 +7,10 @@
 #include <stdio.h>
 #include <algorithm>
 
+#ifdef __linux__
+#include <linux/limits.h>
+#endif
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <stdint.h>
@@ -7760,46 +7764,30 @@ extern "C" void DumpLeakCounter();
 
 int main(int argc, char *argv[]) 
 {
+    char abs_buf[PATH_MAX];
+    char* abs_path = 0;
+
     if (argc < 1)
         strcpy(base_path,"./");
     else
     {
         size_t len = 0;
         #ifdef __linux__
-        char* last_slash = strrchr(argv[0], '/');
+        abs_path = realpath(argv[0], abs_buf);
+        char* last_slash = strrchr(abs_path, '/');
         if (!last_slash)
             strcpy(base_path,"./");
         else
         {
-            len = last_slash - argv[0] + 1;
-            memcpy(base_path,argv[0],len);
+            len = last_slash - abs_path + 1;
+            memcpy(base_path,abs_path,len);
             base_path[len] = 0;
         }
         #else
-        char* last_slash = strrchr(argv[0], '/');
-        char* last_backslash = strrchr(argv[0], '\\');
-
-        if (last_slash && last_backslash)
-        {
-            size_t len_slash = last_slash - argv[0] + 1;
-            size_t len_backslash = last_backslash - argv[0] + 1;
-            len = len_slash > len_backslash ? len_slash : len_backslash;
-        }
-        else
-        if (last_slash)
-            len = last_slash - argv[0] + 1;
-        else
-        if (last_backslash)
-            len = last_backslash - argv[0] + 1;
-
-        if (!len)
-            strcpy(base_path,"./");
-        else
-        {
-            memcpy(base_path,argv[0],len);
-            base_path[len] = 0;
-        }
+        GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
 		#endif
+
+        len = strlen(base_path);
 
 		if (len > 4)
 		{
@@ -7827,9 +7815,12 @@ int main(int argc, char *argv[])
 			}
 
 			if (dotpos >= 0)
-				base_path[dotpos + 1] = 0;
+				base_path[dotpos+1] = 0;
 		}
     }
+
+    printf("exec path: %s\n", argv[0]);
+    printf("BASE PATH: %s\n", base_path);
 
 #ifdef _WIN32
 	//_CrtSetBreakAlloc(11952);
