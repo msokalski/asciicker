@@ -4186,7 +4186,7 @@ void my_render(A3D_WND* wnd)
 				if (anim < 0 || anim >= s->anims)
 					anim = 0;
 
-				static int time = 0;
+				int time = 0;
 
 				int len = sp->t[0] + sp->t[1] * s->anim[anim].length + sp->t[2] + sp->t[3] * s->anim[anim].length;
 
@@ -4196,7 +4196,7 @@ void my_render(A3D_WND* wnd)
 					frame = sp->frame % s->anim[anim].length;
 				else
 				{
-					time = time % len;
+					time = (a3dGetTime() >> 14) /*61.035 FPS*/ % len;
 
 					if (time < sp->t[0])
 						frame = 0;

@@ -4632,7 +4632,7 @@ int AnimateSpriteInst(Inst* i, uint64_t stamp)
 		frame = si->frame % sp->anim[anim].length;
 	else
 	{
-		time = (stamp>>15) % len;
+		time = (stamp>>14) /*61.035 FPS*/ % len;
 
 		if (time < si->reps[0])
 			frame = 0;
