@@ -1849,6 +1849,7 @@ Sprite* player_naked = 0; // what to do?
 
 Sprite* character_button = 0;
 Sprite* inventory_sprite = 0;
+Sprite* fire_sprite = 0;
 
 Sprite* LoadSpriteBP(const char* name, const uint8_t* recolor, bool detached)
 {
@@ -1868,6 +1869,8 @@ void LoadSprites()
 	// main buts
 	character_button = LoadSpriteBP("character.xp", 0, false);
 	inventory_sprite = LoadSpriteBP("inventory.xp", 0, false);
+
+	fire_sprite = LoadSpriteBP("fire.xp", 0, false);
 
 	player_nude = LoadSpriteBP("player-nude.xp", 0, false);
 

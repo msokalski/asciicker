@@ -342,6 +342,7 @@ struct SpriteInst : Inst
 	int reps[4];
 	float yaw;
 	float pos[3];
+	int time;
 
 	bool Hit(double ray[6], double ret[3], bool interval_only)
 	{
@@ -553,6 +554,7 @@ struct World
 		i->inst_type = Inst::INST_TYPE::SPRITE;
 		i->w = this;
 		i->sprite = s;
+		i->time = 0;
 
 		i->bbox[0] = s->proj_bbox[0] + pos[0];
 		i->bbox[1] = s->proj_bbox[1] + pos[0];
@@ -4608,4 +4610,45 @@ void HardInstDel(Inst* i)
 		free(i->name);
 
 	free(i);
+}
+
+int AnimateSpriteInst(Inst* i, int dt)
+{
+	if (i->inst_type != Inst::SPRITE)
+		return -1;
+
+	SpriteInst* si = (SpriteInst*)i;
+	Sprite* sp = si->sprite;
+
+	int anim = si->anim;
+	if (anim < 0 || anim >= sp->anims)
+		anim = 0;
+
+	int time = si->time;
+
+	int len = si->reps[0] + si->reps[1] * sp->anim[anim].length + si->reps[2] + si->reps[3] * sp->anim[anim].length;
+
+	int frame = 0;
+
+	if (len <= 0)
+		frame = si->frame % sp->anim[anim].length;
+	else
+	{
+		time = time % len;
+
+		if (time < si->reps[0])
+			frame = 0;
+		else
+		if (time < si->reps[0] + si->reps[1] * sp->anim[anim].length)
+			frame = (time - si->reps[0]) / si->reps[1];
+		else
+		if (time < si->reps[0] + si->reps[1] * sp->anim[anim].length + si->reps[2])
+			frame = sp->anim[anim].length - 1;
+		else
+			frame = sp->anim[anim].length - 1 - (time - si->reps[0] - si->reps[1] * sp->anim[anim].length - si->reps[2]) / si->reps[3];
+		time += dt;
+	}
+
+	si->time = time;
+	return frame;
 }

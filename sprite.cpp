@@ -19,9 +19,7 @@ struct SpriteInst
 {
 	Sprite* sprite;
 	int pos[3]; // ?
-
 	int anim;
-	int anim_time; // ?
 };
 
 /*
@@ -158,6 +156,28 @@ void* GetSpriteCookie(Sprite* s)
 	return s->cookie;
 }
 
+int RGB2PAL(const uint8_t* rgb)
+{
+	int r = (rgb[0] + 25) / 51;
+	int g = (rgb[1] + 25) / 51;
+	int b = (rgb[2] + 25) / 51;
+	return 16 + 36 * r + 6 * g + b;
+}
+
+void PAL2RGB(int pal, uint8_t* rgb)
+{
+	pal -= 16;
+	int r = pal / 36;
+	pal -= r * 36;
+	int g = pal / 6;
+	pal -= g * 6;
+	int b = pal;
+	rgb[0] = r * 51;
+	rgb[1] = g * 51;
+	rgb[2] = b * 51;
+}
+
+int AverageGlyphTransp(const AnsiCell* ptr, int mask);
 
 extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_buf_len, size_t *pOut_len, int flags);
 
@@ -322,98 +342,176 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 		merge = (XPCell*)((int*)(merge + cells) + 2);
 		for (int c = 0; c < cells; c++)
 		{
-			if (merge[c].bk[0] != 0xFF || merge[c].bk[1] != 0x00 || merge[c].bk[2] != 0xFF)
+			if (m == layers-1 && merge[c].fg[0] == 0 && merge[c].fg[1] == 255 && merge[c].fg[2] == 255)
 			{
-				/*
-				// if this is last layer and fg is clear-cyan (not in ansi pal)
-				// pre-blend swoosh
-				if (m == layers && merge[c].fg[0] == 0 && merge[c].fg[1] == 255 && merge[c].fg[2] == 255)
+				bool fg_transp =
+					layer2[c].fg[0] == layer0[c].bk[0] &&
+					layer2[c].fg[1] == layer0[c].bk[1] &&
+					layer2[c].fg[2] == layer0[c].bk[2];
+				bool bk_transp =
+					layer2[c].bk[0] == layer0[c].bk[0] &&
+					layer2[c].bk[1] == layer0[c].bk[1] &&
+					layer2[c].bk[2] == layer0[c].bk[2];
+
+				if (layer2[c].bk[0] == 255 && layer2[c].bk[1] == 0 && layer2[c].bk[2] == 255)
 				{
-					bool fg_transp =
-						layer2[c].fg[0] == layer0[c].bk[0] &&
-						layer2[c].fg[1] == layer0[c].bk[1] &&
-						layer2[c].fg[2] == layer0[c].bk[2];
-					bool bk_transp =
-						layer2[c].bk[0] == layer0[c].bk[0] &&
-						layer2[c].bk[1] == layer0[c].bk[1] &&
-						layer2[c].bk[2] == layer0[c].bk[2];
+					fg_transp = true;
+					bk_transp = true;
+				}
 
-					switch (merge[c].glyph)
-					{
-						case 221: // left-half
+				bool swoosh_bk_transp =
+					merge[c].bk[0] == layer0[c].bk[0] &&
+					merge[c].bk[1] == layer0[c].bk[1] &&
+					merge[c].bk[2] == layer0[c].bk[2];
+
+				// if bg is also swoosh, unify to full block
+				if (merge[c].bk[0] == 0 && merge[c].bk[1] == 255 && merge[c].bk[2] == 255)
+					merge[c].glyph = 219;
+
+				int mask = 0;
+				switch (merge[c].glyph)
+				{
+					case 0:
+					case 32:
+						if (merge[c].bk[0] != 255 || merge[c].bk[1] != 0 || merge[c].bk[2] != 255)
+							layer2[c] = merge[c];
+						break;
+
+					case 220: // lower
+						if (!mask)
+							mask = 3;
+					case 221: // left
+						if (!mask)
+							mask = 5;
+					case 222: // right
+						if (!mask)
+							mask = 10;
+					case 223: // upper
+						if (!mask)
+							mask = 12;
+
+						if (swoosh_bk_transp)
 						{
-							// if current glyph is left:
-							// blend foreground (leave glyph)
+							// if halfblock with background transparent
+							AnsiCell ac;
+							ac.gl = layer2[c].glyph;
+							ac.fg = fg_transp ? 255 : RGB2PAL(layer2[c].fg);
+							ac.bk = bk_transp ? 255 : RGB2PAL(layer2[c].bk);
 
-							// if current glyph is right:
-							// blend background (leave glyph)
+							// - calc 2 averages under swoosh fg and under swoosh bg
+							int fg = AverageGlyphTransp(&ac, mask);
+							int bk = AverageGlyphTransp(&ac, 0xf ^ mask);
 
-							// otherwise calc average color (on non-transparent part)
-							// set glyph to left-half, blend average color into foreground, set background to average
-						}
-
-						case 219: // full-block
-						{
-							// check full opaque
-							bool blend_bk = !bk_transp || !fg_transp && layer2[c].glyph == 219;
-							bool blend_fg = !fg_transp || !bk_transp && (layer2[c].glyph == 0 || layer2[c].glyph == 32);
-
-							int r, g, b;
-
-							if (blend_bk)
+							if (fg == 255)
 							{
-								int r, g, b;
-								r = layer0[c].bk[0] + 51;
-								g = layer0[c].bk[1] + 51;
-								b = layer0[c].bk[2] + 51;
-								if (r > 255)
-									r = 255;
-								if (g > 255)
-									g = 255;
-								if (b > 255)
-									b = 255;
-								merge[c].bk[0] = r;
-								merge[c].bk[1] = g;
-								merge[c].bk[2] = b;
+								// - if fg average is transparent set fg to swoosh color
+								layer2[c].fg[0] = 0;
+								layer2[c].fg[1] = 255;
+								layer2[c].fg[2] = 255;
 							}
 							else
 							{
-								merge[c].bk[0] = 0;
-								merge[c].bk[1] = 255;
-								merge[c].bk[2] = 255;
+								//   otherwise set fg to lighten fg average
+								PAL2RGB(LightenColor(fg), layer2[c].fg);
 							}
 
-							if (blend_fg)
+							if (fg == 255)
 							{
-								r = layer0[c].fg[0] + 51;
-								g = layer0[c].fg[1] + 51;
-								b = layer0[c].fg[2] + 51;
-								if (r > 255)
-									r = 255;
-								if (g > 255)
-									g = 255;
-								if (b > 255)
-									b = 255;
-								merge[c].fg[0] = r;
-								merge[c].fg[1] = g;
-								merge[c].fg[2] = b;
+								// - if bk average is transparent set bk to transparent
+								layer2[c].bk[0] = layer0[c].bk[0];
+								layer2[c].bk[1] = layer0[c].bk[1];
+								layer2[c].bk[2] = layer0[c].bk[2];
 							}
 							else
 							{
-								merge[c].bk[0] = 0;
-								merge[c].bk[1] = 255;
-								merge[c].bk[2] = 255;
+								//   otherwise set bk to bk average 
+								PAL2RGB(bk, layer2[c].bk);
 							}
+
+							// - set glyph to swoosh glyph
+							layer2[c].glyph = merge[c].glyph;
 						}
-					}
+						else
+						{
+							// if halfblock with background opaque
+							AnsiCell ac;
+							ac.gl = layer2[c].glyph;
+							ac.fg = fg_transp ? 255 : RGB2PAL(layer2[c].fg);
+							ac.bk = bk_transp ? 255 : RGB2PAL(layer2[c].bk);
+
+							// - calc only average under swoosh fg
+							int fg = AverageGlyphTransp(&ac, mask);
+
+							// - if fg average is transparent set fg to swoosh color
+							if (fg == 255)
+							{
+								// - if fg average is transparent set fg to swoosh color
+								layer2[c].fg[0] = 0;
+								layer2[c].fg[1] = 255;
+								layer2[c].fg[2] = 255;
+							}
+							else
+							{
+								//   otherwise set fg to lighten fg average
+								PAL2RGB(LightenColor(fg), layer2[c].fg);
+							}
+
+							// - set bk to swoosh bk
+							layer2[c].bk[0] = merge[c].bk[0];
+							layer2[c].bk[1] = merge[c].bk[1];
+							layer2[c].bk[2] = merge[c].bk[2];
+
+							// - set glyph to swoosh glyph
+							layer2[c].glyph = merge[c].glyph;
+						}
+
+						break;
+
+					default:
+						// if fullblock
+
+						if (fg_transp && bk_transp)
+						{
+							layer2[c] = merge[c];
+						}
+						else
+						{
+							if (fg_transp)
+							{
+								// set fg to swoosh color
+								layer2[c].fg[0] = 0;
+								layer2[c].fg[1] = 255;
+								layer2[c].fg[2] = 255;
+							}
+							else
+							{
+								// lighten fg if not transparent
+								layer2[c].fg[0] = std::min(255, layer2[c].fg[0] + 51);
+								layer2[c].fg[1] = std::min(255, layer2[c].fg[1] + 51);
+								layer2[c].fg[2] = std::min(255, layer2[c].fg[2] + 51);
+							}
+
+							if (bk_transp)
+							{
+								// set bk to swoosh color
+								layer2[c].bk[0] = 0;
+								layer2[c].bk[1] = 255;
+								layer2[c].bk[2] = 255;
+							}
+							else
+							{
+								// lighten bk if not transparent
+								layer2[c].bk[0] = std::min(255, layer2[c].bk[0] + 51);
+								layer2[c].bk[1] = std::min(255, layer2[c].bk[1] + 51);
+								layer2[c].bk[2] = std::min(255, layer2[c].bk[2] + 51);
+							}
+							// - keep underlying glyph
+						}
 				}
-				else
-				{
-					layer2[c] = merge[c];
-				}
-				*/
-				layer2[c] = merge[c];
 			}
+			else
+			if (merge[c].bk[0] != 255 || merge[c].bk[1] != 0 || merge[c].bk[2] != 255)
+				layer2[c] = merge[c];
 		}
 	}
 
@@ -580,6 +678,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 					bool fg_transp = (c2->fg[0] == c0->bk[0] && c2->fg[1] == c0->bk[1] && c2->fg[2] == c0->bk[2]);
 
 					bool fg_swoosh = (c2->fg[0] == 0 && c2->fg[1] == 255 && c2->fg[2] == 255);
+					bool bk_swoosh = (c2->bk[0] == 0 && c2->bk[1] == 255 && c2->bk[2] == 255);
 
 					if (c2->bk[0] == 255 && c2->bk[1] == 0 && c2->bk[2] == 255)
 					{
@@ -596,6 +695,9 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 						else
 							c->spare = 0xFF; // undefined
 
+					if (bk_swoosh)
+						c->bk = 254;
+					else
 					if (bk_transp)
 						c->bk = 255;
 					else
@@ -1272,59 +1374,38 @@ int AverageGlyph(const AnsiCell* ptr, int mask)
 	if (sum > num * 2)
 		return ptr->fg != 255 ? ptr->fg : ptr->bk;
 	return ptr->bk != 255 ? ptr->bk : ptr->fg;
+}
 
-	/*
-	// too complex, results in massive color bleeding
-	int fg_rgb = palette_rgb[ptr->fg];
-	int bk_rgb = palette_rgb[ptr->bk];
-
-	int fg[3] = { fg_rgb & 0xf, (fg_rgb >> 4) & 0xf, (fg_rgb >> 8) & 0xf };
-	int bk[3] = { bk_rgb & 0xf, (bk_rgb >> 4) & 0xf, (bk_rgb >> 8) & 0xf };
-
-	int cc[3] = { 0,0,0 };
+int AverageGlyphTransp(const AnsiCell* ptr, int mask)
+{
+	// same as AverageGlyph but doesnt flip to fg->bk/bk->fg if fg/bk is transparent
 
 	int cov = glyph_coverage[ptr->gl];
-	int fg_cov[4] = { cov & 0xf, (cov >> 4) & 0xf, (cov >> 8) & 0xf, (cov >> 12) & 0xf };
-	int bk_cov[4] = { 4 - fg_cov[0], 4 - fg_cov[1], 4 - fg_cov[2], 4 - fg_cov[3] };
 
 	int num = 0;
-
+	int sum = 0;
 	if (mask & 1)
 	{
-		cc[0] += fg[0] * fg_cov[0] + bk[0] * bk_cov[0];
-		cc[1] += fg[1] * fg_cov[0] + bk[1] * bk_cov[0];
-		cc[2] += fg[2] * fg_cov[0] + bk[2] * bk_cov[0];
+		sum += cov & 0xf;
 		num++;
 	}
 	if (mask & 2)
 	{
-		cc[0] += fg[0] * fg_cov[1] + bk[0] * bk_cov[1];
-		cc[1] += fg[1] * fg_cov[1] + bk[1] * bk_cov[1];
-		cc[2] += fg[2] * fg_cov[1] + bk[2] * bk_cov[1];
+		sum += (cov >> 4) & 0xf;
 		num++;
 	}
 	if (mask & 4)
 	{
-		cc[0] += fg[0] * fg_cov[2] + bk[0] * bk_cov[2];
-		cc[1] += fg[1] * fg_cov[2] + bk[1] * bk_cov[2];
-		cc[2] += fg[2] * fg_cov[2] + bk[2] * bk_cov[2];
+		sum += (cov >> 8) & 0xf;
 		num++;
 	}
 	if (mask & 8)
 	{
-		cc[0] += fg[0] * fg_cov[3] + bk[0] * bk_cov[3];
-		cc[1] += fg[1] * fg_cov[3] + bk[1] * bk_cov[3];
-		cc[2] += fg[2] * fg_cov[3] + bk[2] * bk_cov[3];
+		sum += (cov >> 12) & 0xf;
 		num++;
 	}
 
-	if (!num)
-		return 0;
-
-	cc[0] = (cc[0] + num * 2) / (num * 4);
-	cc[1] = (cc[1] + num * 2) / (num * 4);
-	cc[2] = (cc[2] + num * 2) / (num * 4);
-
-	return 16 + cc[0] + 6 * cc[1] + 36 * cc[2];
-	*/
+	if (sum > num * 2)
+		return ptr->fg;
+	return ptr->bk;
 }

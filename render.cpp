@@ -822,7 +822,9 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 {
 	Renderer* r = (Renderer*)cookie;
 
-	if (anim < 0) // ITEM!
+	bool is_item = anim < 0;
+
+	if (is_item)
 	{
 		int purpose = frame;
 		Item* item = (Item*)reps;
@@ -1086,7 +1088,10 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	buf->sprite = s;
 	buf->angle = ang;
 	buf->anim = anim;
-	buf->frame = frame;
+	if (is_item)
+		buf->frame = frame;
+	else
+		buf->frame = AnimateSpriteInst(inst, global_refl_mode ? 0 : 1);
 	buf->reps[0] = reps[0];
 	buf->reps[1] = reps[1];
 	buf->reps[2] = reps[2];
@@ -1691,27 +1696,43 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 			float height = (2 * src->spare + f->ref[2]) * 0.5 * dz_dy + pos[2]; // *height_scale + pos[2]; // transform!
 			if (!refl && height >= water || refl && height <= water)
 			{
+				// early rejection
+				if (src->bk == 255 && src->fg == 255 ||
+					(src->gl == 32 || src->gl == 0) && src->bk == 255 ||
+					src->gl == 219 && src->fg == 255)
+				{
+					// NOP
+				}
+				else
 				if (src->fg == 254) // swoosh
 				{
+					// note: if both fg and bk are swoosh, 
+					// case is unified to fg swoosh with glyph 219
+					// during sprite loading!
+
+					// TODO:
+					// sprites MUST be sorted by viewing dir (from furthest to nearest)
+					// otherwise swoosh/smoke fx could get overwriten by further sprites!
+
 					int mask = 0;
 					if (height >= s00->height)
 					{
-						s00->height = height;
+						// s00->height = height;
 						mask |= 1;
 					}
 					if (height >= s01->height)
 					{
-						s01->height = height;
+						// s01->height = height;
 						mask |= 2;
 					}
 					if (height >= s10->height)
 					{
-						s10->height = height;
+						// s10->height = height;
 						mask |= 4;
 					}
 					if (height >= s11->height)
 					{
-						s11->height = height;
+						// s11->height = height;
 						mask |= 8;
 					}
 
@@ -1741,16 +1762,61 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 							dst->fg = fg;
 							dst->gl = src->gl;
 					}
-
-					continue;
 				}
-
-				// early rejection
-				if (src->bk == 255 && src->fg == 255 ||
-					(src->gl == 32 || src->gl == 0) && src->bk == 255 ||
-					src->gl == 219 && src->fg == 255)
+				else
+				if (src->bk == 254) // swoosh
 				{
-					// NOP
+					int mask = 0;
+					if (height >= s00->height)
+					{
+						s00->height = height;
+						mask |= 1;
+					}
+					if (height >= s01->height)
+					{
+						s01->height = height;
+						mask |= 2;
+					}
+					if (height >= s10->height)
+					{
+						s10->height = height;
+						mask |= 4;
+					}
+					if (height >= s11->height)
+					{
+						s11->height = height;
+						mask |= 8;
+					}
+
+					if (!mask)
+						continue;
+
+					switch (src->gl)
+					{
+						case 0:
+						case 32: // spaces
+						{
+							if (mask == 15)
+							{
+								dst->bk = LightenColor(dst->bk);
+								dst->fg = LightenColor(dst->fg);
+								break;
+							}
+
+							// no break is intentional here
+						}
+
+						default:
+
+							int bk = LightenColor(AverageGlyph(dst, 0xF ^ mask));
+							if (src->fg == 255)
+								dst->fg = AverageGlyph(dst, mask);
+							else
+								dst->fg = src->fg;
+
+							dst->bk = bk;
+							dst->gl = src->gl;
+					}
 				}
 				else
 				// full block write with FG & BK

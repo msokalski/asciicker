@@ -48,6 +48,8 @@ void UpdateSpriteInst(World* world, Inst* i, Sprite* sprite, const float pos[3],
 Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, int reps[4]);
 Item* GetInstItem(Inst* i, float pos[3], float* yaw);
 
+int AnimateSpriteInst(Inst* i, int dt);
+
 void ShowInst(Inst* i);
 void HideInst(Inst* i);
 
