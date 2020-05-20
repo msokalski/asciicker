@@ -50,6 +50,7 @@ emcc --emrun -O3 \
     -s NO_EXIT_RUNTIME=1 \
     -lidbfs.js \
     --preload-file a3d/game_map.a3d \
+    --preload-file sprites/fire.xp \
     --preload-file sprites/grid-alpha-sword.xp \
     --preload-file sprites/grid-apple.xp \
     --preload-file sprites/grid-beet.xp \
