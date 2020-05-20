@@ -14,6 +14,13 @@
 #include <termios.h>
 #include <time.h>
 #include <gpm.h>
+
+// work around including <netinet/tcp.h>
+// which also defines TCP_CLOSE
+#ifndef TCP_DELAY
+#define TCP_NODELAY 1
+#endif
+
 #else
 #define PATH_MAX 1024
 #endif
