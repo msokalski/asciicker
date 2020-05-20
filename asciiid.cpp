@@ -9,6 +9,8 @@
 
 #ifdef __linux__
 #include <linux/limits.h>
+#else
+#define PATH_MAX 1024
 #endif
 
 #define _USE_MATH_DEFINES
@@ -7771,23 +7773,25 @@ int main(int argc, char *argv[])
         strcpy(base_path,"./");
     else
     {
-        size_t len = 0;
-        #ifdef __linux__
+        size_t len = 2;
+		strcpy(abs_buf, "./");
+		abs_path = abs_buf;
+		#ifdef __linux__
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
-        if (!last_slash)
-            strcpy(base_path,"./");
-        else
-        {
-            len = last_slash - abs_path + 1;
-            memcpy(base_path,abs_path,len);
-            base_path[len] = 0;
-        }
+        if (last_slash)
+			len = last_slash - abs_path + 1;
         #else
-        GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
+        len = GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
+		if (!len)
+			len = 2;
+		if (abs_path)
+			len = abs_path - abs_buf;
+		abs_path = abs_buf;
 		#endif
 
-        len = strlen(base_path);
+		memcpy(base_path, abs_path, len);
+		base_path[len] = 0;
 
 		if (len > 4)
 		{

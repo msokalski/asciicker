@@ -14,6 +14,8 @@
 #include <termios.h>
 #include <time.h>
 #include <gpm.h>
+#else
+#define PATH_MAX 1024
 #endif
 
 #include <assert.h>
@@ -783,6 +785,12 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
         // ok we can live without it
     }
 
+	optval = 1;
+	if (setsockopt(server_socket, IPPROTO_TCP, TCP_NODELAY, (const char*)&optval, sizeof(optval)) != 0)
+	{
+		// ok we can live without it
+	}
+
 	freeaddrinfo(result);
 
 	// first, send HTTP->WS upgrade request (over http)
@@ -953,6 +961,7 @@ int main(int argc, char* argv[])
         }
         #else
         GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
+		memcpy(base_path, abs_buf, abs_path - abs_buf);
 		#endif
 
         len = strlen(base_path);

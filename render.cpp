@@ -288,8 +288,21 @@ struct SpriteRenderBuf
 	int anim;
 	int frame;
 	int reps[4];
+	float dist;
 	uint8_t alpha;
 	bool refl;
+
+	static int FarToNear(const void* a, const void* b)
+	{
+		const SpriteRenderBuf* p = (const SpriteRenderBuf*)a;
+		const SpriteRenderBuf* q = (const SpriteRenderBuf*)b;
+		
+		if (p->dist > q->dist)
+			return -1;
+		if (p->dist < q->dist)
+			return 1;
+		return 0;
+	}
 };
 
 struct Renderer
@@ -921,20 +934,21 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 
 	float w_pos[3] = { pos[0] * HEIGHT_CELLS, pos[1] * HEIGHT_CELLS, pos[2] };
 
+	float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
+	float viewer_dist; // {vx,vy,vz}  r->pos
+	float eye_to_vtx[3] =
+	{
+		vx - r->view_pos[0],
+		vy - r->view_pos[1],
+		vz - r->view_pos[2],
+	};
+
+	viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+
 	if (global_refl_mode)
 	{
 		if (r->perspective) // #if PERSPECTIVE_TEST
 		{
-			float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
-			float viewer_dist; // {vx,vy,vz}  r->pos
-			float eye_to_vtx[3] =
-			{
-				vx - r->view_pos[0],
-				vy - r->view_pos[1],
-				vz - r->view_pos[2],
-			};
-
-			viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 			if (viewer_dist > 0)
 			{
 				// todo: smooth fade
@@ -959,10 +973,10 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 				float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
 				float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
 
-				viewer_dist = 1.0/viewer_dist;
+				float recp_dist = 1.0/viewer_dist;
 
-				fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-				fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+				fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+				fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
 
 				int tx = (int)floorf(fx + 0.5f);
 				int ty = (int)floorf(fy + 0.5f);
@@ -1005,16 +1019,6 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	{
 		if (r->perspective) // #if PERSPECTIVE_TEST
 		{
-			float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
-			float viewer_dist; // {vx,vy,vz}  r->pos
-			float eye_to_vtx[3] =
-			{
-				vx - r->view_pos[0],
-				vy - r->view_pos[1],
-				vz - r->view_pos[2],
-			};
-
-			viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 			if (viewer_dist > 0)
 			{
 				// todo: smooth fade
@@ -1039,10 +1043,10 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 				float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
 				float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
 
-				viewer_dist = 1.0/viewer_dist;
+				float recp_dist = 1.0/viewer_dist;
 
-				fx = (fx - r->view_ofs[0]) * viewer_dist + r->view_ofs[0];
-				fy = (fy - r->view_ofs[1]) * viewer_dist + r->view_ofs[1];
+				fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+				fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
 
 				int tx = (int)floorf(fx + 0.5f);
 				int ty = (int)floorf(fy + 0.5f);
@@ -1097,6 +1101,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	buf->reps[2] = reps[2];
 	buf->reps[3] = reps[3];
 	buf->refl = global_refl_mode;
+	buf->dist = viewer_dist;
 
 	r->sprites++;
 }
@@ -3612,6 +3617,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	}
 #endif
 
+	qsort(r->sprites_alloc, r->sprites, sizeof(SpriteRenderBuf), SpriteRenderBuf::FarToNear);
 
 	// lets check drawing sprites in world space
 	for (int s=0; s<r->sprites; s++)

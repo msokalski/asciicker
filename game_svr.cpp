@@ -10,6 +10,8 @@
 
 #ifdef __linux__
 #include <linux/limits.h>
+#else
+#define PATH_MAX 1024
 #endif
 
 char base_path[1024] = "./";
@@ -875,6 +877,12 @@ int ServerLoop(const char* port)
 				// ok we can live without it
 			}
 
+			optval = 1;
+			if (setsockopt(ClientSocket, IPPROTO_TCP, TCP_NODELAY, (const char*)&optval, sizeof(optval)) != 0)
+			{
+				// ok we can live without it
+			}
+
 			PlayerCon* con = PlayerCon::Aquire();
 			if (!con)
 				TCP_CLOSE(ClientSocket);
@@ -929,27 +937,29 @@ int main(int argc, char* argv[])
     char abs_buf[PATH_MAX];
     char* abs_path = 0;
 
-    if (argc < 1)
+    if (argc > 1)
         strcpy(base_path,"./");
     else
     {
-        size_t len = 0;
-        #ifdef __linux__
+        size_t len = 2;
+		strcpy(abs_buf, "./");
+		abs_path = abs_buf;
+		#ifdef __linux__
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
-        if (!last_slash)
-            strcpy(base_path,"./");
-        else
-        {
-            len = last_slash - abs_path + 1;
-            memcpy(base_path,abs_path,len);
-            base_path[len] = 0;
-        }
+        if (last_slash)
+			len = last_slash - abs_path + 1;
         #else
-        GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
+        len = GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
+		if (!len)
+			len = 2;
+		if (abs_path)
+			len = abs_path - abs_buf;
+		abs_path = abs_buf;
 		#endif
 
-        len = strlen(base_path);
+		memcpy(base_path, abs_path, len);
+		base_path[len] = 0;
 
 		if (len > 4)
 		{
@@ -970,7 +980,7 @@ int main(int argc, char* argv[])
 			{
 				if (dotrun[i])
 				{
-					int pos = dotrun[i] - base_path;
+					int pos = (int)(dotrun[i] - base_path);
 					if (dotpos < 0 || pos < dotpos)
 						dotpos = pos;
 				}
