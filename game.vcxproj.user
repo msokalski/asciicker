@@ -11,11 +11,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerWorkingDirectory>$(ProjectDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-url gumix@localhost/ws/y4/</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-url gumix@localhost/ws/y6/</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerWorkingDirectory>$(ProjectDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-url goomix@asciicker.com:80/ws/y4/</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-url goomix@asciicker.com:80/ws/y6/</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>

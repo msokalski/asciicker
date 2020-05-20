@@ -15,9 +15,11 @@
             "externalConsole": true,
            */
 
+           /*
            "program": "${workspaceFolder}/.run/game_term",
            "args": [],
            "externalConsole": true,           
+           */
 
             /*
             "program": "${workspaceFolder}/.run/server",
@@ -37,15 +39,15 @@
             "externalConsole": true,
             */
 
-            /*
+            
             "program": "${workspaceFolder}/.run/game",
-            "args": ["-url","gumix@asciicker.com:80/ws/y4/"],
+            "args": ["-url","gumix@asciicker.com:80/ws/y6/"],
             "externalConsole": true,
-            */
+            
             
             /*
             "program": "${workspaceFolder}/.run/game",
-            "args": ["-url","gumix@localhost:8080/ws/y5/"],
+            "args": ["-url","gumix@localhost:8080/ws/y6/"],
             "externalConsole": true,
             */
 
