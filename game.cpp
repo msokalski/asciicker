@@ -5006,9 +5006,14 @@ void Game::StartContact(int id, int x, int y, int b)
 					{
 						if (i==id)
 							continue;
+
 						if (input.contact[i].action == Input::Contact::FORCE)
 						{
-							input.jump = true;
+							// if we have a weapon then attack
+							if (player.req.weapon>0)
+								player.SetActionAttack(stamp);
+							else
+								input.jump = true;
 							con->action = Input::Contact::NONE;
 							break;
 						}
@@ -5508,7 +5513,13 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 			else
 			{
 				if (input.contact[0].action == Input::Contact::FORCE)
-					input.jump = true;
+				{
+					// if we have a weapon then attack
+					if (player.req.weapon>0)
+						player.SetActionAttack(stamp);
+					else
+						input.jump = true;					
+				}
 				MoveContact(0, x,y);
 			}
 			input.but |= 0x2;
