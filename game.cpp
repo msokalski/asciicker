@@ -1801,6 +1801,7 @@ struct WEAPON { enum
 {
 	NONE = 0,
 	REGULAR_SWORD,
+	REGULAR_CROSSBOW,
 	SIZE
 };};
 

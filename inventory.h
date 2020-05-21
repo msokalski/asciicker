@@ -118,11 +118,11 @@ enum PLAYER_WEAPON_INDEX
 {
 	WEAPON_NONE = 0,
 	SWORD,
+	CROSSBOW,
 	// --------
 	MACE,
 	HAMMER, // big ace too
 	AXE, // only lumber
-	CROSSBOW,
 	FLAIL,
 };
 
