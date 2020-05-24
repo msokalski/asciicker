@@ -16,6 +16,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerWorkingDirectory>$(ProjectDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-url goomix@asciicker.com:80/ws/y6/</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-url goomix@###asciicker.com:80/ws/y6/</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>
