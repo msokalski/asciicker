@@ -737,14 +737,14 @@ struct Physics
 	}    
 };
 
-int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io)
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 {
-	static const float xy_speed = 0.13;
-	static const float radius_cells = 2; // in full x-cells
-	static const float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
-	static const float world_patch = VISUAL_CELLS; // patch size in world coords
-	static const float world_radius = radius_cells / patch_cells * world_patch;
-	static const float height_cells = 7.0; // 7.5; decreased (hair are soft)
+	float xy_speed = 0.13;
+	float radius_cells = mount ? 3 : 2; // in full x-cells
+	float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
+	float world_patch = VISUAL_CELLS; // patch size in world coords
+	float world_radius = radius_cells / patch_cells * world_patch;
+	float height_cells = mount ? 9.0 : 7.0; // 7.5; decreased (hair are soft)
 
 	// 2/3 = 1/(zoom*sin30)
 	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;

@@ -3143,7 +3143,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		io.jump = false;
 	}
 
-	int steps = Animate(physics, _stamp, &io);
+	int steps = Animate(physics, _stamp, &io, player.req.mount != 0);
 	if (steps > 0)
 	{
 		input.jump = false;
@@ -3293,14 +3293,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		int from[3] =
 		{
-			width / 2 + ss[0] + f->meta_xy[0] / 2,
-			height / 2 + ss[1] + f->meta_xy[1] / 2,
-			pos[2]
+			width / 2 + ss[0] + (f->meta_xy[0]+1) / 2,
+			height / 2 + ss[1] + (f->meta_xy[1]+1) / 2,
+			pos[2] + 40 // should depend on meta_xy[2] :o
 		};
 
 		if (UnprojectCoords3D(renderer, from, player.shoot_from))
 		{
-			player.shoot_from[2] += 50;
+			// player.shoot_from[2] += 50;
 
 			// read x,y,h at current mouse pos
 			// input.shoot_to;
@@ -3320,6 +3320,24 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				// shorten shoot_to to closest collider
 				// HitTerrain();
 				// HitWorld();
+
+				double p[3] = { player.shoot_from[0], player.shoot_from[1], player.shoot_from[2] };
+				double v[3] = { player.shoot_to[0] - p[0], player.shoot_to[1] - p[1], player.shoot_to[2] - p[2] };
+				double r[3] = { player.shoot_to[0], player.shoot_to[1], player.shoot_to[2] };
+
+				p[0] /= HEIGHT_CELLS;
+				p[1] /= HEIGHT_CELLS;
+				p[0] /= HEIGHT_CELLS;
+				p[1] /= HEIGHT_CELLS;
+				r[0] /= HEIGHT_CELLS;
+				r[1] /= HEIGHT_CELLS;
+
+				if (HitTerrain(terrain, p, v, r))
+				{
+					player.shoot_to[0] = r[0] * HEIGHT_CELLS;
+					player.shoot_to[1] = r[1] * HEIGHT_CELLS;
+					player.shoot_to[2] = r[2];
+				}
 
 				// set shoot params in human
 				player.shoot_stamp = stamp;

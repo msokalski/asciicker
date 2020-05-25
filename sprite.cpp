@@ -678,8 +678,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 					if (c0->glyph == 2) // meta-pos
 					{
 						// in half cells
-						frame->meta_xy[0] = x*2 + frame->ref[0];
-						frame->meta_xy[1] = y*2 + frame->ref[1];
+						frame->meta_xy[0] = (x-x0)*2 - frame->ref[0];
+						frame->meta_xy[1] = (y1 - 1 - y)*2 - frame->ref[1];
 					}
 
 					c->gl = c2->glyph;
