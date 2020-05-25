@@ -14,6 +14,7 @@
 // #include "sprite.h"
 
 #include "inventory.h"
+#include "game.h"
 
 #include "PerlinNoise.hpp"
 
@@ -21,6 +22,14 @@
 #include <math.h>
 #include <float.h>
 #include <string.h>
+
+#ifdef min // thanks windows
+#undef min
+#endif
+
+#ifdef max // thanks windows
+#undef max
+#endif
 
 #define DBL
 #define PERSPECTIVE_TEST 0 // 0-off 1-unfiltered 2-snapped >2-filtered
@@ -106,6 +115,93 @@ inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3], int _or
 		}
 	}
 }
+
+template <typename Sample>
+inline void CellLine(/*const*/Sample* smp, AnsiCell* buf, int w, int h, int from[3], int to[3], int gl, int fg)
+{
+	int sx = to[0] - from[0];
+	int sy = to[1] - from[1];
+
+	if (sx == 0 && sy == 0)
+		return;
+
+	int sz = to[2] - from[2];
+
+	int ax = sx >= 0 ? sx : -sx;
+	int ay = sy >= 0 ? sy : -sy;
+
+	if (ax >= ay)
+	{
+		float n = +1.0f / sx;
+		// horizontal domain
+
+		if (from[0] > to[0])
+		{
+			int* swap = from;
+			from = to;
+			to = swap;
+		}
+
+		int	x0 = std::max(0, from[0]);
+		int	x1 = std::min(w, to[0]);
+
+		for (int x = x0; x < x1; x++)
+		{
+			float a = x - from[0] + 0.5f;
+			int y = (int)floor((a * sy)*n + from[1] + 0.5f);
+			if (y >= 0 && y < h)
+			{
+				int hx = 2 * x + 2;
+				int hy = 2 * y + 2;
+				float z = (a * sz) * n + from[2];
+
+				/*const*/Sample* test = smp + hy * (2 * w + 4) + hx;
+				if (test->DepthTest_RO(z))
+				{
+					AnsiCell* ptr = buf + w * y + x;
+					ptr->fg = fg;
+					ptr->gl = gl;
+				}
+			}
+		}
+	}
+	else
+	{
+		float n = 1.0f / sy;
+		// vertical domain
+
+		if (from[1] > to[1])
+		{
+			int* swap = from;
+			from = to;
+			to = swap;
+		}
+
+		int y0 = std::max(0, from[1]);
+		int y1 = std::min(h, to[1]);
+
+		for (int y = y0; y < y1; y++)
+		{
+			int a = y - from[1];
+			int x = (int)floor((a * sx) * n + from[0] + 0.5f);
+			if (x >= 0 && x < w)
+			{
+				int hx = 2 * x + 2;
+				int hy = 2 * y + 2;
+				float z = (a * sz) * n + from[2];
+
+				/*const*/Sample* test = smp + hy * (2 * w + 4) + hx;
+				if (test->DepthTest_RO(z))
+				{
+					AnsiCell* ptr = buf + w * y + x;
+					ptr->fg = fg;
+					ptr->gl = gl;
+				}
+			}
+		}
+	}
+}
+
 
 // todo: lets add "int varyings" template arg
 // and add "const float varying[3][varyings]" function param (values at verts)
@@ -360,6 +456,7 @@ struct Renderer
 	float light[4];
 	bool int_flag;
 	bool perspective;
+	double inv_tm[16]; // for unproject
 
 	// perspective test
 	float view_dir[3];
@@ -1715,7 +1812,6 @@ void Renderer::RenderSprite(AnsiCell* ptr, int width, int height, Sprite* s, boo
 					// case is unified to fg swoosh with glyph 219
 					// during sprite loading!
 
-					// TODO:
 					// sprites MUST be sorted by viewing dir (from furthest to nearest)
 					// otherwise swoosh/smoke fx could get overwriten by further sprites!
 
@@ -2742,8 +2838,9 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	// ...
 
 	// player shadow
-	double inv_tm[16];
-	Invert(tm, inv_tm);
+	// double inv_tm[16];
+	Invert(tm, r->inv_tm);
+	double* inv_tm = r->inv_tm;
 
 	Material* matlib = (Material*)GetMaterialArr();
 
@@ -3633,6 +3730,55 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		int anim = buf->anim;
 		r->RenderSprite(out_ptr, width, height, buf->sprite, buf->refl, anim, frame, buf->angle, buf->s_pos);
 	}
+
+	// restore positive projection for ProjectCoords func (now they are for reflection).
+
+	r->mul[0] = proj_tm[0];
+	r->mul[1] = proj_tm[1];
+	r->mul[2] = proj_tm[2];
+	r->mul[3] = proj_tm[3];
+	r->mul[4] = proj_tm[4];
+	r->mul[5] = proj_tm[5];
+	r->add[0] = proj_tm[6];
+	r->add[1] = proj_tm[7];
+	r->add[2] = proj_tm[8];
+
+	// render arrows, from player, other players and all npcs
+	// how to access human from inst?
+	Human* h = (Human*)GetInstSpriteData(inst);
+	if (h && h->shooting)
+	{
+		if (stamp - h->shoot_stamp > 3000000)
+			h->shooting = false;
+
+		// here we must write directly to AnsiCell buf but test height values from Samples!
+		int from[3];
+		int to[3];
+
+		if (perspective)
+		{
+		}
+		else
+		{
+			int tx = (int)floor(r->mul[0] * h->shoot_from[0] + r->mul[2] * h->shoot_from[1] + 0.5 + r->add[0]);
+			int ty = (int)floor(r->mul[1] * h->shoot_from[0] + r->mul[3] * h->shoot_from[1] + r->mul[5] * h->shoot_from[2] + 0.5 + r->add[1]);
+
+			// convert from samples to cells
+			from[0] = (tx - 1) >> 1;
+			from[1] = (ty - 1) >> 1;
+			from[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
+
+			tx = (int)floor(r->mul[0] * h->shoot_to[0] + r->mul[2] * h->shoot_to[1] + 0.5 + r->add[0]);
+			ty = (int)floor(r->mul[1] * h->shoot_to[0] + r->mul[3] * h->shoot_to[1] + r->mul[5] * h->shoot_to[2] + 0.5 + r->add[1]);
+
+			// convert from samples to cells
+			to[0] = (tx - 1) >> 1;
+			to[1] = (ty - 1) >> 1;
+			to[2] = (int)floorf(h->shoot_to[2] + 0.5) + HEIGHT_SCALE / 2;
+			
+			CellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, 'X', 231);
+		}
+	}
 	
 	/*
 	int invpos[3] = { 1,1,0 };
@@ -3648,28 +3794,121 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	if (inst)
 		ShowInst(inst);
-
-	// restore positive projection for ProjectCoords func (now they are for reflection).
-
-	r->mul[0] = proj_tm[0];
-	r->mul[1] = proj_tm[1]; 
-	r->mul[2] = proj_tm[2]; 
-	r->mul[3] = proj_tm[3]; 
-	r->mul[4] = proj_tm[4]; 
-	r->mul[5] = proj_tm[5]; 
-	r->add[0] = proj_tm[6]; 
-	r->add[1] = proj_tm[7]; 
-	r->add[2] = proj_tm[8];
 }
 
-void ProjectCoords(Renderer* r, const float pos[3], int view[3])
+bool ProjectCoords(Renderer* r, const float pos[3], int view[3])
 {
+	// TODO: add perspective!
 	float w_pos[3] = { pos[0] * HEIGHT_CELLS, pos[1] * HEIGHT_CELLS, pos[2] };
-	int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
-	int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
 
-	// convert from samples to cells
-	view[0] = (tx - 1) >> 1;
-	view[1] = (ty - 1) >> 1;
-	view[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+	if (r->perspective)
+	{
+
+		float vx = w_pos[0], vy = w_pos[1], vz = w_pos[2];
+		float viewer_dist; // {vx,vy,vz}  r->pos
+		float eye_to_vtx[3] =
+		{
+			vx - r->view_pos[0],
+			vy - r->view_pos[1],
+			vz - r->view_pos[2],
+		};
+
+		viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+
+		if (viewer_dist <= 0)
+			return false;
+
+		float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+		float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+		float recp_dist = 1.0 / viewer_dist;
+
+		fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+		fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+
+		int tx = (int)floorf(fx + 0.5f);
+		int ty = (int)floorf(fy + 0.5f);
+
+		view[0] = (tx - 1) >> 1;
+		view[1] = (ty - 1) >> 1;
+		view[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+	}
+	else
+	{
+		int tx = (int)floor(r->mul[0] * w_pos[0] + r->mul[2] * w_pos[1] + 0.5 + r->add[0]);
+		int ty = (int)floor(r->mul[1] * w_pos[0] + r->mul[3] * w_pos[1] + r->mul[5] * w_pos[2] + 0.5 + r->add[1]);
+
+		view[0] = (tx - 1) >> 1;
+		view[1] = (ty - 1) >> 1;
+		view[2] = (int)floorf(w_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+	}
+
+	return true;
+}
+
+bool UnprojectCoords2D(Renderer* r, const int xy[2], float pos[3])
+{
+	int w = (r->sample_buffer.w - 4) / 2;
+	int h = (r->sample_buffer.h - 4) / 2;
+
+	if (xy[0] < 0 || xy[1] < 0 || xy[0] >= w || xy[1] >= h)
+		return false;
+
+	// readback height (max of 4 samples)
+	int x = 2 + xy[0] * 2;
+	int y = 2 + xy[1] * 2;
+	int y0 = r->sample_buffer.w * y + x;
+	int y1 = y0 + r->sample_buffer.w;
+	int sh[4] =
+	{
+		r->sample_buffer.ptr[y0].height,
+		r->sample_buffer.ptr[y0 + 1].height,
+		r->sample_buffer.ptr[y1].height,
+		r->sample_buffer.ptr[y1 + 1].height,
+	};
+
+	int height = sh[0];
+	if (height < sh[1])
+		height = sh[1];
+	if (height < sh[2])
+		height = sh[2];
+	if (height < sh[3])
+		height = sh[3];
+
+	if (r->perspective)
+	{
+		return false;
+	}
+	else
+	{
+		double p[4] = { x,y,height,1 };
+		double w[4];
+		Product(r->inv_tm, p, w);
+		pos[0] = w[0];
+		pos[1] = w[1];
+		pos[2] = w[2];
+	}
+
+	return true;
+}
+
+bool UnprojectCoords3D(Renderer* r, const int xyz[3], float pos[3])
+{
+	// readback height (max of 4 samples)
+
+	if (r->perspective)
+	{
+		return false;
+	}
+	else
+	{
+		double p[4] = { 2*xyz[0] + 1, 2*xyz[1] + 1, xyz[2], 1 };
+		double w[4];
+		Product(r->inv_tm, p, w);
+		pos[0] = w[0];
+		pos[1] = w[1];
+		pos[2] = w[2];
+	}
+
+	return true;
 }

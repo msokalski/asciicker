@@ -337,6 +337,7 @@ struct SpriteInst : Inst
 {
 	World* w;
 	Sprite* sprite;
+	void* data; // player(human) or creature or null
 	int anim;
 	int frame;
 	int reps[4];
@@ -553,6 +554,7 @@ struct World
 		i->inst_type = Inst::INST_TYPE::SPRITE;
 		i->w = this;
 		i->sprite = s;
+		i->data = 0;
 
 		i->bbox[0] = s->proj_bbox[0] + pos[0];
 		i->bbox[1] = s->proj_bbox[1] + pos[0];
@@ -4227,6 +4229,23 @@ Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, 
 	}
 	
 	return si->sprite;
+}
+
+void* GetInstSpriteData(Inst* i)
+{
+	if (i->inst_type != Inst::SPRITE)
+		return 0;
+	SpriteInst* si = (SpriteInst*)i;
+	return si->data;
+}
+
+bool SetInstSpriteData(Inst* i, void* data)
+{
+	if (i->inst_type != Inst::SPRITE)
+		return false;
+	SpriteInst* si = (SpriteInst*)i;
+	si->data = data;
+	return true;
 }
 
 Item* GetInstItem(Inst* i, float pos[3], float* yaw)

@@ -59,7 +59,9 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, 		//
 	const int scene_shift[2],
 	bool perspective);
 
-void ProjectCoords(Renderer* r, const float pos[3], int view[3]); // like a sprite!
+bool ProjectCoords(Renderer* r, const float pos[3], int view[3]); // like a sprite!
+bool UnprojectCoords2D(Renderer* r, const int xy[2], float pos[3]); // reads height from buffer first!
+bool UnprojectCoords3D(Renderer* r, const int xy[3], float pos[3]); // reads height from buffer first!
 
 Item** GetNearbyItems(Renderer* r);
 Inst** GetNearbyCharacters(Renderer* r);

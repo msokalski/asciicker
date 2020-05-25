@@ -618,6 +618,9 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 			frame->width = fr_width;
 			frame->height = fr_height;
 
+			frame->meta_xy[0] = 0;
+			frame->meta_xy[1] = 0;
+
 			AnsiCell* c = (AnsiCell*)malloc(sizeof(AnsiCell)*fr_width*fr_height);
 			frame->cell = c;
 
@@ -671,6 +674,13 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 					XPCell* c0 = layer0 + cell;
 					XPCell* c1 = layer1 + cell;
 					XPCell* c2 = layer2 + cell;
+
+					if (c0->glyph == 2) // meta-pos
+					{
+						// in half cells
+						frame->meta_xy[0] = x*2 + frame->ref[0];
+						frame->meta_xy[1] = y*2 + frame->ref[1];
+					}
 
 					c->gl = c2->glyph;
 

@@ -36,3 +36,4 @@ void DeletePhysics(Physics* phys);
 
 void SetPhysicsPos(Physics* phys, float pos[3], float vel[3]);
 void SetPhysicsYaw(Physics* phys, float yaw, float vel);
+void SetPhysicsDir(Physics* phys, float dir);

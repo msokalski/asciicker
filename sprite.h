@@ -11,6 +11,7 @@ struct Sprite
 		int width;
 		int height;
 		int ref[3]; // on image x,y,z (x,y are int x2 units to allow half block refs)
+		int meta_xy[2]; // some special position, ie crossbow's arrow tip (in half cells)
 		AnsiCell* cell; // cell[].spare encodes cell height relative to ref[2]
 	};
 

@@ -46,6 +46,9 @@ void GetInstBBox(Inst* i, double bbox[6]);
 
 void UpdateSpriteInst(World* world, Inst* i, Sprite* sprite, const float pos[3], float yaw, int anim, int frame, const int reps[4]);
 Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw, int* anim, int* frame, int reps[4]);
+bool SetInstSpriteData(Inst* i, void* data);
+void* GetInstSpriteData(Inst* i);
+
 Item* GetInstItem(Inst* i, float pos[3], float* yaw);
 
 int AnimateSpriteInst(Inst* i, uint64_t stamp);

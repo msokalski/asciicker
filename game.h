@@ -97,6 +97,11 @@ struct Human : Character
 	int talks;
 	Talk talk[3];
 
+	bool shooting;
+	uint64_t shoot_stamp;
+	float shoot_from[3];
+	float shoot_to[3];
+
 	Human* prev;
 	Human* next;
 
@@ -263,7 +268,11 @@ struct Game
 		int wheel;   // relative mouse wheel (only from real mouse)
 		int size[2]; // window size (in pixels)
 		bool jump;
-		bool shot;
+
+		bool shoot;
+		int shoot_xy[2];
+
+		bool shot; // screenshot!
 
 		bool IsKeyDown(int k)
 		{

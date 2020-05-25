@@ -2194,6 +2194,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
 	int reps[4] = { 0,0,0,0 };
 	g->player_inst = CreateInst(world, g->player.sprite, flags, pos, yaw, g->player.anim, g->player.frame, reps, 0, -1/*not in story*/);
+	SetInstSpriteData(g->player_inst, &g->player);
 
 	return g;
 }
@@ -3073,6 +3074,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						dt = 1;
 					yaw = prev_yaw + yaw_vel*dt;
 					SetPhysicsYaw(physics, yaw, 0);
+
+					float mouse_dir_x = (input.contact[i].pos[0] * 2 - input.size[0])/2;
+					float mouse_dir_y = -(input.contact[i].pos[1] * 2 - input.size[1]);
+					if (mouse_dir_x != 0 || mouse_dir_y != 0)
+					{
+						float mouse_dir = atan2(mouse_dir_y, mouse_dir_x) * 180 / M_PI + 90;
+						SetPhysicsDir(physics, mouse_dir + yaw);
+					}
 				}
 				else
 				{
@@ -3261,6 +3270,66 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss, perspective);
+
+	if (input.shoot && !player.shooting)
+	{
+		// read x,y,h at meta_xy of current player's sprite frame
+		// input.shoot_from;
+		// ...
+
+		float pos[3];
+		float dir;
+		int anim;
+		int frame;
+		int reps[4];
+		Sprite* sprite = GetInstSprite(player_inst, pos, &dir, &anim, &frame, reps);
+		int ang = (int)floor((dir - io.yaw) * sprite->angles / 360.0f + 0.5f);
+		ang = ang >= 0 ? ang % sprite->angles : (ang % sprite->angles + sprite->angles) % sprite->angles;
+
+		int i = frame + ang * sprite->anim[anim].length;
+		// if (refl)
+		//	i += s->anim[anim].length * s->angles;
+		Sprite::Frame* f = sprite->atlas + sprite->anim[anim].frame_idx[i];
+
+		int from[3] =
+		{
+			width / 2 + ss[0] + f->meta_xy[0] / 2,
+			height / 2 + ss[1] + f->meta_xy[1] / 2,
+			pos[2]
+		};
+
+		if (UnprojectCoords3D(renderer, from, player.shoot_from))
+		{
+			player.shoot_from[2] += 50;
+
+			// read x,y,h at current mouse pos
+			// input.shoot_to;
+			// ...
+
+			if (UnprojectCoords2D(renderer, input.shoot_xy, player.shoot_to))
+			{
+				printf("shot_to.z = %f\n", player.shoot_to[2]);
+				//player.shoot_to[0] /= HEIGHT_CELLS;
+				//player.shoot_to[1] /= HEIGHT_CELLS;
+
+				// if distance is too long or height diff to big
+				// don't shoot!
+				// ...
+
+				// check for intermediate collisions
+				// shorten shoot_to to closest collider
+				// HitTerrain();
+				// HitWorld();
+
+				// set shoot params in human
+				player.shoot_stamp = stamp;
+				player.shooting = true;
+			}
+		}
+	}
+
+	if (input.shoot)
+		input.shoot = false;
 
 	Item** inrange = GetNearbyItems(renderer);
 
@@ -5512,6 +5581,22 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 			break;
 
 		case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: 
+
+			if (input.but != 0)
+			{
+				if (input.contact[0].action == Input::Contact::TORQUE && !input.shoot)
+				{
+					int cp[2] = { x,y };
+					ScreenToCell(cp);
+					input.shoot = true;
+					input.shoot_xy[0] = cp[0];
+					input.shoot_xy[1] = cp[1];
+					input.contact[0].action = Input::Contact::NONE;
+				}
+				input.but |= 0x1;
+				break;
+			}
+
 			if (input.but == 0x0)
 				StartContact(0, x,y, 1);
 			else

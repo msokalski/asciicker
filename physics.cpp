@@ -1424,3 +1424,8 @@ void SetPhysicsYaw(Physics* phys, float yaw, float vel)
 	phys->yaw = yaw;
 	phys->yaw_vel = vel;
 }
+
+void SetPhysicsDir(Physics* phys, float dir)
+{
+	phys->player_dir = dir;
+}
