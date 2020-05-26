@@ -3859,7 +3859,7 @@ bool UnprojectCoords2D(Renderer* r, const int xy[2], float pos[3])
 	int y = 2 + xy[1] * 2;
 	int y0 = r->sample_buffer.w * y + x;
 	int y1 = y0 + r->sample_buffer.w;
-	int sh[4] =
+	float sh[4] =
 	{
 		r->sample_buffer.ptr[y0].height,
 		r->sample_buffer.ptr[y0 + 1].height,
@@ -3867,7 +3867,7 @@ bool UnprojectCoords2D(Renderer* r, const int xy[2], float pos[3])
 		r->sample_buffer.ptr[y1 + 1].height,
 	};
 
-	int height = sh[0];
+	float height = sh[0];
 	if (height < sh[1])
 		height = sh[1];
 	if (height < sh[2])
@@ -3881,7 +3881,7 @@ bool UnprojectCoords2D(Renderer* r, const int xy[2], float pos[3])
 	}
 	else
 	{
-		double p[4] = { x,y,height,1 };
+		double p[4] = { (double)x,(double)y,(double)height,1.0 };
 		double w[4];
 		Product(r->inv_tm, p, w);
 		pos[0] = w[0];
@@ -3902,7 +3902,7 @@ bool UnprojectCoords3D(Renderer* r, const int xyz[3], float pos[3])
 	}
 	else
 	{
-		double p[4] = { 2*xyz[0] + 1, 2*xyz[1] + 1, xyz[2], 1 };
+		double p[4] = { 2*xyz[0] + 1.0, 2*xyz[1] + 1.0, (double)xyz[2], 1.0 };
 		double w[4];
 		Product(r->inv_tm, p, w);
 		pos[0] = w[0];

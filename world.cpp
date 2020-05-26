@@ -7,6 +7,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <assert.h>
+#include <float.h>
 
 #include "sprite.h"
 #include "world.h"

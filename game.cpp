@@ -3295,7 +3295,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		{
 			width / 2 + ss[0] + (f->meta_xy[0]+1) / 2,
 			height / 2 + ss[1] + (f->meta_xy[1]+1) / 2,
-			pos[2] + 40 // should depend on meta_xy[2] :o
+			(int)pos[2] + 40 // should depend on meta_xy[2] :o
 		};
 
 		if (UnprojectCoords3D(renderer, from, player.shoot_from))
@@ -5140,12 +5140,15 @@ void Game::StartContact(int id, int x, int y, int b)
 						{
 							if (id != 0 && i != 0) // both are touches
 							{
-								if (2 * (x-scene_shift) < input.size[0])
+								if (2 * (cp[0]-scene_shift) < render_size[0])
 								{
 									if (player.req.weapon > 0)
 									{
 										if (player.req.weapon == WEAPON::REGULAR_CROSSBOW)
 										{
+											// TODO: FIX
+											// in this way this is possible only to shoot LEFT on mobile :(
+
 											int cp[2] = { x,y };
 											ScreenToCell(cp);
 											input.shoot = true;
