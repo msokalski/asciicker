@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <float.h>
 
 #ifdef EDITOR
 #include "texheap.h"
@@ -1779,7 +1780,7 @@ void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void
 
 int triangle_intersections = 0; 
 int hit_patch_tests = 0;
-bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3], double nrm[3])
+bool HitPatch(Patch* p, int x, int y, double ray[10], double ret[3], double nrm[3], bool positive_only)
 {
 	hit_patch_tests ++;
 	static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
@@ -1802,17 +1803,12 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3], double nrm[3
 				{x1,y1,(double)p->height[hy+1][hx+1]},
 			};
 
-			double r[3];
-
 			if (rot & 1)
 			{
 				triangle_intersections++;
-				if (RayIntersectsTriangle(ray, v[2], v[0], v[1], r) && r[2] > ret[2])
+				if (RayIntersectsTriangle(ray, v[2], v[0], v[1], ret, positive_only))
 				{
 					hit |= 1;
-					ret[0] = r[0];
-					ret[1] = r[1];
-					ret[2] = r[2];
 
 					if (nrm)
 					{
@@ -1823,12 +1819,9 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3], double nrm[3
 				}
 
 				triangle_intersections++;
-				if (RayIntersectsTriangle(ray, v[2], v[1], v[3], r) && r[2] > ret[2])
+				if (RayIntersectsTriangle(ray, v[2], v[1], v[3], ret, positive_only))
 				{
 					hit |= 1;
-					ret[0] = r[0];
-					ret[1] = r[1];
-					ret[2] = r[2];
 
 					if (nrm)
 					{
@@ -1841,12 +1834,9 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3], double nrm[3
 			else
 			{
 				triangle_intersections++;
-				if (RayIntersectsTriangle(ray, v[0], v[3], v[2], r) && r[2] > ret[2])
+				if (RayIntersectsTriangle(ray, v[0], v[3], v[2], ret, positive_only))
 				{
 					hit |= 1;
-					ret[0] = r[0];
-					ret[1] = r[1];
-					ret[2] = r[2];
 
 					if (nrm)
 					{
@@ -1857,12 +1847,9 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3], double nrm[3
 				}
 
 				triangle_intersections++;
-				if (RayIntersectsTriangle(ray, v[0], v[1], v[3], r) && r[2] > ret[2])
+				if (RayIntersectsTriangle(ray, v[0], v[1], v[3], ret, positive_only))
 				{
 					hit |= 1;
-					ret[0] = r[0];
-					ret[1] = r[1];
-					ret[2] = r[2];
 
 					if (nrm)
 					{
@@ -1880,7 +1867,7 @@ bool HitPatch(Patch* p, int x, int y, double ray[6], double ret[3], double nrm[3
 	return hit;
 }
 
-Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
+Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1896,7 +1883,7 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret, nrm))
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
 			return p;
 		else
 			return 0;
@@ -1908,25 +1895,25 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain0(n->quad[0], x, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain0(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain0(n->quad[1], x+range, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain0(n->quad[1], x+range, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain0(n->quad[2], x, y+range, range, ray, ret, nrm);
+		Patch* h = HitTerrain0(n->quad[2], x, y+range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain0(n->quad[3], x+range, y+range, range, ray, ret, nrm);
+		Patch* h = HitTerrain0(n->quad[3], x+range, y+range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
@@ -1934,7 +1921,7 @@ Patch* HitTerrain0(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
+Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -1950,7 +1937,7 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret, nrm))
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
 			return p;
 		else
 			return 0;
@@ -1962,25 +1949,25 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain1(n->quad[0], x, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain1(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain1(n->quad[1], x + range, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain1(n->quad[1], x + range, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain1(n->quad[2], x, y + range, range, ray, ret, nrm);
+		Patch* h = HitTerrain1(n->quad[2], x, y + range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain1(n->quad[3], x + range, y + range, range, ray, ret, nrm);
+		Patch* h = HitTerrain1(n->quad[3], x + range, y + range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
@@ -1988,7 +1975,7 @@ Patch* HitTerrain1(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
+Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -2004,7 +1991,7 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret, nrm))
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
 			return p;
 		else
 			return 0;
@@ -2016,25 +2003,25 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain2(n->quad[0], x, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain2(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain2(n->quad[1], x + range, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain2(n->quad[1], x + range, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain2(n->quad[2], x, y + range, range, ray, ret, nrm);
+		Patch* h = HitTerrain2(n->quad[2], x, y + range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain2(n->quad[3], x + range, y + range, range, ray, ret, nrm);
+		Patch* h = HitTerrain2(n->quad[3], x + range, y + range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
@@ -2042,7 +2029,7 @@ Patch* HitTerrain2(QuadItem* q, int x, int y, int range, double ray[6], double r
 	return p;
 }
 
-Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3])
+Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
 {
 	int qlo = q->lo;
 	int qhi = q->hi;
@@ -2058,7 +2045,7 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 	if (range == VISUAL_CELLS)
 	{
 		Patch* p = (Patch*)q;
-		if (HitPatch(p, x, y, ray, ret, nrm))
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
 			return p;
 		else
 			return 0;
@@ -2070,25 +2057,242 @@ Patch* HitTerrain3(QuadItem* q, int x, int y, int range, double ray[6], double r
 	Patch* p = 0;
 	if (n->quad[0])
 	{
-		Patch* h = HitTerrain3(n->quad[0], x, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain3(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[1])
 	{
-		Patch* h = HitTerrain3(n->quad[1], x + range, y, range, ray, ret, nrm);
+		Patch* h = HitTerrain3(n->quad[1], x + range, y, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[2])
 	{
-		Patch* h = HitTerrain3(n->quad[2], x, y + range, range, ray, ret, nrm);
+		Patch* h = HitTerrain3(n->quad[2], x, y + range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
 	if (n->quad[3])
 	{
-		Patch* h = HitTerrain3(n->quad[3], x + range, y + range, range, ray, ret, nrm);
+		Patch* h = HitTerrain3(n->quad[3], x + range, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain4(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (ray[0] + qhi * ray[4] - ray[5] * (y + range) > 0 ||
+		-ray[1] + qhi * ray[3] - ray[5] * (x + range) > 0 ||
+		-ray[2] + ray[4] * (x + range) - ray[3] * y > 0 ||
+		-ray[0] - qlo * ray[4] + ray[5] * y > 0 ||
+		ray[1] - qlo * ray[3] + ray[5] * x > 0 ||
+		ray[2] - ray[4] * x + ray[3] * (y + range) > 0)
+		return 0;
+
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
+			return p;
+		else
+			return 0;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain4(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain4(n->quad[1], x + range, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain4(n->quad[2], x, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain4(n->quad[3], x + range, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain5(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (ray[1] - qhi * ray[3] + ray[5] * x > 0 ||
+		ray[0] + qhi * ray[4] - ray[5] * (y + range) > 0 ||
+		-ray[2] + ray[4] * (x + range) - ray[3] * (y + range) > 0 ||
+		-ray[1] + qlo * ray[3] - ray[5] * (x + range) > 0 ||
+		-ray[0] - qlo * ray[4] + ray[5] * y > 0 ||
+		ray[2] - ray[4] * x + ray[3] * y > 0)
+		return 0;
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
+			return p;
+		else
+			return 0;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain5(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain5(n->quad[1], x + range, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain5(n->quad[2], x, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain5(n->quad[3], x + range, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain6(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (-ray[1] + qhi * ray[3] - ray[5] * (x + range) > 0 ||
+		-ray[0] - qhi * ray[4] + ray[5] * y > 0 ||
+		-ray[2] + ray[4] * x - ray[3] * y > 0 ||
+		ray[1] - qlo * ray[3] + ray[5] * x > 0 ||
+		ray[0] + qlo * ray[4] - ray[5] * (y + range) > 0 ||
+		ray[2] - ray[4] * (x + range) + ray[3] * (y + range) > 0)
+		return 0;
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
+			return p;
+		else
+			return 0;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain6(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain6(n->quad[1], x + range, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain6(n->quad[2], x, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain6(n->quad[3], x + range, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+
+	return p;
+}
+
+Patch* HitTerrain7(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only)
+{
+	int qlo = q->lo;
+	int qhi = q->hi;
+
+	if (-ray[0] - qhi * ray[4] + ray[5] * y > 0 ||
+		ray[1] - qhi * ray[3] + ray[5] * x > 0 ||
+		-ray[2] + ray[4] * x - ray[3] * (y + range) > 0 ||
+		ray[0] + qlo * ray[4] - ray[5] * (y + range) > 0 ||
+		-ray[1] + qlo * ray[3] - ray[5] * (x + range) > 0 ||
+		ray[2] - ray[4] * (x + range) + ray[3] * y > 0)
+		return 0;
+
+	if (range == VISUAL_CELLS)
+	{
+		Patch* p = (Patch*)q;
+		if (HitPatch(p, x, y, ray, ret, nrm, positive_only))
+			return p;
+		else
+			return 0;
+	}
+
+	// recurse
+	range >>= 1;
+	Node* n = (Node*)q;
+	Patch* p = 0;
+	if (n->quad[0])
+	{
+		Patch* h = HitTerrain7(n->quad[0], x, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[1])
+	{
+		Patch* h = HitTerrain7(n->quad[1], x + range, y, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[2])
+	{
+		Patch* h = HitTerrain7(n->quad[2], x, y + range, range, ray, ret, nrm, positive_only);
+		if (h)
+			p = h;
+	}
+	if (n->quad[3])
+	{
+		Patch* h = HitTerrain7(n->quad[3], x + range, y + range, range, ray, ret, nrm, positive_only);
 		if (h)
 			p = h;
 	}
@@ -2173,7 +2377,7 @@ double HitTerrain(Patch* p, double u, double v)
 	return -1;
 }
 
-Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3], double nrm[3])
+Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only)
 {
 	if (!t || !t->root)
 		return 0;
@@ -2185,7 +2389,8 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3], double nr
 		p[2] * v[0] - p[0] * v[2],
 		p[0] * v[1] - p[1] * v[0],
 		v[0], v[1], v[2],
-		p[0], p[1], p[2] // used by triangle-ray intersection
+		p[0], p[1], p[2], // used by triangle-ray intersection
+		FLT_MAX
 	};
 
 	int sign_case = 0;
@@ -2197,23 +2402,23 @@ Patch* HitTerrain(Terrain* t, double p[3], double v[3], double ret[3], double nr
 	if (v[2] >= 0)
 		sign_case |= 4;
 
-	assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
+	// assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
 
-	static Patch* (* const func_vect[])(QuadItem* q, int x, int y, int range, double ray[6], double ret[3], double nrm[3]) =
+	static Patch* (* const func_vect[])(QuadItem* q, int x, int y, int range, double ray[10], double ret[3], double nrm[3], bool positive_only) =
 	{
 		HitTerrain0, 
 		HitTerrain1, 
 		HitTerrain2, 
-		HitTerrain3
+		HitTerrain3,
+		HitTerrain4,
+		HitTerrain5,
+		HitTerrain6,
+		HitTerrain7
 	};
-
-	ret[0] = p[0];
-	ret[1] = p[1];
-	ret[2] = p[2];
 
 	hit_patch_tests = 0;
 	triangle_intersections = 0;
-	Patch* patch = func_vect[sign_case](t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, ray, ret, nrm);
+	Patch* patch = func_vect[sign_case](t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, ray, ret, nrm, positive_only);
 	return patch;
 }
 

@@ -238,7 +238,7 @@ inline V DotProduct(const V a[3], const V b[3])
 	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], double v2[3], double ret[3], bool positive_only = false)
+inline bool RayIntersectsTriangle(double ray[10], double v0[3], double v1[3], double v2[3], double ret[3], bool positive_only = false)
 {
 	const double EPSILON = 0.0000001;
 
@@ -290,8 +290,13 @@ inline bool RayIntersectsTriangle(double ray[6], double v0[3], double v1[3], dou
 	double t = //f * edge2.dotProduct(q);
 		f * (edge2[0] * q[0] + edge2[1] * q[1] + edge2[2] * q[2]);
 
-//	if (positive_only && t < EPSILON)
-//		  return false;
+	if (positive_only && t < 0)
+		  return false;
+
+	if (t > ray[9])
+		return false;
+
+	ray[9] = t;
 
 	ret[0] = ray[6] + ray[3] * t;
 	ret[1] = ray[7] + ray[4] * t;

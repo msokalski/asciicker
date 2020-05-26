@@ -204,42 +204,41 @@ struct MeshInst : Inst
 		}
 	}
 
-	bool HitFace(double ray[6], double ret[3], double nrm[3], bool interval_only)
+	bool HitFace(double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
 	{
 		if (!mesh)
 			return false;
 
 		bool flag = false;
 
-		Face* f = mesh->head_face;
+		Face* f = flags & INST_FLAGS::INST_VISIBLE ? mesh->head_face : 0;
 		while (f)
 		{
+			if (!editor)
+			{
+				// game ignores soft faces
+				if ((f->abc[0]->rgba[3] | f->abc[1]->rgba[3] | f->abc[2]->rgba[3]) & 0x80)
+				{
+					f = f->next;
+					continue;
+				}
+			}
+
 			double v0[4], v1[4], v2[4];
 			Product(tm, f->abc[0]->xyzw, v0);
 			Product(tm, f->abc[1]->xyzw, v1);
 			Product(tm, f->abc[2]->xyzw, v2);
 
-			double hit[3];
-			if (RayIntersectsTriangle(ray, v0, v1, v2, hit, interval_only))
+			if (RayIntersectsTriangle(ray, v0, v1, v2, ret, positive_only))
 			{
-				if (hit[2] > ret[2])
+				if (nrm)
 				{
-					if (!interval_only || hit[2] <= ray[9])
-					{
-						ret[0] = hit[0];
-						ret[1] = hit[1];
-						ret[2] = hit[2];
-
-						if (nrm)
-						{
-							double d1[3] = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] };
-							double d2[3] = { v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2] };
-							CrossProduct(d1, d2, nrm);
-						}
-
-						flag = true;
-					}
+					double d1[3] = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] };
+					double d2[3] = { v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2] };
+					CrossProduct(d1, d2, nrm);
 				}
+
+				flag = true;
 			}
 
 			f = f->next;
@@ -249,7 +248,7 @@ struct MeshInst : Inst
 	}
 };
 
-inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float yaw, double ray[6], double ret[3], bool interval_only)
+inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float yaw, double ray[10], double ret[3], bool positive_only)
 {
 	// calc 4 xyz corners of sprite rect aligned up +Z and ray_xy being perpendicular to it
 
@@ -264,6 +263,12 @@ inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float y
 		return false;
 	double n = ray[6] * plane[0] + ray[7] * plane[1] + ray[8] * plane[2] + plane[3];
 	double q = -n / d;
+
+	if (positive_only && q < 0)
+		return false;
+	if (q > ray[9])
+		return false;
+
 	double p[3] =
 	{
 		ray[6] + q * ray[3],
@@ -325,6 +330,8 @@ inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float y
 				ret[0] = p[0];
 				ret[1] = p[1];
 				ret[2] = h;
+
+				ray[9] = q;
 				return true;
 			}
 		}
@@ -344,9 +351,11 @@ struct SpriteInst : Inst
 	float yaw;
 	float pos[3];
 
-	bool Hit(double ray[6], double ret[3], bool interval_only)
+	bool Hit(double ray[10], double ret[3], bool positive_only)
 	{
-		return HitSprite(sprite, anim, frame, pos, yaw, ray, ret, interval_only);
+		if (flags & INST_FLAGS::INST_VISIBLE)
+			return HitSprite(sprite, anim, frame, pos, yaw, ray, ret, positive_only);
+		return false;
 	}
 };
 
@@ -357,9 +366,11 @@ struct ItemInst : Inst
 	float yaw;
 	float pos[3];
 
-	bool Hit(double ray[6], double ret[3], bool interval_only)
+	bool Hit(double ray[10], double ret[3], bool positive_only)
 	{
-		return HitSprite(item->proto->sprite_3d, 0/*anim*/, 0/*frame*/, pos, yaw, ray, ret, interval_only);
+		if (flags & INST_FLAGS::INST_VISIBLE)
+			return HitSprite(item->proto->sprite_3d, 0/*anim*/, 0/*frame*/, pos, yaw, ray, ret, positive_only);
+		return false;
 	}
 
 };
@@ -1517,7 +1528,7 @@ struct World
         }
     }
 
-	static Inst* HitWorld0(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
+	static Inst* HitWorld0(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1526,7 +1537,7 @@ struct World
 		const float y[2] = {q->bbox[2],q->bbox[3]};
 		const float z[2] = {q->bbox[4],q->bbox[5]};
 
-		if (interval_only)
+		if (positive_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1548,7 +1559,7 @@ struct World
 
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
 					return inst;
 				else
 					return 0;
@@ -1556,7 +1567,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1564,7 +1575,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1575,8 +1586,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -1585,8 +1596,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
 
             j = s->head;
@@ -1601,19 +1612,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -1639,19 +1650,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -1663,7 +1674,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld1(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
+	static Inst* HitWorld1(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1672,7 +1683,7 @@ struct World
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
 
-		if (interval_only)
+		if (positive_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1694,7 +1705,7 @@ struct World
 
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
 					return inst;
 				else
 					return 0;
@@ -1702,7 +1713,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1710,7 +1721,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1721,8 +1732,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -1731,8 +1742,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
 
             j = s->head;
@@ -1747,19 +1758,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -1785,19 +1796,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -1809,7 +1820,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld2(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
+	static Inst* HitWorld2(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1818,7 +1829,7 @@ struct World
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
 
-		if (interval_only)
+		if (positive_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1840,7 +1851,7 @@ struct World
 
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
 					return inst;
 				else
 					return 0;
@@ -1848,7 +1859,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1856,7 +1867,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1867,8 +1878,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -1877,8 +1888,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
 
             j = s->head;
@@ -1893,19 +1904,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -1931,19 +1942,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -1955,7 +1966,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld3(BSP* q, double ray[6], double ret[3], double nrm[3], bool interval_only, bool editor)
+	static Inst* HitWorld3(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
 	{
 		if (!q)
 			return 0;
@@ -1964,7 +1975,7 @@ struct World
 		const float y[2] = { q->bbox[2],q->bbox[3] };
 		const float z[2] = { q->bbox[4],q->bbox[5] };
 
-		if (interval_only)
+		if (positive_only)
 		{
 			// do not recurse if all 8 corners projected onto ray are negative
 		}
@@ -1986,7 +1997,7 @@ struct World
 
 			if (inst->inst_type == Inst::INST_TYPE::MESH)
 			{
-				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, interval_only))
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
 					return inst;
 				else
 					return 0;
@@ -1994,7 +2005,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, interval_only))
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2002,7 +2013,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, interval_only))
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2014,8 +2025,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
             return i;
         }
@@ -2024,8 +2035,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, interval_only, editor);
-            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, interval_only, editor);
+            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
             i = j ? j : i;
 
             j = s->head;
@@ -2040,19 +2051,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -2078,19 +2089,19 @@ struct World
 
 				if (j->inst_type == Inst::INST_TYPE::MESH)
 				{
-					if (((MeshInst*)j)->HitFace(ray, ret, nrm, interval_only))
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::SPRITE)
 				{
-					if (((SpriteInst*)j)->Hit(ray, ret, interval_only))
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
 				if (j->inst_type == Inst::INST_TYPE::ITEM)
 				{
-					if (((ItemInst*)j)->Hit(ray, ret, interval_only))
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 
@@ -2102,20 +2113,611 @@ struct World
 		return 0;
 	}
 
+	static Inst* HitWorld4(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
+	{
+		if (!q)
+			return 0;
+
+		const float x[2] = { q->bbox[0],q->bbox[1] };
+		const float y[2] = { q->bbox[2],q->bbox[3] };
+		const float z[2] = { q->bbox[4],q->bbox[5] };
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
+
+		if (ray[0] + z[1] * ray[4] - ray[5] * y[1] > 0 ||
+			-ray[1] + z[1] * ray[3] - ray[5] * x[1] > 0 ||
+			-ray[2] + ray[4] * x[1] - ray[3] * y[0] > 0 ||
+			-ray[0] - z[0] * ray[4] + ray[5] * y[0] > 0 ||
+			ray[1] - z[0] * ray[3] + ray[5] * x[0] > 0 ||
+			ray[2] - ray[4] * x[0] + ray[3] * y[1] > 0)
+			return 0;
+
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
+		{
+			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+
+			return 0;
+		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld4(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld4(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
+
+            Inst* i = HitWorld4(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld4(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+
+            j = s->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
+
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+
+		return 0;
+	}
+
+	static Inst* HitWorld5(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
+	{
+		if (!q)
+			return 0;
+
+		const float x[2] = { q->bbox[0],q->bbox[1] };
+		const float y[2] = { q->bbox[2],q->bbox[3] };
+		const float z[2] = { q->bbox[4],q->bbox[5] };
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
+
+		if (ray[1] - z[1] * ray[3] + ray[5] * x[0] > 0 ||
+			ray[0] + z[1] * ray[4] - ray[5] * y[1] > 0 ||
+			-ray[2] + ray[4] * x[1] - ray[3] * y[1] > 0 ||
+			-ray[1] + z[0] * ray[3] - ray[5] * x[1] > 0 ||
+			-ray[0] - z[0] * ray[4] + ray[5] * y[0] > 0 ||
+			ray[2] - ray[4] * x[0] + ray[3] * y[0] > 0)
+			return 0;
+
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
+		{
+			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+
+			return 0;
+		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld5(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld5(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
+
+            Inst* i = HitWorld5(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld5(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+
+            j = s->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
+
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+
+		return 0;
+	}
+
+	static Inst* HitWorld6(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
+	{
+		if (!q)
+			return 0;
+
+		const float x[2] = { q->bbox[0],q->bbox[1] };
+		const float y[2] = { q->bbox[2],q->bbox[3] };
+		const float z[2] = { q->bbox[4],q->bbox[5] };
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
+
+		if (-ray[1] + z[1] * ray[3] - ray[5] * x[1] > 0 ||
+			-ray[0] - z[1] * ray[4] + ray[5] * y[0] > 0 ||
+			-ray[2] + ray[4] * x[0] - ray[3] * y[0] > 0 ||
+			ray[1] - z[0] * ray[3] + ray[5] * x[0] > 0 ||
+			ray[0] + z[0] * ray[4] - ray[5] * y[1] > 0 ||
+			ray[2] - ray[4] * x[1] + ray[3] * y[1] > 0)
+			return 0;
+
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
+		{
+			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+
+			return 0;
+		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld6(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld6(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
+
+            Inst* i = HitWorld6(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld6(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+
+            j = s->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
+
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+
+		return 0;
+	}
+
+	static Inst* HitWorld7(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor)
+	{
+		if (!q)
+			return 0;
+
+		const float x[2] = { q->bbox[0],q->bbox[1] };
+		const float y[2] = { q->bbox[2],q->bbox[3] };
+		const float z[2] = { q->bbox[4],q->bbox[5] };
+
+		if (positive_only)
+		{
+			// do not recurse if all 8 corners projected onto ray are negative
+		}
+
+		if (-ray[0] - z[1] * ray[4] + ray[5] * y[0] > 0 ||
+			ray[1] - z[1] * ray[3] + ray[5] * x[0] > 0 ||
+			-ray[2] + ray[4] * x[0] - ray[3] * y[1] > 0 ||
+			ray[0] + z[0] * ray[4] - ray[5] * y[1] > 0 ||
+			-ray[1] + z[0] * ray[3] - ray[5] * x[1] > 0 ||
+			ray[2] - ray[4] * x[1] + ray[3] * y[0] > 0)
+			return 0;
+
+		if (q->type == BSP::TYPE::BSP_TYPE_INST)
+		{
+			Inst* inst = (Inst*)q;
+			if (editor && (inst->flags & INST_VOLATILE) || 
+				!editor && !(inst->flags & INST_VOLATILE))
+				return 0;
+
+			if (inst->inst_type == Inst::INST_TYPE::MESH)
+			{
+				if (((MeshInst*)inst)->HitFace(ray, ret, nrm, positive_only, editor))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
+			{
+				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+			else
+			if (inst->inst_type == Inst::INST_TYPE::ITEM)
+			{
+				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+					return inst;
+				else
+					return 0;
+			}
+
+			return 0;
+		}
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE)
+        {
+            BSP_Node* n = (BSP_Node*)q;
+            Inst* i = HitWorld7(n->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld7(n->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_NODE_SHARE)
+        {
+            BSP_NodeShare* s = (BSP_NodeShare*)q;
+
+            Inst* i = HitWorld7(s->bsp_child[0], ray, ret, nrm, positive_only, editor);
+            Inst* j = HitWorld7(s->bsp_child[1], ray, ret, nrm, positive_only, editor);
+            i = j ? j : i;
+
+            j = s->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+        else
+        if (q->type == BSP::TYPE::BSP_TYPE_LEAF)
+        {
+            BSP_Leaf* l = (BSP_Leaf*)q;
+
+            Inst* i = 0;
+            Inst* j = l->head;
+            while (j)
+            {
+				if (editor && (j->flags & INST_VOLATILE) || 
+					!editor && !(j->flags & INST_VOLATILE))
+				{
+					j=j->next;
+					continue;
+				}
+
+				if (j->inst_type == Inst::INST_TYPE::MESH)
+				{
+					if (((MeshInst*)j)->HitFace(ray, ret, nrm, positive_only, editor))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				{
+					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+				else
+				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				{
+					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
+						i = j;
+				}
+
+				j = j->next;
+            }
+            return i;
+        }
+
+		return 0;
+	}
+
+
     // RAY HIT using plucker
-    Inst* HitWorld(double p[3], double v[3], double ret[4], double nrm[3], bool interval_only, bool editor)
+    Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3], bool positive_only, bool editor)
     {
 		if (!root)
 			return 0;
 
+		/*
 		double max_z = 0;
-		if (interval_only)
+		if (positive_only)
 		{
 			max_z = p[2];
 			p[0] += v[0];
 			p[1] += v[1];
 			p[2] += v[2];
 		}
+		*/
 
 		// p should be projected to the BOTTOM plane!
 		double ray[] =
@@ -2125,7 +2727,7 @@ struct World
 			p[0] * v[1] - p[1] * v[0],
 			v[0], v[1], v[2],
 			p[0], p[1], p[2], // used by triangle-ray intersection
-			max_z
+			FLT_MAX
 		};
 
 		int sign_case = 0;
@@ -2137,18 +2739,23 @@ struct World
 		if (v[2] >= 0)
 			sign_case |= 4;
 
-		assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
+		// assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
 
-		static Inst* (*const func_vect[])(BSP* q, double ray[6], double ret[3], double nrm[3], bool, bool) =
+		static Inst* (*const func_vect[])(BSP* q, double ray[10], double ret[3], double nrm[3], bool, bool) =
 		{
 			HitWorld0,
 			HitWorld1,
 			HitWorld2,
-			HitWorld3
+			HitWorld3,
+
+			HitWorld4,
+			HitWorld5,
+			HitWorld6,
+			HitWorld7,
 		};
 
 		/*
-		if (!interval_only)
+		if (!positive_only)
 		{
 			// otherwie ret must be preinitialized
 			ret[0] = p[0];
@@ -2157,7 +2764,7 @@ struct World
 		}
 		*/
 
-		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, interval_only, editor);
+		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, positive_only, editor);
 		return inst;
     }
 
@@ -4029,6 +4636,9 @@ World* LoadWorld(FILE* f, bool editor)
 			if (!m)
 				m = w->AddMesh(mesh_id);
 
+			if (!editor)
+				flags |= INST_FLAGS::INST_VOLATILE;
+
 			Inst* inst = CreateInst(m, flags, tm, inst_name, story_id);
 		}
 		else
@@ -4064,6 +4674,9 @@ World* LoadWorld(FILE* f, bool editor)
 			r = fread(&frame, 1, sizeof(int), f);
 			r = fread(reps, 1, sizeof(int[4]), f);
 			r = fread(&flags, 1, 4, f);
+
+			if (!editor)
+				flags |= INST_FLAGS::INST_VOLATILE;
 
 			int story_id = -1;
 			if (format_version > 0)
@@ -4142,9 +4755,9 @@ World* LoadWorld(FILE* f, bool editor)
 }
 
 
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool interval_only, bool editor)
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only, bool editor)
 {
-    return w->HitWorld(p,v,ret,nrm, interval_only, editor);
+    return w->HitWorld(p,v,ret,nrm, positive_only, editor);
 }
 
 Mesh* GetInstMesh(Inst* i)

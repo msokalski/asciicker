@@ -3271,7 +3271,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss, perspective);
 
-	if (input.shoot && !player.shooting)
+	if (input.shoot /*&& !player.shooting*/ && player.req.weapon == WEAPON::REGULAR_CROSSBOW)
 	{
 		// read x,y,h at meta_xy of current player's sprite frame
 		// input.shoot_from;
@@ -3323,21 +3323,45 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 				double p[3] = { player.shoot_from[0], player.shoot_from[1], player.shoot_from[2] };
 				double v[3] = { player.shoot_to[0] - p[0], player.shoot_to[1] - p[1], player.shoot_to[2] - p[2] };
-				double r[3] = { player.shoot_to[0], player.shoot_to[1], player.shoot_to[2] };
+				double r1[3] = { 0,0,0 };
+				double r2[3] = { 0,0,0 };
 
 				p[0] /= HEIGHT_CELLS;
 				p[1] /= HEIGHT_CELLS;
-				p[0] /= HEIGHT_CELLS;
-				p[1] /= HEIGHT_CELLS;
-				r[0] /= HEIGHT_CELLS;
-				r[1] /= HEIGHT_CELLS;
+				v[0] *= 1000.0 / HEIGHT_CELLS;
+				v[1] *= 1000.0 / HEIGHT_CELLS;
+				v[2] *= 1000.0;
 
-				if (HitTerrain(terrain, p, v, r))
+				HideInst(player_inst);
+				Inst* inst = HitWorld(world, p, v, r1, 0, true);
+				bool ground = HitTerrain(terrain, p, v, inst ? r2 : r1, 0, true);
+
+				if (inst && ground)
 				{
-					player.shoot_to[0] = r[0] * HEIGHT_CELLS;
-					player.shoot_to[1] = r[1] * HEIGHT_CELLS;
-					player.shoot_to[2] = r[2];
+					double d1 = (r1[0] - p[0])*v[0] + (r1[1] - p[1])*v[1] + (r1[2] - p[2])*v[2];
+					double d2 = (r2[0] - p[0])*v[0] + (r2[1] - p[1])*v[1] + (r2[2] - p[2])*v[2];
+					if (d2 < d1)
+					{
+						r1[0] = r2[0];
+						r1[1] = r2[1];
+						r1[2] = r2[2];
+					}
 				}
+				
+				if (inst || ground)
+				{
+					player.shoot_to[0] = r1[0] *HEIGHT_CELLS;
+					player.shoot_to[1] = r1[1] *HEIGHT_CELLS;
+					player.shoot_to[2] = r1[2];
+				}
+				else
+				{
+					player.shoot_to[0] = (p[0] + v[0])*HEIGHT_CELLS;
+					player.shoot_to[1] = (p[1] + v[1])*HEIGHT_CELLS;
+					player.shoot_to[2] = (p[2] + v[2]);
+				}
+
+				ShowInst(player_inst);
 
 				// set shoot params in human
 				player.shoot_stamp = stamp;
@@ -5114,11 +5138,42 @@ void Game::StartContact(int id, int x, int y, int b)
 
 						if (input.contact[i].action == Input::Contact::FORCE)
 						{
-							// if we have a weapon then attack
-							if (player.req.weapon>0)
-								player.SetActionAttack(stamp);
+							if (id != 0 && i != 0) // both are touches
+							{
+								if (2 * (x-scene_shift) < input.size[0])
+								{
+									if (player.req.weapon > 0)
+									{
+										if (player.req.weapon == WEAPON::REGULAR_CROSSBOW)
+										{
+											int cp[2] = { x,y };
+											ScreenToCell(cp);
+											input.shoot = true;
+											input.shoot_xy[0] = cp[0];
+											input.shoot_xy[1] = cp[1];
+										}
+										else
+											player.SetActionAttack(stamp);
+									}
+									else
+										input.jump = true;
+								}
+								else
+								{
+									input.jump = true;
+								}
+							}
 							else
+							{
+								/*
+								// if we have a weapon then attack
+								if (player.req.weapon>0)
+									player.SetActionAttack(stamp);
+								else
+									input.jump = true;
+								*/
 								input.jump = true;
+							}
 							con->action = Input::Contact::NONE;
 							break;
 						}
@@ -5609,7 +5664,7 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 					input.shoot = true;
 					input.shoot_xy[0] = cp[0];
 					input.shoot_xy[1] = cp[1];
-					input.contact[0].action = Input::Contact::NONE;
+					// input.contact[0].action = Input::Contact::NONE;
 				}
 				input.but |= 0x1;
 				break;
@@ -5635,11 +5690,14 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 			{
 				if (input.contact[0].action == Input::Contact::FORCE)
 				{
+					/*
 					// if we have a weapon then attack
 					if (player.req.weapon>0)
 						player.SetActionAttack(stamp);
 					else
-						input.jump = true;					
+						input.jump = true;
+					*/
+					input.jump = true;
 				}
 				MoveContact(0, x,y);
 			}
