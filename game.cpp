@@ -5140,7 +5140,7 @@ void Game::StartContact(int id, int x, int y, int b)
 						{
 							if (id != 0 && i != 0) // both are touches
 							{
-								if (2 * (cp[0]-scene_shift) < render_size[0])
+								if (2 * cp[0] - scene_shift < render_size[0])
 								{
 									if (player.req.weapon > 0)
 									{
