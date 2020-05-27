@@ -39,17 +39,18 @@
             "externalConsole": true,
             */
 
-            
+            /*
             "program": "${workspaceFolder}/.run/game",
             "args": ["-url","gumix@asciicker.com:80/ws/y6/"],
             "externalConsole": true,
+            */
             
             
-            /*
+        //    /*
             "program": "${workspaceFolder}/.run/game",
             "args": ["-url","gumix@localhost:8080/ws/y6/"],
             "externalConsole": true,
-            */
+        //    */
 
             // "cwd": "${workspaceFolder}",
             "cwd": "/",

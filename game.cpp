@@ -5140,20 +5140,21 @@ void Game::StartContact(int id, int x, int y, int b)
 						{
 							if (id != 0 && i != 0) // both are touches
 							{
-								if (2 * cp[0] - scene_shift < render_size[0])
+								int cp2[2] = { input.contact[i].drag_from[0], input.contact[i].drag_from[1] };
+								ScreenToCell(cp2);
+								
+								if (2 * cp2[0] - scene_shift < render_size[0])
 								{
 									if (player.req.weapon > 0)
 									{
 										if (player.req.weapon == WEAPON::REGULAR_CROSSBOW)
 										{
-											// TODO: FIX
-											// in this way this is possible only to shoot LEFT on mobile :(
-
-											int cp[2] = { x,y };
-											ScreenToCell(cp);
 											input.shoot = true;
 											input.shoot_xy[0] = cp[0];
 											input.shoot_xy[1] = cp[1];
+
+											// here we should hittest to see what's there
+											// enemy mesh, enemy sprite ?
 										}
 										else
 											player.SetActionAttack(stamp);

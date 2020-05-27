@@ -32,7 +32,6 @@
 #endif
 
 #define DBL
-#define PERSPECTIVE_TEST 0 // 0-off 1-unfiltered 2-snapped >2-filtered
 
 static bool global_refl_mode = false;
 extern Sprite* player_sprite;
@@ -3757,6 +3756,76 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 		if (perspective)
 		{
+			bool ok = true;
+
+			if (ok)
+			{
+				float vx = h->shoot_from[0], vy = h->shoot_from[1], vz = h->shoot_from[2];
+				float eye_to_vtx[3] =
+				{
+					vx - r->view_pos[0],
+					vy - r->view_pos[1],
+					vz - r->view_pos[2],
+				};
+
+				float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+
+				if (viewer_dist <= 0)
+					ok = false;
+				else
+				{
+					float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+					float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+					float recp_dist = 1.0 / viewer_dist;
+
+					fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+					fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+
+					int tx = (int)floorf(fx + 0.5f);
+					int ty = (int)floorf(fy + 0.5f);
+
+					from[0] = (tx - 1) >> 1;
+					from[1] = (ty - 1) >> 1;
+					from[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
+				}
+			}
+
+			if (ok)
+			{
+				float vx = h->shoot_to[0], vy = h->shoot_to[1], vz = h->shoot_to[2];
+				float eye_to_vtx[3] =
+				{
+					vx - r->view_pos[0],
+					vy - r->view_pos[1],
+					vz - r->view_pos[2],
+				};
+
+				float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+
+				if (viewer_dist <= 0)
+					ok = false;
+				else
+				{
+					float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+					float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+					float recp_dist = 1.0 / viewer_dist;
+
+					fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+					fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+
+					int tx = (int)floorf(fx + 0.5f);
+					int ty = (int)floorf(fy + 0.5f);
+
+					to[0] = (tx - 1) >> 1;
+					to[1] = (ty - 1) >> 1;
+					to[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
+				}
+			}
+
+			if (ok)
+				CellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, 'X', 231);
 		}
 		else
 		{
@@ -3877,7 +3946,8 @@ bool UnprojectCoords2D(Renderer* r, const int xy[2], float pos[3])
 
 	if (r->perspective)
 	{
-		return false;
+		int xyz[3] = {xy[0], xy[1], height};
+		return UnprojectCoords3D(r,xyz,pos);
 	}
 	else
 	{
@@ -3898,7 +3968,48 @@ bool UnprojectCoords3D(Renderer* r, const int xyz[3], float pos[3])
 
 	if (r->perspective)
 	{
-		return false;
+		float tm0 = r->mul[0];
+		float tm1 = r->mul[1];
+		float tm4 = r->mul[2];
+		float tm5 = r->mul[3];
+
+		float tm8 = 0;
+		float tm9 = r->mul[5];
+		float tm12 = r->add[0];
+		float tm13 = r->add[1];
+
+		float z = xyz[2];
+
+		float ww_x, ww_y, ww_c, wx_x, wx_y, wx_c, wy_x, wy_y, wy_c;
+		ww_x = r->view_dir[0]*tm5 - r->view_dir[1]*tm1;
+		ww_y = r->view_dir[1]*tm0 - r->view_dir[0]*tm4;
+		ww_c = tm1*tm4 - tm0*tm5;
+		wx_x = (r->view_pos[0]*tm5*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[1] + r->view_pos[1]*tm5 + tm13 + tm9*z));
+		wx_y = (r->view_pos[0]*tm4*r->view_dir[0] + r->view_dir[1]*(-r->view_ofs[0] + r->view_pos[1]*tm4 + tm12 + tm8*z));
+		wx_c = tm5*(-r->view_ofs[0] + tm12 + tm8*z) + tm4*(r->view_ofs[1] - tm13 - tm9*z);
+		wy_x = (r->view_pos[1]*tm1*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[1] + r->view_pos[0]*tm1 + tm13 + tm9*z));
+		wy_y = (r->view_pos[1]*tm0*r->view_dir[1] + r->view_dir[0]*(-r->view_ofs[0] + r->view_pos[0]*tm0 + tm12 + tm8*z));
+		wy_c = tm1*(r->view_ofs[0] - tm12 - tm8*z) + tm0*(-r->view_ofs[1] + tm13 + tm9*z);
+
+
+		float sx_dx = 2.0*xyz[0]+2  - r->view_ofs[0];
+		float sy_dy = 2.0*xyz[1]+2 - r->view_ofs[1];
+
+		float ww = (sx_dx*ww_x + sy_dy*ww_y + ww_c);
+		if (ww<0)
+		{
+			ww = 1.0/ww;
+			float wx = ww * (wx_c + wx_x * sx_dx - wx_y * sy_dy);
+			float wy = ww * (wy_c - wy_x * sx_dx + wy_y * sy_dy);
+
+			pos[0] = wx;
+			pos[1] = wy;
+			pos[2] = z;
+		}
+		else
+		{
+			return false;
+		}
 	}
 	else
 	{
