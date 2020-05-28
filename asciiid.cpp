@@ -4744,7 +4744,7 @@ void my_render(A3D_WND* wnd)
 
 		if (ImGui::Button("CAST SHADOWS"))
 		{
-			UpdateTerrainDark(terrain, world, global_lt);
+			UpdateTerrainDark(terrain, world, global_lt, true);
 			//UpdateWorldDark(world, terrain, global_lt)
 		}
 #endif

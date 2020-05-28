@@ -1228,7 +1228,7 @@ int main(int argc, char* argv[])
         {
 			RebuildWorld(world, true);
             #ifdef DARK_TERRAIN
-            UpdateTerrainDark(terrain, world, lt);
+            UpdateTerrainDark(terrain, world, lt, false);
             #endif
         }
 	}

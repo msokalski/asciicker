@@ -74,7 +74,7 @@ void SetTerrainDiag(Patch* p, uint16_t diag);
 #ifdef DARK_TERRAIN
 uint64_t GetTerrainDark(Patch* p);
 void SetTerrainDark(Patch* p, uint64_t dark);
-void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3]);
+void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor);
 #endif
 
 void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);

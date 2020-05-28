@@ -2699,7 +2699,7 @@ bool Game::DropItem(int index)
 		z = ret[2];
 		dpos[2] = player.pos[2] + 3 * HEIGHT_SCALE;
 		downward[2] = -dpos[2];
-		bool ok2 = 0 != HitWorld(world, dpos, downward, ret, 0, true);
+		bool ok2 = 0 != HitWorld(world, dpos, downward, ret, 0, true, false, true);
 		if (ok2 && ret[2] > z)
 			z = ret[2];
 	}
@@ -2707,7 +2707,7 @@ bool Game::DropItem(int index)
 	{
 		dpos[2] = player.pos[2] + 3 * HEIGHT_SCALE;
 		downward[2] = -dpos[2];
-		ok = 0 != HitWorld(world, dpos, downward, ret, 0, true);
+		ok = 0 != HitWorld(world, dpos, downward, ret, 0, true, false, true);
 		if (ok)
 			z = ret[2];
 	}
@@ -3333,7 +3333,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				v[2] *= 1000.0;
 
 				HideInst(player_inst);
-				Inst* inst = HitWorld(world, p, v, r1, 0, true);
+				Inst* inst = HitWorld(world, p, v, r1, 0, true, false, true);
 				bool ground = HitTerrain(terrain, p, v, inst ? r2 : r1, 0, true);
 
 				if (inst && ground)

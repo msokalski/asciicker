@@ -1512,7 +1512,7 @@ void QueryTerrainSample(QuadItem* q, int x, int y, int range, void(*cb)(Patch* p
 }
 
 #ifdef DARK_TERRAIN
-void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3])
+void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor)
 {
 	struct Updater
 	{
@@ -1534,7 +1534,7 @@ void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3])
 				}
 			}
 
-			Inst* i = HitWorld(updater->w, coords, updater->lightdir, hit, 0, false, true);
+			Inst* i = HitWorld(updater->w, coords, updater->lightdir, hit, 0, false, updater->editor);
 
 			if (i)
 			{
@@ -1548,12 +1548,13 @@ void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3])
 			p->dark &= ~mask;
 		}
 
+		bool editor;
 		Terrain* t;
 		World* w;
 		double lightdir[3];
 	};
 
-	Updater updater = { t, w, {-lightpos[0], -lightpos[1], -lightpos[2] * HEIGHT_SCALE} };
+	Updater updater = { editor, t, w, {-lightpos[0], -lightpos[1], -lightpos[2] * HEIGHT_SCALE} };
 
 //	double n = 1.0 / sqrt(lightpos[0]* lightpos[0]+ lightpos[1]* lightpos[1]+ lightpos[2]* lightpos[2]);
 //	updater.lightdir[0] *= n;
