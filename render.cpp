@@ -116,6 +116,102 @@ inline void Bresenham(Sample* buf, int w, int h, int from[3], int to[3], int _or
 }
 
 template <typename Sample>
+inline void PerspectiveCorrectCellLine(/*const*/Sample* smp, AnsiCell* buf, int w, int h, int from[3], int to[3], float d_from, float d_to, int gl, int fg)
+{
+	int sx = to[0] - from[0];
+	int sy = to[1] - from[1];
+
+	if (sx == 0 && sy == 0)
+		return;
+
+	int sz = to[2] - from[2];
+
+	int ax = sx >= 0 ? sx : -sx;
+	int ay = sy >= 0 ? sy : -sy;
+
+	if (ax >= ay)
+	{
+		float n = +1.0f / sx;
+		// horizontal domain
+
+		if (from[0] > to[0])
+		{
+			int* swap = from;
+			from = to;
+			to = swap;
+		}
+
+		int	x0 = std::max(0, from[0]);
+		int	x1 = std::min(w, to[0]);
+
+		for (int x = x0; x < x1; x++)
+		{
+			float a = x - from[0] + 0.5f;
+			int y = (int)floor((a * sy)*n + from[1] + 0.5f);
+			if (y >= 0 && y < h)
+			{
+				int hx = 2 * x + 2;
+				int hy = 2 * y + 2;
+
+				float ka = a * n * d_to;
+				ka = ka / ((1 - a * n) * d_from + ka);
+				float z = sz * ka + from[2];
+
+				/*const*/Sample* test = smp + hy * (2 * w + 4) + hx;
+				if (test->DepthTest_RO(z))
+				{
+					AnsiCell* ptr = buf + w * y + x;
+					int av = AverageGlyph(ptr, 0xF);
+					ptr->bk = av;
+					ptr->fg = LightenColor(LightenColor(av));
+					ptr->gl = gl;
+				}
+			}
+		}
+	}
+	else
+	{
+		float n = 1.0f / sy;
+		// vertical domain
+
+		if (from[1] > to[1])
+		{
+			int* swap = from;
+			from = to;
+			to = swap;
+		}
+
+		int y0 = std::max(0, from[1]);
+		int y1 = std::min(h, to[1]);
+
+		for (int y = y0; y < y1; y++)
+		{
+			int a = y - from[1];
+			int x = (int)floor((a * sx) * n + from[0] + 0.5f);
+			if (x >= 0 && x < w)
+			{
+				int hx = 2 * x + 2;
+				int hy = 2 * y + 2;
+
+				float ka = a * n * d_to;
+				ka = ka / ((1 - a * n) * d_from + ka);
+				float z = sz * ka + from[2];
+
+				/*const*/Sample* test = smp + hy * (2 * w + 4) + hx;
+				if (test->DepthTest_RO(z))
+				{
+					AnsiCell* ptr = buf + w * y + x;
+					int av = AverageGlyph(ptr, 0xF);
+					ptr->bk = av;
+					ptr->fg = LightenColor(LightenColor(av));
+					ptr->gl = gl;
+				}
+			}
+		}
+	}
+}
+
+template <typename Sample>
 inline void CellLine(/*const*/Sample* smp, AnsiCell* buf, int w, int h, int from[3], int to[3], int gl, int fg)
 {
 	int sx = to[0] - from[0];
@@ -158,7 +254,9 @@ inline void CellLine(/*const*/Sample* smp, AnsiCell* buf, int w, int h, int from
 				if (test->DepthTest_RO(z))
 				{
 					AnsiCell* ptr = buf + w * y + x;
-					ptr->fg = fg;
+					int av = AverageGlyph(ptr, 0xF);
+					ptr->bk = av;
+					ptr->fg = LightenColor(LightenColor(av));
 					ptr->gl = gl;
 				}
 			}
@@ -193,7 +291,9 @@ inline void CellLine(/*const*/Sample* smp, AnsiCell* buf, int w, int h, int from
 				if (test->DepthTest_RO(z))
 				{
 					AnsiCell* ptr = buf + w * y + x;
-					ptr->fg = fg;
+					int av = AverageGlyph(ptr, 0xF);
+					ptr->bk = av;
+					ptr->fg = LightenColor(LightenColor(av));
 					ptr->gl = gl;
 				}
 			}
@@ -3750,102 +3850,158 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		if (stamp - h->shoot_stamp > 3000000)
 			h->shooting = false;
 
-		// here we must write directly to AnsiCell buf but test height values from Samples!
-		int from[3];
-		int to[3];
+		float arrow_speed = 1000; // 2000 world units / sec
+		float shutter_time = 0.05; // 1/20 sec shutter speed
 
-		if (perspective)
+		float head_time = (stamp - h->shoot_stamp) / 1000000.0f;
+		float tail_time = head_time - shutter_time;
+
+		// normalized dir (note different xy and z scaling!)
+		float dir[3] =
 		{
-			bool ok = true;
+			h->shoot_to[0] - h->shoot_from[0],
+			h->shoot_to[1] - h->shoot_from[1],
+			h->shoot_to[2] - h->shoot_from[2],
+		};
 
-			if (ok)
+		dir[2] /= HEIGHT_SCALE;
+
+		float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+
+		dir[0] /= len;
+		dir[1] /= len;
+		dir[2] /= len;
+
+		dir[2] *= HEIGHT_SCALE;
+
+		if (tail_time < 0)
+			tail_time = 0;
+
+		if (head_time * arrow_speed > len)
+			head_time = len / arrow_speed;
+
+		if (tail_time * arrow_speed > len)
+			h->shooting = false;
+
+		if (h->shooting)
+		{
+			float head_pos[3] =
 			{
-				float vx = h->shoot_from[0], vy = h->shoot_from[1], vz = h->shoot_from[2];
-				float eye_to_vtx[3] =
+				h->shoot_from[0] + dir[0] * head_time * arrow_speed,
+				h->shoot_from[1] + dir[1] * head_time * arrow_speed,
+				h->shoot_from[2] + dir[2] * head_time * arrow_speed,
+			};
+
+			float tail_pos[3] =
+			{
+				h->shoot_from[0] + dir[0] * tail_time * arrow_speed,
+				h->shoot_from[1] + dir[1] * tail_time * arrow_speed,
+				h->shoot_from[2] + dir[2] * tail_time * arrow_speed,
+			};
+
+			// here we must write directly to AnsiCell buf but test height values from Samples!
+			int from[3];
+			int to[3];
+
+			if (perspective)
+			{
+				bool ok = true;
+
+				float d_from, d_to;
+
+				if (ok)
 				{
-					vx - r->view_pos[0],
-					vy - r->view_pos[1],
-					vz - r->view_pos[2],
-				};
+					float vx = head_pos[0], vy = head_pos[1], vz = head_pos[2];
+					float eye_to_vtx[3] =
+					{
+						vx - r->view_pos[0],
+						vy - r->view_pos[1],
+						vz - r->view_pos[2],
+					};
 
-				float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+					float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 
-				if (viewer_dist <= 0)
-					ok = false;
-				else
+					if (viewer_dist <= 0)
+						ok = false;
+					else
+					{
+						float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+						float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+						float recp_dist = 1.0 / viewer_dist;
+						d_from = recp_dist;
+
+						fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+						fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+
+						int tx = (int)floorf(fx + 0.5f);
+						int ty = (int)floorf(fy + 0.5f);
+
+						from[0] = (tx - 1) >> 1;
+						from[1] = (ty - 1) >> 1;
+						from[2] = (int)floorf(head_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+					}
+				}
+
+				if (ok)
 				{
-					float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
-					float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+					float vx = tail_pos[0], vy = tail_pos[1], vz = tail_pos[2];
+					float eye_to_vtx[3] =
+					{
+						vx - r->view_pos[0],
+						vy - r->view_pos[1],
+						vz - r->view_pos[2],
+					};
 
-					float recp_dist = 1.0 / viewer_dist;
+					float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 
-					fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
-					fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+					if (viewer_dist <= 0)
+						ok = false;
+					else
+					{
+						float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+						float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
 
-					int tx = (int)floorf(fx + 0.5f);
-					int ty = (int)floorf(fy + 0.5f);
+						float recp_dist = 1.0 / viewer_dist;
+						d_to = recp_dist;
 
-					from[0] = (tx - 1) >> 1;
-					from[1] = (ty - 1) >> 1;
-					from[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
+						fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+						fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+
+						int tx = (int)floorf(fx + 0.5f);
+						int ty = (int)floorf(fy + 0.5f);
+
+						to[0] = (tx - 1) >> 1;
+						to[1] = (ty - 1) >> 1;
+						to[2] = (int)floorf(tail_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+					}
+				}
+
+				if (ok)
+				{
+					PerspectiveCorrectCellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, d_from, d_to, 7, 231/*231*/);
 				}
 			}
-
-			if (ok)
+			else
 			{
-				float vx = h->shoot_to[0], vy = h->shoot_to[1], vz = h->shoot_to[2];
-				float eye_to_vtx[3] =
-				{
-					vx - r->view_pos[0],
-					vy - r->view_pos[1],
-					vz - r->view_pos[2],
-				};
+				int tx = (int)floor(r->mul[0] * head_pos[0] + r->mul[2] * head_pos[1] + 0.5 + r->add[0]);
+				int ty = (int)floor(r->mul[1] * head_pos[0] + r->mul[3] * head_pos[1] + r->mul[5] * head_pos[2] + 0.5 + r->add[1]);
 
-				float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+				// convert from samples to cells
+				from[0] = (tx - 1) >> 1;
+				from[1] = (ty - 1) >> 1;
+				from[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
 
-				if (viewer_dist <= 0)
-					ok = false;
-				else
-				{
-					float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
-					float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+				tx = (int)floor(r->mul[0] * tail_pos[0] + r->mul[2] * tail_pos[1] + 0.5 + r->add[0]);
+				ty = (int)floor(r->mul[1] * tail_pos[0] + r->mul[3] * tail_pos[1] + r->mul[5] * tail_pos[2] + 0.5 + r->add[1]);
 
-					float recp_dist = 1.0 / viewer_dist;
+				// convert from samples to cells
+				to[0] = (tx - 1) >> 1;
+				to[1] = (ty - 1) >> 1;
+				to[2] = (int)floorf(tail_pos[2] + 0.5) + HEIGHT_SCALE / 2;
 
-					fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
-					fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
-
-					int tx = (int)floorf(fx + 0.5f);
-					int ty = (int)floorf(fy + 0.5f);
-
-					to[0] = (tx - 1) >> 1;
-					to[1] = (ty - 1) >> 1;
-					to[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
-				}
+				CellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, 7, 231/*231*/);
 			}
-
-			if (ok)
-				CellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, 'X', 231);
-		}
-		else
-		{
-			int tx = (int)floor(r->mul[0] * h->shoot_from[0] + r->mul[2] * h->shoot_from[1] + 0.5 + r->add[0]);
-			int ty = (int)floor(r->mul[1] * h->shoot_from[0] + r->mul[3] * h->shoot_from[1] + r->mul[5] * h->shoot_from[2] + 0.5 + r->add[1]);
-
-			// convert from samples to cells
-			from[0] = (tx - 1) >> 1;
-			from[1] = (ty - 1) >> 1;
-			from[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
-
-			tx = (int)floor(r->mul[0] * h->shoot_to[0] + r->mul[2] * h->shoot_to[1] + 0.5 + r->add[0]);
-			ty = (int)floor(r->mul[1] * h->shoot_to[0] + r->mul[3] * h->shoot_to[1] + r->mul[5] * h->shoot_to[2] + 0.5 + r->add[1]);
-
-			// convert from samples to cells
-			to[0] = (tx - 1) >> 1;
-			to[1] = (ty - 1) >> 1;
-			to[2] = (int)floorf(h->shoot_to[2] + 0.5) + HEIGHT_SCALE / 2;
-			
-			CellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, 'X', 231);
 		}
 	}
 	
