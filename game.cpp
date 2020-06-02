@@ -3075,6 +3075,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					yaw = prev_yaw + yaw_vel*dt;
 					SetPhysicsYaw(physics, yaw, 0);
 
+					/*
 					float mouse_dir_x = (input.contact[i].pos[0] * 2 - input.size[0])/2;
 					float mouse_dir_y = -(input.contact[i].pos[1] * 2 - input.size[1]);
 					if (mouse_dir_x != 0 || mouse_dir_y != 0)
@@ -3082,6 +3083,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						float mouse_dir = atan2(mouse_dir_y, mouse_dir_x) * 180 / M_PI + 90;
 						SetPhysicsDir(physics, mouse_dir + yaw);
 					}
+					*/
 				}
 				else
 				{
@@ -3183,10 +3185,18 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 				case PLAYER_WEAPON_INDEX::CROSSBOW:
 				{
+					static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 					int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
-					
 
+					// if frameindex jumps from first half to second half of frames
+					// sample scene at hit location, if theres something emit particles in color(s) of hit object
+					// if this is human sprite, emitt red particles
 
+					assert(frame_index >= 0);
+					if (frame_index >= sizeof(frames) / sizeof(int))
+						player.SetActionNone(_stamp);
+					else
+						player.frame = frames[frame_index];
 					break;
 				}
 			}
@@ -3297,6 +3307,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			height / 2 + ss[1] + (f->meta_xy[1]+1) / 2,
 			(int)pos[2] + 40 // should depend on meta_xy[2] :o
 		};
+
+		player.SetActionAttack(stamp);
 
 		if (UnprojectCoords3D(renderer, from, player.shoot_from))
 		{
@@ -4419,12 +4431,32 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					show_inventory = true;
 				}			
 			}
-			
-			if (show_inventory)
+
+			if (key == 'u' || key == 'U')
 			{
-				if (key=='\n' || key=='\r')
+				if (inventory.focus >= 0)
 				{
-					// attack-eat collision
+					if (show_inventory)
+					{
+						CancelItemContacts();
+						ExecuteItem(inventory.focus);
+					}
+					else
+					{
+						// using food, potion, drink cannot be undone
+						// so not allowed to use when inventory is hidden
+						Item* item = inventory.my_item[inventory.focus].item;
+						switch (item->proto->kind)
+						{
+							case 'F': // food
+							case 'P': // potion
+							case 'D': // drink
+								break;
+							default:
+								CancelItemContacts();
+								ExecuteItem(inventory.focus);
+						}
+					}
 				}
 			}
 		}
