@@ -1056,7 +1056,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y6/";
+	const char* path = "/ws/y7/";
 	const char* port = "80";
 	*/
 
@@ -1064,7 +1064,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y6/";
+	const char* path = "/ws/y7/";
 	const char* port = "443";
 	*/
 
@@ -1072,7 +1072,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y6/"; // just to check if same as server expects
+	const char* path = "/ws/y7/"; // just to check if same as server expects
 	const char* port = "8080";
 	*/
 
