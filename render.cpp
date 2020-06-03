@@ -4102,7 +4102,7 @@ bool UnprojectCoords2D(Renderer* r, const int xy[2], float pos[3])
 
 	if (r->perspective)
 	{
-		int xyz[3] = {xy[0], xy[1], height};
+		int xyz[3] = {xy[0], xy[1], (int)floorf(height+0.5f)};
 		return UnprojectCoords3D(r,xyz,pos);
 	}
 	else

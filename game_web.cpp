@@ -167,7 +167,7 @@ int Main()
             RebuildWorld(world, true);
             #ifdef DARK_TERRAIN
             float lt[4] = { 1,0,1,0.5 };
-            UpdateTerrainDark(terrain, world, lt);
+            UpdateTerrainDark(terrain, world, lt, false);
             #endif    
         }
     }

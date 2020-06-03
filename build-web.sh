@@ -47,6 +47,7 @@ emcc --emrun -O3 \
     -s EXPORTED_FUNCTIONS='["_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_Join","_Packet"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
+    --no-heap-copy \
     -s NO_EXIT_RUNTIME=1 \
     -lidbfs.js \
     --preload-file a3d/game_map.a3d \
