@@ -1242,6 +1242,10 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 			}
 		}
 
+		if (phys->vel[2] > 20)
+			phys->vel[2] = 20;
+
+
 		for (int h = 63; h > 0; h--)
 		{
 			io->xyz[h][0] = io->xyz[h - 1][0];

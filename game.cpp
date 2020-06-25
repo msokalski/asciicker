@@ -5,6 +5,8 @@
 #include "game.h"
 #include "platform.h"
 #include "network.h"
+#include "matrix.h"
+#include "fast_rand.h"
 
 extern char base_path[];
 
@@ -30,8 +32,9 @@ extern Terrain* terrain;
 extern World* world;
 
 // asciiid pseudo-multiplayer
-Human* player_head = 0;
-Human* player_tail = 0;
+// or game npcs?
+Character* player_head = 0;
+Character* player_tail = 0;
 
 char player_name[32] = "player";
 
@@ -1099,7 +1102,9 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			h->req.shield = (join->sprite >> 4) & 0xF;
 			h->req.weapon = join->sprite & 0xF;
 
-			h->sprite = GetSprite(&h->req);
+			h->clr = 0; // from server
+
+			h->sprite = GetSprite(&h->req, h->clr);
 
 			h->anim = join->anim;
 			h->frame = join->frame;
@@ -1128,11 +1133,11 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			if (h->prev)
 				h->prev->next = h->next;
 			else
-				head = h->next;
+				head = (Human*)h->next;
 			if (h->next)
 				h->next->prev = h->prev;
 			else
-				tail = h->prev;
+				tail = (Human*)h->prev;
 
 			// if has world's Inst, remove it
 			if (h->inst)
@@ -1154,7 +1159,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			h->req.shield = (pose->sprite >> 4) & 0xF;
 			h->req.weapon = pose->sprite & 0xF;
 
-			h->sprite = GetSprite(&h->req);
+			h->sprite = GetSprite(&h->req, h->clr);
 
 			h->anim = pose->anim;
 			h->frame = pose->frame;
@@ -1835,14 +1840,17 @@ struct MOUNT { enum
 
 Sprite* player_nude = 0;
 
-Sprite* player[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
-Sprite* player_fall[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
-Sprite* player_attack[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
-Sprite* wolfie[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
-Sprite* wolfie_attack[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
-Sprite* wolfie_fall[ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 }; // todo
+Sprite* player[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* player_fall[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* player_attack[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* wolfie[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* wolfie_attack[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* wolfie_fall[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 }; // todo
 
-Sprite* wolf = 0;
+// dismount immediately when wolfie and/or player dies, evaluate them separately!
+// wolfie dismounting should separate wolfie -> player + wolf
+
+Sprite* wolf[2] = { 0 }; // 2 clr
 Sprite* wolf_attack = 0; // todo
 Sprite* wolf_fall = 0;   // todo
 
@@ -1875,6 +1883,13 @@ void LoadSprites()
 
 	player_nude = LoadSpriteBP("player-nude.xp", 0, false);
 
+	uint8_t wolf_recolor[] = { 2, 85,85,85, 51,51,51, 170,170,170, 102,102,102 };
+	wolf[0] = LoadSpriteBP("wolfie.xp", 0, false);
+	wolf[1] = LoadSpriteBP("wolfie.xp", wolf_recolor, false);
+
+	uint8_t enemy_recolor[] = { 4, 170,0,170, 153,51,102, 0,0,170, 0,51,102, 85,85,255, 51,102,153, 255,85,85, 204,102,102 };
+	uint8_t* recolor[2] = { 0, enemy_recolor };
+
 	for (int a = 0; a < ARMOR::SIZE; a++)
 	{
 		for (int h = 0; h < HELMET::SIZE; h++)
@@ -1883,29 +1898,33 @@ void LoadSprites()
 			{
 				char name[64];
 
-				for (int w = 0; w < WEAPON::SIZE; w++)
+				for (int c = 0; c < 2; c++) // color
 				{
-					sprintf(name, "player-%x%x%x%x.xp", a, h, s, w);
-					player[a][h][s][w] = LoadSpriteBP(name, 0, false);
 
-					sprintf(name, "plydie-%x%x%x%x.xp", a, h, s, w);
-					player_fall[a][h][s][w] = LoadSpriteBP(name, 0, false);
+					for (int w = 0; w < WEAPON::SIZE; w++)
+					{
+						sprintf(name, "player-%x%x%x%x.xp", a, h, s, w);
+						player[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
 
-					sprintf(name, "wolfie-%x%x%x%x.xp", a, h, s, w);
-					wolfie[a][h][s][w] = LoadSpriteBP(name, 0, false);
+						sprintf(name, "plydie-%x%x%x%x.xp", a, h, s, w);
+						player_fall[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
 
-					wolfie_fall[a][h][s][w] = 0;
-				}
+						sprintf(name, "wolfie-%x%x%x%x.xp", a, h, s, w);
+						wolfie[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
 
-				player_attack[a][h][s][WEAPON::NONE] = 0;
-				wolfie_attack[a][h][s][WEAPON::NONE] = 0;
-				for (int w = 1; w < WEAPON::SIZE; w++)
-				{
-					sprintf(name, "attack-%x%x%x%x.xp", a, h, s, w);
-					player_attack[a][h][s][w] = LoadSpriteBP(name, 0, false);
+						wolfie_fall[c][a][h][s][w] = 0;
+					}
 
-					sprintf(name, "wolack-%x%x%x%x.xp", a, h, s, w);
-					wolfie_attack[a][h][s][w] = LoadSpriteBP(name, 0, false);
+					player_attack[c][a][h][s][WEAPON::NONE] = 0;
+					wolfie_attack[c][a][h][s][WEAPON::NONE] = 0;
+					for (int w = 1; w < WEAPON::SIZE; w++)
+					{
+						sprintf(name, "attack-%x%x%x%x.xp", a, h, s, w);
+						player_attack[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
+
+						sprintf(name, "wolack-%x%x%x%x.xp", a, h, s, w);
+						wolfie_attack[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
+					}
 				}
 			}
 		}
@@ -2066,9 +2085,24 @@ void LoadSprites()
 	item_proto_lib = item_proto;
 }
 
-Sprite* GetSprite(const SpriteReq* req)
+Sprite* GetSprite(const SpriteReq* req, int clr)
 {
 	assert(req);
+
+	if (req->kind == SpriteReq::WOLF)
+	{
+		if (req->action == ACTION::NONE &&
+			req->weapon == WEAPON::NONE &&
+			req->shield == SHIELD::NONE &&
+			req->helmet == HELMET::NONE &&
+			req->armor == ARMOR::NONE &&
+			req->mount == MOUNT::NONE)
+		{
+			return wolf[clr];
+		}
+
+		return 0;
+	}
 
 	if (req->action < 0 || req->action >= ACTION::SIZE)
 		return 0;
@@ -2092,15 +2126,15 @@ Sprite* GetSprite(const SpriteReq* req)
 			switch (req->action)
 			{
 				case ACTION::NONE:
-					return player[req->armor][req->helmet][req->shield][req->weapon];
+					return player[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::ATTACK:
-					return player_attack[req->armor][req->helmet][req->shield][req->weapon];
+					return player_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::FALL:
 				case ACTION::DEAD:
 				case ACTION::STAND:
-					return player_fall[req->armor][req->helmet][req->shield][req->weapon];
+					return player_fall[clr][req->armor][req->helmet][req->shield][req->weapon];
 			}
 			return 0;
 		}
@@ -2110,15 +2144,15 @@ Sprite* GetSprite(const SpriteReq* req)
 			switch (req->action)
 			{
 				case ACTION::NONE:
-					return wolfie[req->armor][req->helmet][req->shield][req->weapon];
+					return wolfie[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::ATTACK:
-					return wolfie_attack[req->armor][req->helmet][req->shield][req->weapon];
+					return wolfie_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::FALL:
 				case ACTION::DEAD:
 				case ACTION::STAND:
-					return wolfie_fall[req->armor][req->helmet][req->shield][req->weapon];
+					return wolfie_fall[clr][req->armor][req->helmet][req->shield][req->weapon];
 			}	
 			return 0;
 		}
@@ -2139,6 +2173,131 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	// load defaults
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
+
+	fast_srand(stamp);
+
+	/*
+	Human* enemy_master = 0;
+	for (int i = 0; i < 6; i++) // 1 mater + 5 slaves
+	{
+		Human* enemy = (Human*)malloc(sizeof(Human));
+		memset(enemy, 0, sizeof(Human));
+
+		// init enemy
+		enemy->enemy = true;
+		enemy->master = enemy_master;
+		enemy->target = enemy->master;
+
+		if (i == 0)
+			enemy_master = enemy;
+
+		int r = fast_rand();
+
+		enemy->clr = 1;
+		enemy->req.kind = SpriteReq::WOLF;
+		enemy->req.mount = MOUNT::NONE;
+		enemy->req.armor = ARMOR::NONE;
+		enemy->req.helmet = HELMET::NONE;
+		enemy->req.shield = SHIELD::NONE;
+		enemy->req.weapon = WEAPON::NONE;
+		enemy->req.action = ACTION::NONE;
+
+		enemy->sprite = GetSprite(&enemy->req, enemy->clr);
+		enemy->anim = 0; // ???
+
+		enemy->frame = 0;
+
+		int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
+		int reps[4] = { 0,0,0,0 };
+
+		float e_pos[] = { -13.6, 202.2, 234.7 };
+		float xyz[3] = { e_pos[0] + fast_rand() % 21 - 10, e_pos[1] + fast_rand() % 21 - 10, e_pos[2] + 200 };
+
+		enemy->pos[0] = enemy->unstuck[0][0] = enemy->unstuck[1][0] = xyz[0];
+		enemy->pos[1] = enemy->unstuck[0][1] = enemy->unstuck[1][1] = xyz[1];
+		enemy->pos[2] = enemy->unstuck[0][2] = enemy->unstuck[1][2] = xyz[2];
+		enemy->inst = CreateInst(world, enemy->sprite, flags, xyz, yaw, enemy->anim, enemy->frame, reps, 0, -1);
+		SetInstSpriteData(enemy->inst, enemy);
+
+		AttachInst(world, enemy->inst);
+
+		enemy->prev = 0;
+		enemy->next = player_head;
+
+		if (!player_tail)
+			player_tail = enemy;
+		else
+			player_tail->prev = enemy;
+
+		player_head = enemy;
+
+		enemy->data = CreatePhysics(terrain, world, xyz, 0, 0, stamp);
+	}
+	*/
+
+	for (int i = 0; i < 5; i++)
+	{
+		Human* buddy = (Human*)malloc(sizeof(Human));
+		memset(buddy, 0, sizeof(Human));
+		
+		// init buddy!
+		buddy->enemy = false;
+		buddy->master = &g->player;
+		buddy->target = buddy->master;
+
+		int r = fast_rand();
+
+		buddy->clr = 0;
+		buddy->req.kind = SpriteReq::WOLF;
+		buddy->req.mount = MOUNT::NONE;
+		buddy->req.armor = ARMOR::NONE;
+		buddy->req.helmet = HELMET::NONE;
+		buddy->req.shield = SHIELD::NONE;
+		buddy->req.weapon = WEAPON::NONE;
+		buddy->req.action = ACTION::NONE;
+
+		#if 0
+		buddy->clr = 1;
+		g->player.req.kind = SpriteReq::HUMAN;
+		buddy->req.mount = MOUNT::NONE;// +((r >> 1) & 1);
+		buddy->req.armor = ARMOR::NONE + ((r >> 2) & 1);
+		buddy->req.helmet = HELMET::NONE + ((r >> 3) & 1);
+		buddy->req.shield = SHIELD::NONE + ((r >> 4) & 1);
+		buddy->req.weapon = WEAPON::NONE + ((r >> 5) % 3);
+		buddy->req.action = ACTION::NONE;
+		#endif
+
+		buddy->sprite = GetSprite(&buddy->req, buddy->clr);
+		buddy->anim = 0; // ???
+
+		buddy->frame = 0;
+
+		int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
+		int reps[4] = { 0,0,0,0 };
+
+		float xyz[3] = { pos[0] + fast_rand()%21 - 10, pos[1] + fast_rand() % 21 - 10, 131 + 200 };
+
+		buddy->pos[0] = buddy->unstuck[0][0] = buddy->unstuck[1][0] = xyz[0];
+		buddy->pos[1] = buddy->unstuck[0][1] = buddy->unstuck[1][1] = xyz[1];
+		buddy->pos[2] = buddy->unstuck[0][2] = buddy->unstuck[1][2] = xyz[2];
+		buddy->inst = CreateInst(world, buddy->sprite, flags, xyz, yaw, buddy->anim, buddy->frame, reps, 0, -1);
+		SetInstSpriteData(buddy->inst, buddy);
+
+		AttachInst(world, buddy->inst);
+
+		buddy->prev = 0;
+		buddy->next = player_head;
+
+		if (!player_tail)
+			player_tail = buddy;
+		else
+			player_tail->prev = buddy;
+
+		player_head = buddy;
+
+		buddy->data = CreatePhysics(terrain, world, xyz, 0, 0, stamp);
+		//buddy->dist = 10; // 10 + i * 5;
+	}
 
 	strcpy(g->player.name, player_name);
 
@@ -2171,14 +2330,20 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->stamp = stamp;
 
 	// init player!
-	g->player.req.mount = MOUNT::NONE;
+	g->player.master = 0;
+	g->player.target = 0;
+	g->player.enemy = false; // sounds ridiculous
+	g->player.req.kind = SpriteReq::HUMAN;
+	g->player.req.mount = MOUNT::WOLF;
 	g->player.req.armor = ARMOR::NONE;
 	g->player.req.helmet = HELMET::NONE;
 	g->player.req.shield = SHIELD::NONE; // REGULAR_SHIELD;
 	g->player.req.weapon = WEAPON::NONE; // REGULAR_SWORD;
 	g->player.req.action = ACTION::NONE;
 
-	g->player.sprite = GetSprite(&g->player.req);
+	g->player.clr = 0;
+
+	g->player.sprite = GetSprite(&g->player.req, g->player.clr);
 	g->player.anim = 0; // ???
 
 	g->player.frame = 0;
@@ -2733,14 +2898,14 @@ void Game::ScreenToCell(int p[2]) const
 	p[1] = (input.size[1]-1 - 2*p[1] + render_size[1] * font_size[1]) / (2 * font_size[1]);
 }
 
-bool Human::SetActionNone(uint64_t stamp)
+bool Character::SetActionNone(uint64_t stamp)
 {
 	if (req.action == ACTION::NONE)
 		return true;
 	int old = req.action;
 	req.action = ACTION::NONE;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.action = old;
@@ -2754,7 +2919,7 @@ bool Human::SetActionNone(uint64_t stamp)
 	return true;
 }
 
-bool Human::SetActionAttack(uint64_t stamp)
+bool Character::SetActionAttack(uint64_t stamp)
 {
 	if (req.action == ACTION::ATTACK)
 		return true;
@@ -2766,7 +2931,7 @@ bool Human::SetActionAttack(uint64_t stamp)
 	int old = req.action;
 	req.action = ACTION::ATTACK;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.action = old;
@@ -2780,7 +2945,7 @@ bool Human::SetActionAttack(uint64_t stamp)
 	return true;
 }
 
-bool Human::SetActionStand(uint64_t stamp)
+bool Character::SetActionStand(uint64_t stamp)
 {
 	if (req.action == ACTION::STAND)
 		return true;
@@ -2791,7 +2956,7 @@ bool Human::SetActionStand(uint64_t stamp)
 	int old = req.action;
 	req.action = ACTION::STAND;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.action = old;
@@ -2814,7 +2979,7 @@ bool Human::SetActionStand(uint64_t stamp)
 	return true;
 }
 
-bool Human::SetActionFall(uint64_t stamp)
+bool Character::SetActionFall(uint64_t stamp)
 {
 	if (req.action == ACTION::FALL)
 		return true;
@@ -2825,7 +2990,7 @@ bool Human::SetActionFall(uint64_t stamp)
 	int old = req.action;
 	req.action = ACTION::FALL;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.action = old;
@@ -2848,12 +3013,12 @@ bool Human::SetActionFall(uint64_t stamp)
 	return true;
 }
 
-bool Human::SetActionDead(uint64_t stamp)
+bool Character::SetActionDead(uint64_t stamp)
 {
 	int old = req.action;
 	req.action = ACTION::DEAD;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.action = old;
@@ -2878,7 +3043,7 @@ bool Human::SetWeapon(int w)
 	int old = req.weapon;
 	req.weapon = w;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.weapon = old;
@@ -2897,7 +3062,7 @@ bool Human::SetShield(int s)
 	int old = req.shield;
 	req.shield = s;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.shield = old;
@@ -2916,7 +3081,7 @@ bool Human::SetHelmet(int h)
 	int old = req.helmet;
 	req.helmet = h;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.helmet = old;
@@ -2935,7 +3100,7 @@ bool Human::SetArmor(int a)
 	int old = req.armor;
 	req.armor = a;
 
-	Sprite* spr = GetSprite(&req);
+	Sprite* spr = GetSprite(&req, clr);
 	if (!spr)
 	{
 		req.armor = old;
@@ -2956,7 +3121,7 @@ bool Human::SetMount(int m)
 	int old = req.mount;
 	req.mount = m;
 
-	Sprite* s = GetSprite(&req);
+	Sprite* s = GetSprite(&req, clr);
 	if (!s)
 	{
 		req.mount = old;
@@ -3149,6 +3314,263 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (steps > 0)
 	{
 		input.jump = false;
+	}
+
+	if (!show_inventory)
+	{
+		// animate buddies & enemies
+		Character* h = player_head;
+		while (h)
+		{
+			if (h->data)
+			{
+				Physics* p = (Physics*)h->data;
+
+				PhysicsIO pio;
+				pio.x_force = 0;
+				pio.y_force = 0;
+				pio.torque = 0;
+				pio.water = water;
+				pio.jump = false;
+
+				// distance to the leader
+				float dx = h->master->pos[0] - h->pos[0];
+				float dy = h->master->pos[1] - h->pos[1];
+				float d = sqrtf(dx*dx + dy * dy);
+
+				// find closest enemy
+				/*
+				{
+					Character* h2 = player_head;
+					int nn = 0;
+					float nd = 5;
+					float cd = 0;
+					Character* ch = 0;
+					while (h2)
+					{
+						// not ally (can be true for player)
+						if (h2->enemy != h->enemy)
+						{
+							float bx = h2->pos[0] - h->pos[0];
+							float by = h2->pos[1] - h->pos[1];
+							float d = bx * bx + by * by;
+							if (!ch || d < cd)
+							{
+								cd = d;
+								ch = h2;
+							}
+
+							if (d < nd*nd)
+							{
+								nn++;
+							}
+						}
+						h2 = h2->next;
+					}
+				}
+				*/
+
+				
+				float gd = 10;
+				if (d > gd) // follow the leader if nothing better to do
+				{
+					float df = sqrtf(dx * dx + dy * dy);
+
+					pio.x_force = dx / df;
+					pio.y_force = dy / df;
+
+					// find closest buddy
+					Character* h2 = player_head;
+					int nn = 0;
+					float nd = 5;
+					float cd = 0;
+					Character* ch = 0;
+					while (h2)
+					{
+						// not player, ally, not himself
+						if (h2->data && h2->enemy == h->enemy && h2!=h)
+						{
+							float bx = h2->pos[0] - h->pos[0];
+							float by = h2->pos[1] - h->pos[1];
+							float d = bx * bx + by * by;
+							if (!ch || d < cd)
+							{
+								cd = d;
+								ch = h2;
+							}
+
+							if (d < nd*nd)
+							{
+								nn++;
+							}
+						}
+						h2 = h2->next;
+					}
+
+					if (ch && cd < nd*nd)
+					{
+						// cd = sqrtf(cd);
+
+						// check if our force dir is towards or away of that buddy
+						float bx = ch->pos[0] - h->pos[0];
+						float by = ch->pos[1] - h->pos[1];
+
+						if (pio.x_force * bx + pio.y_force * by > 0)
+						{
+							// towards, so we need to adjust force to slide
+
+							if (d < gd + 30 && nn>1)
+							{
+								// filter out if late to the party
+								h->jump = false;
+								pio.x_force = 0;
+								pio.y_force = 0;
+							}
+							else
+							{
+								float x1[3] = { bx,by,0 };
+								float y1[3] = { dx,dy,0 };
+								float z1[3];
+								CrossProduct(x1, y1, z1);
+								CrossProduct(z1, y1, x1);
+
+								float len = sqrtf(x1[0] * x1[0] + x1[1] * x1[1]);
+								x1[0] *= d / len;
+								x1[1] *= d / len;
+
+								pio.x_force = 0.1*x1[0];
+								pio.y_force = 0.1*x1[1];
+							}
+						}
+
+					}
+				}
+
+				// if previously we applied a force
+				// but movement response wasn't significant
+				// force jump this time
+
+				if (h->jump)
+				{
+					pio.jump = true;
+					h->jump = false;
+				}
+
+				if (h->stuck >= 100 && h->stuck < 200)
+				{
+					// go opposite
+					pio.x_force = -pio.x_force;
+					pio.y_force = -pio.y_force;
+				}
+				else
+				if (h->stuck >= 200 && h->stuck < 300)
+				{
+					// go around
+					if (h->around == 0)
+					{
+						float t = pio.x_force;
+						pio.x_force = -pio.y_force;
+						pio.y_force = t;
+					}
+					else
+					{
+						float t = pio.x_force;
+						pio.x_force = pio.y_force;
+						pio.y_force = -t;
+					}
+				}
+				else
+				if (h->stuck >= 300 && h->stuck < 400)
+				{
+					// keep jumping
+					// even if on way back to target
+				}
+				else
+				if (h->stuck >= 400)
+				{
+					h->stuck = 0;
+				}
+
+
+				int s = Animate(p, _stamp, &pio, h->req.mount != 0);
+
+				float adv[2] = { pio.pos[0] - h->unstuck[1][0], pio.pos[1] - h->unstuck[1][1] };
+				if (adv[0] * adv[0] + adv[1] * adv[1] > 2.0f)
+				{
+					h->unstuck[0][0] = h->unstuck[1][0];
+					h->unstuck[0][1] = h->unstuck[1][1];
+					h->unstuck[0][2] = h->unstuck[1][2];
+					h->unstuck[1][0] = pio.pos[0];
+					h->unstuck[1][1] = pio.pos[1];
+					h->unstuck[1][2] = pio.pos[2];
+				}
+
+
+				int s_stucks = 5;
+				if (h->stuck < 100 && h->stuck + s * s_stucks >= 100)
+				{
+					pio.pos[0] = h->pos[0] = h->unstuck[1][0] = h->unstuck[0][0];
+					pio.pos[1] = h->pos[1] = h->unstuck[1][1] = h->unstuck[0][1];
+					pio.pos[2] = h->pos[2] = h->unstuck[1][2] = h->unstuck[0][2];
+					float vel[3] = { 0,0,0 };
+					SetPhysicsPos(p, pio.pos, vel);
+				}
+
+
+				if (h->stuck >= 100)
+				{
+					h->jump = true;
+					h->stuck += s * s_stucks;
+				}
+
+				if (s && h->stuck < 100 && fabsf(pio.x_force) + fabsf(pio.y_force) > 0.5)
+				{
+					// check new dist
+					float dx = h->master->pos[0] - pio.pos[0];
+					float dy = h->master->pos[1] - pio.pos[1];
+					float d2 = sqrtf(dx*dx + dy * dy);
+
+					if (d - d2 < 0.01*s)
+					{
+						h->jump = true;
+
+						// if tried for more than 3 times
+						// try go around?
+						if (h->stuck < 100)
+						{
+							h->stuck += s * s_stucks;
+							if (h->stuck >= 100)
+							{
+								h->around = fast_rand() & 1;
+							}
+						}
+					}
+				}
+
+				int reps[] = { 0,0,0,0 };
+				UpdateSpriteInst(world, h->inst, h->sprite, pio.pos, pio.player_dir, h->anim, h->frame, reps);
+
+				h->pos[0] = pio.pos[0];
+				h->pos[1] = pio.pos[1];
+				h->pos[2] = pio.pos[2];
+				h->dir = pio.player_dir;
+
+				if (pio.player_stp < 0)
+				{
+					// choose sprite by active items
+					h->anim = 0;
+					h->frame = 0;
+				}
+				else
+				{
+					// choose sprite by active items
+					h->anim = 1;
+					h->frame = pio.player_stp / 1024 % h->sprite->anim[h->anim].length;
+				}
+			}
+
+			h = h->next;
+		}
 	}
 
 	prev_yaw = io.yaw;
@@ -3448,7 +3870,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// no other player will be able to see these items in their lists!
 	// in this way we are sure we can handle picking up safely
 
-	Human* h;
+	Character* h;
 	if (server)
 	{
 		h = server->head;
@@ -3463,31 +3885,36 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	int num = 0;
 	while (h)
 	{
-		num++;
-		// todo: ALL TALKS should be sorted by ascending stamp
-		// should be Z tested! (so maybe better move it to render)
-		// and should have some kind of fade out
-		for (int i = 0; i < h->talks; i++)
+		// assuming only humans can talk (rethink)
+		if (h->req.kind == SpriteReq::HUMAN)
 		{
-			int speed = 100000 + h->talk[i].box->len*400000/255; // 100000 for len=0 , 500000 for len=255
-			int elaps = stamp - h->talk[i].stamp;
-			int dy = elaps / speed; // 10 dy per sec (len=0)
+			num++;
+			// todo: ALL TALKS should be sorted by ascending stamp
+			// should be Z tested! (so maybe better move it to render)
+			// and should have some kind of fade out
+			Human* human = (Human*)h;
+			for (int i = 0; i < human->talks; i++)
+			{
+				int speed = 100000 + human->talk[i].box->len*400000/255; // 100000 for len=0 , 500000 for len=255
+				int elaps = stamp - human->talk[i].stamp;
+				int dy = elaps / speed; // 10 dy per sec (len=0)
 			
-			if (dy <= 30)
-			{
-				int view[3];
-				ProjectCoords(renderer, h->talk[i].pos, view);
-				h->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false, h->name);
-			}
-			else
-			if (h == &player || server)
-			{
-				// each player handles its own talks (except server players, they need help)
-				free(h->talk[i].box);
-				h->talks--;
-				for (int j = i; j < h->talks; j++)
-					h->talk[j] = h->talk[j + 1];
-				i--;
+				if (dy <= 30)
+				{
+					int view[3];
+					ProjectCoords(renderer, human->talk[i].pos, view);
+					human->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false, human->name);
+				}
+				else
+				if (h == &player || server)
+				{
+					// each player handles its own talks (except server players, they need help)
+					free(human->talk[i].box);
+					human->talks--;
+					for (int j = i; j < human->talks; j++)
+						human->talk[j] = human->talk[j + 1];
+					i--;
+				}
 			}
 		}
 

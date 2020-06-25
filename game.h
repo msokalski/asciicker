@@ -11,6 +11,25 @@
 
 extern char player_name[];
 
+struct SpriteReq
+{
+	enum KIND
+	{
+		HUMAN = 0,
+		WOLF = 1
+	};
+
+	KIND kind;
+
+	// only human
+	int mount;
+	int action;
+	int armor;
+	int helmet;
+	int shield;
+	int weapon;
+};
+
 struct Character
 {
 	// recolor?
@@ -20,21 +39,35 @@ struct Character
 	int frame;
 	float pos[3];
 	float dir;
+
+	uint64_t action_stamp;
+
+	bool SetActionNone(uint64_t stamp);
+	bool SetActionAttack(uint64_t stamp);
+	bool SetActionFall(uint64_t stamp);
+	bool SetActionStand(uint64_t stamp);
+	bool SetActionDead(uint64_t stamp);
+
+	Character* prev;
+	Character* next;
+
+	SpriteReq req; // kind of character is inside (human / wolf)!!!
+
+	Inst* inst; // only server players
+	int clr;
+	int stuck;
+	int around;
+	float unstuck[2][3]; // [0]unstuck, [1]candid
+	void* data; // npc physics
+	Character* master;
+	Character* target; // can be 0, master or any enemy
+	bool jump; // helper if got stuck
+	bool enemy; // buddy otherwise!
 };
 
 struct TalkBox;
 
-struct SpriteReq
-{
-	int mount;
-	int action;
-	int armor;
-	int helmet;
-	int shield;
-	int weapon;
-};
-
-Sprite* GetSprite(const SpriteReq* req);
+Sprite* GetSprite(const SpriteReq* req, int clr = 0);
 
 struct Human : Character
 {
@@ -71,14 +104,6 @@ struct Human : Character
 
 	// -------------
 
-	uint64_t action_stamp;
-
-	bool SetActionNone(uint64_t stamp);
-	bool SetActionAttack(uint64_t stamp);
-	bool SetActionFall(uint64_t stamp);
-	bool SetActionStand(uint64_t stamp);
-	bool SetActionDead(uint64_t stamp);
-
 	bool SetWeapon(int w);
 	bool SetShield(int s);
 	bool SetHelmet(int h);
@@ -101,13 +126,6 @@ struct Human : Character
 	uint64_t shoot_stamp;
 	float shoot_from[3];
 	float shoot_to[3];
-
-	Human* prev;
-	Human* next;
-
-	SpriteReq req;
-
-	Inst* inst; // only server players
 };
 
 struct Server

@@ -947,6 +947,28 @@ static int find_tty()
 
 int main(int argc, char* argv[])
 {
+	/*
+	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
+	for (int i = 0; i < 16; i++)
+	{
+		uint8_t col[3] = { 0,0,0 };
+		fwrite(col, 3, 1, fpal);
+	}
+	for (int r = 0; r < 6; r++)
+	for (int g = 0; g < 6; g++)
+	for (int b = 0; b < 6; b++)
+	{
+		uint8_t col[3] = { r*51,g*51,b*51 };
+		fwrite(col, 3, 1, fpal);
+	}
+	for (int i = 0; i < 24; i++)
+	{
+		uint8_t col[3] = { 0,0,0 };
+		fwrite(col, 3, 1, fpal);
+	}
+	return 0;
+	*/
+
     char abs_buf[PATH_MAX];
     char* abs_path = 0;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-static unsigned int g_seed = 0x87654321;
+static unsigned int g_seed = 0x57654321;
 
 // Used to seed the generator.           
 inline void fast_srand(int seed) {

@@ -7764,6 +7764,8 @@ void my_close(A3D_WND* wnd)
 
 extern "C" void DumpLeakCounter();
 
+
+
 int main(int argc, char *argv[]) 
 {
     char abs_buf[PATH_MAX];

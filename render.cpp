@@ -1031,6 +1031,8 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 {
 	Renderer* r = (Renderer*)cookie;
 
+	Human* h = (Human*)GetInstSpriteData(inst);
+
 	bool is_item = anim < 0;
 
 	if (is_item)
@@ -1153,6 +1155,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 				float lo_scale = 1 / hi_scale;
 				float min_scale = 1 / max_scale;
 
+				if (!h)
 				if (viewer_dist > max_scale || viewer_dist < min_scale)
 					return;
 
@@ -1223,6 +1226,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 				float lo_scale = 1 / hi_scale;
 				float min_scale = 1 / max_scale;
 
+				if (!h)
 				if (viewer_dist > max_scale || viewer_dist < min_scale)
 					return;
 
@@ -2932,9 +2936,6 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 	QueryTerrain(t, planes, clip_world, view_flags, Renderer::RenderPatch, r);
 	QueryWorldCB cb = { Renderer::RenderMesh , Renderer::RenderSprite };
 	QueryWorld(w, planes, clip_world, &cb, r);
-
-	// HANDLE drawing sprites
-	// ...
 
 	// player shadow
 	// double inv_tm[16];

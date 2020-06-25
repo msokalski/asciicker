@@ -183,7 +183,7 @@ extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_b
 
 Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const uint8_t* recolor, bool detached)
 {
-	if (!detached)
+	if (!detached && !recolor)
 	{
 		// first, lookup linked sprites, return pointer to already loaded one if found
 		Sprite* s = GetFirstSprite();
