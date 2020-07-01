@@ -486,6 +486,8 @@ struct Physics
     float vel[3];
     float pos[3];
 
+	float accum_contact;
+
     Terrain* terrain;
     World* world;
 
@@ -811,6 +813,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 
 		// VEL & ACC
 		float xy_len = sqrtf(io->x_force * io->x_force + io->y_force * io->y_force);
+
 		int ix = 0, iy = 0;
 		{
 			if (io->x_force < 0)
@@ -905,7 +908,6 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 				phys->vel[1] *= vel_damp;
 			}
 
-
 			// newton vs archimedes 
 			float wave = 2 * (int)((phys->stamp >> 10) & 0x7FF) * (float)M_PI / 0x800;
 			float ampl = 0.05;
@@ -938,6 +940,15 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 			phys->vel[1] *= xy_res;
 			phys->vel[2] *= z_res;
 		}
+
+		phys->vel[0] += io->x_impulse;
+		phys->vel[1] += io->y_impulse;
+
+		if (fabsf(io->x_impulse) + fabsf(io->y_impulse) > 1 && phys->vel[2] > 0)
+			phys->vel[2] = 0;
+
+		io->x_impulse *= 0.5;
+		io->y_impulse *= 0.5;
 
 		// POS - troubles!
 		float contact_normal_z = 0;
@@ -1233,14 +1244,27 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 		}
 
 		// jump
-		if (contact_normal_z > 0.0)
+
+		phys->accum_contact += fmaxf(0.0f,contact_normal_z);
+		if (phys->accum_contact > 5)
+			phys->accum_contact = 5;
+
+		// if (contact_normal_z > 0.0)
+		if (phys->accum_contact >= 1.0)
 		{
 			if (io->jump)
 			{
-				phys->vel[2] += 10;
+				phys->accum_contact = 0;
+
+				if (phys->vel[2] < 0)
+					phys->vel[2] = 10;
+				else
+					phys->vel[2] += 10;
 				io->jump = false;
 			}
 		}
+
+		phys->accum_contact *= 0.9f;
 
 		if (phys->vel[2] > 20)
 			phys->vel[2] = 20;
@@ -1375,6 +1399,8 @@ Physics* CreatePhysics(Terrain* t, World* w, float pos[3], float dir, float yaw,
 	phys->vel[0] = 0;
 	phys->vel[1] = 0;
 	phys->vel[2] = 0;
+
+	phys->accum_contact = 0;
 
 	// todo:
 	// check safe initial position so it won't intersect with anything!!!

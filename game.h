@@ -30,6 +30,7 @@ struct SpriteReq
 	int weapon;
 };
 
+
 struct Character
 {
 	// recolor?
@@ -40,7 +41,11 @@ struct Character
 	float pos[3];
 	float dir;
 
+	float impulse[2];
+
 	uint64_t action_stamp;
+	bool hit_tested;
+	int HP, MAX_HP;
 
 	bool SetActionNone(uint64_t stamp);
 	bool SetActionAttack(uint64_t stamp);
@@ -61,6 +66,7 @@ struct Character
 	void* data; // npc physics
 	Character* master;
 	Character* target; // can be 0, master or any enemy
+	int followers;
 	bool jump; // helper if got stuck
 	bool enemy; // buddy otherwise!
 };

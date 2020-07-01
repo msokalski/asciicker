@@ -486,6 +486,7 @@ struct SpriteRenderBuf
 	float dist;
 	uint8_t alpha;
 	bool refl;
+	Character* character;
 
 	static int FarToNear(const void* a, const void* b)
 	{
@@ -1031,7 +1032,7 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 {
 	Renderer* r = (Renderer*)cookie;
 
-	Human* h = (Human*)GetInstSpriteData(inst);
+	Character* h = (Character*)GetInstSpriteData(inst);
 
 	bool is_item = anim < 0;
 
@@ -1301,6 +1302,9 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 	buf->reps[2] = reps[2];
 	buf->reps[3] = reps[3];
 	buf->refl = global_refl_mode;
+
+	buf->character = h;
+
 	buf->dist = viewer_dist;
 
 	r->sprites++;
@@ -3825,6 +3829,70 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		// it may not perectly stick to character but its fine! (its kinda character is not perfectly positioned)
 
 		// todo: use buf->alpha (perspective fades)
+
+		if (buf->character && !buf->refl && buf->character->req.action!=3/*ACTION::DEAD*/)
+		{
+			// render mini-hp_bar
+
+			// check if sprite has odd or even width, 
+			// paint accordingly bar with 5 or 6 width
+
+			int dy = 10;
+			int y = buf->s_pos[1] + dy;
+
+			static const float ds = 2.0 * (/*zoom*/ 1.0 * /*scale*/ 3.0) / VISUAL_CELLS * 0.5 /*we're not dbl_wh*/;
+			static const float dz_dy = HEIGHT_SCALE / (cos(30 * M_PI / 180) * HEIGHT_CELLS * ds);
+			float t = dy * dz_dy + buf->s_pos[2];
+
+			int lt_red = 16 + 0 + 0*6 + 5*36; // 102,0,0
+			int lt_orange = 16 + 0 + 2*6 + 5*36; 
+			int dk_red = 16 + 0 + 0 * 6 + 3 * 36; // 102,0,0
+			int dk_orange = 16 + 0 + 1 * 6 + 3 * 36;
+			uint8_t fg = buf->character->clr ? lt_orange : lt_red;
+			uint8_t bk = buf->character->clr ? dk_orange : dk_red;
+
+			AnsiCell ac;
+			ac.bk = bk;
+			ac.fg = fg;
+
+			if (y >= 0 && y < height)
+			{
+				for (int bx = -2; bx <= 2; bx++)
+				{
+					int x = bx + buf->s_pos[0];
+
+					// calc average 2x2 height
+					// int height = 
+
+					if (x >= 0 && x < width)
+					{
+						Sample* test_ll = r->sample_buffer.ptr + (2 * y + 0) * (2 * width + 4) + 2 * x + 2;
+						Sample* test_lr = r->sample_buffer.ptr + (2 * y + 0) * (2 * width + 4) + 2 * x + 3;
+						Sample* test_ul = r->sample_buffer.ptr + (2 * y + 1) * (2 * width + 4) + 2 * x + 2;
+						Sample* test_ur = r->sample_buffer.ptr + (2 * y + 1) * (2 * width + 4) + 2 * x + 3;
+
+						if (!test_ul->DepthTest_RO(t) && !test_ur->DepthTest_RO(t) &&
+							!test_ll->DepthTest_RO(t) && !test_lr->DepthTest_RO(t))
+						{
+							continue;
+						}
+
+						bool l = (bx + 2)*buf->character->MAX_HP * 2 + 0 < buf->character->HP * 10;
+						bool r = (bx + 2)*buf->character->MAX_HP * 2 + buf->character->MAX_HP < buf->character->HP * 10;
+
+						if (r)
+							ac.gl = 219; // full
+						else
+						if (l)
+							ac.gl = 221; // half
+						else
+							ac.gl = ' '; // none
+
+						out_ptr[x+width*y] = ac;
+					}
+				}
+			}
+		}
 
 		int frame = buf->frame;
 		int anim = buf->anim;

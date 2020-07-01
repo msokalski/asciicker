@@ -1883,11 +1883,13 @@ void LoadSprites()
 
 	player_nude = LoadSpriteBP("player-nude.xp", 0, false);
 
-	uint8_t wolf_recolor[] = { 2, 85,85,85, 51,51,51, 170,170,170, 102,102,102 };
+	uint8_t wolf_recolor[] = { 2, 85,85,85, 51,51,51, 170,170,170, 102,102,102, 0,0 };
 	wolf[0] = LoadSpriteBP("wolfie.xp", 0, false);
 	wolf[1] = LoadSpriteBP("wolfie.xp", wolf_recolor, false);
 
-	uint8_t enemy_recolor[] = { 4, 170,0,170, 153,51,102, 0,0,170, 0,51,102, 85,85,255, 51,102,153, 255,85,85, 204,102,102 };
+	// uint8_t enemy_recolor[] = { 4, 170,0,170, 153,51,102, 0,0,170, 0,51,102, 85,85,255, 51,102,153, 255,85,85, 204,102,102 };
+	uint8_t enemy_recolor[] = { 4, 170,0,170, 153,0,0, 0,0,170, 0,0,0, 85,85,255, 51,51,51, 255,85,85, 204,102,102, 
+								'@','#', 'v','^', '^','v', 191,217, 217,191,  192,218, 218,192, 0,0};
 	uint8_t* recolor[2] = { 0, enemy_recolor };
 
 	for (int a = 0; a < ARMOR::SIZE; a++)
@@ -2176,17 +2178,25 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 	fast_srand(stamp);
 
-	/*
-	Human* enemy_master = 0;
-	for (int i = 0; i < 6; i++) // 1 mater + 5 slaves
+	Character* enemy_master = 0;
+	int enemies = 4;
+	for (int i = 0; i < enemies; i++) // 1 mater + 5 slaves
 	{
-		Human* enemy = (Human*)malloc(sizeof(Human));
+		Character* enemy = (Human*)malloc(sizeof(Human));
 		memset(enemy, 0, sizeof(Human));
 
 		// init enemy
+
+		enemy->MAX_HP = 100;
+		enemy->HP = (i + 1) * enemy->MAX_HP / enemies;
+
 		enemy->enemy = true;
-		enemy->master = enemy_master;
+
+		//enemy->master = enemy_master;
+		enemy->master = 0;
+
 		enemy->target = enemy->master;
+		enemy->followers = 0;
 
 		if (i == 0)
 			enemy_master = enemy;
@@ -2194,12 +2204,12 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		int r = fast_rand();
 
 		enemy->clr = 1;
-		enemy->req.kind = SpriteReq::WOLF;
-		enemy->req.mount = MOUNT::NONE;
-		enemy->req.armor = ARMOR::NONE;
-		enemy->req.helmet = HELMET::NONE;
-		enemy->req.shield = SHIELD::NONE;
-		enemy->req.weapon = WEAPON::NONE;
+		enemy->req.kind = SpriteReq::HUMAN;
+		enemy->req.mount = MOUNT::NONE;// +((r >> 1) & 1);
+		enemy->req.armor = ARMOR::NONE + ((r >> 2) & 1);
+		enemy->req.helmet = HELMET::NONE + ((r >> 3) & 1);
+		enemy->req.shield = SHIELD::NONE + ((r >> 4) & 1);
+		enemy->req.weapon = WEAPON::NONE + 1;// ((r >> 5) % 3);
 		enemy->req.action = ACTION::NONE;
 
 		enemy->sprite = GetSprite(&enemy->req, enemy->clr);
@@ -2233,39 +2243,32 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 		enemy->data = CreatePhysics(terrain, world, xyz, 0, 0, stamp);
 	}
-	*/
 
-	for (int i = 0; i < 5; i++)
+	int buddies = 2;
+	for (int i = 0; i < buddies; i++)
 	{
 		Human* buddy = (Human*)malloc(sizeof(Human));
 		memset(buddy, 0, sizeof(Human));
 		
 		// init buddy!
+		buddy->MAX_HP = 100;
+		buddy->HP = (i+1) * buddy->MAX_HP / buddies;
+
 		buddy->enemy = false;
 		buddy->master = &g->player;
 		buddy->target = buddy->master;
+		buddy->followers = 0;
 
 		int r = fast_rand();
 
 		buddy->clr = 0;
-		buddy->req.kind = SpriteReq::WOLF;
-		buddy->req.mount = MOUNT::NONE;
-		buddy->req.armor = ARMOR::NONE;
-		buddy->req.helmet = HELMET::NONE;
-		buddy->req.shield = SHIELD::NONE;
-		buddy->req.weapon = WEAPON::NONE;
-		buddy->req.action = ACTION::NONE;
-
-		#if 0
-		buddy->clr = 1;
-		g->player.req.kind = SpriteReq::HUMAN;
+		buddy->req.kind = SpriteReq::HUMAN;
 		buddy->req.mount = MOUNT::NONE;// +((r >> 1) & 1);
 		buddy->req.armor = ARMOR::NONE + ((r >> 2) & 1);
 		buddy->req.helmet = HELMET::NONE + ((r >> 3) & 1);
 		buddy->req.shield = SHIELD::NONE + ((r >> 4) & 1);
-		buddy->req.weapon = WEAPON::NONE + ((r >> 5) % 3);
+		buddy->req.weapon = WEAPON::NONE + 1; // ((r >> 5) % 3);
 		buddy->req.action = ACTION::NONE;
-		#endif
 
 		buddy->sprite = GetSprite(&buddy->req, buddy->clr);
 		buddy->anim = 0; // ???
@@ -2330,15 +2333,18 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->stamp = stamp;
 
 	// init player!
+	g->player.MAX_HP = 200;
+	g->player.HP = g->player.MAX_HP;
 	g->player.master = 0;
 	g->player.target = 0;
+	g->player.followers = 0;
 	g->player.enemy = false; // sounds ridiculous
 	g->player.req.kind = SpriteReq::HUMAN;
-	g->player.req.mount = MOUNT::WOLF;
+	g->player.req.mount = MOUNT::NONE; //MOUNT::WOLF;
 	g->player.req.armor = ARMOR::NONE;
 	g->player.req.helmet = HELMET::NONE;
 	g->player.req.shield = SHIELD::NONE; // REGULAR_SHIELD;
-	g->player.req.weapon = WEAPON::NONE; // REGULAR_SWORD;
+	g->player.req.weapon = WEAPON::REGULAR_SWORD;
 	g->player.req.action = ACTION::NONE;
 
 	g->player.clr = 0;
@@ -2391,6 +2397,28 @@ void DeleteGame(Game* g)
 			g->player.next->prev = g->player.prev;
 		else
 			player_tail = g->player.prev;
+
+		Character* h = player_head;
+		while (h)
+		{
+			Character* n = h->next;
+			if (h->data)
+			{
+				if (h->prev)
+					h->prev->next = h->next;
+				else
+					player_head = h->next;
+
+				if (h->next)
+					h->next->prev = h->prev;
+				else
+					player_tail = h->prev;
+
+				DeletePhysics((Physics*)h->data);
+				free(h);
+			}
+			h = n;
+		}
 
 		free(g);
 	}
@@ -2942,6 +2970,8 @@ bool Character::SetActionAttack(uint64_t stamp)
 	anim = 0;
 	frame = 2;
 	action_stamp = stamp;
+	hit_tested = false;
+
 	return true;
 }
 
@@ -3189,6 +3219,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 
 	PhysicsIO io;
+	io.x_impulse = player.impulse[0];
+	io.y_impulse = player.impulse[1];
 	io.x_force = 0;
 	io.y_force = 0;
 	io.torque = 0;
@@ -3311,6 +3343,10 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	}
 
 	int steps = Animate(physics, _stamp, &io, player.req.mount != 0);
+
+	player.impulse[0] = io.x_impulse;
+	player.impulse[1] = io.y_impulse;
+
 	if (steps > 0)
 	{
 		input.jump = false;
@@ -3320,6 +3356,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	{
 		// animate buddies & enemies
 		Character* h = player_head;
+
 		while (h)
 		{
 			if (h->data)
@@ -3327,246 +3364,439 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				Physics* p = (Physics*)h->data;
 
 				PhysicsIO pio;
+				pio.x_impulse = h->impulse[0];
+				pio.y_impulse = h->impulse[1];
 				pio.x_force = 0;
 				pio.y_force = 0;
 				pio.torque = 0;
 				pio.water = water;
 				pio.jump = false;
 
-				// distance to the leader
-				float dx = h->master->pos[0] - h->pos[0];
-				float dy = h->master->pos[1] - h->pos[1];
-				float d = sqrtf(dx*dx + dy * dy);
+				if (h->target)
+					h->target->followers--;
+				h->target = 0;
 
-				// find closest enemy
-				/*
+				if (h->req.action != ACTION::DEAD && h->req.action != ACTION::FALL)
 				{
-					Character* h2 = player_head;
-					int nn = 0;
-					float nd = 5;
-					float cd = 0;
-					Character* ch = 0;
-					while (h2)
+
+					Character* buddy_ch = 0;
+					float buddy_nd = 5;
+					float buddy_cd = 0;
+					int buddy_nn = 0;
+
+					// find closest enemy
+					float min_target_dist = 0;
+					float max_target_dist = 0; // give up if blocked by others and closer than this distance
+					float distance = 0; // distance to target before update step
+
+					float master_distance = 0;
+					if (h->master)
 					{
-						// not ally (can be true for player)
-						if (h2->enemy != h->enemy)
-						{
-							float bx = h2->pos[0] - h->pos[0];
-							float by = h2->pos[1] - h->pos[1];
-							float d = bx * bx + by * by;
-							if (!ch || d < cd)
-							{
-								cd = d;
-								ch = h2;
-							}
-
-							if (d < nd*nd)
-							{
-								nn++;
-							}
-						}
-						h2 = h2->next;
-					}
-				}
-				*/
-
-				
-				float gd = 10;
-				if (d > gd) // follow the leader if nothing better to do
-				{
-					float df = sqrtf(dx * dx + dy * dy);
-
-					pio.x_force = dx / df;
-					pio.y_force = dy / df;
-
-					// find closest buddy
-					Character* h2 = player_head;
-					int nn = 0;
-					float nd = 5;
-					float cd = 0;
-					Character* ch = 0;
-					while (h2)
-					{
-						// not player, ally, not himself
-						if (h2->data && h2->enemy == h->enemy && h2!=h)
-						{
-							float bx = h2->pos[0] - h->pos[0];
-							float by = h2->pos[1] - h->pos[1];
-							float d = bx * bx + by * by;
-							if (!ch || d < cd)
-							{
-								cd = d;
-								ch = h2;
-							}
-
-							if (d < nd*nd)
-							{
-								nn++;
-							}
-						}
-						h2 = h2->next;
+						float dx = h->master->pos[0] - h->pos[0];
+						float dy = h->master->pos[1] - h->pos[1];
+						master_distance = sqrtf(dx*dx + dy * dy);
 					}
 
-					if (ch && cd < nd*nd)
 					{
-						// cd = sqrtf(cd);
+						Character* h2 = player_head;
+						Character* enemy_ch = 0;
+						float enemy_cd = 0;
+						int enemy_cf = 0;
 
-						// check if our force dir is towards or away of that buddy
-						float bx = ch->pos[0] - h->pos[0];
-						float by = ch->pos[1] - h->pos[1];
-
-						if (pio.x_force * bx + pio.y_force * by > 0)
+						while (h2)
 						{
-							// towards, so we need to adjust force to slide
-
-							if (d < gd + 30 && nn>1)
+							// not ally (can be true for player)
+							if (h2->enemy != h->enemy && h2->req.action != ACTION::DEAD)
 							{
-								// filter out if late to the party
-								h->jump = false;
-								pio.x_force = 0;
-								pio.y_force = 0;
+								// enemy
+								float bx = h2->pos[0] - h->pos[0];
+								float by = h2->pos[1] - h->pos[1];
+								float d = (bx * bx + by * by);
+								if (!enemy_ch || d * (h2->followers + 4) < enemy_cd*(enemy_cf + 4))
+								{
+									enemy_cf = h2->followers;
+									enemy_cd = d;
+									enemy_ch = h2;
+								}
+							}
+							else
+								if (h2->data && h2 != h && h2->req.action != ACTION::DEAD)
+								{
+									// buddy
+									float bx = h2->pos[0] - h->pos[0];
+									float by = h2->pos[1] - h->pos[1];
+									float d = bx * bx + by * by;
+									if (!buddy_ch || d < buddy_cd)
+									{
+										buddy_cd = d;
+										buddy_ch = h2;
+									}
+
+									if (d < buddy_nd*buddy_nd)
+									{
+										buddy_nn++;
+									}
+								}
+
+							h2 = h2->next;
+						}
+
+						float ret_md = 40; // skip enemies if distance to master is greater
+						float max_ed = 20; // max distance to enemy (if greater don't chase)
+						float min_ed = 3;  // min distance to enemy (if smaller then attack instead of chase)
+						float min_md = 10; // min distance to master (if smaller don't come any closer)
+
+						if (enemy_ch && enemy_cd < max_ed*max_ed && master_distance < ret_md)
+						{
+							h->target = enemy_ch;
+							h->target->followers++;
+							min_target_dist = min_ed;
+							max_target_dist = min_ed + 3;
+						}
+						else
+							if (h->master)
+							{
+								h->target = h->master;
+								h->target->followers++;
+								min_target_dist = min_md;
+								max_target_dist = min_md + 30;
+							}
+					}
+
+					if (h->target)
+					{
+						float dx = h->target->pos[0] - h->pos[0];
+						float dy = h->target->pos[1] - h->pos[1];
+						float d = sqrtf(dx*dx + dy * dy);
+
+						distance = d;
+
+						if (d > min_target_dist)
+						{
+							if (d > 15)
+							{
+								pio.x_force = dx / d;
+								pio.y_force = dy / d;
 							}
 							else
 							{
-								float x1[3] = { bx,by,0 };
-								float y1[3] = { dx,dy,0 };
-								float z1[3];
-								CrossProduct(x1, y1, z1);
-								CrossProduct(z1, y1, x1);
+								pio.x_force = dx / 15;
+								pio.y_force = dy / 15;
+							}
 
-								float len = sqrtf(x1[0] * x1[0] + x1[1] * x1[1]);
-								x1[0] *= d / len;
-								x1[1] *= d / len;
+							if (buddy_ch && buddy_cd < buddy_nd*buddy_nd)
+							{
+								// cd = sqrtf(cd);
 
-								pio.x_force = 0.1*x1[0];
-								pio.y_force = 0.1*x1[1];
+								// check if our force dir is towards or away of that buddy
+								float bx = buddy_ch->pos[0] - h->pos[0];
+								float by = buddy_ch->pos[1] - h->pos[1];
+
+								if (pio.x_force * bx + pio.y_force * by > 0)
+								{
+									// towards, so we need to adjust force to slide
+
+									if (d < max_target_dist && buddy_nn>1)
+									{
+										// filter out if late to the party
+										h->jump = false;
+										pio.x_force = 0;
+										pio.y_force = 0;
+									}
+									else
+									{
+										float x1[3] = { bx,by,0 };
+										float y1[3] = { dx,dy,0 };
+										float z1[3];
+										CrossProduct(x1, y1, z1);
+										CrossProduct(z1, y1, x1);
+
+										float len = sqrtf(x1[0] * x1[0] + x1[1] * x1[1]);
+										x1[0] *= d / len;
+										x1[1] *= d / len;
+
+										pio.x_force = 0.1*x1[0];
+										pio.y_force = 0.1*x1[1];
+									}
+								}
 							}
 						}
-
+						else
+						{
+							if (h->target != h->master)
+								h->SetActionAttack(_stamp);
+						}
 					}
-				}
 
-				// if previously we applied a force
-				// but movement response wasn't significant
-				// force jump this time
+					// if previously we applied a force
+					// but movement response wasn't significant
+					// force jump this time
 
-				if (h->jump)
-				{
-					pio.jump = true;
-					h->jump = false;
-				}
-
-				if (h->stuck >= 100 && h->stuck < 200)
-				{
-					// go opposite
-					pio.x_force = -pio.x_force;
-					pio.y_force = -pio.y_force;
-				}
-				else
-				if (h->stuck >= 200 && h->stuck < 300)
-				{
-					// go around
-					if (h->around == 0)
+					if (h->jump)
 					{
-						float t = pio.x_force;
-						pio.x_force = -pio.y_force;
-						pio.y_force = t;
+						pio.jump = true;
+						h->jump = false;
+					}
+
+					if (h->stuck >= 100 && h->stuck < 200)
+					{
+						// go opposite
+						pio.x_force = -pio.x_force;
+						pio.y_force = -pio.y_force;
 					}
 					else
-					{
-						float t = pio.x_force;
-						pio.x_force = pio.y_force;
-						pio.y_force = -t;
-					}
-				}
-				else
-				if (h->stuck >= 300 && h->stuck < 400)
-				{
-					// keep jumping
-					// even if on way back to target
-				}
-				else
-				if (h->stuck >= 400)
-				{
-					h->stuck = 0;
-				}
-
-
-				int s = Animate(p, _stamp, &pio, h->req.mount != 0);
-
-				float adv[2] = { pio.pos[0] - h->unstuck[1][0], pio.pos[1] - h->unstuck[1][1] };
-				if (adv[0] * adv[0] + adv[1] * adv[1] > 2.0f)
-				{
-					h->unstuck[0][0] = h->unstuck[1][0];
-					h->unstuck[0][1] = h->unstuck[1][1];
-					h->unstuck[0][2] = h->unstuck[1][2];
-					h->unstuck[1][0] = pio.pos[0];
-					h->unstuck[1][1] = pio.pos[1];
-					h->unstuck[1][2] = pio.pos[2];
-				}
-
-
-				int s_stucks = 5;
-				if (h->stuck < 100 && h->stuck + s * s_stucks >= 100)
-				{
-					pio.pos[0] = h->pos[0] = h->unstuck[1][0] = h->unstuck[0][0];
-					pio.pos[1] = h->pos[1] = h->unstuck[1][1] = h->unstuck[0][1];
-					pio.pos[2] = h->pos[2] = h->unstuck[1][2] = h->unstuck[0][2];
-					float vel[3] = { 0,0,0 };
-					SetPhysicsPos(p, pio.pos, vel);
-				}
-
-
-				if (h->stuck >= 100)
-				{
-					h->jump = true;
-					h->stuck += s * s_stucks;
-				}
-
-				if (s && h->stuck < 100 && fabsf(pio.x_force) + fabsf(pio.y_force) > 0.5)
-				{
-					// check new dist
-					float dx = h->master->pos[0] - pio.pos[0];
-					float dy = h->master->pos[1] - pio.pos[1];
-					float d2 = sqrtf(dx*dx + dy * dy);
-
-					if (d - d2 < 0.01*s)
-					{
-						h->jump = true;
-
-						// if tried for more than 3 times
-						// try go around?
-						if (h->stuck < 100)
+						if (h->stuck >= 200 && h->stuck < 300)
 						{
-							h->stuck += s * s_stucks;
-							if (h->stuck >= 100)
+							// go around
+							if (h->around == 0)
 							{
-								h->around = fast_rand() & 1;
+								float t = pio.x_force;
+								pio.x_force = -pio.y_force;
+								pio.y_force = t;
+							}
+							else
+							{
+								float t = pio.x_force;
+								pio.x_force = pio.y_force;
+								pio.y_force = -t;
+							}
+						}
+						else
+							if (h->stuck >= 300 && h->stuck < 400)
+							{
+								// keep jumping
+								// even if on way back to target
+							}
+							else
+								if (h->stuck >= 400)
+								{
+									h->stuck = 0;
+								}
+
+					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
+
+					if (h->target)
+					{
+						float adv[2] = { pio.pos[0] - h->unstuck[1][0], pio.pos[1] - h->unstuck[1][1] };
+						if (adv[0] * adv[0] + adv[1] * adv[1] > 2.0f)
+						{
+							h->unstuck[0][0] = h->unstuck[1][0];
+							h->unstuck[0][1] = h->unstuck[1][1];
+							h->unstuck[0][2] = h->unstuck[1][2];
+							h->unstuck[1][0] = pio.pos[0];
+							h->unstuck[1][1] = pio.pos[1];
+							h->unstuck[1][2] = pio.pos[2];
+						}
+
+
+						int s_stucks = 5;
+						if (h->stuck < 100 && h->stuck + s * s_stucks >= 100)
+						{
+							pio.pos[0] = h->pos[0] = h->unstuck[1][0] = h->unstuck[0][0];
+							pio.pos[1] = h->pos[1] = h->unstuck[1][1] = h->unstuck[0][1];
+							pio.pos[2] = h->pos[2] = h->unstuck[1][2] = h->unstuck[0][2];
+							float vel[3] = { 0,0,0 };
+							SetPhysicsPos(p, pio.pos, vel);
+						}
+
+						if (fabsf(pio.x_impulse) > 0.001 || fabsf(pio.y_impulse) > 0.001)
+						{
+							h->stuck = 0;
+						}
+
+
+						if (h->stuck >= 100)
+						{
+							h->jump = true;
+							h->stuck += s * s_stucks;
+						}
+
+						if (s && h->stuck < 100 && fabsf(pio.x_force) + fabsf(pio.y_force) > 0.5)
+						{
+							// check new dist
+							float dx = h->target->pos[0] - pio.pos[0];
+							float dy = h->target->pos[1] - pio.pos[1];
+							float d2 = sqrtf(dx*dx + dy * dy);
+
+							if (distance - d2 < 0.001*s)
+							{
+								h->jump = true;
+
+								// if tried for more than 3 times
+								// try go around?
+								if (h->stuck < 100)
+								{
+									h->stuck += s * s_stucks;
+									if (h->stuck >= 100)
+									{
+										h->around = fast_rand() & 1;
+									}
+								}
 							}
 						}
 					}
 				}
+				else
+				{
+					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
+				}
 
-				int reps[] = { 0,0,0,0 };
-				UpdateSpriteInst(world, h->inst, h->sprite, pio.pos, pio.player_dir, h->anim, h->frame, reps);
+				h->impulse[0] = pio.x_impulse;
+				h->impulse[1] = pio.y_impulse;
+
+				// COPIED FROM PLAYER
+				switch (h->req.action)
+				{
+					case ACTION::ATTACK:
+					{
+						switch (h->req.weapon)
+						{
+							case PLAYER_WEAPON_INDEX::SWORD:
+							{
+								//static const int frames[] = { 2,2,2,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,4,4,4, 4,4,4,4,4,4,4,4,4,4,4,4, 3,3,3,3,3,3,3 };
+
+								// SWOOSH:                                                    <--------->
+								static const int frames[] = { 7,7,7,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,5,5,5, 5,5,5,5,5,5,5,5,5,5,5,5, 6,6,6,6,6,6,6 };
+								int frame_index = (_stamp - h->action_stamp) / attack_us_per_frame;
+
+								if (frame_index > 21 && !h->hit_tested)
+								{
+									// do hit test, once per attack!
+									h->hit_tested = true;
+
+									// check if target is enemy and is in weapon range
+									if (h->target && h->target->enemy != h->enemy)
+									{
+										float dx = h->target->pos[0] - h->pos[0];
+										float dy = h->target->pos[1] - h->pos[1];
+										float d = sqrtf(dx*dx + dy * dy);
+										if (d < 3)
+										{
+											int hp = h->target->HP;
+											h->target->HP -= rand() % 100;
+
+											float d = 15.0f / sqrtf(dx*dx + dy * dy);
+											h->target->impulse[0] += dx * d; 
+											h->target->impulse[1] += dy * d;
+
+											if (h->target->HP <= 0)
+											{
+												if (h->target->req.mount != MOUNT::NONE)
+												{
+													((Human*)h->target)->SetMount(MOUNT::NONE);
+													h->target->HP = hp;
+												}
+												else
+												{
+													h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+													Physics* p = h->target->data ? (Physics*)h->target->data : physics;
+													SetPhysicsDir(p, h->target->dir);
+
+													h->target->HP = 0;
+													h->target->SetActionFall(_stamp);
+												}
+											}
+										}
+									}
+								}
+
+								// if frameindex jumps from first half to second half of frames
+								// sample scene at hit location, if theres something emit particles in color(s) of hit object
+								// if this is human sprite, emitt red particles
+
+								assert(frame_index >= 0);
+								if (frame_index >= sizeof(frames) / sizeof(int))
+									h->SetActionNone(_stamp);
+								else
+									h->frame = frames[frame_index];
+								break;
+							}
+
+							case PLAYER_WEAPON_INDEX::CROSSBOW:
+							{
+								static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+								int frame_index = (_stamp - h->action_stamp) / attack_us_per_frame;
+
+								// if frameindex jumps from first half to second half of frames
+								// sample scene at hit location, if theres something emit particles in color(s) of hit object
+								// if this is human sprite, emitt red particles
+
+								assert(frame_index >= 0);
+								if (frame_index >= sizeof(frames) / sizeof(int))
+									h->SetActionNone(_stamp);
+								else
+									h->frame = frames[frame_index];
+								break;
+							}
+						}
+
+						break;
+					}
+
+					case ACTION::FALL:
+					{
+						// animate, check if finished -> stay at last frame
+						int frame = (_stamp - h->action_stamp) / stand_us_per_frame;
+						assert(frame >= 0);
+						if (frame >= h->sprite->anim[h->anim].length)
+							h->SetActionDead(_stamp);
+						else
+							h->frame = h->sprite->anim[h->anim].length-1 - frame;
+						break;
+					}
+
+					case ACTION::STAND:
+					{
+						// animate, check if finished -> switch to NONE
+						int frame = (_stamp - h->action_stamp) / stand_us_per_frame;
+						assert(frame >= 0);
+						if (frame >= h->sprite->anim[h->anim].length)
+							h->SetActionNone(_stamp);
+						else
+							h->frame = frame;
+						break;
+					}
+
+					case ACTION::DEAD:
+					{
+						// nutting
+						break;
+					}
+
+					case ACTION::NONE:
+					{
+						// animate / idle depending on physics output
+						if (pio.player_stp < 0)
+						{
+							// choose sprite by active items
+							h->anim = 0;
+							h->frame = 0;
+						}
+						else
+						{
+							// choose sprite by active items
+							h->anim = 1;
+							h->frame = pio.player_stp / 1024 % h->sprite->anim[h->anim].length;
+						}
+						break;
+					}
+				}
+
+				if (h->target && h->target != h->master && h->req.action == ACTION::ATTACK)
+				{
+					// force direction
+					float dx = h->target->pos[0] - pio.pos[0];
+					float dy = h->target->pos[1] - pio.pos[1];
+					pio.player_dir = atan2(dy, dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+				}
 
 				h->pos[0] = pio.pos[0];
 				h->pos[1] = pio.pos[1];
 				h->pos[2] = pio.pos[2];
 				h->dir = pio.player_dir;
 
-				if (pio.player_stp < 0)
-				{
-					// choose sprite by active items
-					h->anim = 0;
-					h->frame = 0;
-				}
-				else
-				{
-					// choose sprite by active items
-					h->anim = 1;
-					h->frame = pio.player_stp / 1024 % h->sprite->anim[h->anim].length;
-				}
+				int reps[] = { 0,0,0,0 };
+				UpdateSpriteInst(world, h->inst, h->sprite, pio.pos, pio.player_dir, h->anim, h->frame, reps);
 			}
 
 			h = h->next;
@@ -3593,10 +3823,92 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					static const int frames[] = { 7,7,7,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,5,5,5, 5,5,5,5,5,5,5,5,5,5,5,5, 6,6,6,6,6,6,6 };
 					int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
 
-					// if frameindex jumps from first half to second half of frames
-					// sample scene at hit location, if theres something emit particles in color(s) of hit object
-					// if this is human sprite, emitt red particles
+					Character* h = &player;
+					if (frame_index > 21 && !h->hit_tested)
+					{
+						// do hit test, once per attack!
+						h->hit_tested = true;
 
+						// find target for player
+						{
+							Character* h2 = player_head;
+							Character* ch = 0;
+							float cd = 0;
+							while (h2)
+							{
+								if (h2->data && h2->enemy)
+								{
+									// check if distance is at max 3
+									float dx = h2->pos[0] - h->pos[0];
+									float dy = h2->pos[1] - h->pos[1];
+
+									float dd = dx * dx + dy * dy;
+									if (dd < 3 * 3)
+									{
+										// check if direction is in +/-22.5deg
+										float dif = atan2(dy, dx) * 180 / M_PI + 90 - h->dir;
+										if (dif > 180)
+											dif -= 360;
+										if (dif > 180)
+											dif -= 360;
+										if (dif < -180)
+											dif += 360;
+										if (dif < -180)
+											dif += 360;
+										if (fabsf(dif) <= 90)
+										{
+											if (!ch || cd < dd)
+											{
+												cd = dd;
+												ch = h2;
+											}
+										}
+									}
+								}
+
+								h2 = h2->next;
+							}
+
+							h->target = ch;
+						}
+
+
+						// check if target is enemy and is in weapon range
+						if (h->target && h->target->enemy != h->enemy)
+						{
+							float dx = h->target->pos[0] - h->pos[0];
+							float dy = h->target->pos[1] - h->pos[1];
+							float d = sqrtf(dx*dx + dy * dy);
+							if (d < 3)
+							{
+								int hp = h->target->HP;
+								h->target->HP -= rand() % 100;
+								//h->target->HP = 0;
+
+								float d = 15.0f / sqrtf(dx*dx + dy * dy);
+								h->target->impulse[0] += dx * d;
+								h->target->impulse[1] += dy * d;
+
+								if (h->target->HP <= 0)
+								{
+									if (h->target->req.mount != MOUNT::NONE)
+									{
+										((Human*)h->target)->SetMount(MOUNT::NONE);
+										h->target->HP = hp;
+									}
+									else
+									{
+										h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+										Physics* p = h->target->data ? (Physics*)h->target->data : physics;
+										SetPhysicsDir(p, h->target->dir);
+
+										h->target->HP = 0;
+										h->target->SetActionFall(_stamp);
+									}
+								}
+							}
+						}
+					}
 					assert(frame_index >= 0);
 					if (frame_index >= sizeof(frames) / sizeof(int))
 						player.SetActionNone(_stamp);
@@ -4044,6 +4356,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					// gold potion hack
 					player.SetMount(MOUNT::NONE);
 				}
+				else
+				if (a->sprite == item_proto_lib[34].sprite_2d)
+				{
+					// healing potion hack
+					player.HP = player.MAX_HP;
+				}
 				
 
 				memmove(a,a+1,sizeof(ConsumeAnim)*(consume_anims-i-1));
@@ -4397,12 +4715,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		int hp_xyw[] = { bars_pos, height - bar.height, bar_w };
 		int mp_xyw[] = { width - bars_pos - bar_w, height - bar.height, bar_w };
 
-		static int f = 0;
-		f++;
+		//static int f = 0;
+		//f++;
+		// float val = 0.5*(1.0 + sinf(f*0.02));
 
-		float val = 0.5*(1.0 + sinf(f*0.02));
+		float val = (float)player.HP / player.MAX_HP;
 		bar.Paint(ptr, width, height, val, hp_xyw, false);
-		bar.Paint(ptr, width, height, val, mp_xyw, true);
+		bar.Paint(ptr, width, height, 1.0f, mp_xyw, true);
 
 		BlitSprite(ptr, width, height, character_button->atlas + 0, bars_pos-7, height - character_button->atlas[0].height);
 		BlitSprite(ptr, width, height, character_button->atlas + 1, 7-bars_pos + width - character_button->atlas[1].width, height - character_button->atlas[1].height);

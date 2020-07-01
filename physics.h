@@ -17,6 +17,11 @@ struct PhysicsIO
     // IO:
     bool jump; // will be falsed by Animate() if jump was handled
 
+	// user should accumulate them
+	// physics will zero them only when handled
+	float x_impulse;
+	float y_impulse;
+
     // OUTPUT:
     float pos[3];
     float yaw;

@@ -727,6 +727,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 									c2->bk[0] = re_dst[0];
 									c2->bk[1] = re_dst[1];
 									c2->bk[2] = re_dst[2];
+									break;
 								}
 							}
 						}
@@ -760,6 +761,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 									c2->fg[0] = re_dst[0];
 									c2->fg[1] = re_dst[1];
 									c2->fg[2] = re_dst[2];
+									break;
 								}
 							}
 						}
@@ -769,6 +771,18 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 						int b = (c2->fg[2] * 5 + 128) / rgb_div;
 
 						c->fg = 16 + 36 * r + g * 6 + b;
+					}
+
+					if (recolor)
+					{
+						for (int i = 1 + 6 * recolor[0]; recolor[i]; i += 2)
+						{
+							if (c2->glyph == recolor[i])
+							{
+								c->gl = recolor[i + 1];
+								break;
+							}
+						}
 					}
 				}
 			}
