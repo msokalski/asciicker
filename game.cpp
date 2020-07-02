@@ -1791,52 +1791,6 @@ static const Keyb keyb =
 // ...
 
 
-struct ACTION { enum
-{
-	NONE = 0, // IDLE/MOVE
-	ATTACK,
-	/*HIT,*/
-	FALL,
-	DEAD,
-	STAND,
-	SIZE
-};};
-
-struct WEAPON { enum
-{
-	NONE = 0,
-	REGULAR_SWORD,
-	REGULAR_CROSSBOW,
-	SIZE
-};};
-
-struct SHIELD { enum
-{
-	NONE = 0,
-	REGULAR_SHIELD,
-	SIZE
-};};
-
-struct HELMET { enum
-{
-	NONE = 0,
-	REGULAR_HELMET,
-	SIZE
-};};
-
-struct ARMOR { enum
-{
-	NONE = 0,
-	REGULAR_ARMOR,
-	SIZE
-};};
-
-struct MOUNT { enum
-{
-	NONE = 0,
-	WOLF,
-	SIZE
-};};
 
 Sprite* player_nude = 0;
 
@@ -2131,7 +2085,10 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 					return player[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::ATTACK:
-					return player_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
+					if (req->weapon == WEAPON::REGULAR_CROSSBOW)
+						return player[clr][req->armor][req->helmet][req->shield][req->weapon];
+					else
+						return player_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::FALL:
 				case ACTION::DEAD:
@@ -2149,7 +2106,10 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 					return wolfie[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::ATTACK:
-					return wolfie_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
+					if (req->weapon == WEAPON::REGULAR_CROSSBOW)
+						return player[clr][req->armor][req->helmet][req->shield][req->weapon];
+					else
+						return wolfie_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
 
 				case ACTION::FALL:
 				case ACTION::DEAD:
@@ -2182,8 +2142,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	int enemies = 4;
 	for (int i = 0; i < enemies; i++) // 1 mater + 5 slaves
 	{
-		Character* enemy = (Human*)malloc(sizeof(Human));
-		memset(enemy, 0, sizeof(Human));
+		NPC_Human* enemy = (NPC_Human*)malloc(sizeof(NPC_Human));
+		memset(enemy, 0, sizeof(NPC_Human));
 
 		// init enemy
 
@@ -2212,6 +2172,62 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		enemy->req.weapon = WEAPON::NONE + 1;// ((r >> 5) % 3);
 		enemy->req.action = ACTION::NONE;
 
+		if (enemy->req.armor)
+		{
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+			item->proto = item_proto_lib + rand() % 2 + 19;
+			item->purpose = Item::OWNED;
+			enemy->has[enemy->items].in_use = true;
+			enemy->has[enemy->items].item = item;
+			enemy->has[enemy->items].story_id = -1;
+			enemy->items++;
+		}
+		if (enemy->req.helmet)
+		{
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+			item->proto = item_proto_lib + rand() % 2 + 15;
+			item->purpose = Item::OWNED;
+			enemy->has[enemy->items].in_use = true;
+			enemy->has[enemy->items].item = item;
+			enemy->has[enemy->items].story_id = -1;
+			enemy->items++;
+		}
+		if (enemy->req.shield)
+		{
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+			item->proto = item_proto_lib + rand() % 2 + 17;
+			item->purpose = Item::OWNED;
+			enemy->has[enemy->items].in_use = true;
+			enemy->has[enemy->items].item = item;
+			enemy->has[enemy->items].story_id = -1;
+			enemy->items++;
+		}
+		if (enemy->req.weapon)
+		{
+			// only sword at the moment
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+
+			int id = rand() % 4;
+			if (id >= 2)
+				id++; // there's a hole in sword ids :(
+
+			item->proto = item_proto_lib + id + 3;
+			item->purpose = Item::OWNED;
+			enemy->has[enemy->items].in_use = true;
+			enemy->has[enemy->items].item = item;
+			enemy->has[enemy->items].story_id = -1;
+			enemy->items++;
+		}
+
+
 		enemy->sprite = GetSprite(&enemy->req, enemy->clr);
 		enemy->anim = 0; // ???
 
@@ -2228,6 +2244,9 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		enemy->pos[2] = enemy->unstuck[0][2] = enemy->unstuck[1][2] = xyz[2];
 		enemy->inst = CreateInst(world, enemy->sprite, flags, xyz, yaw, enemy->anim, enemy->frame, reps, 0, -1);
 		SetInstSpriteData(enemy->inst, enemy);
+
+		for (int it = 0; it < enemy->items; it++)
+			enemy->has[it].item->inst = enemy->inst;
 
 		AttachInst(world, enemy->inst);
 
@@ -2247,8 +2266,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	int buddies = 2;
 	for (int i = 0; i < buddies; i++)
 	{
-		Human* buddy = (Human*)malloc(sizeof(Human));
-		memset(buddy, 0, sizeof(Human));
+		NPC_Human* buddy = (NPC_Human*)malloc(sizeof(NPC_Human));
+		memset(buddy, 0, sizeof(NPC_Human));
 		
 		// init buddy!
 		buddy->MAX_HP = 100;
@@ -2270,6 +2289,61 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		buddy->req.weapon = WEAPON::NONE + 1; // ((r >> 5) % 3);
 		buddy->req.action = ACTION::NONE;
 
+		if (buddy->req.armor)
+		{
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+			item->proto = item_proto_lib + rand() % 2 + 19;
+			item->purpose = Item::OWNED;
+			buddy->has[buddy->items].in_use = true;
+			buddy->has[buddy->items].item = item;
+			buddy->has[buddy->items].story_id = -1;
+			buddy->items++;
+		}
+		if (buddy->req.helmet)
+		{
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+			item->proto = item_proto_lib + rand() % 2 + 15;
+			item->purpose = Item::OWNED;
+			buddy->has[buddy->items].in_use = true;
+			buddy->has[buddy->items].item = item;
+			buddy->has[buddy->items].story_id = -1;
+			buddy->items++;
+		}
+		if (buddy->req.shield)
+		{
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+			item->proto = item_proto_lib + rand() % 2 + 17;
+			item->purpose = Item::OWNED;
+			buddy->has[buddy->items].in_use = true;
+			buddy->has[buddy->items].item = item;
+			buddy->has[buddy->items].story_id = -1;
+			buddy->items++;
+		}
+		if (buddy->req.weapon)
+		{
+			// only sword at the moment
+			Item* item = CreateItem();
+			item->count = 1;
+			item->inst = 0;
+
+			int id = rand() % 4;
+			if (id >= 2)
+				id++; // there's a hole in sword ids :(
+
+			item->proto = item_proto_lib + id + 3;
+			item->purpose = Item::OWNED;
+			buddy->has[buddy->items].in_use = true;
+			buddy->has[buddy->items].item = item;
+			buddy->has[buddy->items].story_id = -1;
+			buddy->items++;
+		}
+
 		buddy->sprite = GetSprite(&buddy->req, buddy->clr);
 		buddy->anim = 0; // ???
 
@@ -2285,6 +2359,9 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		buddy->pos[2] = buddy->unstuck[0][2] = buddy->unstuck[1][2] = xyz[2];
 		buddy->inst = CreateInst(world, buddy->sprite, flags, xyz, yaw, buddy->anim, buddy->frame, reps, 0, -1);
 		SetInstSpriteData(buddy->inst, buddy);
+
+		for (int it = 0; it < buddy->items; it++)
+			buddy->has[it].item->inst = buddy->inst;
 
 		AttachInst(world, buddy->inst);
 
@@ -2415,6 +2492,19 @@ void DeleteGame(Game* g)
 					player_tail = h->prev;
 
 				DeletePhysics((Physics*)h->data);
+
+				ItemOwner* io = 0;
+				if (n->req.kind == SpriteReq::HUMAN)
+					io = (ItemOwner*)(NPC_Human*)h;
+				else
+					io = (ItemOwner*)(NPC_Creature*)h;
+
+				for (int i = 0; i < io->items; i++)
+				{
+					io->has[i].item->inst = 0;
+					DestroyItem(io->has[i].item);
+				}
+
 				free(h);
 			}
 			h = n;
@@ -3352,7 +3442,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		input.jump = false;
 	}
 
-	if (!show_inventory)
+	// if (!show_inventory)
 	{
 		// animate buddies & enemies
 		Character* h = player_head;
@@ -3420,47 +3510,57 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								}
 							}
 							else
-								if (h2->data && h2 != h && h2->req.action != ACTION::DEAD)
+							if (h2->data && h2 != h && h2->req.action != ACTION::DEAD)
+							{
+								// buddy
+								float bx = h2->pos[0] - h->pos[0];
+								float by = h2->pos[1] - h->pos[1];
+								float d = bx * bx + by * by;
+								if (!buddy_ch || d < buddy_cd)
 								{
-									// buddy
-									float bx = h2->pos[0] - h->pos[0];
-									float by = h2->pos[1] - h->pos[1];
-									float d = bx * bx + by * by;
-									if (!buddy_ch || d < buddy_cd)
-									{
-										buddy_cd = d;
-										buddy_ch = h2;
-									}
-
-									if (d < buddy_nd*buddy_nd)
-									{
-										buddy_nn++;
-									}
+									buddy_cd = d;
+									buddy_ch = h2;
 								}
+
+								if (d < buddy_nd*buddy_nd)
+								{
+									buddy_nn++;
+								}
+							}
 
 							h2 = h2->next;
 						}
 
 						float ret_md = 40; // skip enemies if distance to master is greater
 						float max_ed = 20; // max distance to enemy (if greater don't chase)
-						float min_ed = 3;  // min distance to enemy (if smaller then attack instead of chase)
+						float min_ed_contact = 3;  // min distance to enemy (if smaller then attack instead of chase)
+						float min_ed_archer = 10;  
 						float min_md = 10; // min distance to master (if smaller don't come any closer)
 
 						if (enemy_ch && enemy_cd < max_ed*max_ed && master_distance < ret_md)
 						{
 							h->target = enemy_ch;
 							h->target->followers++;
-							min_target_dist = min_ed;
-							max_target_dist = min_ed + 3;
+
+							if (h->req.weapon == WEAPON::REGULAR_CROSSBOW)
+							{
+								min_target_dist = min_ed_archer;
+								max_target_dist = min_ed_archer + 3;
+							}
+							else
+							{
+								min_target_dist = min_ed_contact;
+								max_target_dist = min_ed_contact + 3;
+							}
 						}
 						else
-							if (h->master)
-							{
-								h->target = h->master;
-								h->target->followers++;
-								min_target_dist = min_md;
-								max_target_dist = min_md + 30;
-							}
+						if (h->master)
+						{
+							h->target = h->master;
+							h->target->followers++;
+							min_target_dist = min_md;
+							max_target_dist = min_md + 30;
+						}
 					}
 
 					if (h->target)
@@ -3524,7 +3624,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						else
 						{
 							if (h->target != h->master)
+							{
+								// we need to randomize _stamp here
+								// so first in list NCPs arn't favored 
+
 								h->SetActionAttack(_stamp);
+							}
 						}
 					}
 
@@ -3545,33 +3650,33 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						pio.y_force = -pio.y_force;
 					}
 					else
-						if (h->stuck >= 200 && h->stuck < 300)
+					if (h->stuck >= 200 && h->stuck < 300)
+					{
+						// go around
+						if (h->around == 0)
 						{
-							// go around
-							if (h->around == 0)
-							{
-								float t = pio.x_force;
-								pio.x_force = -pio.y_force;
-								pio.y_force = t;
-							}
-							else
-							{
-								float t = pio.x_force;
-								pio.x_force = pio.y_force;
-								pio.y_force = -t;
-							}
+							float t = pio.x_force;
+							pio.x_force = -pio.y_force;
+							pio.y_force = t;
 						}
 						else
-							if (h->stuck >= 300 && h->stuck < 400)
-							{
-								// keep jumping
-								// even if on way back to target
-							}
-							else
-								if (h->stuck >= 400)
-								{
-									h->stuck = 0;
-								}
+						{
+							float t = pio.x_force;
+							pio.x_force = pio.y_force;
+							pio.y_force = -t;
+						}
+					}
+					else
+					if (h->stuck >= 300 && h->stuck < 400)
+					{
+						// keep jumping
+						// even if on way back to target
+					}
+					else
+					if (h->stuck >= 400)
+					{
+						h->stuck = 0;
+					}
 
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 
@@ -3714,18 +3819,18 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 							case PLAYER_WEAPON_INDEX::CROSSBOW:
 							{
-								static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+								// just delay
+								//static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 								int frame_index = (_stamp - h->action_stamp) / attack_us_per_frame;
 
 								// if frameindex jumps from first half to second half of frames
 								// sample scene at hit location, if theres something emit particles in color(s) of hit object
 								// if this is human sprite, emitt red particles
 
+								int frames = 40;
 								assert(frame_index >= 0);
-								if (frame_index >= sizeof(frames) / sizeof(int))
+								if (frame_index >= frames)
 									h->SetActionNone(_stamp);
-								else
-									h->frame = frames[frame_index];
 								break;
 							}
 						}
@@ -3919,18 +4024,18 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 				case PLAYER_WEAPON_INDEX::CROSSBOW:
 				{
-					static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+					// just delay
+					//static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 					int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
 
 					// if frameindex jumps from first half to second half of frames
 					// sample scene at hit location, if theres something emit particles in color(s) of hit object
 					// if this is human sprite, emitt red particles
 
+					int frames = 40;
 					assert(frame_index >= 0);
-					if (frame_index >= sizeof(frames) / sizeof(int))
+					if (frame_index >= frames)
 						player.SetActionNone(_stamp);
-					else
-						player.frame = frames[frame_index];
 					break;
 				}
 			}

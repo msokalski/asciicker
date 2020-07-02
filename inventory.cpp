@@ -185,6 +185,90 @@ void Inventory::SetFocus(int index)
 
 bool Inventory::InsertItem(Item* item, int xy[2])
 {
+	animate_scroll = true;
+	smooth_scroll = scroll;
+
+	if (my_items >= max_items)
+		return true;
+
+	if (item->purpose == Item::OWNED)
+	{
+		Character* h = (Character*)GetInstSpriteData(item->inst);
+		ItemOwner* io = 0;
+		if (h->req.kind == SpriteReq::HUMAN)
+			io = (ItemOwner*)(NPC_Human*)h;
+		else
+			io = (ItemOwner*)(NPC_Creature*)h;
+
+		// find it and transfer ownership
+		for (int i = 0; i < io->items; i++)
+		{
+			if (io->has[i].item == item)
+			{
+				if (io->has[i].in_use)
+				{
+					assert(h->req.kind == SpriteReq::HUMAN);
+
+					Human* hh = (Human*)h;
+					// modify req (only humans)
+					switch (item->proto->kind)
+					{
+						case 'W':
+							hh->SetWeapon(0);
+							break;
+						case 'S':
+							hh->SetShield(0);
+							break;
+						case 'H':
+							hh->SetHelmet(0);
+							break;
+						case 'A':
+							hh->SetArmor(0);
+							break;
+					}
+
+					int reps[4] = { 0,0,0,0 };
+					Sprite* sprite = GetSprite(&hh->req, hh->clr);
+					UpdateSpriteInst(world, item->inst, sprite, hh->pos, hh->dir, hh->anim, hh->frame, reps);
+				}
+
+				item->inst = 0;
+
+				my_item[my_items].story_id = io->has[i].story_id;
+				my_item[my_items].xy[0] = xy[0];
+				my_item[my_items].xy[1] = xy[1];
+				my_item[my_items].item = item;
+				my_item[my_items].in_use = false;
+
+				// set bitmask
+				int x0 = my_item[my_items].xy[0];
+				int x1 = x0 + (item->proto->sprite_2d->atlas->width + 1) / 4;
+				int y0 = my_item[my_items].xy[1];
+				int y1 = y0 + (item->proto->sprite_2d->atlas->height + 1) / 4;
+				for (int y = y0; y < y1; y++)
+				{
+					for (int x = x0; x < x1; x++)
+					{
+						int i = x + y * width;
+						bitmask[i >> 3] |= 1 << (i & 7);
+					}
+				}
+
+				my_items++;
+				focus = my_items - 1;
+
+				// remove from corpse
+				io->items--;
+				for (; i < io->items; i++)
+					io->has[i] = io->has[i + 1];
+
+				return true;
+			}
+		}
+
+		assert(0);
+	}
+
 	assert(item && item->inst && item->purpose == Item::WORLD);
 
 	// here we should send 'pickitem' to server
@@ -192,40 +276,33 @@ bool Inventory::InsertItem(Item* item, int xy[2])
 	// and will remove it from there and from world
 	// it will also remember we own it
 
-	if (my_items < max_items)
+	my_item[my_items].story_id = GetInstStoryID(item->inst);
+	my_item[my_items].xy[0] = xy[0];
+	my_item[my_items].xy[1] = xy[1];
+	my_item[my_items].item = item;
+	my_item[my_items].in_use = false;
+
+	DeleteInst(item->inst);
+
+	item->inst = 0;
+	item->purpose = Item::OWNED;
+
+	// set bitmask
+	int x0 = my_item[my_items].xy[0];
+	int x1 = x0 + (item->proto->sprite_2d->atlas->width + 1) / 4;
+	int y0 = my_item[my_items].xy[1];
+	int y1 = y0 + (item->proto->sprite_2d->atlas->height + 1) / 4;
+	for (int y = y0; y < y1; y++)
 	{
-		my_item[my_items].story_id = GetInstStoryID(item->inst);
-		my_item[my_items].xy[0] = xy[0];
-		my_item[my_items].xy[1] = xy[1];
-		my_item[my_items].item = item;
-		my_item[my_items].in_use = false;
-
-		DeleteInst(item->inst);
-
-		item->inst = 0;
-		item->purpose = Item::OWNED;
-
-		// set bitmask
-		int x0 = my_item[my_items].xy[0];
-		int x1 = x0 + (item->proto->sprite_2d->atlas->width + 1) / 4;
-		int y0 = my_item[my_items].xy[1];
-		int y1 = y0 + (item->proto->sprite_2d->atlas->height + 1) / 4;
-		for (int y = y0; y < y1; y++)
+		for (int x = x0; x < x1; x++)
 		{
-			for (int x = x0; x < x1; x++)
-			{
-				int i = x + y * width;
-				bitmask[i >> 3] |= 1 << (i & 7);
-			}
+			int i = x + y * width;
+			bitmask[i >> 3] |= 1 << (i & 7);
 		}
-
-		my_items++;
-		focus = my_items - 1;
 	}
 
-	animate_scroll = true;
-	smooth_scroll = scroll;
-
+	my_items++;
+	focus = my_items - 1;
 
 	return true;
 }

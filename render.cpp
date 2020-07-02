@@ -1036,6 +1036,54 @@ void Renderer::RenderSprite(Inst* inst, Sprite* s, float pos[3], float yaw, int 
 
 	bool is_item = anim < 0;
 
+	if (h && h->req.action == ACTION::DEAD)
+	{
+		// we need to list his items if nearby
+		if (!global_refl_mode)
+		{
+			float dx = r->pos[0] - pos[0];
+			float dy = r->pos[1] - pos[1];
+			float dz = (r->pos[2] + 3 * HEIGHT_SCALE - pos[2]) / HEIGHT_SCALE;
+
+			float dist = dx * dx + dy * dy + dz * dz;
+
+			float max_item_dist = 20;
+			if (dist < max_item_dist)
+			{
+				ItemOwner* io = 0;
+				if (h->req.kind == SpriteReq::HUMAN)
+					io = (ItemOwner*)(NPC_Human*)h;
+				else
+					io = (ItemOwner*)(NPC_Creature*)h;
+
+				for (int it = 0; it < io->items; it++)
+				{
+					int sort = 0;
+					for (; sort < r->items; sort++)
+					{
+						if (dist < r->item_dist[sort])
+						{
+							int last = r->items < r->max_items ? r->items : r->max_items - 1;
+							for (int move = last; move > sort; move--)
+							{
+								r->item_sort[move] = r->item_sort[move - 1];
+								r->item_dist[move] = r->item_dist[move - 1];
+							}
+							break;
+						}
+					}
+					if (sort < r->max_items)
+					{
+						r->item_sort[sort] = io->has[it].item;
+						r->item_dist[sort] = dist;
+						if (r->items < r->max_items)
+							r->items++;
+					}
+				}
+			}
+		}
+	}
+
 	if (is_item)
 	{
 		int purpose = frame;
@@ -3830,7 +3878,7 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 		// todo: use buf->alpha (perspective fades)
 
-		if (buf->character && !buf->refl && buf->character->req.action!=3/*ACTION::DEAD*/)
+		if (buf->character && !buf->refl && buf->character->req.action!=ACTION::DEAD)
 		{
 			// render mini-hp_bar
 

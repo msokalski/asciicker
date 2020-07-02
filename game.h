@@ -11,6 +11,54 @@
 
 extern char player_name[];
 
+
+struct ACTION { enum
+{
+	NONE = 0, // IDLE/MOVE
+	ATTACK,
+	/*HIT,*/
+	FALL,
+	DEAD,
+	STAND,
+	SIZE
+};};
+
+struct WEAPON { enum
+{
+	NONE = 0,
+	REGULAR_SWORD,
+	REGULAR_CROSSBOW,
+	SIZE
+};};
+
+struct SHIELD { enum
+{
+	NONE = 0,
+	REGULAR_SHIELD,
+	SIZE
+};};
+
+struct HELMET { enum
+{
+	NONE = 0,
+	REGULAR_HELMET,
+	SIZE
+};};
+
+struct ARMOR { enum
+{
+	NONE = 0,
+	REGULAR_ARMOR,
+	SIZE
+};};
+
+struct MOUNT { enum
+{
+	NONE = 0,
+	WOLF,
+	SIZE
+};};
+
 struct SpriteReq
 {
 	enum KIND
@@ -30,6 +78,18 @@ struct SpriteReq
 	int weapon;
 };
 
+struct ItemOwner
+{
+	// NPCs carrying items should inherit from it
+	static const int max_items = 5;
+	int items;
+	struct
+	{
+		Item* item;
+		int story_id;
+		bool in_use;
+	} has[max_items];
+};
 
 struct Character
 {
@@ -133,6 +193,9 @@ struct Human : Character
 	float shoot_from[3];
 	float shoot_to[3];
 };
+
+struct NPC_Creature : Character, ItemOwner {};
+struct NPC_Human : Human, ItemOwner {};
 
 struct Server
 {
