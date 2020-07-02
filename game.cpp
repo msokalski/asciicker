@@ -2494,7 +2494,7 @@ void DeleteGame(Game* g)
 				DeletePhysics((Physics*)h->data);
 
 				ItemOwner* io = 0;
-				if (n->req.kind == SpriteReq::HUMAN)
+				if (h->req.kind == SpriteReq::HUMAN)
 					io = (ItemOwner*)(NPC_Human*)h;
 				else
 					io = (ItemOwner*)(NPC_Creature*)h;
