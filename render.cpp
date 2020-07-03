@@ -33,6 +33,9 @@
 
 #define DBL
 
+extern Character* player_head;
+extern Character* player_tail;
+
 static bool global_refl_mode = false;
 extern Sprite* player_sprite;
 extern Sprite* attack_sprite;
@@ -3961,165 +3964,174 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 
 	// render arrows, from player, other players and all npcs
 	// how to access human from inst?
-	Human* h = (Human*)GetInstSpriteData(inst);
-	if (h && h->shooting)
+
+	Character* ch = player_head;
+	while (ch)
 	{
-		if (stamp - h->shoot_stamp > 3000000)
-			h->shooting = false;
-
-		float arrow_speed = 1000; // 2000 world units / sec
-		float shutter_time = 0.05; // 1/20 sec shutter speed
-
-		float head_time = (stamp - h->shoot_stamp) / 1000000.0f;
-		float tail_time = head_time - shutter_time;
-
-		// normalized dir (note different xy and z scaling!)
-		float dir[3] =
-		{
-			h->shoot_to[0] - h->shoot_from[0],
-			h->shoot_to[1] - h->shoot_from[1],
-			h->shoot_to[2] - h->shoot_from[2],
-		};
-
-		dir[2] /= HEIGHT_SCALE;
-
-		float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
-
-		dir[0] /= len;
-		dir[1] /= len;
-		dir[2] /= len;
-
-		dir[2] *= HEIGHT_SCALE;
-
-		if (tail_time < 0)
-			tail_time = 0;
-
-		if (head_time * arrow_speed > len)
-			head_time = len / arrow_speed;
-
-		if (tail_time * arrow_speed > len)
-			h->shooting = false;
+		Human* h = 0;
+		if (ch->req.kind == SpriteReq::HUMAN)
+			h = (Human*)ch;
 
 		if (h->shooting)
 		{
-			float head_pos[3] =
+			if (stamp - h->shoot_stamp > 3000000)
+				h->shooting = false;
+
+			float arrow_speed = 1000; // 2000 world units / sec
+			float shutter_time = 0.05; // 1/20 sec shutter speed
+
+			float head_time = (stamp - h->shoot_stamp) / 1000000.0f;
+			float tail_time = head_time - shutter_time;
+
+			// normalized dir (note different xy and z scaling!)
+			float dir[3] =
 			{
-				h->shoot_from[0] + dir[0] * head_time * arrow_speed,
-				h->shoot_from[1] + dir[1] * head_time * arrow_speed,
-				h->shoot_from[2] + dir[2] * head_time * arrow_speed,
+				h->shoot_to[0] - h->shoot_from[0],
+				h->shoot_to[1] - h->shoot_from[1],
+				h->shoot_to[2] - h->shoot_from[2],
 			};
 
-			float tail_pos[3] =
+			dir[2] /= HEIGHT_SCALE;
+
+			float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+
+			dir[0] /= len;
+			dir[1] /= len;
+			dir[2] /= len;
+
+			dir[2] *= HEIGHT_SCALE;
+
+			if (tail_time < 0)
+				tail_time = 0;
+
+			if (head_time * arrow_speed > len)
+				head_time = len / arrow_speed;
+
+			if (tail_time * arrow_speed > len)
+				h->shooting = false;
+
+			if (h->shooting)
 			{
-				h->shoot_from[0] + dir[0] * tail_time * arrow_speed,
-				h->shoot_from[1] + dir[1] * tail_time * arrow_speed,
-				h->shoot_from[2] + dir[2] * tail_time * arrow_speed,
-			};
-
-			// here we must write directly to AnsiCell buf but test height values from Samples!
-			int from[3];
-			int to[3];
-
-			if (perspective)
-			{
-				bool ok = true;
-
-				float d_from, d_to;
-
-				if (ok)
+				float head_pos[3] =
 				{
-					float vx = head_pos[0], vy = head_pos[1], vz = head_pos[2];
-					float eye_to_vtx[3] =
+					h->shoot_from[0] + dir[0] * head_time * arrow_speed,
+					h->shoot_from[1] + dir[1] * head_time * arrow_speed,
+					h->shoot_from[2] + dir[2] * head_time * arrow_speed,
+				};
+
+				float tail_pos[3] =
+				{
+					h->shoot_from[0] + dir[0] * tail_time * arrow_speed,
+					h->shoot_from[1] + dir[1] * tail_time * arrow_speed,
+					h->shoot_from[2] + dir[2] * tail_time * arrow_speed,
+				};
+
+				// here we must write directly to AnsiCell buf but test height values from Samples!
+				int from[3];
+				int to[3];
+
+				if (perspective)
+				{
+					bool ok = true;
+
+					float d_from, d_to;
+
+					if (ok)
 					{
-						vx - r->view_pos[0],
-						vy - r->view_pos[1],
-						vz - r->view_pos[2],
-					};
+						float vx = head_pos[0], vy = head_pos[1], vz = head_pos[2];
+						float eye_to_vtx[3] =
+						{
+							vx - r->view_pos[0],
+							vy - r->view_pos[1],
+							vz - r->view_pos[2],
+						};
 
-					float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+						float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 
-					if (viewer_dist <= 0)
-						ok = false;
-					else
+						if (viewer_dist <= 0)
+							ok = false;
+						else
+						{
+							float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+							float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+
+							float recp_dist = 1.0 / viewer_dist;
+							d_from = recp_dist;
+
+							fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+							fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+
+							int tx = (int)floorf(fx + 0.5f);
+							int ty = (int)floorf(fy + 0.5f);
+
+							from[0] = (tx - 1) >> 1;
+							from[1] = (ty - 1) >> 1;
+							from[2] = (int)floorf(head_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+						}
+					}
+
+					if (ok)
 					{
-						float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
-						float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+						float vx = tail_pos[0], vy = tail_pos[1], vz = tail_pos[2];
+						float eye_to_vtx[3] =
+						{
+							vx - r->view_pos[0],
+							vy - r->view_pos[1],
+							vz - r->view_pos[2],
+						};
 
-						float recp_dist = 1.0 / viewer_dist;
-						d_from = recp_dist;
+						float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
 
-						fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
-						fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+						if (viewer_dist <= 0)
+							ok = false;
+						else
+						{
+							float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
+							float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
 
-						int tx = (int)floorf(fx + 0.5f);
-						int ty = (int)floorf(fy + 0.5f);
+							float recp_dist = 1.0 / viewer_dist;
+							d_to = recp_dist;
 
-						from[0] = (tx - 1) >> 1;
-						from[1] = (ty - 1) >> 1;
-						from[2] = (int)floorf(head_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+							fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
+							fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
+
+							int tx = (int)floorf(fx + 0.5f);
+							int ty = (int)floorf(fy + 0.5f);
+
+							to[0] = (tx - 1) >> 1;
+							to[1] = (ty - 1) >> 1;
+							to[2] = (int)floorf(tail_pos[2] + 0.5) + HEIGHT_SCALE / 2;
+						}
+					}
+
+					if (ok)
+					{
+						PerspectiveCorrectCellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, d_from, d_to, 7, 231/*231*/);
 					}
 				}
-
-				if (ok)
+				else
 				{
-					float vx = tail_pos[0], vy = tail_pos[1], vz = tail_pos[2];
-					float eye_to_vtx[3] =
-					{
-						vx - r->view_pos[0],
-						vy - r->view_pos[1],
-						vz - r->view_pos[2],
-					};
+					int tx = (int)floor(r->mul[0] * head_pos[0] + r->mul[2] * head_pos[1] + 0.5 + r->add[0]);
+					int ty = (int)floor(r->mul[1] * head_pos[0] + r->mul[3] * head_pos[1] + r->mul[5] * head_pos[2] + 0.5 + r->add[1]);
 
-					float viewer_dist = DotProduct(eye_to_vtx, r->view_dir);
+					// convert from samples to cells
+					from[0] = (tx - 1) >> 1;
+					from[1] = (ty - 1) >> 1;
+					from[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
 
-					if (viewer_dist <= 0)
-						ok = false;
-					else
-					{
-						float fx = r->mul[0] * vx + r->mul[2] * vy + r->add[0];
-						float fy = r->mul[1] * vx + r->mul[3] * vy + r->mul[5] * vz + r->add[1];
+					tx = (int)floor(r->mul[0] * tail_pos[0] + r->mul[2] * tail_pos[1] + 0.5 + r->add[0]);
+					ty = (int)floor(r->mul[1] * tail_pos[0] + r->mul[3] * tail_pos[1] + r->mul[5] * tail_pos[2] + 0.5 + r->add[1]);
 
-						float recp_dist = 1.0 / viewer_dist;
-						d_to = recp_dist;
+					// convert from samples to cells
+					to[0] = (tx - 1) >> 1;
+					to[1] = (ty - 1) >> 1;
+					to[2] = (int)floorf(tail_pos[2] + 0.5) + HEIGHT_SCALE / 2;
 
-						fx = (fx - r->view_ofs[0]) * recp_dist + r->view_ofs[0];
-						fy = (fy - r->view_ofs[1]) * recp_dist + r->view_ofs[1];
-
-						int tx = (int)floorf(fx + 0.5f);
-						int ty = (int)floorf(fy + 0.5f);
-
-						to[0] = (tx - 1) >> 1;
-						to[1] = (ty - 1) >> 1;
-						to[2] = (int)floorf(tail_pos[2] + 0.5) + HEIGHT_SCALE / 2;
-					}
+					CellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, 7, 231/*231*/);
 				}
-
-				if (ok)
-				{
-					PerspectiveCorrectCellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, d_from, d_to, 7, 231/*231*/);
-				}
-			}
-			else
-			{
-				int tx = (int)floor(r->mul[0] * head_pos[0] + r->mul[2] * head_pos[1] + 0.5 + r->add[0]);
-				int ty = (int)floor(r->mul[1] * head_pos[0] + r->mul[3] * head_pos[1] + r->mul[5] * head_pos[2] + 0.5 + r->add[1]);
-
-				// convert from samples to cells
-				from[0] = (tx - 1) >> 1;
-				from[1] = (ty - 1) >> 1;
-				from[2] = (int)floorf(h->shoot_from[2] + 0.5) + HEIGHT_SCALE / 2;
-
-				tx = (int)floor(r->mul[0] * tail_pos[0] + r->mul[2] * tail_pos[1] + 0.5 + r->add[0]);
-				ty = (int)floor(r->mul[1] * tail_pos[0] + r->mul[3] * tail_pos[1] + r->mul[5] * tail_pos[2] + 0.5 + r->add[1]);
-
-				// convert from samples to cells
-				to[0] = (tx - 1) >> 1;
-				to[1] = (ty - 1) >> 1;
-				to[2] = (int)floorf(tail_pos[2] + 0.5) + HEIGHT_SCALE / 2;
-
-				CellLine(r->sample_buffer.ptr, out_ptr, width, height, from, to, 7, 231/*231*/);
 			}
 		}
+		ch = ch->next;
 	}
 	
 	/*

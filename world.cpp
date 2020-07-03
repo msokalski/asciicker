@@ -1528,7 +1528,7 @@ struct World
         }
     }
 
-	static Inst* HitWorld0(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld0(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -1567,7 +1567,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1575,7 +1575,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1586,8 +1586,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld0(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld0(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -1596,8 +1596,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld0(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld0(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -1674,7 +1674,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld1(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld1(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -1713,7 +1713,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1721,7 +1721,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1732,8 +1732,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld1(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld1(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -1742,8 +1742,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld1(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld1(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -1820,7 +1820,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld2(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld2(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -1859,7 +1859,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1867,7 +1867,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -1878,8 +1878,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld2(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld2(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -1888,8 +1888,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld2(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld2(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -1966,7 +1966,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld3(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld3(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -2005,7 +2005,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2013,7 +2013,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2025,8 +2025,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld3(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld3(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -2035,8 +2035,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld3(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld3(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -2113,7 +2113,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld4(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld4(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -2152,7 +2152,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2160,7 +2160,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2172,8 +2172,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld4(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld4(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld4(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld4(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -2182,8 +2182,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld4(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld4(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld4(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld4(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -2260,7 +2260,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld5(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld5(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -2299,7 +2299,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2307,7 +2307,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2319,8 +2319,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld5(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld5(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld5(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld5(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -2329,8 +2329,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld5(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld5(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld5(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld5(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -2407,7 +2407,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld6(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld6(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -2446,7 +2446,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2454,7 +2454,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2466,8 +2466,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld6(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld6(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld6(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld6(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -2476,8 +2476,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld6(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld6(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld6(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld6(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -2554,7 +2554,7 @@ struct World
 		return 0;
 	}
 
-	static Inst* HitWorld7(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+	static Inst* HitWorld7(BSP* q, double ray[10], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 	{
 		if (!q)
 			return 0;
@@ -2593,7 +2593,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::SPRITE)
 			{
-				if (((SpriteInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((SpriteInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2601,7 +2601,7 @@ struct World
 			else
 			if (inst->inst_type == Inst::INST_TYPE::ITEM)
 			{
-				if (((ItemInst*)inst)->Hit(ray, ret, positive_only))
+				if (sprites_too && ((ItemInst*)inst)->Hit(ray, ret, positive_only))
 					return inst;
 				else
 					return 0;
@@ -2613,8 +2613,8 @@ struct World
         if (q->type == BSP::TYPE::BSP_TYPE_NODE)
         {
             BSP_Node* n = (BSP_Node*)q;
-            Inst* i = HitWorld7(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld7(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld7(n->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld7(n->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
             return i;
         }
@@ -2623,8 +2623,8 @@ struct World
         {
             BSP_NodeShare* s = (BSP_NodeShare*)q;
 
-            Inst* i = HitWorld7(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only);
-            Inst* j = HitWorld7(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only);
+            Inst* i = HitWorld7(s->bsp_child[0], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
+            Inst* j = HitWorld7(s->bsp_child[1], ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
             i = j ? j : i;
 
             j = s->head;
@@ -2703,7 +2703,7 @@ struct World
 
 
     // RAY HIT using plucker
-    Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+    Inst* HitWorld(double p[3], double v[3], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
     {
 		if (!root)
 			return 0;
@@ -2741,7 +2741,7 @@ struct World
 
 		// assert((sign_case & 4) == 0); // watching from the bottom? -> raytraced reflections?
 
-		static Inst* (*const func_vect[])(BSP* q, double ray[10], double ret[3], double nrm[3], bool, bool, bool) =
+		static Inst* (*const func_vect[])(BSP* q, double ray[10], double ret[3], double nrm[3], bool, bool, bool, bool) =
 		{
 			HitWorld0,
 			HitWorld1,
@@ -2764,7 +2764,7 @@ struct World
 		}
 		*/
 
-		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, positive_only, editor, solid_only);
+		Inst* inst = func_vect[sign_case](root, ray, ret, nrm, positive_only, editor, solid_only, sprites_too);
 		return inst;
     }
 
@@ -4755,9 +4755,9 @@ World* LoadWorld(FILE* f, bool editor)
 }
 
 
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only)
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only, bool editor, bool solid_only, bool sprites_too)
 {
-    return w->HitWorld(p,v,ret,nrm, positive_only, editor, solid_only);
+    return w->HitWorld(p,v,ret,nrm, positive_only, editor, solid_only, sprites_too);
 }
 
 Mesh* GetInstMesh(Inst* i)

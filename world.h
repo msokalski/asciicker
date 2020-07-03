@@ -77,7 +77,7 @@ void QueryWorldBSP(World* w, int planes, double plane[][4], void (*cb)(int level
 
 
 // if editor==true -> ignore volatile instances
-Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only = false, bool editor = false, bool solid_only = false);
+Inst* HitWorld(World* w, double p[3], double v[3], double ret[3], double nrm[3], bool positive_only = false, bool editor = false, bool solid_only = false, bool sprites_too = true);
 
 void SaveWorld(World* w, FILE* f);
 

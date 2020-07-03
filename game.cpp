@@ -2107,7 +2107,7 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 
 				case ACTION::ATTACK:
 					if (req->weapon == WEAPON::REGULAR_CROSSBOW)
-						return player[clr][req->armor][req->helmet][req->shield][req->weapon];
+						return wolfie[clr][req->armor][req->helmet][req->shield][req->weapon];
 					else
 						return wolfie_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
 
@@ -3057,8 +3057,16 @@ bool Character::SetActionAttack(uint64_t stamp)
 	}
 	sprite = spr;
 
-	anim = 0;
-	frame = 2;
+	if (req.weapon == WEAPON::REGULAR_CROSSBOW)
+	{
+		anim = 0;
+		frame = 0;
+	}
+	else
+	{
+		anim = 0;
+		frame = 2;
+	}
 	action_stamp = stamp;
 	hit_tested = false;
 
@@ -3432,6 +3440,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		io.jump = false;
 	}
 
+	if (player.req.action == ACTION::ATTACK && 
+		player.req.weapon == WEAPON::REGULAR_CROSSBOW)
+	{
+		io.x_force = 0;
+		io.y_force = 0;
+		io.jump = false;
+	}
+
 	int steps = Animate(physics, _stamp, &io, player.req.mount != 0);
 
 	player.impulse[0] = io.x_impulse;
@@ -3535,7 +3551,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						float max_ed = 20; // max distance to enemy (if greater don't chase)
 						float min_ed_contact = 3;  // min distance to enemy (if smaller then attack instead of chase)
 						float min_ed_archer = 10;  
-						float min_md = 10; // min distance to master (if smaller don't come any closer)
+						float min_md = 30; // min distance to master (if smaller don't come any closer)
 
 						if (enemy_ch && enemy_cd < max_ed*max_ed && master_distance < ret_md)
 						{
@@ -3678,6 +3694,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						h->stuck = 0;
 					}
 
+					if (h->req.action == ACTION::ATTACK &&
+						h->req.weapon == WEAPON::REGULAR_CROSSBOW)
+					{
+						pio.x_force = 0;
+						pio.y_force = 0;
+						pio.jump = false;
+					}
+
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 
 					if (h->target)
@@ -3743,6 +3767,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				}
 				else
 				{
+					if (h->req.action == ACTION::ATTACK &&
+						h->req.weapon == WEAPON::REGULAR_CROSSBOW)
+					{
+						pio.x_force = 0;
+						pio.y_force = 0;
+						pio.jump = false;
+					}
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 				}
 
@@ -3827,8 +3858,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								// sample scene at hit location, if theres something emit particles in color(s) of hit object
 								// if this is human sprite, emitt red particles
 
-								int frames = 40;
+								int frames = 10;
 								assert(frame_index >= 0);
+
+								if (2 * frame_index >= frames)
+								{
+									// here we should release arrow
+								}
+
 								if (frame_index >= frames)
 									h->SetActionNone(_stamp);
 								break;
@@ -4032,8 +4069,17 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					// sample scene at hit location, if theres something emit particles in color(s) of hit object
 					// if this is human sprite, emitt red particles
 
-					int frames = 40;
+					io.x_force = 0;
+					io.y_force = 0;
+
+					int frames = 10;
 					assert(frame_index >= 0);
+
+					if (2*frame_index >= frames)
+					{
+						// here we should release arrow
+					}
+
 					if (frame_index >= frames)
 						player.SetActionNone(_stamp);
 					break;
@@ -4122,10 +4168,151 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	if (input.shoot /*&& !player.shooting*/ && player.req.weapon == WEAPON::REGULAR_CROSSBOW)
 	{
-		// read x,y,h at meta_xy of current player's sprite frame
-		// input.shoot_from;
-		// ...
+		// this should be done inside SetActionAttack() if weapon is crossbow
 
+		// find closest enemy in current direction
+		// if found change dir to be exactly on the line between player and target
+		
+		Character* h2 = player_head;
+		Character* t = 0;
+		float _dang = 60;
+		float _ang = player.dir;
+		float _dist = 0;
+		while (h2)
+		{
+			// temporarily commented!!!
+			if (/*h2->enemy &&*/ h2->data && h2->req.action != ACTION::DEAD)
+			{
+				float dx = h2->pos[0] - player.pos[0];
+				float dy = h2->pos[1] - player.pos[1];
+				float dz = h2->pos[2] - player.pos[2];
+
+				float d = dx * dx + dy * dy;
+
+				// check min dist, max dist and max slope
+				if (d >= 2*2 + 2*2 && d < 30*30 + 30*30 && dz*dz < d*8*8 )
+				{
+					float a = atan2(dy, dx) * 180 / M_PI + 90;
+					float da = a - player.dir;
+					
+					// note: player.dur may wrap multiple times!!!!
+					// TODO:
+					// FIX!
+
+					if (da < -180)
+						da += 360;
+					if (da < -180)
+						da += 360;
+					if (da > 180)
+						da -= 360;
+					if (da > 180)
+						da -= 360;
+
+					da = fabsf(da);
+					if (da < _dang) // +/-60 deg
+					{
+						t = h2;
+						_dang = da;
+						_ang = a;
+						_dist = d;
+					}
+				}
+			}
+			h2 = h2->next;
+		}
+
+		if (t && player.SetActionAttack(_stamp))
+		{
+			if (_ang < 0)
+				_ang += 360;
+			SetPhysicsDir(physics, _ang);
+			player.dir = _ang;
+			Sprite* sprite = GetSprite(&player.req, player.clr);
+
+			int ang = (int)floor((_ang - io.yaw) * sprite->angles / 360.0f + 0.5f);
+			ang = ang >= 0 ? ang % sprite->angles : (ang % sprite->angles + sprite->angles) % sprite->angles;
+
+			int i = player.frame + ang * sprite->anim[player.anim].length;
+			Sprite::Frame* f = sprite->atlas + sprite->anim[player.anim].frame_idx[i];
+
+			int from[3] =
+			{
+				width / 2 + ss[0] + (f->meta_xy[0] + 1) / 2,
+				height / 2 + ss[1] + (f->meta_xy[1] + 1) / 2,
+				(int)player.pos[2] + 40 // should depend on meta_xy[2] :o
+			};
+
+			if (UnprojectCoords3D(renderer, from, player.shoot_from))
+			{
+				player.shoot_to[0] = t->pos[0] * HEIGHT_CELLS;
+				player.shoot_to[1] = t->pos[1] * HEIGHT_CELLS;
+				player.shoot_to[2] = t->pos[2] + 40;
+
+				double p[3] = { player.shoot_from[0], player.shoot_from[1], player.shoot_from[2] };
+				double v[3] = { player.shoot_to[0] - p[0], player.shoot_to[1] - p[1], player.shoot_to[2] - p[2] };
+				double r1[3] = { 0,0,0 };
+				double r2[3] = { 0,0,0 };
+
+				p[0] /= HEIGHT_CELLS;
+				p[1] /= HEIGHT_CELLS;
+
+				v[0] *= 1000.0 / HEIGHT_CELLS;
+				v[1] *= 1000.0 / HEIGHT_CELLS;
+				v[2] *= 1000.0;
+
+				/*
+				v[0] *= 1.0 / HEIGHT_CELLS;
+				v[1] *= 1.0 / HEIGHT_CELLS;
+				*/
+
+				HideInst(player_inst);
+				Inst* inst = HitWorld(world, p, v, r1, 0, true, false, true, false);
+				bool ground = HitTerrain(terrain, p, v, inst ? r2 : r1, 0, true);
+
+				if (inst && ground)
+				{
+					double d1 = (r1[0] - p[0])*v[0] + (r1[1] - p[1])*v[1] + (r1[2] - p[2])*v[2];
+					double d2 = (r2[0] - p[0])*v[0] + (r2[1] - p[1])*v[1] + (r2[2] - p[2])*v[2];
+					if (d2 < d1)
+					{
+						inst = 0;
+						r1[0] = r2[0];
+						r1[1] = r2[1];
+						r1[2] = r2[2];
+					}
+					else
+					{
+						ground = false;
+					}
+				}
+
+				bool hit = true;
+
+				if (inst || ground)
+				{
+					float dx = r1[0] * HEIGHT_CELLS - player.shoot_from[0];
+					float dy = r1[1] * HEIGHT_CELLS - player.shoot_from[1];
+					
+					if (dx*dx + dy * dy < _dist * HEIGHT_CELLS * HEIGHT_CELLS)
+					{
+						hit = false;
+						player.shoot_to[0] = r1[0] * HEIGHT_CELLS;
+						player.shoot_to[1] = r1[1] * HEIGHT_CELLS;
+						player.shoot_to[2] = r1[2];
+					}
+				}
+
+				ShowInst(player_inst);
+
+				// set shoot params in human
+				player.shoot_stamp = stamp;
+				player.shooting = true;
+
+				printf(hit ? "HIT!\n" : "MISS\n");
+			}
+		}
+
+		#if 0
 		float pos[3];
 		float dir;
 		int anim;
@@ -4219,6 +4406,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				player.shooting = true;
 			}
 		}
+		#endif
 	}
 
 	if (input.shoot)
