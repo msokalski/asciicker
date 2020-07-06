@@ -3448,6 +3448,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		io.jump = false;
 	}
 
+	// blocked by enemies? (closest one)
+	// ...
+
 	int steps = Animate(physics, _stamp, &io, player.req.mount != 0);
 
 	player.impulse[0] = io.x_impulse;
@@ -3584,6 +3587,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						float dx = h->target->pos[0] - h->pos[0];
 						float dy = h->target->pos[1] - h->pos[1];
 						float d = sqrtf(dx*dx + dy * dy);
+
+						if (d < 10)
+						{
+							dx *= 0.7;
+							dy *= 0.7;
+						}
 
 						distance = d;
 
@@ -3985,18 +3994,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									float dy = h2->pos[1] - h->pos[1];
 
 									float dd = dx * dx + dy * dy;
-									if (dd < 3 * 3)
+									if (dd < /*3 * 3*/ 4*4) // player's sword a bit longer
 									{
 										// check if direction is in +/-22.5deg
 										float dif = atan2(dy, dx) * 180 / M_PI + 90 - h->dir;
-										if (dif > 180)
-											dif -= 360;
-										if (dif > 180)
-											dif -= 360;
+										dif = fmodf(dif, 360);
 										if (dif < -180)
 											dif += 360;
-										if (dif < -180)
-											dif += 360;
+										if (dif > +180)
+											dif -= 360;
+
 										if (fabsf(dif) <= 90)
 										{
 											if (!ch || cd < dd)
@@ -4181,7 +4188,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		while (h2)
 		{
 			// temporarily commented!!!
-			if (/*h2->enemy &&*/ h2->data && h2->req.action != ACTION::DEAD)
+			if (h2->enemy && h2->data && h2->req.action != ACTION::DEAD)
 			{
 				float dx = h2->pos[0] - player.pos[0];
 				float dy = h2->pos[1] - player.pos[1];
@@ -4195,17 +4202,10 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					float a = atan2(dy, dx) * 180 / M_PI + 90;
 					float da = a - player.dir;
 					
-					// note: player.dur may wrap multiple times!!!!
-					// TODO:
-					// FIX!
-
+					da = fmodf(da, 360);
 					if (da < -180)
 						da += 360;
-					if (da < -180)
-						da += 360;
-					if (da > 180)
-						da -= 360;
-					if (da > 180)
+					if (da > +180)
 						da -= 360;
 
 					da = fabsf(da);
@@ -5439,7 +5439,13 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		if (!player.talk_box)
 		{
 			if (key == '\n' || key == '\r')
+			{
+				input.shoot = true;
+				input.shoot_xy[0] = -1;
+				input.shoot_xy[1] = -1;
+
 				player.SetActionAttack(stamp);
+			}
 
 			if (key == '\\' || key == '|')
 				perspective = !perspective;
