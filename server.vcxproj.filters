@@ -39,6 +39,7 @@
     <ClInclude Include="network.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="enemygen.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="world.cpp">
@@ -74,5 +75,6 @@
     <ClCompile Include="network.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="enemygen.cpp" />
   </ItemGroup>
 </Project>

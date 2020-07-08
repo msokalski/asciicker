@@ -47,8 +47,10 @@
 
 #include "render.h"
 #include "game.h"
+#include "enemygen.h"
 
 char base_path[1024] = "./";
+Sprite* enemygen_sprite = 0;
 
 void SyncConf()
 {
@@ -988,6 +990,17 @@ int painting_y = 0;
 double painting_dx;
 double painting_dy;
 double paint_dist;
+
+bool enemygen_preview = false;
+float enemygen_preview_pos[3] = { 0,0,0 };
+int eg_alive_max = 1;
+int eg_revive_min = 0; // EXPONENTIAL!
+int eg_revive_max = 10; // EXPONENTIAL!
+int eg_armor = 5;
+int eg_helmet = 5;
+int eg_shield = 5;
+int eg_sword = 10;
+int eg_crossbow = 0;
 
 bool diag_flipped = false;
 bool br_limit = false;
@@ -4003,6 +4016,8 @@ void Load(const char* path)
 					m = GetNextMesh(m);
 				}
 			}
+
+			LoadEnemyGens(f);
 		}
 
 		fclose(f);
@@ -4983,6 +4998,8 @@ void my_render(A3D_WND* wnd)
 
 							SaveWorld(world,f);
 
+							SaveEnemyGens(f);
+
 							// close save dialog
 							save = 0;
 							if (dir_arr)
@@ -5078,6 +5095,8 @@ void my_render(A3D_WND* wnd)
 								fwrite(mat[i].shade,1,sizeof(MatCell)*4*16,f);
 
 							SaveWorld(world,f);
+
+							SaveEnemyGens(f);
 
 							// close save dialog
 							save = 0;
@@ -5627,6 +5646,94 @@ void my_render(A3D_WND* wnd)
 					ImGui::PopStyleVar();
 				}
 
+
+				if (edit_mode != 6)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
+					add_verts = false;
+					build_poly = false;
+
+					item_preview_sprite = 0;
+				}
+				if (ImGui::BeginTabItem("ENEMY"))
+				{
+					edit_mode = 6;
+
+					if (ImGui::SliderInt("MaxAlive", &eg_alive_max, 1, 7))
+					{
+						if (eg_alive_max < 0)
+							eg_alive_max = 0;
+						if (eg_alive_max > 7)
+							eg_alive_max = 7;
+					}
+
+					if (ImGui::SliderInt("ReviveMax", &eg_revive_min, 0, eg_revive_max))
+					{
+						if (eg_revive_min < 0)
+							eg_revive_min = 0;
+						if (eg_revive_min > 10)
+							eg_revive_min = 10;
+					}
+					if (ImGui::SliderInt("ReviveMin", &eg_revive_max, eg_revive_min, 10))
+					{
+						if (eg_revive_max < 0)
+							eg_revive_max = 0;
+						if (eg_revive_max > 10)
+							eg_revive_max = 10;
+					}
+
+
+					if (ImGui::SliderInt("Armor", &eg_armor, 0, 10))
+					{
+						if (eg_armor < 0)
+							eg_armor = 0;
+						if (eg_armor > 10)
+							eg_armor = 10;
+					}
+
+
+					if (ImGui::SliderInt("Helmet", &eg_helmet, 0, 10))
+					{
+						if (eg_helmet < 0)
+							eg_helmet = 0;
+						if (eg_helmet > 10)
+							eg_helmet = 10;
+					}
+
+					if (ImGui::SliderInt("Shield", &eg_shield, 0, 10))
+					{
+						if (eg_shield < 0)
+							eg_shield = 0;
+						if (eg_shield > 10)
+							eg_shield = 10;
+					}
+
+					if (ImGui::SliderInt("Sword", &eg_sword, 0, 10))
+					{
+						if (eg_sword < 0)
+							eg_sword = 0;
+						if (eg_sword > 10)
+							eg_sword = 10;
+						eg_crossbow = 10 - eg_sword;
+					}
+					if (ImGui::SliderInt("Crossbow", &eg_crossbow, 0, 10))
+					{
+						if (eg_crossbow < 0)
+							eg_crossbow = 0;
+						if (eg_crossbow > 10)
+							eg_crossbow = 10;
+						eg_sword = 10 - eg_crossbow;
+					}
+
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
 
 				/*
 				if (edit_mode != 2)
@@ -6308,6 +6415,8 @@ void my_render(A3D_WND* wnd)
 
 	bool sprite_preview = false;
 	float sprite_preview_pos[3] = { 0,0,0 };
+
+	enemygen_preview = false;
 
 	if (!io.WantCaptureMouse && mouse_in)
 	{
@@ -7164,6 +7273,70 @@ void my_render(A3D_WND* wnd)
 						}
 					}
 				}
+				else
+				if (edit_mode == 6)
+				{
+					Inst* inst = HitWorld(world, ray_p, ray_v, hit, 0, false, true);
+
+					if (io.KeyCtrl)
+					{
+						// hit test against all enemygens
+						// pick closest one
+						/*
+						HitEnemyGen(ray_p, ray_v, hit);
+
+						if (io.MouseDown[0])
+						{
+							// delete it
+						}
+						else
+						{
+							// hilight it
+						}
+						*/
+					}
+					else
+					{
+						if (!inst_added && io.MouseDown[0])
+						{
+							int flags = INST_USE_TREE | INST_VISIBLE;
+							// inst = CreateInst(active_mesh, flags, inst_tm, 0);
+
+							//AddEnemyGen(hit);
+							EnemyGen* eg = (EnemyGen*)malloc(sizeof(EnemyGen));
+							eg->pos[0] = hit[0];
+							eg->pos[1] = hit[1];
+							eg->pos[2] = hit[2];
+
+							eg->alive_max = eg_alive_max;
+							eg->revive_min = eg_revive_min;
+							eg->revive_max = eg_revive_max;
+							eg->armor = eg_armor;
+							eg->helmet = eg_helmet;
+							eg->shield = eg_shield;
+							eg->sword = eg_sword;
+							eg->crossbow = eg_crossbow;
+
+							eg->prev = 0;
+							eg->next = enemygen_head;
+
+							if (enemygen_head)
+								enemygen_head->prev = eg;
+							else
+								enemygen_tail = 0;
+
+							enemygen_head = eg;
+							inst_added = true;
+						}
+						else
+						{
+							enemygen_preview = true;
+							enemygen_preview_pos[0] = hit[0];
+							enemygen_preview_pos[1] = hit[1];
+							enemygen_preview_pos[2] = hit[2];
+						}
+					}
+				}
 			}
 			else
 			{
@@ -7337,6 +7510,23 @@ void my_render(A3D_WND* wnd)
 		}
 	}
 
+	if (enemygen_sprite)
+	{
+		if (enemygen_preview)
+		{
+			// draw something
+			RenderContext::RenderSprite(0, enemygen_sprite, enemygen_preview_pos, 0, -1, Item::EDIT, 0, rc);
+		}
+
+		EnemyGen* eg = enemygen_head;
+		while (eg)
+		{
+			// draw something
+			RenderContext::RenderSprite(0, enemygen_sprite, eg->pos, 0, -1, Item::EDIT, 0, rc);
+			eg = eg->next;
+		}
+	}
+
 //	if (sprite_preview)
 //		RenderContext::RenderSprite(sprite_preview, ..., rc);
 
@@ -7432,6 +7622,8 @@ void my_render(A3D_WND* wnd)
 		if (!exist)
 			rc->PaintGhost(tm, create_preview_px, create_preview_py, probe_z, ghost);
 	}
+
+
 
 	glDisable(GL_DEPTH_TEST);
 
@@ -7734,6 +7926,8 @@ void my_close(A3D_WND* wnd)
 
 	DeleteTerrain(terrain);
 
+	FreeEnemyGens();
+
 	PurgeItemInstCache();
 
 	MyFont::Free();
@@ -7832,6 +8026,10 @@ int main(int argc, char *argv[])
 	//_CrtSetBreakAlloc(11952);
 #endif
 	LoadSprites();
+
+	char enemygen_path[1024];
+	sprintf(enemygen_path, "%ssprites/enemygen.xp", base_path);
+	enemygen_sprite = LoadSprite(enemygen_path, "enemygen.xp", 0, false);
 
 	PlatformInterface pi;
 	pi.close = my_close;

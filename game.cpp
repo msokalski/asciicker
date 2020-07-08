@@ -3,6 +3,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include "game.h"
+#include "enemygen.h"
 #include "platform.h"
 #include "network.h"
 #include "matrix.h"
@@ -2136,9 +2137,142 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
 
+	g->perspective = true;
+
 	fast_srand(stamp);
 
-	Character* enemy_master = 0;
+	EnemyGen* eg = enemygen_head;
+	while (eg)
+	{
+		Character* enemy_master = 0;
+		for (int i = 0; i < eg->alive_max; i++)
+		{
+			NPC_Human* enemy = (NPC_Human*)malloc(sizeof(NPC_Human));
+			memset(enemy, 0, sizeof(NPC_Human));
+
+			// init enemy
+
+			enemy->MAX_HP = 100;
+			enemy->HP = (i + 1) * enemy->MAX_HP / eg->alive_max;
+
+			enemy->enemy = true;
+
+			//enemy->master = enemy_master;
+			enemy->master = 0;
+
+			enemy->target = enemy->master;
+			enemy->followers = 0;
+
+			if (i == 0)
+				enemy_master = enemy;
+
+			enemy->clr = 1;
+			enemy->req.kind = SpriteReq::HUMAN;
+			enemy->req.mount = MOUNT::NONE;// +((r >> 1) & 1);
+			enemy->req.armor = fast_rand() % 11 < eg->armor ? ARMOR::NONE : ARMOR::REGULAR_ARMOR;
+			enemy->req.helmet = fast_rand() % 11 < eg->helmet ? HELMET::NONE : HELMET::REGULAR_HELMET;
+			enemy->req.shield = fast_rand() % 11 < eg->shield ? SHIELD::NONE : SHIELD::REGULAR_SHIELD;
+			enemy->req.weapon = fast_rand() % (eg->sword + eg->crossbow + 1) < eg->sword ?
+				WEAPON::REGULAR_SWORD : WEAPON::REGULAR_CROSSBOW;
+			enemy->req.action = ACTION::NONE;
+
+			if (enemy->req.armor)
+			{
+				Item* item = CreateItem();
+				item->count = 1;
+				item->inst = 0;
+				item->proto = item_proto_lib + rand() % 2 + 19;
+				item->purpose = Item::OWNED;
+				enemy->has[enemy->items].in_use = true;
+				enemy->has[enemy->items].item = item;
+				enemy->has[enemy->items].story_id = -1;
+				enemy->items++;
+			}
+			if (enemy->req.helmet)
+			{
+				Item* item = CreateItem();
+				item->count = 1;
+				item->inst = 0;
+				item->proto = item_proto_lib + rand() % 2 + 15;
+				item->purpose = Item::OWNED;
+				enemy->has[enemy->items].in_use = true;
+				enemy->has[enemy->items].item = item;
+				enemy->has[enemy->items].story_id = -1;
+				enemy->items++;
+			}
+			if (enemy->req.shield)
+			{
+				Item* item = CreateItem();
+				item->count = 1;
+				item->inst = 0;
+				item->proto = item_proto_lib + rand() % 2 + 17;
+				item->purpose = Item::OWNED;
+				enemy->has[enemy->items].in_use = true;
+				enemy->has[enemy->items].item = item;
+				enemy->has[enemy->items].story_id = -1;
+				enemy->items++;
+			}
+			if (enemy->req.weapon)
+			{
+				// only sword at the moment
+				Item* item = CreateItem();
+				item->count = 1;
+				item->inst = 0;
+
+				int id = rand() % 4;
+				if (id >= 2)
+					id++; // there's a hole in sword ids :(
+
+				item->proto = item_proto_lib + id + 3;
+				item->purpose = Item::OWNED;
+				enemy->has[enemy->items].in_use = true;
+				enemy->has[enemy->items].item = item;
+				enemy->has[enemy->items].story_id = -1;
+				enemy->items++;
+			}
+
+
+			enemy->sprite = GetSprite(&enemy->req, enemy->clr);
+			enemy->anim = 0; // ???
+
+			enemy->frame = 0;
+
+			int flags = INST_USE_TREE | INST_VISIBLE | INST_VOLATILE;
+			int reps[4] = { 0,0,0,0 };
+
+			float* e_pos = eg->pos;
+			float xyz[3] = { e_pos[0] + fast_rand() % 21 - 10, e_pos[1] + fast_rand() % 21 - 10, e_pos[2] + 200 };
+
+			enemy->gen = eg;
+
+			enemy->pos[0] = enemy->unstuck[0][0] = enemy->unstuck[1][0] = xyz[0];
+			enemy->pos[1] = enemy->unstuck[0][1] = enemy->unstuck[1][1] = xyz[1];
+			enemy->pos[2] = enemy->unstuck[0][2] = enemy->unstuck[1][2] = xyz[2];
+			enemy->inst = CreateInst(world, enemy->sprite, flags, xyz, yaw, enemy->anim, enemy->frame, reps, 0, -1);
+			SetInstSpriteData(enemy->inst, enemy);
+
+			for (int it = 0; it < enemy->items; it++)
+				enemy->has[it].item->inst = enemy->inst;
+
+			AttachInst(world, enemy->inst);
+
+			enemy->prev = 0;
+			enemy->next = player_head;
+
+			if (!player_tail)
+				player_tail = enemy;
+			else
+				player_tail->prev = enemy;
+
+			player_head = enemy;
+
+			enemy->data = CreatePhysics(terrain, world, xyz, 0, 0, stamp);
+		}
+		eg = eg->next;
+	}
+
+	#if 0
+	
 	int enemies = 4;
 	for (int i = 0; i < enemies; i++) // 1 mater + 5 slaves
 	{
@@ -2262,7 +2396,9 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 		enemy->data = CreatePhysics(terrain, world, xyz, 0, 0, stamp);
 	}
+	#endif
 
+	#if 0
 	int buddies = 2;
 	for (int i = 0; i < buddies; i++)
 	{
@@ -2378,6 +2514,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		buddy->data = CreatePhysics(terrain, world, xyz, 0, 0, stamp);
 		//buddy->dist = 10; // 10 + i * 5;
 	}
+	#endif
 
 	strcpy(g->player.name, player_name);
 
@@ -2409,6 +2546,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->physics = CreatePhysics(terrain, world, pos, dir, yaw, stamp);
 	g->stamp = stamp;
 
+	g->player.data = g->physics;
+
 	// init player!
 	g->player.MAX_HP = 200;
 	g->player.HP = g->player.MAX_HP;
@@ -2421,7 +2560,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->player.req.armor = ARMOR::NONE;
 	g->player.req.helmet = HELMET::NONE;
 	g->player.req.shield = SHIELD::NONE; // REGULAR_SHIELD;
-	g->player.req.weapon = WEAPON::REGULAR_SWORD;
+	g->player.req.weapon = WEAPON::NONE;
 	g->player.req.action = ACTION::NONE;
 
 	g->player.clr = 0;
@@ -2479,7 +2618,7 @@ void DeleteGame(Game* g)
 		while (h)
 		{
 			Character* n = h->next;
-			if (h->data)
+			if (h->data != g->physics)
 			{
 				if (h->prev)
 					h->prev->next = h->next;
@@ -3468,7 +3607,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		while (h)
 		{
-			if (h->data)
+			if (h->data != physics)
 			{
 				Physics* p = (Physics*)h->data;
 
@@ -3521,6 +3660,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								float bx = h2->pos[0] - h->pos[0];
 								float by = h2->pos[1] - h->pos[1];
 								float d = (bx * bx + by * by);
+
+								if (h2->req.action!=ACTION::DEAD &&  h->shoot_by == h2 && 
+									stamp >  500000 + h->shoot_by_stamp &&
+									stamp < 5000000 + h->shoot_by_stamp)
+								{
+									d *= 0.2;
+								}
+
 								if (!enemy_ch || d * (h2->followers + 4) < enemy_cd*(enemy_cf + 4))
 								{
 									enemy_cf = h2->followers;
@@ -3529,7 +3676,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								}
 							}
 							else
-							if (h2->data && h2 != h && h2->req.action != ACTION::DEAD)
+							if (h2->data != physics && h2 != h && h2->req.action != ACTION::DEAD)
 							{
 								// buddy
 								float bx = h2->pos[0] - h->pos[0];
@@ -3834,7 +3981,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 												else
 												{
 													h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
-													Physics* p = h->target->data ? (Physics*)h->target->data : physics;
+													Physics* p = (Physics*)h->target->data;
 													SetPhysicsDir(p, h->target->dir);
 
 													h->target->HP = 0;
@@ -3987,7 +4134,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 							float cd = 0;
 							while (h2)
 							{
-								if (h2->data && h2->enemy)
+								if (h2->data != physics && h2->enemy)
 								{
 									// check if distance is at max 3
 									float dx = h2->pos[0] - h->pos[0];
@@ -4048,7 +4195,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									else
 									{
 										h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
-										Physics* p = h->target->data ? (Physics*)h->target->data : physics;
+										Physics* p = (Physics*)h->target->data;
 										SetPhysicsDir(p, h->target->dir);
 
 										h->target->HP = 0;
@@ -4188,7 +4335,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		while (h2)
 		{
 			// temporarily commented!!!
-			if (h2->enemy && h2->data && h2->req.action != ACTION::DEAD)
+			if (h2->enemy && h2->data != physics && h2->req.action != ACTION::DEAD)
 			{
 				float dx = h2->pos[0] - player.pos[0];
 				float dy = h2->pos[1] - player.pos[1];
@@ -4221,7 +4368,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			h2 = h2->next;
 		}
 
-		if (t && player.SetActionAttack(_stamp))
+		if (/*t &&*/ player.SetActionAttack(_stamp))
 		{
 			if (_ang < 0)
 				_ang += 360;
@@ -4244,9 +4391,18 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			if (UnprojectCoords3D(renderer, from, player.shoot_from))
 			{
-				player.shoot_to[0] = t->pos[0] * HEIGHT_CELLS;
-				player.shoot_to[1] = t->pos[1] * HEIGHT_CELLS;
-				player.shoot_to[2] = t->pos[2] + 40;
+				if (t)
+				{
+					player.shoot_to[0] = t->pos[0] * HEIGHT_CELLS;
+					player.shoot_to[1] = t->pos[1] * HEIGHT_CELLS;
+					player.shoot_to[2] = t->pos[2] + 40;
+				}
+				else
+				{
+					player.shoot_to[0] = player.pos[0] * HEIGHT_CELLS + 1000 * cos((player.dir - 90) * M_PI / 180);
+					player.shoot_to[1] = player.pos[1] * HEIGHT_CELLS + 1000 * sin((player.dir - 90) * M_PI / 180);
+					player.shoot_to[2] = player.pos[2] + 40;
+				}
 
 				double p[3] = { player.shoot_from[0], player.shoot_from[1], player.shoot_from[2] };
 				double v[3] = { player.shoot_to[0] - p[0], player.shoot_to[1] - p[1], player.shoot_to[2] - p[2] };
@@ -4307,6 +4463,20 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				// set shoot params in human
 				player.shoot_stamp = stamp;
 				player.shooting = true;
+
+				if (hit)
+				{
+					if (t)
+					{
+						player.shoot_target = t;
+						t->shoot_by = &player;
+						t->shoot_by_stamp = stamp;
+					}
+					else
+						player.shoot_target = 0;
+				}
+				else
+					player.shoot_target = 0;
 
 				printf(hit ? "HIT!\n" : "MISS\n");
 			}
@@ -6738,15 +6908,31 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 
 			if (input.but != 0)
 			{
-				if (input.contact[0].action == Input::Contact::TORQUE && !input.shoot)
+				if (input.contact[0].action == Input::Contact::TORQUE)
 				{
+
+					if (player.req.weapon == WEAPON::REGULAR_CROSSBOW && !input.shoot)
+					{
+						input.shoot = true;
+						//input.shoot_xy[0] = cp[0];
+						//input.shoot_xy[1] = cp[1];
+
+						// here we should hittest to see what's there
+						// enemy mesh, enemy sprite ?
+					}
+					else
+						player.SetActionAttack(stamp);
+
+					/*
 					int cp[2] = { x,y };
 					ScreenToCell(cp);
 					input.shoot = true;
 					input.shoot_xy[0] = cp[0];
 					input.shoot_xy[1] = cp[1];
 					// input.contact[0].action = Input::Contact::NONE;
+					*/
 				}
+
 				input.but |= 0x1;
 				break;
 			}

@@ -3975,7 +3975,10 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 		if (h->shooting)
 		{
 			if (stamp - h->shoot_stamp > 3000000)
+			{
 				h->shooting = false;
+				h->shoot_target = 0;
+			}
 
 			float arrow_speed = 1000; // 2000 world units / sec
 			float shutter_time = 0.05; // 1/20 sec shutter speed
@@ -4008,7 +4011,40 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 				head_time = len / arrow_speed;
 
 			if (tail_time * arrow_speed > len)
+			{
+				if (h->shoot_target)
+				{
+					int hp = h->shoot_target->HP;
+					h->shoot_target->HP -= rand() % 50;
+
+					float dx = h->shoot_target->pos[0] - h->pos[0];
+					float dy = h->shoot_target->pos[1] - h->pos[1];
+
+					float d = 1.0f / sqrtf(dx*dx + dy * dy);
+					h->shoot_target->impulse[0] += dx * d;
+					h->shoot_target->impulse[1] += dy * d;
+
+					if (h->shoot_target->HP <= 0)
+					{
+						if (h->shoot_target->req.mount != MOUNT::NONE)
+						{
+							((Human*)h->shoot_target)->SetMount(MOUNT::NONE);
+							h->target->HP = hp;
+						}
+						else
+						{
+							h->shoot_target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+							Physics* p = (Physics*)h->shoot_target->data;
+							SetPhysicsDir(p, h->shoot_target->dir);
+
+							h->shoot_target->HP = 0;
+							h->shoot_target->SetActionFall(stamp);
+						}
+					}
+				}
 				h->shooting = false;
+				h->shoot_target = 0;
+			}
 
 			if (h->shooting)
 			{

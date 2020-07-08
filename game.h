@@ -124,8 +124,11 @@ struct Character
 	int around;
 	float unstuck[2][3]; // [0]unstuck, [1]candid
 	void* data; // npc physics
+	void* gen;  // enemygen for reviving
 	Character* master;
 	Character* target; // can be 0, master or any enemy
+	Character* shoot_by;
+	uint64_t shoot_by_stamp;
 	int followers;
 	bool jump; // helper if got stuck
 	bool enemy; // buddy otherwise!
@@ -188,10 +191,11 @@ struct Human : Character
 	int talks;
 	Talk talk[3];
 
-	bool shooting;
+	Character* shoot_target;
 	uint64_t shoot_stamp;
 	float shoot_from[3];
 	float shoot_to[3];
+	bool shooting;
 };
 
 struct NPC_Creature : Character, ItemOwner {};

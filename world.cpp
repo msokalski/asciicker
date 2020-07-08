@@ -1616,13 +1616,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -1654,13 +1654,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -1762,13 +1762,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -1800,13 +1800,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -1908,13 +1908,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -1946,13 +1946,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2055,13 +2055,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2093,13 +2093,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2202,13 +2202,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2240,13 +2240,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2349,13 +2349,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2387,13 +2387,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2496,13 +2496,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2534,13 +2534,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2643,13 +2643,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
@@ -2681,13 +2681,13 @@ struct World
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::SPRITE)
+				if (j->inst_type == Inst::INST_TYPE::SPRITE && sprites_too)
 				{
 					if (((SpriteInst*)j)->Hit(ray, ret, positive_only))
 						i = j;
 				}
 				else
-				if (j->inst_type == Inst::INST_TYPE::ITEM)
+				if (j->inst_type == Inst::INST_TYPE::ITEM && sprites_too)
 				{
 					if (((ItemInst*)j)->Hit(ray, ret, positive_only))
 						i = j;

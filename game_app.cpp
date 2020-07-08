@@ -40,6 +40,7 @@
 #include "rgba8.h"
 
 #include "game.h"
+#include "enemygen.h"
 
 char base_path[1024] = "./";
 
@@ -1187,7 +1188,7 @@ int main(int argc, char* argv[])
 
 	{
         char a3d_path[1024];
-        sprintf(a3d_path,"%sa3d/game_map.a3d", base_path);
+        sprintf(a3d_path,"%sa3d/game_map_y7.a3d", base_path);
 		FILE* f = fopen(a3d_path, "rb");
 
 		// TODO:
@@ -1227,6 +1228,8 @@ int main(int argc, char* argv[])
 
 						m = GetNextMesh(m);
 					}
+
+					LoadEnemyGens(f);
 				}
 			}
 
