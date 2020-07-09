@@ -4,6 +4,7 @@
 
 #include "terrain.h"
 #include "game.h"
+#include "enemygen.h"
 #include "sprite.h"
 #include "world.h"
 #include "render.h"
@@ -128,6 +129,8 @@ int Main()
 
                         m = GetNextMesh(m);
                     }
+
+                    LoadEnemyGens(f);
                 }
                 else
                 {
@@ -145,7 +148,7 @@ int Main()
         }
         else
         {
-            printf("failed to open game_map.a3d\n");
+            printf("failed to open game_map_y7.a3d\n");
             return -2;
         }
 

@@ -2233,6 +2233,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 
 			enemy->sprite = GetSprite(&enemy->req, enemy->clr);
+			assert(enemy->sprite);
 			enemy->anim = 0; // ???
 
 			enemy->frame = 0;
@@ -4094,6 +4095,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				h->dir = pio.player_dir;
 
 				int reps[] = { 0,0,0,0 };
+
 				UpdateSpriteInst(world, h->inst, h->sprite, pio.pos, pio.player_dir, h->anim, h->frame, reps);
 			}
 

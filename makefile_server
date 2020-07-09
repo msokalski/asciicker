@@ -8,6 +8,7 @@ SRCS :=	game_svr.cpp \
 		network.cpp \
 		sha1.c \
 		game.cpp \
+		enemygen.cpp \
 		render.cpp \
 		terrain.cpp \
 		world.cpp \

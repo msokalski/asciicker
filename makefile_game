@@ -7,6 +7,7 @@ BIN := .run/game
 # source files
 # SRCS :=	game_app.cpp \
 #		game.cpp \
+#		enemygen.cpp \
 # 		render.cpp \
 # 		terrain.cpp \
 #		world.cpp \
@@ -23,6 +24,7 @@ SRCS :=	gl.c \
 		x11.cpp \
         term.cpp \
 		game.cpp \
+		enemygen.cpp \
 		game_app.cpp \
 		network.cpp \
 		render.cpp \
