@@ -2219,11 +2219,18 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 				item->count = 1;
 				item->inst = 0;
 
-				int id = rand() % 4;
-				if (id >= 2)
-					id++; // there's a hole in sword ids :(
+				if (enemy->req.weapon == WEAPON::REGULAR_SWORD)
+				{
+					int id = rand() % 4;
+					if (id >= 2)
+						id++; // there's a hole in sword ids :(
+					item->proto = item_proto_lib + id + 3;
+				}
+				else
+				{
+					item->proto = item_proto_lib + 9;
+				}
 
-				item->proto = item_proto_lib + id + 3;
 				item->purpose = Item::OWNED;
 				enemy->has[enemy->items].in_use = true;
 				enemy->has[enemy->items].item = item;
@@ -2350,11 +2357,19 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 			item->count = 1;
 			item->inst = 0;
 
-			int id = rand() % 4;
-			if (id >= 2)
-				id++; // there's a hole in sword ids :(
+			if (enemy->req.weapon == WEAPON::REGULAR_SWORD)
+			{
+				int id = rand() % 4;
+				if (id >= 2)
+					id++; // there's a hole in sword ids :(
+				item->proto = item_proto_lib + id + 3;
+			}
+			else
+			{
+				item->proto = item_proto_lib + 9;
+				
+			}
 
-			item->proto = item_proto_lib + id + 3;
 			item->purpose = Item::OWNED;
 			enemy->has[enemy->items].in_use = true;
 			enemy->has[enemy->items].item = item;
@@ -2399,7 +2414,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	}
 	#endif
 
-	#if 0
+	#if 1
 	int buddies = 2;
 	for (int i = 0; i < buddies; i++)
 	{
@@ -2469,11 +2484,18 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 			item->count = 1;
 			item->inst = 0;
 
-			int id = rand() % 4;
-			if (id >= 2)
-				id++; // there's a hole in sword ids :(
+			if (buddy->req.weapon == WEAPON::REGULAR_SWORD)
+			{
+				int id = rand() % 4;
+				if (id >= 2)
+					id++; // there's a hole in sword ids :(
+				item->proto = item_proto_lib + id + 3;
+			}
+			else
+			{
+				item->proto = item_proto_lib + 9;
+			}
 
-			item->proto = item_proto_lib + id + 3;
 			item->purpose = Item::OWNED;
 			buddy->has[buddy->items].in_use = true;
 			buddy->has[buddy->items].item = item;
@@ -3702,7 +3724,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						float max_ed = 20; // max distance to enemy (if greater don't chase)
 						float min_ed_contact = 3;  // min distance to enemy (if smaller then attack instead of chase)
 						float min_ed_archer = 10;  
-						float min_md = 30; // min distance to master (if smaller don't come any closer)
+						float min_md = 10; // min distance to master (if smaller don't come any closer)
 
 						if (enemy_ch && enemy_cd < max_ed*max_ed && master_distance < ret_md)
 						{
