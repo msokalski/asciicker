@@ -1819,6 +1819,10 @@ Sprite* LoadSpriteBP(const char* name, const uint8_t* recolor, bool detached)
 {
 	char path[1024];
 	sprintf(path,"%ssprites/%s", base_path, name);
+
+#ifdef EDITOR
+	recolor = 0;
+#endif
 	return LoadSprite(path,name,recolor,detached);
 }
 
