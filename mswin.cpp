@@ -1,4 +1,5 @@
 #ifdef _WIN32
+#ifndef USE_SDL
 // PLATFORM: MS-WINDOWS 
 
 #include <Windows.h>
@@ -1845,5 +1846,5 @@ void a3dClosePTY(A3D_PTY* pty)
 
 #endif
 
-
+#endif // USE_SDL
 #endif // __WIN32__

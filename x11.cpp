@@ -1,5 +1,5 @@
 #ifdef __linux__
-// PLATFORM: LINUX
+#ifndef USE_SDL
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2284,4 +2284,5 @@ void a3dClosePTY(A3D_PTY* pty)
 	free(pty);
 }
 
+#endif // USE_SDL
 #endif // __linux__
