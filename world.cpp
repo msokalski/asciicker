@@ -5139,6 +5139,8 @@ void HideInst(Inst* i)
 
 void UpdateSpriteInst(World* world, Inst* i, Sprite* sprite, const float pos[3], float yaw, int anim, int frame, const int reps[4])
 {
+	if (!i)
+		return;
 	assert(i->inst_type == Inst::INST_TYPE::SPRITE);
 
 	// instead of detach/ attach it could be more intelligent:

@@ -37,14 +37,34 @@ struct A3D_WND
 
 	bool mapped;
 	void* cookie;
+	int captured;
 
 	PlatformInterface platform_api;
 };
 
 A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* share)
 {
+	struct PUSH
+	{
+		PUSH()
+		{
+			rc = SDL_GL_GetCurrentContext();
+			dr = SDL_GL_GetCurrentWindow();
+		}
+
+		~PUSH()
+		{
+			if (dr && rc)
+				SDL_GL_MakeCurrent(dr, rc);
+		}
+
+		SDL_Window* dr;
+		SDL_GLContext rc;
+	} push;
+
 	A3D_WND* wnd = (A3D_WND*)malloc(sizeof(A3D_WND));
 
+	wnd->captured = 0;
 	wnd->prev = wnd_tail;
 	wnd->next = 0;
 	if (wnd_tail)
@@ -57,8 +77,6 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->platform_api = *pi;
 	wnd->cookie = 0;
 	wnd->mapped = false;
-
-	SDL_SetWindowData(wnd->win, "a3d", wnd);
 
 	if (share)
 	{
@@ -81,6 +99,8 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		SDL_WINDOW_RESIZABLE |
 		SDL_WINDOW_HIDDEN);
 
+	SDL_SetWindowData(wnd->win, "a3d", wnd);
+
 	wnd->rc = SDL_GL_CreateContext(wnd->win);
 
 	if (share)
@@ -102,6 +122,25 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
 void a3dClose(A3D_WND* wnd)
 {
+	struct PUSH
+	{
+		PUSH()
+		{
+			rc = SDL_GL_GetCurrentContext();
+			dr = SDL_GL_GetCurrentWindow();
+		}
+
+		~PUSH()
+		{
+			if (dr && rc)
+				SDL_GL_MakeCurrent(dr, rc);
+		}
+
+		SDL_Window* dr;
+		SDL_GLContext rc;
+
+	} push;
+
 	SDL_GL_DeleteContext(wnd->rc);
 	SDL_DestroyWindow(wnd->win);
 
@@ -132,8 +171,11 @@ WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh)
 
 bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode)
 {
-	SDL_SetWindowPosition(wnd->win, xywh[0], xywh[1]);
-	SDL_SetWindowSize(wnd->win, xywh[2], xywh[3]);
+	if (xywh)
+	{
+		SDL_SetWindowPosition(wnd->win, xywh[0], xywh[1]);
+		SDL_SetWindowSize(wnd->win, xywh[2], xywh[3]);
+	}
 	return true;
 }
 
@@ -543,7 +585,10 @@ void a3dLoop()
 								if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
 									mi |= RIGHT;
 
-								mi |= INSIDE;
+								int w, h;
+								SDL_GL_GetDrawableSize(wnd->win, &w, &h);
+								if (x >= 0 && x < w && y >= 0 && y < h)
+									mi |= INSIDE;
 
 								wnd->platform_api.mouse(wnd, x,y, (MouseInfo)mi);
 							}
@@ -552,6 +597,7 @@ void a3dLoop()
 
 						case SDL_WINDOWEVENT_FOCUS_GAINED:
 						case SDL_WINDOWEVENT_FOCUS_LOST:
+
 							if (wnd->platform_api.keyb_focus)
 								wnd->platform_api.keyb_focus(wnd, ev->event == SDL_WINDOWEVENT_FOCUS_GAINED);
 							break;
@@ -642,7 +688,10 @@ void a3dLoop()
 					if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
 						mi |= RIGHT;
 
-					mi |= INSIDE;
+					int w, h;
+					SDL_GL_GetDrawableSize(wnd->win, &w, &h);
+					if (ev->x >= 0 && ev->x < w && ev->y >= 0 && ev->y < h)
+						mi |= INSIDE;
 
 					wnd->platform_api.mouse(wnd,ev->x,ev->y,(MouseInfo)mi);
 					break;					
@@ -675,7 +724,10 @@ void a3dLoop()
 					if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
 						mi |= RIGHT;
 
-					mi |= INSIDE;
+					int w, h;
+					SDL_GL_GetDrawableSize(wnd->win, &w, &h);
+					if (x>=0 && x<w && y>=0 && y<h)
+						mi |= INSIDE;
 
 					wnd->platform_api.mouse(wnd, x, y, (MouseInfo)mi);
 					break;
@@ -697,7 +749,27 @@ void a3dLoop()
 					if (!wnd || !wnd->platform_api.mouse)
 						break;
 
-					int b = SDL_GetMouseState(0,0);
+					// note:
+					// as there is no capture lost event in SDL
+					// we can't implement it in reliable way
+
+					if (Event.type == SDL_MOUSEBUTTONDOWN)
+					{
+						if (!wnd->captured)
+						{
+							SDL_CaptureMouse(SDL_TRUE);
+							wnd->captured = ev->button;
+						}
+					}
+					else
+					if (wnd->captured == ev->button)
+					{
+						SDL_CaptureMouse(SDL_FALSE);
+						wnd->captured = 0;
+					}
+
+					int x, y;
+					int b = SDL_GetMouseState(&x,&y);
 
 					int mi = 0;
 
@@ -708,7 +780,10 @@ void a3dLoop()
 					if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
 						mi |= RIGHT;
 
-					mi |= INSIDE;
+					int w, h;
+					SDL_GL_GetDrawableSize(wnd->win, &w, &h);
+					if (x >= 0 && x < w && y >= 0 && y < h)
+						mi |= INSIDE;
 
 					switch (ev->button)
 					{

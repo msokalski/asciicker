@@ -4066,7 +4066,6 @@ void my_render(A3D_WND* wnd)
 		{
 			sync = true;
 			mouse_in = 0;
-			printf("MOUSE OUT\n");
 		}
 		else
 		{
@@ -4074,7 +4073,6 @@ void my_render(A3D_WND* wnd)
 			{
 				sync = true;
 				mouse_in = 1;
-				printf("MOUSE IN\n");
 			}
 
 			io.MousePos = ImVec2((float)x, (float)y);
