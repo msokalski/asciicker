@@ -827,16 +827,26 @@ void a3dLoop()
 	}
 }
 
-bool a3dSetIcon(A3D_WND* wnd, const char* path)
+void _a3dSetIconData(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
-	// not critical
-	return false;
+	int wh = w * h;
+	uint32_t* buf = (uint32_t*)malloc(sizeof(uint32_t)*wh);
+	Convert_UI32_AARRGGBB(buf, f, w, h, data, palsize, palbuf);
+	SDL_Surface* icon = SDL_CreateRGBSurfaceFrom(buf,w,h,32,w*4,0xFF<<16,0xFF<<8,0xFF,0xFF<<24);
+	SDL_SetWindowIcon(((A3D_WND*)cookie)->win, icon);
+	SDL_FreeSurface(icon);
+	free(buf);
 }
 
 bool a3dSetIconData(A3D_WND* wnd, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 {
-	// not critical
-	return false;
+	_a3dSetIconData(wnd, f, w, h, data, palsize, palbuf);
+	return true;
+}
+
+bool a3dSetIcon(A3D_WND* wnd, const char* path)
+{
+	return a3dLoadImage(path, wnd, _a3dSetIconData);
 }
 
 void a3dSetTitle(A3D_WND* wnd, const char* utf8_name)
