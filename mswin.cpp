@@ -1026,9 +1026,12 @@ void a3dLoop() // infinite untill all windows are destroyed
 	A3D_WND* wnd = wnd_head;
 	while (wnd)
 	{
-		RECT rc;
-		GetClientRect(wnd->hwnd, &rc);
-		wnd->platform_api.resize(wnd, rc.right, rc.bottom);
+		if (wnd->platform_api.resize)
+		{
+			RECT rc;
+			GetClientRect(wnd->hwnd, &rc);
+			wnd->platform_api.resize(wnd, rc.right, rc.bottom);
+		}
 		wnd = wnd->next;
 	}
 

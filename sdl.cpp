@@ -15,12 +15,14 @@
 
 #include "upng.h"
 
+#ifdef _WIN32
+#include <SDL.h>
+#include <SDL_opengl.h>
+#else
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
+#endif
 #include <GL/gl.h>
-
-typedef void SDL_WINDOW;
-typedef void SDL_GL_CTX;
 
 A3D_WND* wnd_head = 0;
 A3D_WND* wnd_tail = 0;
@@ -64,7 +66,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
 	}
 
-	int x=0, y=0, w = 800, h = 600;
+	int x=100, y=100, w = 800, h = 600;
 	if (gd->wnd_xywh)
 	{
 		x = gd->wnd_xywh[0];
@@ -76,6 +78,7 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->win = SDL_CreateWindow("ASCIIID SDL", x, y, w, h, 
 		SDL_WINDOW_ALLOW_HIGHDPI | 
 		SDL_WINDOW_OPENGL | 
+		SDL_WINDOW_RESIZABLE |
 		SDL_WINDOW_HIDDEN);
 
 	wnd->rc = SDL_GL_CreateContext(wnd->win);
@@ -86,11 +89,11 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	// note
 	// wnd->rc is now current
 
+	SDL_GL_GetDrawableSize(wnd->win, &w, &h);
+
 	if (wnd->platform_api.init)
 		wnd->platform_api.init(wnd);
 
-	SDL_GL_GetDrawableSize(wnd->win, &w, &h);
-	
 	if (wnd->platform_api.resize)
 		wnd->platform_api.resize(wnd, w,h);
 
@@ -163,6 +166,152 @@ void* a3dGetCookie(A3D_WND* wnd)
 {
 	return wnd->cookie;
 }
+
+int A3D2SDL[] = 
+{
+	SDL_SCANCODE_UNKNOWN,
+
+	SDL_SCANCODE_BACKSPACE,
+	SDL_SCANCODE_TAB,
+	SDL_SCANCODE_RETURN,
+
+	SDL_SCANCODE_PAUSE,
+	SDL_SCANCODE_ESCAPE,
+
+	SDL_SCANCODE_SPACE,
+	SDL_SCANCODE_PAGEUP,
+	SDL_SCANCODE_PAGEDOWN,
+	SDL_SCANCODE_END,
+	SDL_SCANCODE_HOME,
+	SDL_SCANCODE_LEFT,
+	SDL_SCANCODE_UP,
+	SDL_SCANCODE_RIGHT,
+	SDL_SCANCODE_DOWN,
+
+	SDL_SCANCODE_PRINTSCREEN,
+	SDL_SCANCODE_INSERT,
+	SDL_SCANCODE_DELETE,
+
+	SDL_SCANCODE_0,
+	SDL_SCANCODE_1,
+	SDL_SCANCODE_2,
+	SDL_SCANCODE_3,
+	SDL_SCANCODE_4,
+	SDL_SCANCODE_5,
+	SDL_SCANCODE_6,
+	SDL_SCANCODE_7,
+	SDL_SCANCODE_8,
+	SDL_SCANCODE_9,
+
+	SDL_SCANCODE_A,
+	SDL_SCANCODE_B,
+	SDL_SCANCODE_C,
+	SDL_SCANCODE_D,
+	SDL_SCANCODE_E,
+	SDL_SCANCODE_F,
+	SDL_SCANCODE_G,
+	SDL_SCANCODE_H,
+	SDL_SCANCODE_I,
+	SDL_SCANCODE_J,
+	SDL_SCANCODE_K,
+	SDL_SCANCODE_L,
+	SDL_SCANCODE_M,
+	SDL_SCANCODE_N,
+	SDL_SCANCODE_O,
+	SDL_SCANCODE_P,
+	SDL_SCANCODE_Q,
+	SDL_SCANCODE_R,
+	SDL_SCANCODE_S,
+	SDL_SCANCODE_T,
+	SDL_SCANCODE_U,
+	SDL_SCANCODE_V,
+	SDL_SCANCODE_W,
+	SDL_SCANCODE_X,
+	SDL_SCANCODE_Y,
+	SDL_SCANCODE_Z,
+
+	SDL_SCANCODE_LGUI,
+	SDL_SCANCODE_RGUI,
+	SDL_SCANCODE_APPLICATION,
+
+	SDL_SCANCODE_KP_0,
+	SDL_SCANCODE_KP_1,
+	SDL_SCANCODE_KP_2,
+	SDL_SCANCODE_KP_3,
+	SDL_SCANCODE_KP_4,
+	SDL_SCANCODE_KP_5,
+	SDL_SCANCODE_KP_6,
+	SDL_SCANCODE_KP_7,
+	SDL_SCANCODE_KP_8,
+	SDL_SCANCODE_KP_9,
+	SDL_SCANCODE_KP_MULTIPLY,
+	SDL_SCANCODE_KP_DIVIDE,
+	SDL_SCANCODE_KP_PLUS,
+	SDL_SCANCODE_KP_MINUS,
+	SDL_SCANCODE_KP_DECIMAL,
+	SDL_SCANCODE_KP_ENTER,
+
+	SDL_SCANCODE_F1,
+	SDL_SCANCODE_F2,
+	SDL_SCANCODE_F3,
+	SDL_SCANCODE_F4,
+	SDL_SCANCODE_F5,
+	SDL_SCANCODE_F6,
+	SDL_SCANCODE_F7,
+	SDL_SCANCODE_F8,
+	SDL_SCANCODE_F9,
+	SDL_SCANCODE_F10,
+	SDL_SCANCODE_F11,
+	SDL_SCANCODE_F12,
+	SDL_SCANCODE_F13,
+	SDL_SCANCODE_F14,
+	SDL_SCANCODE_F15,
+	SDL_SCANCODE_F16,
+	SDL_SCANCODE_F17,
+	SDL_SCANCODE_F18,
+	SDL_SCANCODE_F19,
+	SDL_SCANCODE_F20,
+	SDL_SCANCODE_F21,
+	SDL_SCANCODE_F22,
+	SDL_SCANCODE_F23,
+	SDL_SCANCODE_F24,
+
+	SDL_SCANCODE_CAPSLOCK,
+	SDL_SCANCODE_NUMLOCKCLEAR,
+	SDL_SCANCODE_SCROLLLOCK,
+
+	SDL_SCANCODE_LSHIFT,
+	SDL_SCANCODE_RSHIFT,
+	SDL_SCANCODE_LCTRL,
+	SDL_SCANCODE_RCTRL,
+	SDL_SCANCODE_LALT,
+	SDL_SCANCODE_RALT,
+
+	SDL_SCANCODE_SEMICOLON,
+	SDL_SCANCODE_EQUALS,
+	SDL_SCANCODE_COMMA,
+	SDL_SCANCODE_MINUS,
+	SDL_SCANCODE_PERIOD,
+	SDL_SCANCODE_SLASH,
+	SDL_SCANCODE_GRAVE,
+
+	SDL_SCANCODE_LEFTBRACKET,
+	SDL_SCANCODE_RIGHTBRACKET,
+	SDL_SCANCODE_BACKSLASH,
+	SDL_SCANCODE_APOSTROPHE,
+
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN,
+	SDL_SCANCODE_UNKNOWN
+};
 
 KeyInfo SDL2A3D[/*128*/] = 
 {
@@ -258,7 +407,7 @@ KeyInfo SDL2A3D[/*128*/] =
     A3D_DOWN,
     A3D_UP,
 
-    A3D_NONE, //NUMLOCKCLEAR
+    A3D_NUMLOCK,
 
     A3D_NUMPAD_DIVIDE,
     A3D_NUMPAD_MULTIPLY,
@@ -312,6 +461,20 @@ KeyInfo SDL2A3D[/*128*/] =
 
 void a3dLoop()
 {
+	// for all created wnds, force size notifications
+	A3D_WND* wnd = wnd_head;
+	while (wnd)
+	{
+		if (wnd->platform_api.resize)
+		{
+			int w, h;
+			SDL_GL_GetDrawableSize(wnd->win, &w, &h);
+			wnd->platform_api.resize(wnd, w, h);
+		}
+
+		wnd = wnd->next;
+	}
+
 	bool Running = true;
 	while (Running)
 	{
@@ -321,18 +484,30 @@ void a3dLoop()
 			switch (Event.type)
 			{
 				case SDL_QUIT: Running = 0; break;
-				
-				case SDL_KEYDOWN:
-				case SDL_KEYUP:
+
+				case SDL_TEXTINPUT:
 				{
-					SDL_KeyboardEvent* ev = &Event.key;
+					SDL_TextInputEvent* ev = &Event.text;
 
-					if (ev->keysym.scancode < 0 || ev->keysym.scancode >= 128)
-						break; 
+					A3D_WND* wnd = wnd_head;
+					while (wnd)
+					{
+						if (SDL_GetWindowID(wnd->win) == ev->windowID)
+							break;
+						wnd = wnd->next;
+					}
 
-					KeyInfo ki = SDL2A3D[ev->keysym.scancode];
-					if (ki == A3D_NONE)
-						break;
+					if (wnd && wnd->platform_api.keyb_char)
+					{
+						// actually we should convert utf8 to wchar_t
+						wnd->platform_api.keyb_char(wnd, (wchar_t)ev->text[0]);
+					}
+					break;
+				}
+				
+				case SDL_WINDOWEVENT:
+				{
+					SDL_WindowEvent* ev = &Event.window;
 
 					A3D_WND* wnd = wnd_head;
 					while (wnd)
@@ -345,17 +520,98 @@ void a3dLoop()
 					if (!wnd)
 						break;
 
-					if (wnd->platform_api.keyb_key)
+					switch (ev->event)
 					{
-						wnd->platform_api.keyb_key(wnd,ki,Event.type==SDL_KEYDOWN);
+						case SDL_WINDOWEVENT_CLOSE:
+							if (wnd->platform_api.close)
+								wnd->platform_api.close(wnd);
+							break;
+
+						case SDL_WINDOWEVENT_ENTER:
+						case SDL_WINDOWEVENT_LEAVE:
+							if (wnd->platform_api.mouse)
+							{
+								int x, y;
+								int b = SDL_GetMouseState(&x,&y);
+
+								int mi = ev->event == SDL_WINDOWEVENT_ENTER ? ENTER : LEAVE;
+
+								if (b & SDL_BUTTON(SDL_BUTTON_LEFT))
+									mi |= LEFT;
+								if (b & SDL_BUTTON(SDL_BUTTON_MIDDLE))
+									mi |= MIDDLE;
+								if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
+									mi |= RIGHT;
+
+								mi |= INSIDE;
+
+								wnd->platform_api.mouse(wnd, x,y, (MouseInfo)mi);
+							}
+
+							break;
+
+						case SDL_WINDOWEVENT_FOCUS_GAINED:
+						case SDL_WINDOWEVENT_FOCUS_LOST:
+							if (wnd->platform_api.keyb_focus)
+								wnd->platform_api.keyb_focus(wnd, ev->event == SDL_WINDOWEVENT_FOCUS_GAINED);
+							break;
+
+						case SDL_WINDOWEVENT_SIZE_CHANGED:
+							if (wnd->platform_api.resize)
+							{
+								int w, h;
+								SDL_GL_GetDrawableSize(wnd->win, &w, &h);
+								wnd->platform_api.resize(wnd, w,h);
+							}
+							break;
 					}
 
-					/*
-					if (wnd->platform_api.keyb_char && Event.type==SDL_KEYDOWN)
+					break;
+				}
+
+				case SDL_KEYDOWN:
+				case SDL_KEYUP:
+				{
+					SDL_KeyboardEvent* ev = &Event.key;
+
+					if (ev->keysym.scancode < 0)
+						break; 
+
+					KeyInfo ki;
+					
+					switch (ev->keysym.scancode)
 					{
-						wnd->platform_api.keyb_char(wnd,(wchar_t)Event.key.keysym.unicode);
+						// handle big codes that didn't
+						// fit well into mapping table
+						case SDL_SCANCODE_LCTRL:	ki = A3D_LCTRL;		break;
+						case SDL_SCANCODE_LSHIFT:	ki = A3D_LSHIFT;	break;
+						case SDL_SCANCODE_LALT:		ki = A3D_LALT;		break;
+						case SDL_SCANCODE_LGUI:		ki = A3D_LWIN;		break;
+						case SDL_SCANCODE_RCTRL:	ki = A3D_RCTRL;		break;
+						case SDL_SCANCODE_RSHIFT:	ki = A3D_RSHIFT;	break;
+						case SDL_SCANCODE_RALT:		ki = A3D_RALT;		break;
+						case SDL_SCANCODE_RGUI:		ki = A3D_RWIN;		break;
+
+						default:
+							if (ev->keysym.scancode < 128)
+								ki = SDL2A3D[ev->keysym.scancode];
+							else
+								ki = A3D_NONE;
 					}
-					*/
+
+					if (ki == A3D_NONE)
+						break;
+
+					A3D_WND* wnd = wnd_head;
+					while (wnd)
+					{
+						if (SDL_GetWindowID(wnd->win) == ev->windowID)
+							break;
+						wnd = wnd->next;
+					}
+
+					if (wnd && wnd->platform_api.keyb_key)
+						wnd->platform_api.keyb_key(wnd,ki,Event.type==SDL_KEYDOWN);
 
 					break;
 				}
@@ -375,8 +631,54 @@ void a3dLoop()
 					if (!wnd || !wnd->platform_api.mouse)
 						break;
 
-					wnd->platform_api.mouse(wnd,ev->x,ev->y,MOVE);
+					int b = SDL_GetMouseState(0,0);
+
+					int mi = MOVE;
+
+					if (b & SDL_BUTTON(SDL_BUTTON_LEFT))
+						mi |= LEFT;
+					if (b & SDL_BUTTON(SDL_BUTTON_MIDDLE))
+						mi |= MIDDLE;
+					if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
+						mi |= RIGHT;
+
+					mi |= INSIDE;
+
+					wnd->platform_api.mouse(wnd,ev->x,ev->y,(MouseInfo)mi);
 					break;					
+				}
+
+				case SDL_MOUSEWHEEL:
+				{
+					SDL_MouseWheelEvent* ev = &Event.wheel;
+
+					A3D_WND* wnd = wnd_head;
+					while (wnd)
+					{
+						if (SDL_GetWindowID(wnd->win) == ev->windowID)
+							break;
+						wnd = wnd->next;
+					}
+
+					if (!wnd || !wnd->platform_api.mouse)
+						break;
+
+					int x, y;
+					int b = SDL_GetMouseState(&x, &y);
+
+					int mi = ev->y > 0 ? WHEEL_UP : ev->y < 0 ? WHEEL_DN : 0;
+
+					if (b & SDL_BUTTON(SDL_BUTTON_LEFT))
+						mi |= LEFT;
+					if (b & SDL_BUTTON(SDL_BUTTON_MIDDLE))
+						mi |= MIDDLE;
+					if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
+						mi |= RIGHT;
+
+					mi |= INSIDE;
+
+					wnd->platform_api.mouse(wnd, x, y, (MouseInfo)mi);
+					break;
 				}
 
 				case SDL_MOUSEBUTTONDOWN:
@@ -395,34 +697,34 @@ void a3dLoop()
 					if (!wnd || !wnd->platform_api.mouse)
 						break;
 
-					wnd->platform_api.mouse(wnd,ev->x,ev->y,
-						Event.type == SDL_MOUSEBUTTONDOWN ? LEFT_DN: LEFT_UP );
+					int b = SDL_GetMouseState(0,0);
+
+					int mi = 0;
+
+					if (b & SDL_BUTTON(SDL_BUTTON_LEFT))
+						mi |= LEFT;
+					if (b & SDL_BUTTON(SDL_BUTTON_MIDDLE))
+						mi |= MIDDLE;
+					if (b & SDL_BUTTON(SDL_BUTTON_RIGHT))
+						mi |= RIGHT;
+
+					mi |= INSIDE;
+
+					switch (ev->button)
+					{
+						case SDL_BUTTON_LEFT:   mi |= Event.type == SDL_MOUSEBUTTONDOWN ? LEFT_DN : LEFT_UP; break;
+						case SDL_BUTTON_MIDDLE: mi |= Event.type == SDL_MOUSEBUTTONDOWN ? MIDDLE_DN : MIDDLE_UP; break;
+						case SDL_BUTTON_RIGHT:  mi |= Event.type == SDL_MOUSEBUTTONDOWN ? RIGHT_DN : RIGHT_UP; break;
+					}
+
+					wnd->platform_api.mouse(wnd,ev->x,ev->y, (MouseInfo)mi);
 					break;											
 				}
-				case SDL_MOUSEWHEEL:
-					break;
-			}
-
-			if (Event.type == SDL_KEYDOWN)
-			{
-				switch (Event.key.keysym.sym)
-				{
-				case SDLK_ESCAPE:
-					Running = 0;
-					break;
-				default:
-					break;
-				}
-			}
-			else if (Event.type == SDL_QUIT)
-			{
-				Running = 0;
 			}
 		}
 
 		A3D_WND* wnd = wnd_head;
 		A3D_WND* swap = 0;
-		A3D_WND* share = 0;
 
 		while (wnd)
 		{
@@ -444,7 +746,7 @@ void a3dLoop()
 
 		if (swap)
 		{
-			SDL_GL_SetSwapInterval(0);
+			SDL_GL_SetSwapInterval(1);
 			SDL_GL_SwapWindow(swap->win);
 		}
 	}
@@ -470,7 +772,7 @@ void a3dSetTitle(A3D_WND* wnd, const char* utf8_name)
 int a3dGetTitle(A3D_WND* wnd, char* utf8_name, int size)
 {
 	const char* name = SDL_GetWindowTitle(wnd->win);
-	int len = strlen(name);
+	int len = (int)strlen(name);
 	len = len < size-1 ? len : size-1;
 	if (utf8_name && size>0)
 	{
@@ -523,7 +825,16 @@ bool a3dLoadImage(const char* path, void* cookie, void(*cb)(void* cookie, A3D_Im
 
 bool a3dGetKeyb(A3D_WND* wnd, KeyInfo ki)
 {
-	return false; // later
+	if (ki < 0 || ki >= 128)
+		return false;
+	int scan = A3D2SDL[ki];
+
+	int n = 0;
+	const Uint8* arr = SDL_GetKeyboardState(&n);
+	if (n <= scan)
+		return false;
+
+	return arr[scan] != 0;
 }
 
 void a3dPushContext(A3D_PUSH_CONTEXT* ctx)

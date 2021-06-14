@@ -966,7 +966,8 @@ void a3dLoop()
 	A3D_WND* wnd = wnd_head;
 	while (wnd)
 	{
-		wnd->platform_api.resize(wnd, wnd->gwa_width, wnd->gwa_height);
+		if (wnd->platform_api.resize)
+			wnd->platform_api.resize(wnd, wnd->gwa_width, wnd->gwa_height);
 		wnd = wnd->next;
 	}
 
