@@ -172,6 +172,7 @@
   <ItemGroup>
     <ClInclude Include="enemygen.h" />
     <ClInclude Include="game.h" />
+    <ClInclude Include="gl45_emu.h" />
     <ClInclude Include="inventory.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="render.h" />
@@ -205,6 +206,7 @@
     </ClCompile>
     <ClCompile Include="enemygen.cpp" />
     <ClCompile Include="game.cpp" />
+    <ClCompile Include="gl45_emu.cpp" />
     <ClCompile Include="inventory.cpp" />
     <ClCompile Include="mswin.cpp" />
     <ClCompile Include="render.cpp" />

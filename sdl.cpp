@@ -27,6 +27,21 @@
 A3D_WND* wnd_head = 0;
 A3D_WND* wnd_tail = 0;
 
+struct GlobalSDL
+{
+	GlobalSDL()
+	{
+		SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+	}
+
+	~GlobalSDL()
+	{
+		SDL_Quit();
+	}
+};
+
+static GlobalSDL sdl;
+
 struct A3D_WND
 {
 	A3D_WND* prev;
@@ -100,6 +115,16 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		SDL_WINDOW_HIDDEN);
 
 	SDL_SetWindowData(wnd->win, "a3d", wnd);
+
+	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, gd->alpha_bits);
+	SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, gd->color_bits);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, gd->depth_bits);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, gd->stencil_bits);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, gd->flags & GraphicsDesc::FLAGS::DOUBLE_BUFFER ? 1:0);
+
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, gd->version[0]);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, gd->version[1]);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
 	wnd->rc = SDL_GL_CreateContext(wnd->win);
 

@@ -21,6 +21,7 @@ BIN := .run/game
 # LDLIBS := -lutil
 
 SRCS :=	gl.c \
+		gl45_emu.cpp \
 		x11.cpp \
 		sdl.cpp \
         term.cpp \

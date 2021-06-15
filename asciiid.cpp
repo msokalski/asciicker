@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "gl.h"
+#include "gl45_emu.h"
 
 #include "rgba8.h"
 
@@ -397,18 +398,18 @@ struct MyMaterial : Material
 			}
 		}
 
-		glCreateTextures(GL_TEXTURE_2D, 1, &tex);
+		gl3CreateTextures(GL_TEXTURE_2D, 1, &tex);
 
-		glTextureStorage2D(tex, 1, GL_RGBA8UI, 128, 256);
+		gl3TextureStorage2D(tex, 1, GL_RGBA8UI, 128, 256);
 
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(tex, 0, 0, 0, 128, 256, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, m->shade );
+		gl3TextureSubImage2D(tex, 0, 0, 0, 128, 256, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, m->shade );
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-		glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		gl3TextureParameteri2D(tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		gl3TextureParameteri2D(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	}
 
 	void Update()
@@ -417,7 +418,7 @@ struct MyMaterial : Material
 		int y = (int)(this-m);
 		// update this single material texture slice !
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(tex, 0, 0, y, 128, 1, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, shade);
+		gl3TextureSubImage2D(tex, 0, 0, y, 128, 1, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, shade);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 	}
 
@@ -815,21 +816,21 @@ struct MyFont
 		sprintf(export_path,"%s.psf",path);
 		WritePSF(export_path, w,h,buf,24);
 
-		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
-		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
+		gl3CreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
+		gl3TextureStorage2D(fnt->tex, 1, ifmt, w, h);
 
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+		gl3TextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
 		float white_transp[4] = { 1,1,1,0 };
 
-		glTextureParameteri(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
-		glTextureParameterfv(fnt->tex, GL_TEXTURE_BORDER_COLOR, white_transp);
+		gl3TextureParameterfv2D(fnt->tex, GL_TEXTURE_BORDER_COLOR, white_transp);
 
 
 		/*
@@ -862,13 +863,13 @@ struct MyFont
 	void SetTexel(int x, int y, uint8_t val)
 	{
 		uint8_t texel[4] = { 0xFF,0xFF,0xFF,val };
-		glTextureSubImage2D(tex, 0, x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
+		gl3TextureSubImage2D(tex, 0, x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
 	}
 
 	uint8_t GetTexel(int x, int y)
 	{
 		uint8_t texel[4];
-		glGetTextureSubImage(tex, 0, x, y, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 4, texel);
+		gl3GetTextureSubImage(tex, 0, x, y, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 4, texel);
 		return texel[3];
 	}
 
@@ -1015,6 +1016,11 @@ uint64_t g_Time; // in microsecs
 
 struct RenderContext
 {
+	int uni_ansi_vp;
+	int uni_ansi_wh;
+	int uni_ansi;
+	int uni_font;
+
 	void Create()
 	{
 		GLsizei loglen = 999;
@@ -1023,9 +1029,9 @@ struct RenderContext
 
 		// sprite AnsiCell buffer, texture and shader
 		const char* term_vs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			CODE(
-				layout(location = 0) uniform ivec2 ansi_vp;  // viewport size in cells
+				/*layout(location = 0)*/ uniform ivec2 ansi_vp;  // viewport size in cells
 				layout(location = 0) in vec2 uv; // normalized to viewport size
 				out vec2 cell_coord;
 				void main()
@@ -1036,13 +1042,13 @@ struct RenderContext
 			);
 
 		const char* term_fs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			DEFN2(P(r, g, b), vec3(r / 6., g / 7., b / 6.))
 			CODE(
 				layout(location = 0) out vec4 color;
-				layout(location = 1) uniform sampler2D ansi;
-				layout(location = 2) uniform sampler2D font;
-				layout(location = 3) uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
+				/*layout(location = 1)*/ uniform sampler2D ansi;
+				/*layout(location = 2)*/ uniform sampler2D font;
+				/*layout(location = 3)*/ uniform ivec2 ansi_wh;  // ansi texture size (in cells), constant = 160x90
 				in vec2 cell_coord;
 
 				/*
@@ -1149,24 +1155,28 @@ struct RenderContext
 		if (loglen)
 			printf("%s", logstr);
 
+		uni_ansi_vp = glGetUniformLocation(ansi_prg, "ansi_vp");
+		uni_ansi_wh = glGetUniformLocation(ansi_prg, "ansi_wh");
+		uni_ansi = glGetUniformLocation(ansi_prg, "ansi");
+		uni_font = glGetUniformLocation(ansi_prg, "font");
 
 		ansi_buf_size[0] = 64;
 		ansi_buf_size[1] = 64;
 
 		ansi_buf = (AnsiCell*)malloc(sizeof(AnsiCell)*ansi_buf_size[0]* ansi_buf_size[1]);
-		glCreateTextures(GL_TEXTURE_2D, 1, &ansi_tex);
-		glTextureStorage2D(ansi_tex, 1, GL_RGBA8, ansi_buf_size[0], ansi_buf_size[1]);
-		glTextureParameteri(ansi_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(ansi_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(ansi_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTextureParameteri(ansi_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		gl3CreateTextures(GL_TEXTURE_2D, 1, &ansi_tex);
+		gl3TextureStorage2D(ansi_tex, 1, GL_RGBA8, ansi_buf_size[0], ansi_buf_size[1]);
+		gl3TextureParameteri2D(ansi_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(ansi_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(ansi_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		gl3TextureParameteri2D(ansi_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-		glCreateBuffers(1, &ansi_vbo);
+		gl3CreateBuffers(1, &ansi_vbo);
 		float vbo_data[] = { 0,0, 1,0, 1,1, 0,1 };
-		glNamedBufferStorage(ansi_vbo, 4 * sizeof(float[2]), 0, GL_DYNAMIC_STORAGE_BIT);
-		glNamedBufferSubData(ansi_vbo, 0, 4 * sizeof(float[2]), vbo_data);
+		gl3NamedBufferStorage(ansi_vbo, 4 * sizeof(float[2]), 0, GL_DYNAMIC_STORAGE_BIT);
+		gl3NamedBufferSubData(ansi_vbo, 0, 4 * sizeof(float[2]), vbo_data);
 
-		glCreateVertexArrays(1, &ansi_vao);
+		gl3CreateVertexArrays(1, &ansi_vao);
 		glBindVertexArray(ansi_vao);
 		glBindBuffer(GL_ARRAY_BUFFER, ansi_vao);
 		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float[2]), (void*)0);
@@ -1174,11 +1184,11 @@ struct RenderContext
 		glBindVertexArray(0);
 
 		// meshes & bsp
-		glCreateBuffers(1, &mesh_vbo);
+		gl3CreateBuffers(1, &mesh_vbo);
 		int mesh_face_size = 3*sizeof(float[3]) + 3*sizeof(uint8_t[4]) + sizeof(uint32_t); // 3*pos_xyz, visual, rgba
-		glNamedBufferStorage(mesh_vbo, 1024 * mesh_face_size, 0, GL_DYNAMIC_STORAGE_BIT);
+		gl3NamedBufferStorage(mesh_vbo, 1024 * mesh_face_size, 0, GL_DYNAMIC_STORAGE_BIT);
 
-		glCreateVertexArrays(1, &mesh_vao);
+		gl3CreateVertexArrays(1, &mesh_vao);
 		glBindVertexArray(mesh_vao);
 		glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, mesh_face_size, (void*)0);
@@ -1200,7 +1210,7 @@ struct RenderContext
 		glBindVertexArray(0);
 
 		const char* mesh_vs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			CODE(
 				layout(location = 0) in vec3 a;
 				layout(location = 1) in vec3 b;
@@ -1228,7 +1238,7 @@ struct RenderContext
 			);
 
 		const char* mesh_gs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			CODE(
 				layout(points) in;
 				layout(triangle_strip, max_vertices = 3) out;				
@@ -1255,24 +1265,24 @@ struct RenderContext
 					vec3 b = vb[0];
 					vec3 c = vc[0];
 
-					matid = vis[0] & 0xFF;
+					matid = vis[0] & uint(0xFF);
 					nrm = normalize( cross( b-a, c-a ) );
 					view_nrm = normalize((tm * vec4(nrm, 0)).xyz);
 
-					shade = float((vis[0] >> 8) & 0x7f) / 8.0;
-					elev = float((vis[0] >> 15) & 0x1);
+					shade = float((vis[0] >> 8) & uint(0x7f)) / 8.0;
+					elev = float((vis[0] >> 15) & uint(0x1));
 					tint = vca[0];
 					gl_Position = tm * vec4(a, 1.0);
 					EmitVertex();
 
-					shade = float((vis[0] >> 16) & 0x7f) / 8.0;
-					elev = float((vis[0] >> 23) & 0x1);
+					shade = float((vis[0] >> 16) & uint(0x7f)) / 8.0;
+					elev = float((vis[0] >> 23) & uint(0x1));
 					tint = vcb[0];
 					gl_Position = tm * vec4(b, 1.0);
 					EmitVertex();
 
-					shade = float((vis[0] >> 24) & 0x7f) / 8.0;
-					elev = float((vis[0] >> 31) & 0x1);
+					shade = float((vis[0] >> 24) & uint(0x7f)) / 8.0;
+					elev = float((vis[0] >> 31) & uint(0x1));
 					tint = vcc[0];
 					gl_Position = tm * vec4(c, 1.0);
 					EmitVertex();
@@ -1283,7 +1293,7 @@ struct RenderContext
 
 
 		const char* mesh_fs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			CODE(
 				uniform sampler2D a_tex;
 				uniform sampler2D f_tex;
@@ -1321,7 +1331,7 @@ struct RenderContext
 				
 				void main()
 				{
-					if (matid != 0)
+					if (matid != uint(0))
 					{
 						vec2 cell_coord = tint.rg * sprite_wh;
 
@@ -1378,7 +1388,7 @@ struct RenderContext
 			);
 
 		const char* bsp_vs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			CODE(
 				layout(location = 0) in vec3 a;
 				layout(location = 1) in vec3 b;
@@ -1394,7 +1404,7 @@ struct RenderContext
 			);
 
 		const char* bsp_gs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			CODE(
 				layout(points) in;
 				layout(line_strip, max_vertices = 18) out;				
@@ -1445,7 +1455,7 @@ struct RenderContext
 
 
 		const char* bsp_fs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			CODE(
 
 				layout(location = 0) out vec4 color;
@@ -1459,10 +1469,10 @@ struct RenderContext
 
 
 		// patches
-		glCreateBuffers(1, &vbo);
-		glNamedBufferStorage(vbo, TERRAIN_TEXHEAP_CAPACITY * sizeof(GLint[5]), 0, GL_DYNAMIC_STORAGE_BIT);
+		gl3CreateBuffers(1, &vbo);
+		gl3NamedBufferStorage(vbo, TERRAIN_TEXHEAP_CAPACITY * sizeof(GLint[5]), 0, GL_DYNAMIC_STORAGE_BIT);
 
-		glCreateVertexArrays(1, &vao);
+		gl3CreateVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glVertexAttribIPointer(0, 4, GL_INT, sizeof(GLint[5]), (void*)0);
@@ -1473,10 +1483,10 @@ struct RenderContext
 		glBindVertexArray(0);
 
 		// ghost
-		glCreateBuffers(1, &ghost_vbo);
-		glNamedBufferStorage(ghost_vbo, sizeof(GLint[3*4*HEIGHT_CELLS]), 0, GL_DYNAMIC_STORAGE_BIT);
+		gl3CreateBuffers(1, &ghost_vbo);
+		gl3NamedBufferStorage(ghost_vbo, sizeof(GLint[3*4*HEIGHT_CELLS]), 0, GL_DYNAMIC_STORAGE_BIT);
 
-		glCreateVertexArrays(1, &ghost_vao);
+		gl3CreateVertexArrays(1, &ghost_vao);
 		glBindVertexArray(ghost_vao);
 		glBindBuffer(GL_ARRAY_BUFFER, ghost_vbo);
 		glVertexAttribIPointer(0, 3, GL_INT, sizeof(GLint[3]), (void*)0);
@@ -1485,7 +1495,7 @@ struct RenderContext
 		glBindVertexArray(0);
 
 		const char* ghost_vs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			DEFN(HEIGHT_SCALE)
 			DEFN(HEIGHT_CELLS)
 			DEFN(VISUAL_CELLS)
@@ -1502,7 +1512,7 @@ struct RenderContext
 			);
 
 		const char* ghost_fs_src =
-			CODE(#version 450\n)
+			CODE(#version 330\n)
 			DEFN(HEIGHT_SCALE)
 			DEFN(HEIGHT_CELLS)
 			DEFN(VISUAL_CELLS)
@@ -1516,7 +1526,7 @@ struct RenderContext
 			);
 
 		const char* vs_src = 
-		CODE(#version 450\n)
+		CODE(#version 330\n)
 		DEFN(HEIGHT_SCALE)
 		DEFN(HEIGHT_CELLS)
 		DEFN(VISUAL_CELLS)
@@ -1534,13 +1544,13 @@ struct RenderContext
 		);
 
 		const char* gs_src = 
-		CODE(#version 450\n)
+		CODE(#version 330\n)
 		DEFN(HEIGHT_SCALE)
 		DEFN(HEIGHT_CELLS)
 		DEFN(VISUAL_CELLS)
 		CODE(
 			layout(points) in;
-			layout(triangle_strip, max_vertices = 4*HEIGHT_CELLS*HEIGHT_CELLS ) out;
+			layout(triangle_strip, max_vertices = 64/*4*HEIGHT_CELLS*HEIGHT_CELLS*/ ) out;
 
 			uniform vec4 br;
 			uniform usampler2D z_tex;
@@ -1660,9 +1670,9 @@ struct RenderContext
 						norm[2] = cross(xyz[3] - xyz[1], xyz[0] - xyz[1]);
 						norm[3] = cross(xyz[0] - xyz[2], xyz[3] - xyz[2]);
 
-						uint r = rot & 1;
+						uint r = rot & uint(1);
 
-						normal = norm[2 * r];
+						normal = norm[2 * int(r)];
 						normal.xy *= 1.0 / HEIGHT_SCALE;
 
 						{
@@ -1696,7 +1706,7 @@ struct RenderContext
 							EmitVertex();
 						}
 
-						normal = norm[2 * r + 1];
+						normal = norm[2 * int(r) + 1];
 						normal.xy *= 1.0 / HEIGHT_SCALE;
 
 						{
@@ -1710,7 +1720,6 @@ struct RenderContext
 							EmitVertex();
 						}
 
-
 						rot = rot >> 1;
 						EndPrimitive();
 					}
@@ -1719,7 +1728,7 @@ struct RenderContext
 		);
 
 		const char* fs_src = 
-		CODE(#version 450\n)
+		CODE(#version 330\n)
 		DEFN(HEIGHT_SCALE)
 		DEFN(HEIGHT_CELLS)
 		DEFN(VISUAL_CELLS)
@@ -1780,9 +1789,9 @@ struct RenderContext
 				bool elevated = false;
 
 				{
-					uint matid = visual & 0xFF;
-					uint shade = (visual >> 8) & 0x7F;
-					uint elev  = (visual >> 15) & 0x1;
+					uint matid = visual & uint(0xFF);
+					uint shade = (visual >> 8) & uint(0x7F);
+					uint elev  = (visual >> 15) & uint(0x1);
 
 					/*
 					if (mode == 1) // replace shade with lighting
@@ -1836,21 +1845,21 @@ struct RenderContext
 						- 3: screen shade map with lighting  /
 					*/
 
-					elevated = elev != 0;
+					elevated = elev != uint(0);
 
 					// convert elev to 0,1,2 material row of shades
 					elev = uint(1);
 
 					// sample material array
 					// y=0,1 -> descent; y=2,3 -> fill; y=4,5 -> ascent
-					uint mat_x = 2 * diffuse + 32 * elev;
-					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(0+mat_x, matid), 0);
-					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(1+mat_x, matid), 0);
+					uint mat_x = uint(2) * diffuse + uint(32) * elev;
+					uvec4 fill_rgbc = texelFetch(m_tex, ivec2(uint(0)+mat_x, matid), 0);
+					uvec4 fill_rgbp = texelFetch(m_tex, ivec2(uint(1)+mat_x, matid), 0);
 
 					//fill_rgbc.w = 44;
 
-					uvec2 font_size = textureSize(f_tex,0);
-					uvec2 glyph_size = font_size / 16;
+					uvec2 font_size = uvec2(textureSize(f_tex,0));
+					uvec2 glyph_size = font_size / uint(16);
 
 					vec2 glyph_fract = fract(gl_FragCoord.xy * fz / glyph_size);
 					glyph_fract.y = 1.0 - glyph_fract.y;
@@ -1864,7 +1873,7 @@ struct RenderContext
 						glyph_fract.y -= 1;
 
 					// sample font texture (pure alpha)
-					vec2 glyph_coord = vec2(fill_rgbc.w & 0xF, fill_rgbc.w >> 4);
+					vec2 glyph_coord = vec2(fill_rgbc.w & uint(0xF), fill_rgbc.w >> 4);
 					float glyph = texture(f_tex, (glyph_coord + glyph_fract) / 16.0).a;
 
 					// compose glyph
@@ -1943,8 +1952,8 @@ struct RenderContext
 				if (!gl_FrontFacing)
 					color.rgb = 0.25 * (vec3(1.0) - color.rgb);
 
-				float dx = 1.25*length(vec2(dFdxFine(uvh.x), dFdyFine(uvh.x)));
-				float dy = 1.25*length(vec2(dFdxFine(uvh.y), dFdyFine(uvh.y)));
+				float dx = 1.25*length(vec2(dFdx(uvh.x), dFdy(uvh.x)));
+				float dy = 1.25*length(vec2(dFdx(uvh.y), dFdy(uvh.y)));
 
 				vec2 d = vec2(dx, dy);
 
@@ -2256,7 +2265,7 @@ struct RenderContext
 
 		glUniformMatrix4fv(ghost_tm_loc, 1, GL_FALSE, ftm);
 
-		glNamedBufferSubData(ghost_vbo, 0, sizeof(GLint[3 * 4 * HEIGHT_CELLS]), buf);
+		gl3NamedBufferSubData(ghost_vbo, 0, sizeof(GLint[3 * 4 * HEIGHT_CELLS]), buf);
 
 		glUniform4f(ghost_cl_loc, 0, 0, 0, 1.0f);
 		glLineWidth(2.0f);
@@ -2266,7 +2275,7 @@ struct RenderContext
 		// flatten
 		for (b = 0; b < 4 * HEIGHT_CELLS; b++)
 			buf[3 * b + 2] = pz;
-		glNamedBufferSubData(ghost_vbo, 0, sizeof(GLint[3 * 4 * HEIGHT_CELLS]), buf);
+		gl3NamedBufferSubData(ghost_vbo, 0, sizeof(GLint[3 * 4 * HEIGHT_CELLS]), buf);
 
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -2375,9 +2384,9 @@ struct RenderContext
 
 		glBindVertexArray(mesh_vao);
 
-		glBindTextureUnit(2, ansi_tex);
-		glBindTextureUnit(3, font[active_font].tex);
-		glBindTextureUnit(4, pal_tex);
+		gl3BindTextureUnit2D(2, ansi_tex);
+		gl3BindTextureUnit2D(3, font[active_font].tex);
+		gl3BindTextureUnit3D(4, pal_tex);
 
 		//glEnable(GL_CULL_FACE);
 		//glCullFace(GL_BACK);
@@ -2504,12 +2513,12 @@ struct RenderContext
 					*dst = *src;
 				}
 			}
-			glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, rc->ansi_buf_size[0], cpy_h, GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
+			gl3TextureSubImage2D(rc->ansi_tex, 0, 0, 0, rc->ansi_buf_size[0], cpy_h, GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
 		}
 		else
 		{
 			int cpy_h = f->height < rc->ansi_buf_size[1] ? f->height : rc->ansi_buf_size[1];
-			glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, f->width, cpy_h, GL_RGBA, GL_UNSIGNED_BYTE, f->cell);
+			gl3TextureSubImage2D(rc->ansi_tex, 0, 0, 0, f->width, cpy_h, GL_RGBA, GL_UNSIGNED_BYTE, f->cell);
 		}
 
 
@@ -2646,9 +2655,9 @@ struct RenderContext
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-		glBindTextureUnit(2, 0);
-		glBindTextureUnit(3, 0);
-		glBindTextureUnit(4, 0);
+		gl3BindTextureUnit2D(2, 0);
+		gl3BindTextureUnit2D(3, 0);
+		gl3BindTextureUnit3D(4, 0);
 
 		glBindVertexArray(0);
 		glUseProgram(0);
@@ -2732,9 +2741,9 @@ struct RenderContext
 		glUniform1ui(br_matid_loc, (GLuint)active_material);
 		glBindVertexArray(vao);
 
-		glBindTextureUnit(2, MyMaterial::tex);
-		glBindTextureUnit(3, font[active_font].tex);
-		glBindTextureUnit(4, pal_tex);
+		gl3BindTextureUnit2D(2, MyMaterial::tex);
+		gl3BindTextureUnit2D(3, font[active_font].tex);
+		gl3BindTextureUnit3D(4, pal_tex);
 
 		head = 0;
 		patches = 0;
@@ -2783,10 +2792,10 @@ struct RenderContext
 				rc->page_tex = ta->page;
 
 				for (int u=0; u<2; u++)
-					glBindTextureUnit(u, rc->page_tex->tex[u]);
+					gl3BindTextureUnit2D(u, rc->page_tex->tex[u]);
 			}
 
-			glNamedBufferSubData(rc->vbo, 0, sizeof(GLint[5]) * buf->size, buf->data);
+			gl3NamedBufferSubData(rc->vbo, 0, sizeof(GLint[5]) * buf->size, buf->data);
 			glDrawArrays(GL_POINTS, 0, buf->size);
 
 			if (buf->prev)
@@ -2817,11 +2826,11 @@ struct RenderContext
 				page_tex = tp;
 
 				for (int u=0; u<2; u++)
-					glBindTextureUnit(u, page_tex->tex[u]);
+					gl3BindTextureUnit2D(u, page_tex->tex[u]);
 			}
 
 			draws++;
-			glNamedBufferSubData(vbo, 0, sizeof(GLint[5]) * buf->size, buf->data);
+			gl3NamedBufferSubData(vbo, 0, sizeof(GLint[5]) * buf->size, buf->data);
 			glDrawArrays(GL_POINTS, 0, buf->size);
 
 			tp = buf->next;
@@ -2834,7 +2843,7 @@ struct RenderContext
 		head = 0;
 
 		for (int u = 0; u < 5; u++)
-			glBindTextureUnit(u,0);
+			gl3BindTextureUnit2D(u,0);
 
 		glBindVertexArray(0);
 		glUseProgram(0);
@@ -3382,12 +3391,12 @@ void Palettize(const uint8_t p[768])
 	uint64_t t0 = a3dGetTime();
 
 	GLuint vbo;
-	glCreateBuffers(1, &vbo);
+	gl3CreateBuffers(1, &vbo);
 	float quad[8] = { 0,0,1,0,1,1,0,1 };
-	glNamedBufferStorage(vbo, sizeof(float[2])*4, quad, 0);
+	gl3NamedBufferStorage(vbo, sizeof(float[2])*4, quad, 0);
 
 	GLuint vao;
-	glCreateVertexArrays(1, &vao);
+	gl3CreateVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float[2]), (void*)0);
@@ -3401,7 +3410,7 @@ void Palettize(const uint8_t p[768])
 	char logstr[1000];
 
 	const char* vs_src =
-		CODE(#version 450\n)
+		CODE(#version 330\n)
 		CODE(
 			layout(location = 0) in vec2 pos; // 0.0 - 1.0
 			uniform float slice; // 0.0 - 255.0
@@ -3416,7 +3425,7 @@ void Palettize(const uint8_t p[768])
 		);
 
 	const char* fs_src =
-		CODE(#version 450\n)
+		CODE(#version 330\n)
 		CODE(
 			uniform uvec3 pal[256]; // 0 - 255
 			uniform bool unpal;
@@ -4287,7 +4296,7 @@ void my_render(A3D_WND* wnd)
 					}
 				}
 
-				glTextureSubImage2D(rc->ansi_tex, 0, 0, 0, view_size[0], view_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
+				gl3TextureSubImage2D(rc->ansi_tex, 0, 0, 0, view_size[0], view_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
 
 				glViewport(
 					(int)sw->rect.Min.x,
@@ -4302,19 +4311,19 @@ void my_render(A3D_WND* wnd)
 					(int)(sw->rect.Max.y - sw->rect.Min.y));
 
 				glUseProgram(rc->ansi_prg);
-				glUniform2i(0, view_size[0], view_size[1]);
+				glUniform2i(rc->uni_ansi_vp, view_size[0], view_size[1]);
 
-				glUniform1i(1, 0);
+				glUniform1i(rc->uni_ansi, 0);
 
 				int font_size[2];
 				int font_tex = GetGLFont(font_size, 0);
 
-				glBindTextureUnit(0, rc->ansi_tex);
+				gl3BindTextureUnit2D(0, rc->ansi_tex);
 
-				glUniform1i(2, 1);
-				glBindTextureUnit(1, font_tex);
+				glUniform1i(rc->uni_font, 1);
+				gl3BindTextureUnit2D(1, font_tex);
 
-				glUniform2i(3, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
+				glUniform2i(rc->uni_ansi_wh, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
 
 				glBindVertexArray(rc->ansi_vao);
 				//glEnable(GL_BLEND);
@@ -4328,16 +4337,16 @@ void my_render(A3D_WND* wnd)
 				//glDisable(GL_BLEND);
 
 
-				glBindTextureUnit(0, 0);
-				glBindTextureUnit(1, 0);
+				gl3BindTextureUnit2D(0, 0);
+				gl3BindTextureUnit2D(1, 0);
 
 				// we should restore !!!!
 
 				glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-				glBindTextureUnit(2, 0);
-				glBindTextureUnit(3, 0);
-				glBindTextureUnit(4, 0);
+				gl3BindTextureUnit2D(2, 0);
+				gl3BindTextureUnit2D(3, 0);
+				gl3BindTextureUnit3D(4, 0);
 
 				glBindVertexArray(vao);
 				glUseProgram(prg);
@@ -4589,9 +4598,9 @@ void my_render(A3D_WND* wnd)
 
 				glBindVertexArray(rc->mesh_vao);
 
-				glBindTextureUnit(2, rc->ansi_tex);
-				glBindTextureUnit(3, font[active_font].tex);
-				glBindTextureUnit(4, pal_tex);
+				gl3BindTextureUnit2D(2, rc->ansi_tex);
+				gl3BindTextureUnit2D(3, font[active_font].tex);
+				gl3BindTextureUnit3D(4, pal_tex);
 
 				//glEnable(GL_CULL_FACE);
 				//glCullFace(GL_BACK);
@@ -4615,9 +4624,9 @@ void my_render(A3D_WND* wnd)
 
 				glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-				glBindTextureUnit(2, 0);
-				glBindTextureUnit(3, 0);
-				glBindTextureUnit(4, 0);
+				gl3BindTextureUnit2D(2, 0);
+				gl3BindTextureUnit2D(3, 0);
+				gl3BindTextureUnit3D(4, 0);
 
 				glBindVertexArray(vao);
 				glUseProgram(prg);
@@ -4865,7 +4874,7 @@ void my_render(A3D_WND* wnd)
 			int width = font[active_font].width;
 			int height = font[active_font].height;
 			uint8_t* img = (uint8_t*)malloc(width*height);
-			glGetTextureSubImage(font[active_font].tex, 0, 0, 0, 0, width, height, 1, GL_ALPHA, GL_UNSIGNED_BYTE, width*height, img);
+			gl3GetTextureSubImage(font[active_font].tex, 0, 0, 0, 0, width, height, 1, GL_ALPHA, GL_UNSIGNED_BYTE, width*height, img);
 
 			int cw = width / 32;
 			int ch = height / 32;
@@ -7747,13 +7756,13 @@ void my_init(A3D_WND* wnd)
 
 	RebuildWorld(world);
 
-	glCreateTextures(GL_TEXTURE_3D, 1, &pal_tex);
-	glTextureStorage3D(pal_tex, 1, GL_RGBA8, 256, 256, 256); // alpha holds pal-indexes!
-	glTextureParameteri(pal_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTextureParameteri(pal_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTextureParameteri(pal_tex, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	gl3CreateTextures(GL_TEXTURE_3D, 1, &pal_tex);
+	gl3TextureStorage3D(pal_tex, 1, GL_RGBA8, 256, 256, 256); // alpha holds pal-indexes!
+	gl3TextureParameteri3D(pal_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	gl3TextureParameteri3D(pal_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	gl3TextureParameteri3D(pal_tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	gl3TextureParameteri3D(pal_tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	gl3TextureParameteri3D(pal_tex, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 	Palettize(0);
 
 	MyMaterial::Init();
@@ -8048,8 +8057,8 @@ int main(int argc, char *argv[])
 	gd.alpha_bits = 8;
 	gd.depth_bits = 24;
 	gd.stencil_bits = 8;
-	gd.version[0]=4;
-	gd.version[1]=5;
+	gd.version[0]=3;
+	gd.version[1]=3;
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
 	int rc[] = {0,0,1920*2,1080+2*1080};

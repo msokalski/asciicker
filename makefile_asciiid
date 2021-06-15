@@ -23,6 +23,7 @@ SRCS :=	asciiid.cpp \
 		upng.c \
 		tinfl.c \
 		gl.c \
+		gl45_emu.cpp \
 		imgui_impl_opengl3.cpp \
 		imgui/imgui.cpp \
 		imgui/imgui_demo.cpp \
