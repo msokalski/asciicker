@@ -31,7 +31,7 @@ struct GlobalSDL
 {
 	GlobalSDL()
 	{
-		SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+		SDL_Init(SDL_INIT_EVERYTHING);
 	}
 
 	~GlobalSDL()
@@ -116,8 +116,17 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 
 	SDL_SetWindowData(wnd->win, "a3d", wnd);
 
-	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, gd->alpha_bits);
-	SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, gd->color_bits);
+	if (0)
+	{
+		// let SDL choose rgba sizes
+		// stressing it too much results in no context!
+		SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+		SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+		SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+		SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+		SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 8);
+	}
+
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, gd->depth_bits);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, gd->stencil_bits);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, gd->flags & GraphicsDesc::FLAGS::DOUBLE_BUFFER ? 1:0);
