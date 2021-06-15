@@ -37,6 +37,7 @@
 // FOR GL 
 #include "term.h"
 #include "gl.h"
+#include "gl45_emu.h"
 #include "rgba8.h"
 
 #include "game.h"
@@ -453,21 +454,21 @@ struct MyFont
 		uint8_t rgb[3] = { 0xff,0xff,0xff };
 		ConvertLuminance_UI32_LLZZYYXX(buf, rgb, f, w, h, data, palsize, palbuf);
 
-		glCreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
-		glTextureStorage2D(fnt->tex, 1, ifmt, w, h);
+		gl3CreateTextures(GL_TEXTURE_2D, 1, &fnt->tex);
+		gl3TextureStorage2D(fnt->tex, 1, ifmt, w, h);
 
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
+		gl3TextureSubImage2D(fnt->tex, 0, 0, 0, w, h, fmt, type, buf ? buf : data);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
 		float white_transp[4] = { 1,1,1,0 };
 
-		glTextureParameteri(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-		glTextureParameteri(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		gl3TextureParameteri2D(fnt->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
-		glTextureParameterfv(fnt->tex, GL_TEXTURE_BORDER_COLOR, white_transp);
+		gl3TextureParameterfv2D(fnt->tex, GL_TEXTURE_BORDER_COLOR, white_transp);
 
 
 		/*
@@ -500,13 +501,13 @@ struct MyFont
 	void SetTexel(int x, int y, uint8_t val)
 	{
 		uint8_t texel[4] = { 0xFF,0xFF,0xFF,val };
-		glTextureSubImage2D(tex, 0, x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
+		gl3TextureSubImage2D(tex, 0, x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
 	}
 
 	uint8_t GetTexel(int x, int y)
 	{
 		uint8_t texel[4];
-		glGetTextureSubImage(tex, 0, x, y, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 4, texel);
+		gl3GetTextureSubImage(tex, 0, x, y, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, 4, texel);
 		return texel[3];
 	}
 
