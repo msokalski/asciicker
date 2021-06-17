@@ -1,4 +1,5 @@
 
+#include <stdio.h>
 #include "gl45_emu.h"
 
 void gl3CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ,
@@ -6,9 +7,13 @@ void gl3CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint
 						GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth)
 {
 #if USE_GL3
-	// TODO
-	// used by texheap alloc compression
-	// change it to texsubimage from ram?
+	// all calls ported
+	static bool warn_once = true;
+	if (warn_once)
+	{
+		warn_once = false;
+		printf("WARNING: GL3 calling unimplemented glCopyImageSubData()\n");
+	}
 #else
 	glCopyImageSubData(srcName, srcTarget, srcLevel, srcX, srcY, srcZ,
 		dstName, dstTarget, dstLevel, dstX, dstY, dstZ,
@@ -21,8 +26,14 @@ void gl3GetTextureSubImage(GLuint texture, GLint level, GLint xoffset, GLint yof
 						   GLenum format, GLenum type, GLsizei bufSize, void *pixels)
 {
 #if USE_GL3
-	// TODO
+	// TODO later
 	// used by font editor (get pixel) & glyphs coverage calculator (not needed for end user)
+	static bool warn_once = true;
+	if (warn_once)
+	{
+		warn_once = false;
+		printf("WARNING: GL3 calling unimplemented glGetTextureSubImage()\n");
+	}
 #else
 	glGetTextureSubImage(texture, level, xoffset, yoffset, zoffset,
 		width, height, depth, format, type, bufSize, pixels);

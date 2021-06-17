@@ -181,6 +181,7 @@ Terrain* CreateTerrain(int z)
 			{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->visual},
 		};
 		p->ta = t->th.Alloc(data);
+		p->ta->user = p;
 #endif
 	}
 	else
@@ -545,7 +546,13 @@ bool DelTerrainPatch(Terrain* t, int x, int y)
 	Node* n = p->parent;
 
 #ifdef TEXHEAP
-	p->ta->Free();
+	TexAlloc* last = p->ta->Free();
+	if (last)
+	{
+		Patch* l = (Patch*)last->user;
+		UpdateTerrainVisualMap(l);
+		UpdateTerrainHeightMap(l);
+	}
 #endif
 	free(p);
 
@@ -690,6 +697,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 			{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->visual},
 		};
 		p->ta = t->th.Alloc(data);
+		p->ta->user = p;
 #endif
 
 		return p;
@@ -1115,6 +1123,7 @@ Patch* AddTerrainPatch(Terrain* t, int x, int y, int z)
 				{GL_RED_INTEGER, GL_UNSIGNED_SHORT, p->visual},
 			};
 			p->ta = t->th.Alloc(data);
+			p->ta->user = p;
 #endif
 
 			return p;
@@ -2793,7 +2802,13 @@ size_t TerrainDispose(Patch* p)
 	// MUST BE DETACHED!
 
 #ifdef TEXHEAP
-	p->ta->Free();
+	TexAlloc* last = p->ta->Free();
+	if (last)
+	{
+		Patch* l = (Patch*)last->user;
+		UpdateTerrainVisualMap(l);
+		UpdateTerrainHeightMap(l);
+	}
 #endif
 
 	free(p);

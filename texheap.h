@@ -26,7 +26,7 @@ struct TexAlloc
 	int x, y;
 
 	void Update(int first, int count, const TexData[]);
-	void Free();
+	TexAlloc* Free();
 };
 
 struct TexPage

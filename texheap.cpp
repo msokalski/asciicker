@@ -100,16 +100,20 @@ TexAlloc* TexHeap::Alloc(const TexData data[])
 	return a;
 }
 
-void TexAlloc::Free()
+TexAlloc* TexAlloc::Free() // return last alloc which must be re-updated (GL3 only)
 {
 	TexHeap* h = page->heap;
 	int cap = h->cap_x * h->cap_y;
 	int on_page = y * h->cap_x + x;
 
+	TexAlloc* last = 0;
+
 	// not last alloc on last page?
 	if (page != h->tail || on_page != (h->allocs-1) % cap)
 	{
-		TexAlloc* last = h->tail->alloc[(h->allocs-1) % cap];
+		last = h->tail->alloc[(h->allocs-1) % cap];
+
+		#if !USE_GL3
 		for (int t = 0; t < h->num; t++)
 		{
 			gl3CopyImageSubData(
@@ -117,10 +121,16 @@ void TexAlloc::Free()
 				page->tex[t], GL_TEXTURE_2D, 0, x * h->tex[t].item_w, y * h->tex[t].item_h, 0,
 				h->tex[t].item_w, h->tex[t].item_h, 1);
 		}
+		#endif
+
 		page->alloc[on_page] = last;
 		last->page = page;
 		last->x = x;
 		last->y = y;
+
+		#if !USE_GL3
+		last = 0;
+		#endif
 	}
 
 	h->allocs--;
@@ -137,6 +147,8 @@ void TexAlloc::Free()
 		h->tail = h->tail->prev;
 		free(h->tail);
 	}
+
+	return last;
 }
 
 void TexAlloc::Update(int first, int count, const TexData data[])
