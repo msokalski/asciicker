@@ -1,9 +1,9 @@
+#!/bin/bash
 
-# sudo apt install libgpm-dev
-# sudo apt install libx11-dev
-# sudo apt install libxinerama-dev
-# sudo apt install libgl1-mesa-dev
-
+sudo apt install libgpm-dev
+sudo apt install libx11-dev
+sudo apt install libxinerama-dev
+sudo apt install libgl1-mesa-dev
 
 if [ -f "/usr/bin/time" ]; then
     echo -e "BUILDING asciiid\n----------------------"

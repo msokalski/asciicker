@@ -19,30 +19,30 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="enemygen.h" />
-    <ClInclude Include="fast_rand.h" />
-    <ClInclude Include="game.h" />
-    <ClInclude Include="inventory.h" />
-    <ClInclude Include="network.h" />
-    <ClInclude Include="physics.h" />
-    <ClInclude Include="render.h" />
-    <ClInclude Include="sprite.h" />
-    <ClInclude Include="terrain.h" />
-    <ClInclude Include="world.h" />
+    <ClInclude Include="src\enemygen.h" />
+    <ClInclude Include="src\fast_rand.h" />
+    <ClInclude Include="src\game.h" />
+    <ClInclude Include="src\inventory.h" />
+    <ClInclude Include="src\network.h" />
+    <ClInclude Include="src\physics.h" />
+    <ClInclude Include="src\render.h" />
+    <ClInclude Include="src\sprite.h" />
+    <ClInclude Include="src\terrain.h" />
+    <ClInclude Include="src\world.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="enemygen.cpp" />
-    <ClCompile Include="game.cpp" />
-    <ClCompile Include="game_svr.cpp" />
-    <ClCompile Include="inventory.cpp" />
-    <ClCompile Include="network.cpp" />
-    <ClCompile Include="physics.cpp" />
-    <ClCompile Include="render.cpp" />
-    <ClCompile Include="sha1.c" />
-    <ClCompile Include="sprite.cpp" />
-    <ClCompile Include="terrain.cpp" />
-    <ClCompile Include="tinfl.c" />
-    <ClCompile Include="world.cpp" />
+    <ClCompile Include="src\enemygen.cpp" />
+    <ClCompile Include="src\game.cpp" />
+    <ClCompile Include="src\game_svr.cpp" />
+    <ClCompile Include="src\inventory.cpp" />
+    <ClCompile Include="src\network.cpp" />
+    <ClCompile Include="src\physics.cpp" />
+    <ClCompile Include="src\render.cpp" />
+    <ClCompile Include="src\sha1.c" />
+    <ClCompile Include="src\sprite.cpp" />
+    <ClCompile Include="src\terrain.cpp" />
+    <ClCompile Include="src\tinfl.c" />
+    <ClCompile Include="src\world.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

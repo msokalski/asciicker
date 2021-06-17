@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26430.12
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "asciiid", "asciiid.vcxproj", "{EDC758D2-2AE8-41BE-8859-8D6F70247DBE}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "asciiid", "VisualStudio\asciiid.vcxproj", "{EDC758D2-2AE8-41BE-8859-8D6F70247DBE}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "game", "game.vcxproj", "{B7E885AC-A026-49F3-8145-08D3353FC1CE}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "game", "VisualStudio\game.vcxproj", "{B7E885AC-A026-49F3-8145-08D3353FC1CE}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "server", "server.vcxproj", "{CCE87DBC-F823-4FFB-9AAD-61B4EEFDAD09}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "server", "VisualStudio\server.vcxproj", "{CCE87DBC-F823-4FFB-9AAD-61B4EEFDAD09}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "io_mesh_akm", "io_mesh_akm", "{CAE7FC16-A41F-4744-93EC-760BB90D6F2C}"
 	ProjectSection(SolutionItems) = preProject

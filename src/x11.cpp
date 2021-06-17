@@ -1962,9 +1962,6 @@ int a3dListDir(const char* dir_path, bool (*cb)(A3D_DirItem item, const char* na
 			if (s.st_mode == S_IFDIR)
 				item = A3D_DIRECTORY;
 			else
-			if (dir->d_type == S_IFREG)
-				item = A3D_FILE;
-			else
 				continue;				
 		}
 		else

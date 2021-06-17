@@ -1,7 +1,4 @@
-
-
-
-
+#!/bin/bash
 # BASED ON:
 # https://webassembly.org/getting-started/developers-guide/
 
@@ -19,8 +16,10 @@
 # AUTO SETUP (will be called everytime as all vars are set to this batch env only)
 hash emcc 2>/dev/null || { pushd ~/emsdk; source ./emsdk_env.sh --build=Release; popd; }
 
-# now we can build, 
+# now we can build,
 # for the first time it will compile and cache libc
+
+mkdir .web
 
 rm .web/index.html
 rm .web/index.js

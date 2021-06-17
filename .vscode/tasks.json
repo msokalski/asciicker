@@ -4,40 +4,61 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "run",
+            "label": "Run asciiid",
+            "command": "${workspaceFolder}/build/asciiid",
             "type": "shell",
-            "command": ".run/game",
-            "problemMatcher": [
-                "$gcc"
-            ],
             "group": {
-                "kind": "build",
+                "kind": "test",
                 "isDefault": true
             }
         },
         {
-            "label": "build",
+            "label": "Run game (Offline)",
+            "command": "${workspaceFolder}/build/game",
             "type": "shell",
-            "command": "./build.sh",
-            "problemMatcher": [
-                "$gcc"
-            ],
             "group": {
-                "kind": "build",
+                "kind": "test",
                 "isDefault": true
             }
         },
         {
-            "label": "clean",
+            "label": "Run game (Online)",
+            "command": "${workspaceFolder}/build/game",
+            "args": ["-url","gumix@localhost:8080/ws/y7/"],
             "type": "shell",
-            "command": "./clean.sh",
-            "problemMatcher": [
-                "$gcc"
-            ],
             "group": {
-                "kind": "build",
+                "kind": "test",
                 "isDefault": true
             }
-        }        
+        },
+        {
+            "label": "Run game_term (Offline)",
+            "command": "${workspaceFolder}/build/game_term",
+            "type": "shell",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Run game_term (Online)",
+            "command": "${workspaceFolder}/build/game_term",
+            "args": ["-url","gumix@localhost:8080/ws/y7/"],
+            "type": "shell",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Run server",
+            "command": "${workspaceFolder}/build/server",
+            "args": [],
+            "type": "shell",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        }
     ]
 }

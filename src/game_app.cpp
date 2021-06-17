@@ -994,36 +994,16 @@ int main(int argc, char* argv[])
 		memcpy(base_path, abs_buf, abs_path - abs_buf);
 		#endif
 
-        len = strlen(base_path);
-
-		if (len > 4)
-		{
-			char* dotrun[4] =
-			{
-				strstr(base_path, "/.run/"),
-#ifdef _WIN32
-				strstr(base_path, "\\.run\\"),
-				strstr(base_path, "\\.run/"),
-				strstr(base_path, "/.run\\"),
-#else
-				0,0,0
-#endif
-			};
-
-			int dotpos = -1;
-			for (int i = 0; i < 4; i++)
-			{
-				if (dotrun[i])
-				{
-					int pos = dotrun[i] - base_path;
-					if (dotpos < 0 || pos < dotpos)
-						dotpos = pos;
-				}
+        while (1) {
+			if ((strcmp(strrchr(base_path, '/'), "/asciiid")) == 0) {
+				break;
 			}
 
-			if (dotpos >= 0)
-				base_path[dotpos+1] = 0;
+			memcpy(base_path, base_path, (strlen(base_path) - strlen(strrchr(base_path, '/'))));
+
+			base_path[(strlen(base_path) - strlen(strrchr(base_path, '/')))] = '\0';
 		}
+        
     }
 
     printf("exec path: %s\n", argv[0]);

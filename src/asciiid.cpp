@@ -1,6 +1,10 @@
 // nvbug.cpp : Defines the entry point for the console application.
 //
 
+#ifdef __APPLE__
+#include <malogasdgasg.h>
+#endif
+
 #define NOMINMAX // windows fix
 
 #include <wchar.h>
@@ -7888,8 +7892,7 @@ void my_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 	ki = (KeyInfo)(ki & ~A3D_AUTO_REPEAT);
 
 	ImGuiIO& io = ImGui::GetIO();
-	if (ki < IM_ARRAYSIZE(io.KeysDown))
-		io.KeysDown[ki] = down;
+	io.KeysDown[ki] = down;
 	
 	io.KeysDown[A3D_ENTER] = a3dGetKeyb(wnd,A3D_ENTER) || a3dGetKeyb(wnd, A3D_NUMPAD_ENTER);
 	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);// || a3dGetKeyb(wnd,A3D_RALT);
@@ -7962,7 +7965,7 @@ extern "C" void DumpLeakCounter();
 
 int main(int argc, char *argv[]) 
 {
-    char abs_buf[PATH_MAX];
+    char* abs_buf = (char*)malloc(PATH_MAX * sizeof(char));
     char* abs_path = 0;
 
     if (argc < 1)
@@ -7976,7 +7979,7 @@ int main(int argc, char *argv[])
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (last_slash)
-			len = last_slash - abs_path + 1;
+			len = last_slash - abs_path;
         #else
         len = GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
 		if (!len)
@@ -7987,37 +7990,18 @@ int main(int argc, char *argv[])
 		#endif
 
 		memcpy(base_path, abs_path, len);
-		base_path[len] = 0;
 
-		if (len > 4)
-		{
-			char* dotrun[4] =
-			{
-				strstr(base_path, "/.run/"),
-#ifdef _WIN32
-				strstr(base_path, "\\.run\\"),
-				strstr(base_path, "\\.run/"),
-				strstr(base_path, "/.run\\"),
-#else
-				0,0,0
-#endif
-			};
-
-			int dotpos = -1;
-			for (int i = 0; i < 4; i++)
-			{
-				if (dotrun[i])
-				{
-					int pos = dotrun[i] - base_path;
-					if (dotpos < 0 || pos < dotpos)
-						dotpos = pos;
-				}
+		while (1) {
+			if ((strcmp(strrchr(base_path, '/'), "/asciiid")) == 0) {
+				break;
 			}
 
-			if (dotpos >= 0)
-				base_path[dotpos+1] = 0;
+			memcpy(base_path, base_path, (strlen(base_path) - strlen(strrchr(base_path, '/'))));
+
+			base_path[(strlen(base_path) - strlen(strrchr(base_path, '/')))] = '\0';
 		}
-    }
+
+	}
 
     printf("exec path: %s\n", argv[0]);
     printf("BASE PATH: %s\n", base_path);
