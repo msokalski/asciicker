@@ -504,8 +504,15 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 	gd.alpha_bits = 0;
 	gd.depth_bits = 0;
 	gd.stencil_bits = 0;
-	gd.version[0]=3;
-	gd.version[1]=3;	
+
+#ifdef USE_GL3
+	gd.version[0] = 3;
+	gd.version[1] = 3;
+#else
+	gd.version[0] = 4;
+	gd.version[1] = 5;
+#endif
+
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
 	int rc[] = { 0,0,1920 * 2,1080 + 2 * 1080 };

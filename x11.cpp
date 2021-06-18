@@ -797,9 +797,11 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	XFree(ch);
 
 	int attribs[] = {
-		GLX_CONTEXT_FLAGS_ARB, gd->flags & GraphicsDesc::DEBUG_CONTEXT ? GLX_CONTEXT_DEBUG_BIT_ARB : 0,
+		GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB | (gd->flags & GraphicsDesc::DEBUG_CONTEXT ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
 		GLX_CONTEXT_MAJOR_VERSION_ARB, gd->version[0],
 		GLX_CONTEXT_MINOR_VERSION_ARB, gd->version[1],
+		GLX_CONTEXT_PROFILE_MASK_ARB, strcmp(GALOGEN_API_PROFILE,"core") == 0 ? WGL_CONTEXT_CORE_PROFILE_BIT_ARB : 0,
+		GLX_CONTEXT_
 		0};
 
 	#if 0
