@@ -5,7 +5,7 @@
 //#include "game.h"
 
 #include <stdint.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include "terrain.h"
 #include "world.h"

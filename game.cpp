@@ -3582,6 +3582,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				io.x_force = (int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A));
 				io.y_force = (int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S));
 			}
+			
+			if(input.IsKeyDown(A3D_M)) {
+				water++;
+			}
+			if(input.IsKeyDown(A3D_N)) {
+				water--;
+			}
 
 			float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
 			if (len > 0)

@@ -337,4 +337,3 @@ int a3dWritePTY(A3D_PTY* pty, const void* buf, size_t size);
 void a3dResizePTY(A3D_PTY* pty, int w, int h);
 void a3dUnblockPTY(A3D_PTY* pty);
 void a3dClosePTY(A3D_PTY* pty);
-

@@ -2,18 +2,24 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdarg.h>
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <sys/ioctl.h>
 #include <sys/poll.h>
-#include <linux/limits.h>
+#ifdef __linux__
+# include <linux/limits.h>
+#else
+# include <limits.h>
+#endif
 #include <unistd.h>
 #include <signal.h>
 #include <termios.h>
 #include <time.h>
+#ifdef USE_GPM
 #include <gpm.h>
+#endif // USE_GPM
 
 // work around including <netinet/tcp.h>
 // which also defines TCP_CLOSE
@@ -54,7 +60,7 @@ const char* GetConfPath()
     return "asciicker.cfg";
 }
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 /*
 https://superuser.com/questions/1185824/configure-vga-colors-linux-ubuntu
 https://int10h.org/oldschool-pc-fonts/fontlist/
@@ -284,6 +290,7 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
     int fg16 = 0;
     int bk16 = 1;
 
+#ifdef USE_GPM
     if (gpm>=0)
     {
         // bake mouse into buffer
@@ -293,7 +300,7 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
             buf[mouse_x + w*(h-1-mouse_y)] = mouse;
         }
     }
-
+#endif // USE_GPM
 
     if (tty>=0)
     {
@@ -909,7 +916,7 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
 
 extern "C" void DumpLeakCounter();
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 
 static int find_tty()
 {
@@ -979,7 +986,7 @@ int main(int argc, char* argv[])
     else
     {
         size_t len = 0;
-        #ifdef __linux__
+        #if defined(__linux__) || defined(__APPLE__)
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (!last_slash)
@@ -1318,7 +1325,7 @@ int main(int argc, char* argv[])
 
 #endif // #ifndef PURE_TERM
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 
     // recursively check if we are on TTY console or 'vt'
     const char* term_env = getenv("TERM");
@@ -1334,6 +1341,7 @@ int main(int argc, char* argv[])
 
     if (tty > 0)
     {
+#ifdef USE_GPM
         Gpm_Connect conn;
         conn.eventMask  = ~0;   /* Want to know about all the events */
         conn.defaultMask = 0;   /* don't handle anything by default  */
@@ -1357,9 +1365,9 @@ int main(int argc, char* argv[])
             printf("failed to connect to gpm\n");
             exit(0);
         }
+#endif
     }
-    else
-    if (strncmp(term_env,"xterm",5)==0)
+    else if (strncmp(term_env,"xterm",5)==0)
     {
         printf("VIRTUAL TERMINAL EMULGLATOR\n");
 
@@ -1544,6 +1552,7 @@ int main(int argc, char* argv[])
 
             poll(pfds, 2, 0); // 0 no timeout, -1 block
 
+#ifdef USE_GPM
             if (pfds[1].revents & POLLIN)
             {
                 static int mouse_read = 0;
@@ -1647,6 +1656,7 @@ int main(int argc, char* argv[])
                     mouse_read = 0;
                 }
             }
+#endif // USE_GPM
         }
         else
         {
@@ -2224,10 +2234,12 @@ int main(int argc, char* argv[])
     exit:
     uint64_t end = GetTime();
 
+#ifdef USE_GPM
     if (gpm>=0)
     {
         Gpm_Close();
     }
+#endif //USE_GPM
 
     if (terrain)
         DeleteTerrain(terrain);

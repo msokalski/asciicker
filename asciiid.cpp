@@ -9,6 +9,8 @@
 
 #ifdef __linux__
 #include <linux/limits.h>
+#elif defined(__APPLE__)
+#include <limits.h>
 #else
 #define PATH_MAX 1024
 #endif
@@ -18,7 +20,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "gl.h"
@@ -4059,6 +4061,7 @@ void my_render(A3D_WND* wnd)
 {
 
 	ImGuiIO& io = ImGui::GetIO();
+	static bool oldRight = false;
 
 	#ifdef MOUSE_QUEUE
 	while (mouse_queue_len) // accumulate wheel sequence only
@@ -4112,6 +4115,7 @@ void my_render(A3D_WND* wnd)
 				case MouseInfo::RIGHT_UP:
 					sync=true;
 					io.MouseDown[1] = false;
+					oldRight = false;
 					break;
 				case MouseInfo::MIDDLE_DN:
 					sync=true;
@@ -4130,6 +4134,22 @@ void my_render(A3D_WND* wnd)
 		if (sync)
 			break;
 	}
+	
+	// NOTE(xylit): if a mouse (*cough* apple mouse *cough*) doesn't have a middle mouse button
+	// the alternative will be alt + right mouse button
+	if (io.KeyAlt && (io.MouseDown[1] || oldRight)) {
+		io.MouseDown[1] = false;
+		io.MouseDown[2] = true;
+		oldRight = true;
+	} else {
+		io.MouseDown[2] = false;
+	}
+	
+	if (!io.KeyAlt && !io.MouseDown[2] && oldRight) {
+		io.MouseDown[1] = true;
+		oldRight = false;
+	}
+	
 	#endif
 
 	// THINGZ
@@ -7781,12 +7801,12 @@ void my_init(A3D_WND* wnd)
 	g_Time = a3dGetTime();
 	render_context.Create();
 
-	glDebugMessageCallback(glDebugCall, 0/*cookie*/);
+	// NOTE(xylit): this call is an extension
+	// glDebugMessageCallback(glDebugCall, 0/*cookie*/);
 
 	// Setup Dear ImGui context
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
-
 	{
 		// USER_DIR
 		snprintf(ini_path,4096,"./imgui.ini");
@@ -7824,7 +7844,7 @@ void my_init(A3D_WND* wnd)
 	ImGui::StyleColorsDark();
 	//ImGui::StyleColorsClassic();
 
-	ImGui_ImplOpenGL3_Init();
+	ImGui_ImplOpenGL3_Init("#version 150");
 
 	ImWchar range[]={0x0020, 0x03FF, 0};
 	char ui_font_path[1024];
@@ -7901,7 +7921,7 @@ void my_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 		io.KeysDown[ki] = down;
 	
 	io.KeysDown[A3D_ENTER] = a3dGetKeyb(wnd,A3D_ENTER) || a3dGetKeyb(wnd, A3D_NUMPAD_ENTER);
-	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);// || a3dGetKeyb(wnd,A3D_RALT);
+	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT) || a3dGetKeyb(wnd,A3D_RALT);
 	io.KeyCtrl = a3dGetKeyb(wnd, A3D_LCTRL) || a3dGetKeyb(wnd, A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(wnd, A3D_LSHIFT) || a3dGetKeyb(wnd, A3D_RSHIFT);
 }
@@ -7981,7 +8001,7 @@ int main(int argc, char *argv[])
         size_t len = 2;
 		strcpy(abs_buf, "./");
 		abs_path = abs_buf;
-		#ifdef __linux__
+		#if defined(__linux__) || defined(__APPLE__)
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (last_slash)

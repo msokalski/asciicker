@@ -1,7 +1,7 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <assert.h>
 #include "matrix.h"
 #include "physics.h"
@@ -775,6 +775,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 
 		// by having old and new water level we can (in future) keep player floating on top of waves 
 		phys->water = io->water;
+		printf("io.water: %f\n", io->water);
 
 		// YAW
 		{
@@ -916,6 +917,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 
 			float cnt = 0.78 + ampl * sinf(wave);
 			float acc = (phys->water - (phys->pos[2] + cnt * world_height)) / (2 * cnt*world_height);
+			// float acc = (phys->pos[2] + cnt) / (2 * cnt*world_height);
 			if (acc < 0 - cnt)
 				acc = 0 - cnt;
 			if (acc > 1 - cnt)

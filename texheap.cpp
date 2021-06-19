@@ -1,5 +1,5 @@
 
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include "texheap.h"
 #include "gl45_emu.h"
