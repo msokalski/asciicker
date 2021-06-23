@@ -18,10 +18,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "io_mesh_akm", "io_mesh_akm"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WEB", "WEB", "{070D52C0-85BC-408E-94B5-F9584BE723B4}"
 	ProjectSection(SolutionItems) = preProject
-		asciicker.js = asciicker.js
-		asciicker.json = asciicker.json
-		asciicker.png = asciicker.png
-		game_web.html = game_web.html
+		asciicker.js = src\asciicker.js
+		asciicker.json = src\asciicker.json
+		asciicker.png = src\asciicker.png
+		game_web.html = src\game_web.html
 	EndProjectSection
 EndProject
 Global

@@ -12,69 +12,69 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\fast_rand.h">
+    <ClInclude Include="..\src\fast_rand.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\render.h">
+    <ClInclude Include="..\src\render.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\terrain.h">
+    <ClInclude Include="..\src\terrain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\world.h">
+    <ClInclude Include="..\src\world.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\sprite.h">
+    <ClInclude Include="..\src\sprite.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\inventory.h">
+    <ClInclude Include="..\src\inventory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\game.h">
+    <ClInclude Include="..\src\game.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\physics.h">
+    <ClInclude Include="..\src\physics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\network.h">
+    <ClInclude Include="..\src\network.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\enemygen.h" />
+    <ClInclude Include="..\src\enemygen.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\world.cpp">
+    <ClCompile Include="..\src\world.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\terrain.cpp">
+    <ClCompile Include="..\src\terrain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\game_svr.cpp">
+    <ClCompile Include="..\src\game_svr.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\sprite.cpp">
+    <ClCompile Include="..\src\sprite.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\tinfl.c">
+    <ClCompile Include="..\src\tinfl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\inventory.cpp">
+    <ClCompile Include="..\src\inventory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\game.cpp">
+    <ClCompile Include="..\src\game.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\render.cpp">
+    <ClCompile Include="..\src\render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\physics.cpp">
+    <ClCompile Include="..\src\physics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\sha1.c">
+    <ClCompile Include="..\src\sha1.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\network.cpp">
+    <ClCompile Include="..\src\network.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\enemygen.cpp" />
+    <ClCompile Include="..\src\enemygen.cpp" />
   </ItemGroup>
 </Project>

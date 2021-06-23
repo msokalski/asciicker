@@ -1,10 +1,8 @@
 // nvbug.cpp : Defines the entry point for the console application.
 //
 
-#ifdef __APPLE__
-#include <malogasdgasg.h>
-#endif
-
+#include <cstddef>
+#include <cstdlib>
 #define NOMINMAX // windows fix
 
 #include <wchar.h>
@@ -7732,10 +7730,10 @@ void my_resize(A3D_WND* wnd, int w, int h)
 
 void my_init(A3D_WND* wnd)
 {
-	printf("RENDERER: %s\n",glGetString(GL_RENDERER));
-	printf("VENDOR:   %s\n",glGetString(GL_VENDOR));
-	printf("VERSION:  %s\n",glGetString(GL_VERSION));
-	printf("SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
+	printf("INFO: RENDERER: %s\n",glGetString(GL_RENDERER));
+	printf("INFO: VENDOR:   %s\n",glGetString(GL_VENDOR));
+	printf("INFO: VERSION:  %s\n",glGetString(GL_VERSION));
+	printf("INFO: SHADERS:  %s\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
 
 	world = CreateWorld();
 
@@ -7975,12 +7973,12 @@ int main(int argc, char *argv[])
         size_t len = 2;
 		strcpy(abs_buf, "./");
 		abs_path = abs_buf;
-		#ifdef __linux__
+		#if defined(__linux__) || defined(__APPLE__)
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (last_slash)
-			len = last_slash - abs_path;
-        #else
+			len = last_slash - abs_path + 1;
+        #elif defined(_WIN32)
         len = GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
 		if (!len)
 			len = 2;
@@ -7990,21 +7988,58 @@ int main(int argc, char *argv[])
 		#endif
 
 		memcpy(base_path, abs_path, len);
+		base_path[len] = 0;
 
-		while (1) {
-			if ((strcmp(strrchr(base_path, '/'), "/asciiid")) == 0) {
-				break;
+		int max_attempts{15};
+		int attempts{0};
+		int new_len{0};
+
+		printf("WARN: Folder with all asciiid resources should be named 'asciiid'.\n");
+
+		printf("INFO: Asciiid will now preform recursive search for this directory with %d max attempts...\n", max_attempts);
+
+#if defined(__linux__) || defined(__APPLE__)
+		while (strcmp(strrchr(base_path, '/'), "/asciiid") != 0) {
+			printf("INFO: Current directory: %s, searching for 'asciiid/', full path: %s\n", strrchr(base_path, '/'), base_path);
+			new_len = strlen(base_path) - strlen(strrchr(base_path, '/'));
+			if (new_len == 0) {
+				printf("ERR: Recursive search reached root.\n");
+				exit(1);
 			}
-
-			memcpy(base_path, base_path, (strlen(base_path) - strlen(strrchr(base_path, '/'))));
-
-			base_path[(strlen(base_path) - strlen(strrchr(base_path, '/')))] = '\0';
+			base_path[new_len] = 0;
+			if (max_attempts == attempts) {
+				printf("ERR: Recursive search exceeded maximum attempts.\n");
+				exit(1);
+			}
+			attempts++;
 		}
+#elif defined(_WIN32)
+		while (strcmp(strrchr(base_path, '\\'), "\\asciiid") != 0) {
+			printf("INFO: Current directory: %s, searching for 'asciiid\\', full path: %s\n", strrchr(base_path, '\\'), base_path);
+			new_len = strlen(base_path) - strlen(strrchr(base_path, '\\'));
+			if (new_len == 0) {
+				printf("ERR: Recursive search reached root.\n");
+				exit(1);
+			}
+			base_path[new_len] = 0;
+			if (max_attempts == attempts) {
+				printf("ERR: Recursive search exceeded maximum attempts.\n");
+				exit(1);
+			}
+			attempts++;
+		}
+#endif
+		size_t length = strlen(base_path);
+#if defined(__linux__) || defined(__APPLE__)
+		base_path[length] = '/';
+#elif _WIN32
+		base_path[length] = '\\';
+#endif
+		base_path[length + 1] = 0;
+    }
 
-	}
-
-    printf("exec path: %s\n", argv[0]);
-    printf("BASE PATH: %s\n", base_path);
+    printf("INFO: Execution path: %s\n", argv[0]);
+    printf("INFO: Resources folder path: %s\n", base_path);
 
 #ifdef _WIN32
 	//_CrtSetBreakAlloc(11952);

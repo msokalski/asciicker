@@ -12,14 +12,6 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-if(NOT CMAKE_C_COMPILER)
-  set(CMAKE_C_COMPILER clang)
-endif()
-
-if(NOT MAKE_CXX_COMPILER)
-  set(CMAKE_CXX_COMPILER clang++)
-endif()
-
 if(CMAKE_BUILD_TYPE EQUAL Release)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 endif()

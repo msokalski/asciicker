@@ -19,30 +19,30 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\enemygen.h" />
-    <ClInclude Include="src\fast_rand.h" />
-    <ClInclude Include="src\game.h" />
-    <ClInclude Include="src\inventory.h" />
-    <ClInclude Include="src\network.h" />
-    <ClInclude Include="src\physics.h" />
-    <ClInclude Include="src\render.h" />
-    <ClInclude Include="src\sprite.h" />
-    <ClInclude Include="src\terrain.h" />
-    <ClInclude Include="src\world.h" />
+    <ClInclude Include="..\src\enemygen.h" />
+    <ClInclude Include="..\src\fast_rand.h" />
+    <ClInclude Include="..\src\game.h" />
+    <ClInclude Include="..\src\inventory.h" />
+    <ClInclude Include="..\src\network.h" />
+    <ClInclude Include="..\src\physics.h" />
+    <ClInclude Include="..\src\render.h" />
+    <ClInclude Include="..\src\sprite.h" />
+    <ClInclude Include="..\src\terrain.h" />
+    <ClInclude Include="..\src\world.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\enemygen.cpp" />
-    <ClCompile Include="src\game.cpp" />
-    <ClCompile Include="src\game_svr.cpp" />
-    <ClCompile Include="src\inventory.cpp" />
-    <ClCompile Include="src\network.cpp" />
-    <ClCompile Include="src\physics.cpp" />
-    <ClCompile Include="src\render.cpp" />
-    <ClCompile Include="src\sha1.c" />
-    <ClCompile Include="src\sprite.cpp" />
-    <ClCompile Include="src\terrain.cpp" />
-    <ClCompile Include="src\tinfl.c" />
-    <ClCompile Include="src\world.cpp" />
+    <ClCompile Include="..\src\enemygen.cpp" />
+    <ClCompile Include="..\src\game.cpp" />
+    <ClCompile Include="..\src\game_svr.cpp" />
+    <ClCompile Include="..\src\inventory.cpp" />
+    <ClCompile Include="..\src\network.cpp" />
+    <ClCompile Include="..\src\physics.cpp" />
+    <ClCompile Include="..\src\render.cpp" />
+    <ClCompile Include="..\src\sha1.c" />
+    <ClCompile Include="..\src\sprite.cpp" />
+    <ClCompile Include="..\src\terrain.cpp" />
+    <ClCompile Include="..\src\tinfl.c" />
+    <ClCompile Include="..\src\world.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
