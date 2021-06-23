@@ -2,20 +2,20 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := .run/server
+BIN := ../build/server
 
-SRCS :=	game_svr.cpp \
-		network.cpp \
-		sha1.c \
-		game.cpp \
-		enemygen.cpp \
-		render.cpp \
-		terrain.cpp \
-		world.cpp \
-		inventory.cpp \
-		physics.cpp \
-		sprite.cpp \
-		tinfl.c \
+SRCS :=	../src/game_svr.cpp \
+		../src/network.cpp \
+		../src/sha1.c \
+		../src/game.cpp \
+		../src/enemygen.cpp \
+		../src/render.cpp \
+		../src/terrain.cpp \
+		../src/world.cpp \
+		../src/inventory.cpp \
+		../src/physics.cpp \
+		../src/sprite.cpp \
+		../src/tinfl.c \
 		
 LDLIBS := -lutil -pthread
 
@@ -26,10 +26,10 @@ DISTFILES := $(BIN)
 DISTOUTPUT := $(BIN).tar.gz
 
 # intermediate directory for generated object files
-OBJDIR := .o_server
+OBJDIR := ../build/0xserver_make_o_cache
 
 # intermediate directory for generated dependency files
-DEPDIR := .d_server
+DEPDIR := ../build/0xserver_make_d_cache
 
 # object files, auto generated from sourcce files
 OBJS := $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))
