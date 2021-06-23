@@ -18,35 +18,9 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="enemygen.h" />
-    <ClInclude Include="fast_rand.h" />
-    <ClInclude Include="game.h" />
-    <ClInclude Include="inventory.h" />
-    <ClInclude Include="network.h" />
-    <ClInclude Include="physics.h" />
-    <ClInclude Include="render.h" />
-    <ClInclude Include="sprite.h" />
-    <ClInclude Include="terrain.h" />
-    <ClInclude Include="world.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="enemygen.cpp" />
-    <ClCompile Include="game.cpp" />
-    <ClCompile Include="game_svr.cpp" />
-    <ClCompile Include="inventory.cpp" />
-    <ClCompile Include="network.cpp" />
-    <ClCompile Include="physics.cpp" />
-    <ClCompile Include="render.cpp" />
-    <ClCompile Include="sha1.c" />
-    <ClCompile Include="sprite.cpp" />
-    <ClCompile Include="terrain.cpp" />
-    <ClCompile Include="tinfl.c" />
-    <ClCompile Include="world.cpp" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{CCE87DBC-F823-4FFB-9AAD-61B4EEFDAD09}</ProjectGuid>
+    <ProjectGuid>{EDC758D2-2AE8-41BE-8859-8D6F70247DBE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>asciiid</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
@@ -121,16 +95,15 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>SERVER;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>
-      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>./freeglut/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x86</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -138,16 +111,15 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>SERVER;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>
-      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>./freeglut/lib/x64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x64</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -157,9 +129,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>SERVER;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>
-      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
@@ -168,7 +139,7 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>./freeglut/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x86</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -178,9 +149,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>SERVER;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>
-      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
@@ -192,10 +162,74 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>./freeglut/lib/x64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x64</AdditionalLibraryDirectories>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\enemygen.h" />
+    <ClInclude Include="..\src\game.h" />
+    <ClInclude Include="..\src\gl45_emu.h" />
+    <ClInclude Include="..\src\inventory.h" />
+    <ClInclude Include="..\src\platform.h" />
+    <ClInclude Include="..\src\render.h" />
+    <ClInclude Include="..\src\term.h" />
+    <ClInclude Include="..\src\urdo.h" />
+    <ClInclude Include="..\src\fast_rand.h" />
+    <ClInclude Include="..\src\gl.h" />
+    <ClInclude Include="..\src\imgui\imconfig.h" />
+    <ClInclude Include="..\src\imgui\imgui.h" />
+    <ClInclude Include="..\src\imgui\imgui_internal.h" />
+    <ClInclude Include="..\src\imgui\imstb_rectpack.h" />
+    <ClInclude Include="..\src\imgui\imstb_textedit.h" />
+    <ClInclude Include="..\src\imgui\imstb_truetype.h" />
+    <ClInclude Include="..\src\imgui_impl_opengl3.h" />
+    <ClInclude Include="..\src\matrix.h" />
+    <ClInclude Include="..\src\world.h" />
+    <ClInclude Include="..\src\rgba8.h" />
+    <ClInclude Include="..\src\sprite.h" />
+    <ClInclude Include="..\src\stdafx.h" />
+    <ClInclude Include="..\src\targetver.h" />
+    <ClInclude Include="..\src\terrain.h" />
+    <ClInclude Include="..\src\texheap.h" />
+    <ClInclude Include="..\src\upng.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\asciiid.cpp">
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Include="..\src\enemygen.cpp" />
+    <ClCompile Include="..\src\game.cpp" />
+    <ClCompile Include="..\src\gl45_emu.cpp" />
+    <ClCompile Include="..\src\inventory.cpp" />
+    <ClCompile Include="..\src\mswin.cpp" />
+    <ClCompile Include="..\src\render.cpp" />
+    <ClCompile Include="..\src\sdl.cpp" />
+    <ClCompile Include="..\src\term.cpp" />
+    <ClCompile Include="..\src\tinfl.c" />
+    <ClCompile Include="..\src\urdo.cpp" />
+    <ClCompile Include="..\src\gl.c" />
+    <ClCompile Include="..\src\world.cpp" />
+    <ClCompile Include="..\src\physics.cpp" />
+    <ClCompile Include="..\src\rgba8.cpp" />
+    <ClCompile Include="..\src\imgui\imgui.cpp" />
+    <ClCompile Include="..\src\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\src\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\src\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\src\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="..\src\sprite.cpp" />
+    <ClCompile Include="..\src\terrain.cpp" />
+    <ClCompile Include="..\src\texheap.cpp" />
+    <ClCompile Include="..\src\upng.c" />
+    <ClCompile Include="..\src\water.cpp" />
+    <ClCompile Include="..\src\x11.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

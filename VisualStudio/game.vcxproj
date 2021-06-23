@@ -96,14 +96,14 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>USE_SDL;GAME;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>"SDL\include"</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>./SDL/lib/x86</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x86</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -112,14 +112,14 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>USE_SDL;GAME;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>"SDL\include"</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>./SDL/lib/x64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x64</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -130,7 +130,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>USE_SDL;GAME;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>"SDL\include"</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
@@ -139,7 +139,7 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>./SDL/lib/x86</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x86</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -150,7 +150,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>USE_SDL;GAME;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>"SDL\include"</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>"..\SDL\include"</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
@@ -162,7 +162,7 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>./SDL/lib/x64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../SDL/lib/x64</AdditionalLibraryDirectories>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
@@ -170,50 +170,50 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="enemygen.h" />
-    <ClInclude Include="fast_rand.h" />
-    <ClInclude Include="game.h" />
-    <ClInclude Include="gl.h" />
-    <ClInclude Include="gl45_emu.h" />
-    <ClInclude Include="imgui_impl_opengl3.h" />
-    <ClInclude Include="inventory.h" />
-    <ClInclude Include="matrix.h" />
-    <ClInclude Include="physics.h" />
-    <ClInclude Include="platform.h" />
-    <ClInclude Include="render.h" />
-    <ClInclude Include="rgba8.h" />
-    <ClInclude Include="sprite.h" />
-    <ClInclude Include="stdafx.h" />
-    <ClInclude Include="targetver.h" />
-    <ClInclude Include="term.h" />
-    <ClInclude Include="terrain.h" />
-    <ClInclude Include="texheap.h" />
-    <ClInclude Include="upng.h" />
-    <ClInclude Include="world.h" />
+    <ClInclude Include="..\src\enemygen.h" />
+    <ClInclude Include="..\src\fast_rand.h" />
+    <ClInclude Include="..\src\game.h" />
+    <ClInclude Include="..\src\gl.h" />
+    <ClInclude Include="..\src\gl45_emu.h" />
+    <ClInclude Include="..\src\imgui_impl_opengl3.h" />
+    <ClInclude Include="..\src\inventory.h" />
+    <ClInclude Include="..\src\matrix.h" />
+    <ClInclude Include="..\src\physics.h" />
+    <ClInclude Include="..\src\platform.h" />
+    <ClInclude Include="..\src\render.h" />
+    <ClInclude Include="..\src\rgba8.h" />
+    <ClInclude Include="..\src\sprite.h" />
+    <ClInclude Include="..\src\stdafx.h" />
+    <ClInclude Include="..\src\targetver.h" />
+    <ClInclude Include="..\src\term.h" />
+    <ClInclude Include="..\src\terrain.h" />
+    <ClInclude Include="..\src\texheap.h" />
+    <ClInclude Include="..\src\upng.h" />
+    <ClInclude Include="..\src\world.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="enemygen.cpp" />
-    <ClCompile Include="game.cpp" />
-    <ClCompile Include="gl45_emu.cpp" />
-    <ClCompile Include="inventory.cpp" />
-    <ClCompile Include="network.cpp" />
-    <ClCompile Include="render.cpp" />
-    <ClCompile Include="screen.cpp" />
-    <ClCompile Include="sdl.cpp" />
-    <ClCompile Include="term.cpp" />
-    <ClCompile Include="mswin.cpp" />
-    <ClCompile Include="tinfl.c" />
-    <ClCompile Include="world.cpp" />
-    <ClCompile Include="x11.cpp" />
-    <ClCompile Include="game_app.cpp" />
-    <ClCompile Include="gl.c" />
-    <ClCompile Include="input.cpp" />
-    <ClCompile Include="physics.cpp" />
-    <ClCompile Include="rgba8.cpp" />
-    <ClCompile Include="sprite.cpp" />
-    <ClCompile Include="terrain.cpp" />
-    <ClCompile Include="upng.c" />
-    <ClCompile Include="water.cpp" />
+    <ClCompile Include="..\src\enemygen.cpp" />
+    <ClCompile Include="..\src\game.cpp" />
+    <ClCompile Include="..\src\gl45_emu.cpp" />
+    <ClCompile Include="..\src\inventory.cpp" />
+    <ClCompile Include="..\src\network.cpp" />
+    <ClCompile Include="..\src\render.cpp" />
+    <ClCompile Include="..\src\screen.cpp" />
+    <ClCompile Include="..\src\sdl.cpp" />
+    <ClCompile Include="..\src\term.cpp" />
+    <ClCompile Include="..\src\mswin.cpp" />
+    <ClCompile Include="..\src\tinfl.c" />
+    <ClCompile Include="..\src\world.cpp" />
+    <ClCompile Include="..\src\x11.cpp" />
+    <ClCompile Include="..\src\game_app.cpp" />
+    <ClCompile Include="..\src\gl.c" />
+    <ClCompile Include="..\src\input.cpp" />
+    <ClCompile Include="..\src\physics.cpp" />
+    <ClCompile Include="..\src\rgba8.cpp" />
+    <ClCompile Include="..\src\sprite.cpp" />
+    <ClCompile Include="..\src\terrain.cpp" />
+    <ClCompile Include="..\src\upng.c" />
+    <ClCompile Include="..\src\water.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="build-web.sh" />

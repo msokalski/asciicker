@@ -27,162 +27,162 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="stdafx.h">
+    <ClInclude Include="..\src\stdafx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="targetver.h">
+    <ClInclude Include="..\src\targetver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="gl.h">
+    <ClInclude Include="..\src\gl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\imstb_textedit.h">
+    <ClInclude Include="..\src\imgui\imstb_textedit.h">
       <Filter>imgui\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\imstb_truetype.h">
+    <ClInclude Include="..\src\imgui\imstb_truetype.h">
       <Filter>imgui\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\imconfig.h">
+    <ClInclude Include="..\src\imgui\imconfig.h">
       <Filter>imgui\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\imgui.h">
+    <ClInclude Include="..\src\imgui\imgui.h">
       <Filter>imgui\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\imgui_internal.h">
+    <ClInclude Include="..\src\imgui\imgui_internal.h">
       <Filter>imgui\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\imstb_rectpack.h">
+    <ClInclude Include="..\src\imgui\imstb_rectpack.h">
       <Filter>imgui\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="imgui_impl_opengl3.h">
+    <ClInclude Include="..\src\imgui_impl_opengl3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="terrain.h">
+    <ClInclude Include="..\src\terrain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="matrix.h">
+    <ClInclude Include="..\src\matrix.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="texheap.h">
+    <ClInclude Include="..\src\texheap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="fast_rand.h">
+    <ClInclude Include="..\src\fast_rand.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="upng.h">
+    <ClInclude Include="..\src\upng.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="rgba8.h">
+    <ClInclude Include="..\src\rgba8.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="sprite.h">
+    <ClInclude Include="..\src\sprite.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="platform.h">
+    <ClInclude Include="..\src\platform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="render.h">
+    <ClInclude Include="..\src\render.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="term.h">
+    <ClInclude Include="..\src\term.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="urdo.h">
+    <ClInclude Include="..\src\urdo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="game.h">
+    <ClInclude Include="..\src\game.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="inventory.h">
+    <ClInclude Include="..\src\inventory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="world.h">
+    <ClInclude Include="..\src\world.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="enemygen.h">
+    <ClInclude Include="..\src\enemygen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="gl45_emu.h">
+    <ClInclude Include="..\src\gl45_emu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="asciiid.cpp">
+    <ClCompile Include="..\src\asciiid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="gl.c">
+    <ClCompile Include="..\src\gl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui.cpp">
+    <ClCompile Include="..\src\imgui\imgui.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui_draw.cpp">
+    <ClCompile Include="..\src\imgui\imgui_draw.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui_widgets.cpp">
+    <ClCompile Include="..\src\imgui\imgui_widgets.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui_impl_opengl3.cpp">
+    <ClCompile Include="..\src\imgui_impl_opengl3.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui_demo.cpp">
+    <ClCompile Include="..\src\imgui\imgui_demo.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="terrain.cpp">
+    <ClCompile Include="..\src\terrain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="texheap.cpp">
+    <ClCompile Include="..\src\texheap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="upng.c">
+    <ClCompile Include="..\src\upng.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="rgba8.cpp">
+    <ClCompile Include="..\src\rgba8.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="water.cpp">
+    <ClCompile Include="..\src\water.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="sprite.cpp">
+    <ClCompile Include="..\src\sprite.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="physics.cpp">
+    <ClCompile Include="..\src\physics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="urdo.cpp">
+    <ClCompile Include="..\src\urdo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="mswin.cpp">
+    <ClCompile Include="..\src\mswin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="render.cpp">
+    <ClCompile Include="..\src\render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="term.cpp">
+    <ClCompile Include="..\src\term.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="x11.cpp">
+    <ClCompile Include="..\src\x11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="tinfl.c">
+    <ClCompile Include="..\src\tinfl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="game.cpp">
+    <ClCompile Include="..\src\game.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="inventory.cpp">
+    <ClCompile Include="..\src\inventory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="world.cpp">
+    <ClCompile Include="..\src\world.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="enemygen.cpp">
+    <ClCompile Include="..\src\enemygen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="sdl.cpp">
+    <ClCompile Include="..\src\sdl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="gl45_emu.cpp">
+    <ClCompile Include="..\src\gl45_emu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
