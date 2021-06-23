@@ -104,76 +104,76 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="asciiid.cpp">
+    <ClCompile Include="..\src\asciiid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="gl.c">
+    <ClCompile Include="..\src\gl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui.cpp">
+    <ClCompile Include="..\src\imgui\imgui.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui_draw.cpp">
+    <ClCompile Include="..\src\imgui\imgui_draw.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui_widgets.cpp">
+    <ClCompile Include="..\src\imgui\imgui_widgets.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui_impl_opengl3.cpp">
+    <ClCompile Include="..\src\imgui_impl_opengl3.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\imgui_demo.cpp">
+    <ClCompile Include="..\src\imgui\imgui_demo.cpp">
       <Filter>imgui\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="terrain.cpp">
+    <ClCompile Include="..\src\terrain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="texheap.cpp">
+    <ClCompile Include="..\src\texheap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="upng.c">
+    <ClCompile Include="..\src\upng.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="rgba8.cpp">
+    <ClCompile Include="..\src\rgba8.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="water.cpp">
+    <ClCompile Include="..\src\water.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="sprite.cpp">
+    <ClCompile Include="..\src\sprite.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="physics.cpp">
+    <ClCompile Include="..\src\physics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="urdo.cpp">
+    <ClCompile Include="..\src\urdo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="mswin.cpp">
+    <ClCompile Include="..\src\mswin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="render.cpp">
+    <ClCompile Include="..\src\render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="term.cpp">
+    <ClCompile Include="..\src\term.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="x11.cpp">
+    <ClCompile Include="..\src\x11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="tinfl.c">
+    <ClCompile Include="..\src\tinfl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="game.cpp">
+    <ClCompile Include="..\src\game.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="inventory.cpp">
+    <ClCompile Include="..\src\inventory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="world.cpp">
+    <ClCompile Include="..\src\world.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="enemygen.cpp">
+    <ClCompile Include="..\src\enemygen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
