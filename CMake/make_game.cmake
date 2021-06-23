@@ -4,7 +4,9 @@
 
 set(GAME_SOURCE
 	"src/gl.c"
+	"src/gl45_emu.cpp"
 	"src/x11.cpp"
+	"src/sdl.cpp"
 	"src/term.cpp"
 	"src/game.cpp"
 	"src/enemygen.cpp"

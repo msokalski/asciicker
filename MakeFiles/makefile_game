@@ -2,7 +2,7 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := .run/game
+BIN := ../build/game
 
 # source files
 # SRCS :=	game_app.cpp \
@@ -20,24 +20,24 @@ BIN := .run/game
 
 # LDLIBS := -lutil
 
-SRCS :=	gl.c \
-		gl45_emu.cpp \
-		x11.cpp \
-		sdl.cpp \
-        term.cpp \
-		game.cpp \
-		enemygen.cpp \
-		game_app.cpp \
-		network.cpp \
-		render.cpp \
-		terrain.cpp \
-		world.cpp \
-		inventory.cpp \
-		physics.cpp \
-		sprite.cpp \
-		upng.c \
-		tinfl.c \
-		rgba8.cpp \
+SRCS :=	../src/gl.c \
+		../src/gl45_emu.cpp \
+		../src/x11.cpp \
+		../src/sdl.cpp \
+		../src/term.cpp \
+		../src/game.cpp \
+		../src/enemygen.cpp \
+		../src/game_app.cpp \
+		../src/network.cpp \
+		../src/render.cpp \
+		../src/terrain.cpp \
+		../src/world.cpp \
+		../src/inventory.cpp \
+		../src/physics.cpp \
+		../src/sprite.cpp \
+		../src/upng.c \
+		../src/tinfl.c \
+		../src/rgba8.cpp \
 
 LDLIBS := -lutil -lGL -lX11 -lXinerama -lgpm -lSDL2
 
@@ -48,10 +48,10 @@ DISTFILES := $(BIN)
 DISTOUTPUT := $(BIN).tar.gz
 
 # intermediate directory for generated object files
-OBJDIR := .o_game
+OBJDIR := ../build/game_make_o_cache
 
 # intermediate directory for generated dependency files
-DEPDIR := .d_game
+DEPDIR := ../build/game_make_d_cache
 
 # object files, auto generated from sourcce files
 OBJS := $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))
@@ -149,28 +149,28 @@ $(BIN): $(OBJS)
 
 $(OBJDIR)/%.o: %.c
 $(OBJDIR)/%.o: %.c $(DEPDIR)/%.d
-	@echo Comiling $<
+	@echo Compiling $<
 	@$(PRECOMPILE)
 	@$(COMPILE.c) $<
 	@$(POSTCOMPILE)
 
 $(OBJDIR)/%.o: %.cpp
 $(OBJDIR)/%.o: %.cpp $(DEPDIR)/%.d
-	@echo Comiling $<
+	@echo Compiling $<
 	@$(PRECOMPILE)
 	@$(COMPILE.cc) $<
 	@$(POSTCOMPILE)
 
 $(OBJDIR)/%.o: %.cc
 $(OBJDIR)/%.o: %.cc $(DEPDIR)/%.d
-	@echo Comiling $<
+	@echo Compiling $<
 	@$(PRECOMPILE)
 	@$(COMPILE.cc) $<
 	@$(POSTCOMPILE)
 
 $(OBJDIR)/%.o: %.cxx
 $(OBJDIR)/%.o: %.cxx $(DEPDIR)/%.d
-	@echo Comiling $<
+	@echo Compiling $<
 	@$(PRECOMPILE)
 	@$(COMPILE.cc) $<
 	@$(POSTCOMPILE)

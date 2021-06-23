@@ -3,7 +3,7 @@
 #-----------
 
 set(GAME_TERM_SOURCE
-    "src/game.cpp"
+	"src/game.cpp"
 	"src/enemygen.cpp"
 	"src/game_app.cpp"
 	"src/network.cpp"
