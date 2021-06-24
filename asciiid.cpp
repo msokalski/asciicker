@@ -7854,7 +7854,9 @@ void my_init(A3D_WND* wnd)
 	g_Time = a3dGetTime();
 	render_context.Create();
 
+	#ifndef USE_GL3
 	glDebugMessageCallback(glDebugCall, 0/*cookie*/);
+	#endif
 
 	// Setup Dear ImGui context
 	ImGui::CreateContext();
@@ -8136,8 +8138,13 @@ int main(int argc, char *argv[])
 	gd.alpha_bits = 8;
 	gd.depth_bits = 24;
 	gd.stencil_bits = 8;
+	#ifdef USE_GL3
 	gd.version[0]=3;
 	gd.version[1]=3;
+	#else
+	gd.version[0] = 4;
+	gd.version[1] = 5;
+	#endif
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
 	int rc[] = {0,0,1920*2,1080+2*1080};

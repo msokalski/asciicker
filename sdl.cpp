@@ -131,10 +131,11 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, gd->stencil_bits);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, gd->flags & GraphicsDesc::FLAGS::DOUBLE_BUFFER ? 1:0);
 
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG |
+		(gd->flags & GraphicsDesc::DEBUG_CONTEXT ? SDL_GL_CONTEXT_DEBUG_FLAG : 0));
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, gd->version[0]);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, gd->version[1]);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 
 	wnd->rc = SDL_GL_CreateContext(wnd->win);
 
