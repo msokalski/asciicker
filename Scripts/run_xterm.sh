@@ -1,6 +1,6 @@
 
 #install fonts dir
-xset fp+ $PWD/fonts
+xset fp+ ../fonts
 xset fp rehash
 
 #run
@@ -12,8 +12,8 @@ xterm \
     -xrm "xterm*font4: -gumix-*-*-*-*-*-16-*-*-*-*-*-*" \
     -xrm "xterm*font5: -gumix-*-*-*-*-*-18-*-*-*-*-*-*" \
     -xrm "xterm*font6: -gumix-*-*-*-*-*-20-*-*-*-*-*-*" \
-    -e .run/game_term 
+    -e ../build/game_term 
 
 #cleanup
-xset fp- $PWD/fonts
+xset fp- ../fonts
 xset fp rehash    
