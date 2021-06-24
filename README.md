@@ -14,7 +14,11 @@ Link to repository: https://github.com/Niki4tap/asciiid.git
 3) Retarget solutions (this step may not be needed in some cases)
 ![Retarget](https://github.com/Niki4tap/asciiid/raw/master/misc/VS_Retarget.png)
 4) Install [SDL2](https://www.libsdl.org/download-2.0.php)
+
+
 ![SDL](https://github.com/Niki4tap/asciiid/raw/sdl/misc/SDL.png)
+
+
 5) Copy `include` and `lib` directories into `SDL\` directory in the root of the repository
 6) Build asciiid
 7) Copy `lib\(your_architecture_here)\SDL.dll` into `build` directory
