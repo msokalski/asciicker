@@ -9,12 +9,12 @@
 #include "fast_rand.h"
 #include "matrix.h"
 #include "gl.h"
+#include "gl45_emu.h"
 
 #include "game.h"
 
 #define CODE(...) #__VA_ARGS__
 #define DEFN(a,s) "#define " #a #s "\n"
-
 
 struct TERM_LIST
 {
@@ -117,7 +117,7 @@ void term_render(A3D_WND* wnd)
 	};
 
 	// copy term->buf to some texture
-	glTextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
+	gl3TextureSubImage2D(term->tex, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, term->buf);
 
 	glViewport(vp_xy[0], vp_xy[1], vp_wh[0], vp_wh[1]);
 
@@ -207,17 +207,18 @@ void term_init(A3D_WND* wnd)
 	GLuint shader[2] = { 0,0 };
 
 	term->tex = 0;
-	glCreateTextures(GL_TEXTURE_2D, 1, &term->tex);
+	gl3CreateTextures(GL_TEXTURE_2D, 1, &term->tex);
+
 	if (!term->tex)
 	{
 		printf("glCreateTextures failed\n");
 		exit(-1);
 	}
 	
-	glTextureStorage2D(term->tex, 1, GL_RGBA8, term->max_width, term->max_height);
+	gl3TextureStorage2D(term->tex, 1, GL_RGBA8, term->max_width, term->max_height);
 
 	const char* term_vs_src =
-		CODE(#version 130\n)
+		CODE(#version 330\n)
 		CODE(
 			/*layout(location = 0)*/ uniform ivec2 ansi_vp;  // viewport size in cells
 			/*layout(location = 0)*/ in vec2 uv; // normalized to viewport size
@@ -230,7 +231,7 @@ void term_init(A3D_WND* wnd)
 		);
 
 	const char* term_fs_src =
-		CODE(#version 130\n)
+		CODE(#version 330\n)
 		DEFN(P(r, g, b), vec3(r / 6., g / 7., b / 6.))
 		CODE(
 
@@ -503,8 +504,15 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 	gd.alpha_bits = 0;
 	gd.depth_bits = 0;
 	gd.stencil_bits = 0;
-	gd.version[0]=3;
-	gd.version[1]=0;	
+
+#ifdef USE_GL3
+	gd.version[0] = 3;
+	gd.version[1] = 3;
+#else
+	gd.version[0] = 4;
+	gd.version[1] = 5;
+#endif
+
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
 	int rc[] = { 0,0,1920 * 2,1080 + 2 * 1080 };

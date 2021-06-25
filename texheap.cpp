@@ -2,6 +2,7 @@
 #include <malloc.h>
 #include <string.h>
 #include "texheap.h"
+#include "gl45_emu.h"
 
 void TexHeap::Create(int page_cap_x, int page_cap_y, int numtex, const TexDesc* texdesc, int page_user_bytes)
 {
@@ -68,14 +69,14 @@ TexAlloc* TexHeap::Alloc(const TexData data[])
 			head = page;
 		tail = page;
 		
-		glCreateTextures(GL_TEXTURE_2D, num, page->tex);
+		gl3CreateTextures(GL_TEXTURE_2D, num, page->tex);
 		for (int t = 0; t < num; t++)
 		{
-			glTextureStorage2D(page->tex[t], 1, tex[t].ifmt, cap_x * tex[t].item_w, cap_y * tex[t].item_h);
-			glTextureParameteri(page->tex[t], GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTextureParameteri(page->tex[t], GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTextureParameteri(page->tex[t], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTextureParameteri(page->tex[t], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			gl3TextureStorage2D(page->tex[t], 1, tex[t].ifmt, cap_x * tex[t].item_w, cap_y * tex[t].item_h);
+			gl3TextureParameteri2D(page->tex[t], GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			gl3TextureParameteri2D(page->tex[t], GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			gl3TextureParameteri2D(page->tex[t], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			gl3TextureParameteri2D(page->tex[t], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		}
 	}
 
@@ -92,34 +93,44 @@ TexAlloc* TexHeap::Alloc(const TexData data[])
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	for (int t = 0; t < num; t++)
 	{
-		glTextureSubImage2D(page->tex[t], 0, a->x * tex[t].item_w, a->y * tex[t].item_h,
+		gl3TextureSubImage2D(page->tex[t], 0, a->x * tex[t].item_w, a->y * tex[t].item_h,
 			tex[t].item_w, tex[t].item_h, data[t].format, data[t].type, data[t].data);
 	}
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 	return a;
 }
 
-void TexAlloc::Free()
+TexAlloc* TexAlloc::Free() // return last alloc which must be re-updated (GL3 only)
 {
 	TexHeap* h = page->heap;
 	int cap = h->cap_x * h->cap_y;
 	int on_page = y * h->cap_x + x;
 
+	TexAlloc* last = 0;
+
 	// not last alloc on last page?
 	if (page != h->tail || on_page != (h->allocs-1) % cap)
 	{
-		TexAlloc* last = h->tail->alloc[(h->allocs-1) % cap];
+		last = h->tail->alloc[(h->allocs-1) % cap];
+
+		#if !USE_GL3
 		for (int t = 0; t < h->num; t++)
 		{
-			glCopyImageSubData(
+			gl3CopyImageSubData(
 				last->page->tex[t], GL_TEXTURE_2D, 0, last->x * h->tex[t].item_w, last->y * h->tex[t].item_h, 0,
 				page->tex[t], GL_TEXTURE_2D, 0, x * h->tex[t].item_w, y * h->tex[t].item_h, 0,
 				h->tex[t].item_w, h->tex[t].item_h, 1);
 		}
+		#endif
+
 		page->alloc[on_page] = last;
 		last->page = page;
 		last->x = x;
 		last->y = y;
+
+		#if !USE_GL3
+		last = 0;
+		#endif
 	}
 
 	h->allocs--;
@@ -136,6 +147,8 @@ void TexAlloc::Free()
 		h->tail = h->tail->prev;
 		free(h->tail);
 	}
+
+	return last;
 }
 
 void TexAlloc::Update(int first, int count, const TexData data[])
@@ -146,7 +159,7 @@ void TexAlloc::Update(int first, int count, const TexData data[])
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	for (int t = first; t < end; t++)
 	{
-		glTextureSubImage2D(page->tex[t], 0, x * h->tex[t].item_w, y * h->tex[t].item_h,
+		gl3TextureSubImage2D(page->tex[t], 0, x * h->tex[t].item_w, y * h->tex[t].item_h,
 			h->tex[t].item_w, h->tex[t].item_h, data[t-first].format, data[t-first].type, data[t-first].data);
 	}
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);

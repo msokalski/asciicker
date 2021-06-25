@@ -2145,6 +2145,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 	fast_srand(stamp);
 
+#ifndef EDITOR
 	EnemyGen* eg = enemygen_head;
 	while (eg)
 	{
@@ -2282,6 +2283,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		}
 		eg = eg->next;
 	}
+#endif
+
 
 	#if 0
 	
@@ -2418,7 +2421,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	}
 	#endif
 
-	#if 1
+	#ifndef EDITOR
 	int buddies = 2;
 	for (int i = 0; i < buddies; i++)
 	{
@@ -2641,6 +2644,7 @@ void DeleteGame(Game* g)
 		else
 			player_tail = g->player.prev;
 
+		#ifndef EDITOR
 		Character* h = player_head;
 		while (h)
 		{
@@ -2675,6 +2679,7 @@ void DeleteGame(Game* g)
 			}
 			h = n;
 		}
+		#endif
 
 		free(g);
 	}

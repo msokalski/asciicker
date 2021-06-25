@@ -4628,6 +4628,14 @@ World* LoadWorld(FILE* f, bool editor)
 				}
 			}
 
+			/*
+			if (strstr(mesh_id,"untitled"))
+			{
+				strcpy(mesh_id,"tree-3.akm");
+			}
+			*/
+
+
 			// mesh id lookup
 			Mesh* m = w->head_mesh;
 			while (m && strcmp(m->name, mesh_id))
@@ -5139,6 +5147,8 @@ void HideInst(Inst* i)
 
 void UpdateSpriteInst(World* world, Inst* i, Sprite* sprite, const float pos[3], float yaw, int anim, int frame, const int reps[4])
 {
+	if (!i)
+		return;
 	assert(i->inst_type == Inst::INST_TYPE::SPRITE);
 
 	// instead of detach/ attach it could be more intelligent:

@@ -75,6 +75,9 @@
     <ClInclude Include="enemygen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="gl45_emu.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gl.c">
@@ -135,6 +138,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="enemygen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sdl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gl45_emu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

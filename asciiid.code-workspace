@@ -18,7 +18,12 @@
 		"files.associations": {
 			"cmath": "cpp",
 			"random": "cpp",
-			"*.tcc": "cpp"
+			"*.tcc": "cpp",
+			"array": "cpp",
+			"string_view": "cpp",
+			"initializer_list": "cpp",
+			"utility": "cpp",
+			"typeinfo": "cpp"
 		}
 	}
 }

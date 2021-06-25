@@ -1,0 +1,2 @@
+for windows unpack SDL here it should contains ./include and ./lib dirs
+then copy ./lib/*.dll files to apriopriate build/run directories
