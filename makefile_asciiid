@@ -75,8 +75,8 @@ CXXFLAGS :=
 
 # C/C++ flags
 # CPPFLAGS := -save-temps=obj -pthread -DEDITOR -O3 -DUSE_SDL
-CPPFLAGS := -g -save-temps=obj -pthread -DEDITOR -O3
-# CPPFLAGS := -g -save-temps=obj -pthread -DEDITOR -fsanitize=address
+CPPFLAGS := -g -save-temps=obj -pthread -DEDITOR -DUSE_SDL
+# CPPFLAGS := -g -save-temps=obj -pthread -DEDITOR -DUSE_SDL -fsanitize=address 
 
 # linker flags
 LDFLAGS := -save-temps=obj -pthread -O3

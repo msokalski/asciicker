@@ -1080,7 +1080,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y7/";
+	const char* path = "/ws/y8/";
 	const char* port = "80";
 	*/
 
@@ -1088,7 +1088,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y7/";
+	const char* path = "/ws/y8/";
 	const char* port = "443";
 	*/
 
@@ -1096,7 +1096,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y7/"; // just to check if same as server expects
+	const char* path = "/ws/y8/"; // just to check if same as server expects
 	const char* port = "8080";
 	*/
 
@@ -1189,7 +1189,7 @@ int main(int argc, char* argv[])
 
 	{
         char a3d_path[1024];
-        sprintf(a3d_path,"%sa3d/game_map_y7.a3d", base_path);
+        sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
 		FILE* f = fopen(a3d_path, "rb");
 
 		// TODO:
