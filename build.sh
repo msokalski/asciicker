@@ -21,8 +21,8 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 		make -j16 -f makefile_game_term
 	fi
 else
-	make -j16 -f makefile_asciiid
+	make -j16 -f makefile_asciiid_mac
 	# make -j16 -f makefile_server
-	make -j16 -f makefile_game
-	make -j16 -f makefile_game_term
+	make -j16 -f makefile_game_mac
+	make -j16 -f makefile_game_term_mac
 fi

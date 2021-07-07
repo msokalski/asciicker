@@ -775,7 +775,6 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 
 		// by having old and new water level we can (in future) keep player floating on top of waves 
 		phys->water = io->water;
-		printf("io.water: %f\n", io->water);
 
 		// YAW
 		{

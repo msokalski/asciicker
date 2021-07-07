@@ -3533,7 +3533,8 @@ void Palettize(const uint8_t p[768])
 
 	if (ipal)
 	{
-		glGetTextureImage(pal_tex, 0, GL_ALPHA, GL_UNSIGNED_BYTE, 1<<24, ipal);
+		// glGetTextureImage(pal_tex, 0, GL_ALPHA, GL_UNSIGNED_BYTE, 1<<24, ipal);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_ALPHA, GL_UNSIGNED_BYTE, ipal);
 		uint64_t t2 = a3dGetTime();
 		printf("fetched ipal in %d us\n", (int)(t2 - t1));
 	}
@@ -4061,7 +4062,7 @@ void my_render(A3D_WND* wnd)
 {
 
 	ImGuiIO& io = ImGui::GetIO();
-	static bool oldRight = false;
+	static bool oldRight = false; // HACK(xylit): prob not a good solution, but works it works :p
 
 	#ifdef MOUSE_QUEUE
 	while (mouse_queue_len) // accumulate wheel sequence only
@@ -7414,11 +7415,12 @@ void my_render(A3D_WND* wnd)
 	}
 
 	// 4 clip planes in clip-space
-
-	double clip_left[4] =   { 1, 0, 0,+.9 };
-	double clip_right[4] =  {-1, 0, 0,+.9 };
-	double clip_bottom[4] = { 0, 1, 0,+.9 }; 
-	double clip_top[4] =    { 0,-1, 0,+.9 }; // adjust by max brush descent
+	
+	// NOTE(xylit): changed last col from +.9 to 1 because the clipping was clipping parts that should be visible
+	double clip_left[4] =   { 1, 0, 0, 1 };
+	double clip_right[4] =  {-1, 0, 0, 1 };
+	double clip_bottom[4] = { 0, 1, 0, 1 }; 
+	double clip_top[4] =    { 0,-1, 0, 1 }; // adjust by max brush descent
 
 	double brush_extent = cos(pitch) * br_xyra[3] * br_xyra[2] / ry;
 
