@@ -2,7 +2,7 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := .run/server
+BIN := .run/asciicker_server
 
 SRCS :=	game_svr.cpp \
 		network.cpp \

@@ -2,7 +2,7 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := .run/game_term
+BIN := .run/asciicker_term
 
 # source files
 SRCS :=	game.cpp \
