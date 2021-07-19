@@ -7803,8 +7803,9 @@ void my_init(A3D_WND* wnd)
 	g_Time = a3dGetTime();
 	render_context.Create();
 
-	// NOTE(xylit): this call is an extension
-	// glDebugMessageCallback(glDebugCall, 0/*cookie*/);
+	#ifndef USE_GL3
+	glDebugMessageCallback(glDebugCall, 0/*cookie*/);
+	#endif
 
 	// Setup Dear ImGui context
 	ImGui::CreateContext();
@@ -7846,7 +7847,7 @@ void my_init(A3D_WND* wnd)
 	ImGui::StyleColorsDark();
 	//ImGui::StyleColorsClassic();
 
-	ImGui_ImplOpenGL3_Init("#version 150");
+	ImGui_ImplOpenGL3_Init("#version 330");
 
 	ImWchar range[]={0x0020, 0x03FF, 0};
 	char ui_font_path[1024];
@@ -7923,7 +7924,12 @@ void my_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 		io.KeysDown[ki] = down;
 	
 	io.KeysDown[A3D_ENTER] = a3dGetKeyb(wnd,A3D_ENTER) || a3dGetKeyb(wnd, A3D_NUMPAD_ENTER);
+	#ifdef __APPLE__ // it has only RALT
 	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT) || a3dGetKeyb(wnd,A3D_RALT);
+	#else
+	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);
+	#endif
+	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);
 	io.KeyCtrl = a3dGetKeyb(wnd, A3D_LCTRL) || a3dGetKeyb(wnd, A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(wnd, A3D_LSHIFT) || a3dGetKeyb(wnd, A3D_RSHIFT);
 }
