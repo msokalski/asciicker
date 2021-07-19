@@ -7924,11 +7924,13 @@ void my_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 		io.KeysDown[ki] = down;
 	
 	io.KeysDown[A3D_ENTER] = a3dGetKeyb(wnd,A3D_ENTER) || a3dGetKeyb(wnd, A3D_NUMPAD_ENTER);
+	
 	#ifdef __APPLE__ // it has only RALT
 	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT) || a3dGetKeyb(wnd,A3D_RALT);
 	#else
 	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);
 	#endif
+
 	io.KeyCtrl = a3dGetKeyb(wnd, A3D_LCTRL) || a3dGetKeyb(wnd, A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(wnd, A3D_LSHIFT) || a3dGetKeyb(wnd, A3D_RSHIFT);
 }
