@@ -7929,7 +7929,6 @@ void my_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 	#else
 	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);
 	#endif
-	io.KeyAlt = a3dGetKeyb(wnd, A3D_LALT);
 	io.KeyCtrl = a3dGetKeyb(wnd, A3D_LCTRL) || a3dGetKeyb(wnd, A3D_RCTRL);
 	io.KeyShift = a3dGetKeyb(wnd, A3D_LSHIFT) || a3dGetKeyb(wnd, A3D_RSHIFT);
 }
