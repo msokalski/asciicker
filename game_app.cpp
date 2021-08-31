@@ -1120,6 +1120,8 @@ int main(int argc, char* argv[])
 	// if url is given try to open connection
 	GameServer* gs = 0;
 
+	// Y7+ are not multiplayer
+	/*
 	if (url)
 	{
 		// [user@]server_address/path[:port]
@@ -1171,6 +1173,7 @@ int main(int argc, char* argv[])
 		// ...
 	}
     else
+	*/
     {
         strcpy(player_name, "player");
     }

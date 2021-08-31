@@ -202,6 +202,10 @@ WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh)
 		SDL_GetWindowPosition(wnd->win, xywh + 0, xywh + 1);
 		SDL_GetWindowSize(wnd->win, xywh + 2, xywh + 3);
 	}
+
+	uint32_t f = SDL_GetWindowFlags(wnd->win);
+	if (f & SDL_WINDOW_FULLSCREEN)
+		return WndMode::A3D_WND_FULLSCREEN;
 	return WndMode::A3D_WND_NORMAL; // not critical
 }
 
@@ -212,6 +216,13 @@ bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode)
 		SDL_SetWindowPosition(wnd->win, xywh[0], xywh[1]);
 		SDL_SetWindowSize(wnd->win, xywh[2], xywh[3]);
 	}
+
+	if (wnd_mode == WndMode::A3D_WND_FULLSCREEN)
+		SDL_SetWindowFullscreen(wnd->win, SDL_WINDOW_FULLSCREEN_DESKTOP);
+	else
+	if (wnd_mode != WndMode::A3D_WND_CURRENT)
+		SDL_SetWindowFullscreen(wnd->win, 0);
+
 	return true;
 }
 
