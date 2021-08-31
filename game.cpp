@@ -3624,8 +3624,27 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int steps = Animate(physics, _stamp, &io, player.req.mount != 0);
 
+
 	player.impulse[0] = io.x_impulse;
 	player.impulse[1] = io.y_impulse;
+
+//	if (io.grounded)
+//	{
+//		static int steps_accum = 0;
+//		steps_accum += steps;
+//
+//		printf("steps: %d, accum: %d\n", steps, steps_accum);
+//
+//
+//		if (steps_accum >= 5)
+//		{
+//			steps_accum -= steps_accum / 5 * 5;
+//
+//			// radius should be attenuated by slope (0deg:full, 90deg:zero)
+//			float xy[2] = { player.pos[0] + fast_rand() % 3 - 1, player.pos[1] + fast_rand() % 3 - 1 };
+//			PaintTerrain(xy, fast_rand() % 20 * 0.1f, 5/*blood*/);
+//		}
+//	}
 
 	if (steps > 0)
 	{
@@ -3999,6 +4018,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 											int hp = h->target->HP;
 											h->target->HP -= rand() % 100;
 
+											{
+												float r = fast_rand() % 20 * 0.1f + 0.6;
+												if (hp > 0 && h->target->HP <= 0)
+													r = fmaxf(r,2.5f);
+												float xy[2] = { h->target->pos[0] + fast_rand() % 3 - 1, h->target->pos[1] + fast_rand() % 3 - 1 };
+												PaintTerrain(xy, r, 5/*blood*/);
+											}
+
 											float d = 15.0f / sqrtf(dx*dx + dy * dy);
 											h->target->impulse[0] += dx * d; 
 											h->target->impulse[1] += dy * d;
@@ -4213,6 +4240,14 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								int hp = h->target->HP;
 								h->target->HP -= rand() % 100;
 								//h->target->HP = 0;
+
+								{
+									float r = fast_rand() % 20 * 0.1f + 0.6;
+									if (hp > 0 && h->target->HP <= 0)
+										r = fmaxf(r, 2.5f);
+									float xy[2] = { h->target->pos[0] + fast_rand() % 3 - 1, h->target->pos[1] + fast_rand() % 3 - 1 };
+									PaintTerrain(xy, r, 5/*blood*/);
+								}
 
 								float d = 15.0f / sqrtf(dx*dx + dy * dy);
 								h->target->impulse[0] += dx * d;
@@ -7093,4 +7128,61 @@ void Game::OnMessage(const uint8_t* msg, int len)
 {
 	// NET_TODO:
 	// this is called by JS or game_app (already on game's thread)
+}
+
+
+
+struct MatIDStamp
+{
+	static void SetMatCB(Patch* p, int x, int y, int view_flags, void* cookie)
+	{
+		MatIDStamp* t = (MatIDStamp*)cookie;
+
+		double r2 = t->r * t->r;
+		double* hit = t->hit;
+		int matid = t->matid;
+
+		uint16_t* visual = GetTerrainVisualMap(p);
+
+		bool diff = false;
+		diff = true;
+
+		for (int v = 0, i = 0; v < VISUAL_CELLS; v++)
+		{
+			for (int u = 0; u < VISUAL_CELLS; u++, i++)
+			{
+				double dx = u + x - hit[0];
+				double dy = v + y - hit[1];
+				if (dx*dx + dy * dy < r2)
+				{
+					int old = visual[i] & 0xFF;
+					if (old != matid)
+					{
+						diff = true;
+						visual[i] = (visual[i] & ~0x00FF) | matid;
+					}
+				}
+			}
+		}
+
+		if (diff)
+			UpdateTerrainVisualMap(p);
+	}
+
+	int matid;
+	double hit[2];
+	double r;
+};
+
+void PaintTerrain(float* xy, float r, int matid)
+{
+#ifndef EDITOR
+	MatIDStamp stamp;
+	stamp.hit[0] = xy[0];
+	stamp.hit[1] = xy[1];
+	stamp.r = r;
+	stamp.matid = matid;
+
+	QueryTerrain(terrain, xy[0], xy[1], r * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
+#endif
 }

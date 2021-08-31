@@ -1264,6 +1264,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 			}
 		}
 
+		io->grounded = phys->accum_contact >= 1.0;
+
 		phys->accum_contact *= 0.9f;
 
 		if (phys->vel[2] > 20)

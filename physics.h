@@ -29,6 +29,8 @@ struct PhysicsIO
     int player_stp;
 	int dt;
 
+	bool grounded;
+
 	float xyz[64][3];
 };
 

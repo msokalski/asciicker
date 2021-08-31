@@ -4017,6 +4017,14 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 					int hp = h->shoot_target->HP;
 					h->shoot_target->HP -= rand() % 50;
 
+					{
+						float r = fast_rand() % 20 * 0.1f + 0.6;
+						if (hp > 0 && h->shoot_target->HP <= 0)
+							r = fmaxf(r, 2.5f);
+						float xy[2] = { h->shoot_target->pos[0] + fast_rand() % 3 - 1, h->shoot_target->pos[1] + fast_rand() % 3 - 1 };
+						PaintTerrain(xy, r, 5/*blood*/);
+					}
+
 					float dx = h->shoot_target->pos[0] - h->pos[0];
 					float dy = h->shoot_target->pos[1] - h->pos[1];
 

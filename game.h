@@ -425,3 +425,5 @@ void DeleteGame(Game* g);
 
 void LoadSprites();
 void FreeSprites();
+
+void PaintTerrain(float* xy, float r, int matid);
