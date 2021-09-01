@@ -3624,27 +3624,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int steps = Animate(physics, _stamp, &io, player.req.mount != 0);
 
+	if (io.grounded)
+		BloodLeak(&player, steps);
 
 	player.impulse[0] = io.x_impulse;
 	player.impulse[1] = io.y_impulse;
-
-//	if (io.grounded)
-//	{
-//		static int steps_accum = 0;
-//		steps_accum += steps;
-//
-//		printf("steps: %d, accum: %d\n", steps, steps_accum);
-//
-//
-//		if (steps_accum >= 5)
-//		{
-//			steps_accum -= steps_accum / 5 * 5;
-//
-//			// radius should be attenuated by slope (0deg:full, 90deg:zero)
-//			float xy[2] = { player.pos[0] + fast_rand() % 3 - 1, player.pos[1] + fast_rand() % 3 - 1 };
-//			PaintTerrain(xy, fast_rand() % 20 * 0.1f, 5/*blood*/);
-//		}
-//	}
 
 	if (steps > 0)
 	{
@@ -3911,6 +3895,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 
+					if (pio.grounded)
+						BloodLeak(h, s);
+
 					if (h->target)
 					{
 						float adv[2] = { pio.pos[0] - h->unstuck[1][0], pio.pos[1] - h->unstuck[1][1] };
@@ -3982,6 +3969,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						pio.jump = false;
 					}
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
+
+					if (pio.grounded)
+						BloodLeak(h, s);
 				}
 
 				h->impulse[0] = pio.x_impulse;
@@ -4019,10 +4009,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 											h->target->HP -= rand() % 100;
 
 											{
+												h->target->leak += (hp - h->target->HP) / 5;
+
 												float r = fast_rand() % 20 * 0.1f + 0.6;
 												if (hp > 0 && h->target->HP <= 0)
 													r = fmaxf(r,2.5f);
-												float xy[2] = { h->target->pos[0] + fast_rand() % 3 - 1, h->target->pos[1] + fast_rand() % 3 - 1 };
+
+												float dR = 1.0;
+												float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
+												float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
+												float xy[2] = { h->target->pos[0] + dr * cosf(dt), h->target->pos[0] + dr * sinf(dt) };
 												PaintTerrain(xy, r, 5/*blood*/);
 											}
 
@@ -4242,10 +4238,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								//h->target->HP = 0;
 
 								{
+									h->target->leak += (hp - h->target->HP) / 5;
+
 									float r = fast_rand() % 20 * 0.1f + 0.6;
 									if (hp > 0 && h->target->HP <= 0)
 										r = fmaxf(r, 2.5f);
-									float xy[2] = { h->target->pos[0] + fast_rand() % 3 - 1, h->target->pos[1] + fast_rand() % 3 - 1 };
+
+									float dR = 1.0;
+									float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
+									float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
+									float xy[2] = { h->target->pos[0] + dr * cosf(dt), h->target->pos[0] + dr * sinf(dt) };
 									PaintTerrain(xy, r, 5/*blood*/);
 								}
 
@@ -7185,4 +7187,25 @@ void PaintTerrain(float* xy, float r, int matid)
 
 	QueryTerrain(terrain, xy[0], xy[1], r * 0.501, 0x00, MatIDStamp::SetMatCB, &stamp);
 #endif
+}
+
+void BloodLeak(Character* c, int steps)
+{
+	c->leak_steps += steps;
+
+	if (!c->leak)
+		c->leak_steps = 0;
+	else
+	if (c->leak_steps >= 5)
+	{
+		c->leak_steps -= c->leak_steps / 5 * 5;
+
+		float dR = 1.0;
+		float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
+		float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
+		float xy[2] = { c->pos[0] + dr * cosf(dt), c->pos[1] + dr * sinf(dt) };
+		PaintTerrain(xy, fast_rand() % 20 * 0.1f, 5/*blood*/);
+
+		c->leak--;
+	}
 }

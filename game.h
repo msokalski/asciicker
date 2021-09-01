@@ -118,6 +118,9 @@ struct Character
 
 	SpriteReq req; // kind of character is inside (human / wolf)!!!
 
+	int leak; // blood / guts
+	int leak_steps;
+
 	Inst* inst; // only server players
 	int clr;
 	int stuck;
@@ -427,3 +430,4 @@ void LoadSprites();
 void FreeSprites();
 
 void PaintTerrain(float* xy, float r, int matid);
+void BloodLeak(Character* c, int steps);

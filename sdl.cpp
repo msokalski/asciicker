@@ -706,6 +706,21 @@ void a3dLoop()
 					if (wnd && wnd->platform_api.keyb_key)
 						wnd->platform_api.keyb_key(wnd,ki,Event.type==SDL_KEYDOWN);
 
+					// cure sdl, it doesn't report all keys to SDL_TEXTINPUT
+					// TODO: test if sdl on MAC also requires this cure
+					if (Event.type == SDL_KEYDOWN)
+					{
+						switch (ki)
+						{
+							case A3D_DELETE: wnd->platform_api.keyb_char(wnd, 127); break;
+							case A3D_BACKSPACE: wnd->platform_api.keyb_char(wnd, 8); break;
+							case A3D_ENTER: 
+							case A3D_NUMPAD_ENTER:
+								wnd->platform_api.keyb_char(wnd, 13); break;
+							// case A3D_TAB: we dont use tab in key_char()
+						}
+					}
+
 					break;
 				}
 
