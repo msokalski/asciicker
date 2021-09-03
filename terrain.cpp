@@ -1416,6 +1416,13 @@ TexAlloc* GetTerrainTexAlloc(Patch* p)
 }
 #endif
 
+uint16_t GetTerrainHi(Patch* p, uint16_t* lo)
+{
+	if (lo)
+		*lo = p->lo;
+	return p->hi;
+}
+
 uint16_t GetTerrainDiag(Patch* p)
 {
 	return p->diag;

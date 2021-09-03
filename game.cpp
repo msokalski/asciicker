@@ -1798,9 +1798,14 @@ Sprite* player_nude = 0;
 Sprite* player[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
 Sprite* player_fall[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
 Sprite* player_attack[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+
 Sprite* wolfie[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
 Sprite* wolfie_attack[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
 Sprite* wolfie_fall[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 }; // todo
+
+Sprite* bigbee[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* bigbee_attack[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 };
+Sprite* bigbee_fall[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = { 0 }; // todo
 
 // dismount immediately when wolfie and/or player dies, evaluate them separately!
 // wolfie dismounting should separate wolfie -> player + wolf
@@ -1808,6 +1813,10 @@ Sprite* wolfie_fall[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE] = 
 Sprite* wolf[2] = { 0 }; // 2 clr
 Sprite* wolf_attack = 0; // todo
 Sprite* wolf_fall = 0;   // todo
+
+Sprite* bee[2] = { 0 }; // 2 clr
+Sprite* bee_attack = 0; // todo
+Sprite* bee_fall = 0;   // todo
 
 Sprite* player_naked = 0; // what to do?
 
@@ -1846,6 +1855,10 @@ void LoadSprites()
 	wolf[0] = LoadSpriteBP("wolfie.xp", 0, false);
 	wolf[1] = LoadSpriteBP("wolfie.xp", wolf_recolor, false);
 
+	bee[0] = LoadSpriteBP("bigbee.xp", 0, false);
+	bee[1] = 0;
+
+
 	// uint8_t enemy_recolor[] = { 4, 170,0,170, 153,51,102, 0,0,170, 0,51,102, 85,85,255, 51,102,153, 255,85,85, 204,102,102 };
 	uint8_t enemy_recolor[] = { 4, 170,0,170, 153,0,0, 0,0,170, 0,0,0, 85,85,255, 51,51,51, 255,85,85, 204,102,102, 
 								'@','#', 'v','^', '^','v', 191,217, 217,191,  192,218, 218,192, 0,0};
@@ -1872,8 +1885,14 @@ void LoadSprites()
 
 						sprintf(name, "wolfie-%x%x%x%x.xp", a, h, s, w);
 						wolfie[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
-
 						wolfie_fall[c][a][h][s][w] = 0;
+
+						sprintf(name, "bigbee-%x%x%x%x.xp", a, h, s, w);
+						if (a == 0 && h == 0 && s == 0 && w == 0)
+							bigbee[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
+						else
+							bigbee[c][a][h][s][w] = 0;
+						bigbee_fall[c][a][h][s][w] = 0;
 					}
 
 					player_attack[c][a][h][s][WEAPON::NONE] = 0;
@@ -1885,6 +1904,10 @@ void LoadSprites()
 
 						sprintf(name, "wolack-%x%x%x%x.xp", a, h, s, w);
 						wolfie_attack[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
+
+						//sprintf(name, "beeack-%x%x%x%x.xp", a, h, s, w);
+						//bigbee_attack[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
+						bigbee_attack[c][a][h][s][w] = 0;
 					}
 				}
 			}
@@ -2065,6 +2088,21 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 		return 0;
 	}
 
+	if (req->kind == SpriteReq::BEE)
+	{
+		if (req->action == ACTION::NONE &&
+			req->weapon == WEAPON::NONE &&
+			req->shield == SHIELD::NONE &&
+			req->helmet == HELMET::NONE &&
+			req->armor == ARMOR::NONE &&
+			req->mount == MOUNT::NONE)
+		{
+			return bee[clr];
+		}
+
+		return 0;
+	}
+
 	if (req->action < 0 || req->action >= ACTION::SIZE)
 		return 0;
 
@@ -2121,6 +2159,27 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 				case ACTION::STAND:
 					return wolfie_fall[clr][req->armor][req->helmet][req->shield][req->weapon];
 			}	
+			return 0;
+		}
+
+		case MOUNT::BEE:
+		{
+			switch (req->action)
+			{
+			case ACTION::NONE:
+				return bigbee[clr][req->armor][req->helmet][req->shield][req->weapon];
+
+			case ACTION::ATTACK:
+				if (req->weapon == WEAPON::REGULAR_CROSSBOW)
+					return bigbee[clr][req->armor][req->helmet][req->shield][req->weapon];
+				else
+					return bigbee_attack[clr][req->armor][req->helmet][req->shield][req->weapon];
+
+			case ACTION::FALL:
+			case ACTION::DEAD:
+			case ACTION::STAND:
+				return bigbee_fall[clr][req->armor][req->helmet][req->shield][req->weapon];
+			}
 			return 0;
 		}
 	}
@@ -3622,7 +3681,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// blocked by enemies? (closest one)
 	// ...
 
-	int steps = Animate(physics, _stamp, &io, player.req.mount != 0);
+	int steps = Animate(physics, _stamp, &io, player.req.mount);
 
 	if (io.grounded)
 		BloodLeak(&player, steps);
@@ -4887,6 +4946,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				if (a->sprite == item_proto_lib[39].sprite_2d)
 				{
 					// gold potion hack
+					player.SetMount(MOUNT::BEE);
+				}
+				else
+				if (a->sprite == item_proto_lib[38].sprite_2d)
+				{
+					// cyan potion hack
 					player.SetMount(MOUNT::NONE);
 				}
 				else
@@ -5537,6 +5602,14 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				player.SetActionStand(stamp);
 			if (key == A3D_END)
 				player.SetActionFall(stamp);
+
+			if (key == A3D_NUMPAD_1)
+				player.SetMount(MOUNT::WOLF);
+			if (key == A3D_NUMPAD_2)
+				player.SetMount(MOUNT::BEE);
+			if (key == A3D_NUMPAD_0)
+				player.SetMount(MOUNT::NONE);
+
 
 			/*
 			if (key == A3D_1)

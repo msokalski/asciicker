@@ -56,6 +56,7 @@ struct MOUNT { enum
 {
 	NONE = 0,
 	WOLF,
+	BEE,
 	SIZE
 };};
 
@@ -64,7 +65,8 @@ struct SpriteReq
 	enum KIND
 	{
 		HUMAN = 0,
-		WOLF = 1
+		WOLF = 1,
+		BEE = 2,
 	};
 
 	KIND kind;

@@ -71,6 +71,8 @@ size_t GetTerrainBytes(Terrain* t);
 uint16_t GetTerrainDiag(Patch* p);
 void SetTerrainDiag(Patch* p, uint16_t diag);
 
+uint16_t GetTerrainHi(Patch* p, uint16_t* lo = 0);
+
 #ifdef DARK_TERRAIN
 uint64_t GetTerrainDark(Patch* p);
 void SetTerrainDark(Patch* p, uint64_t dark);
