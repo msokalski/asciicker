@@ -1888,10 +1888,7 @@ void LoadSprites()
 						wolfie_fall[c][a][h][s][w] = 0;
 
 						sprintf(name, "bigbee-%x%x%x%x.xp", a, h, s, w);
-						if (a == 0 && h == 0 && s == 0 && w == 0)
-							bigbee[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
-						else
-							bigbee[c][a][h][s][w] = 0;
+						bigbee[c][a][h][s][w] = LoadSpriteBP(name, recolor[c], false);
 						bigbee_fall[c][a][h][s][w] = 0;
 					}
 
@@ -5603,13 +5600,14 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			if (key == A3D_END)
 				player.SetActionFall(stamp);
 
+			/*
 			if (key == A3D_NUMPAD_1)
 				player.SetMount(MOUNT::WOLF);
 			if (key == A3D_NUMPAD_2)
 				player.SetMount(MOUNT::BEE);
 			if (key == A3D_NUMPAD_0)
 				player.SetMount(MOUNT::NONE);
-
+			*/
 
 			/*
 			if (key == A3D_1)
