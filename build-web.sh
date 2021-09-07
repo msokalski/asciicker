@@ -51,7 +51,7 @@ emcc --emrun -O3 \
     --no-heap-copy \
     -s NO_EXIT_RUNTIME=1 \
     -lidbfs.js \
-    --preload-file a3d/game_map_y7.a3d \
+    --preload-file a3d/game_map_y8.a3d \
     --preload-file sprites/fire.xp \
     --preload-file sprites/grid-alpha-sword.xp \
     --preload-file sprites/grid-apple.xp \
@@ -257,7 +257,8 @@ emcc --emrun -O3 \
     --preload-file meshes/bridge-2.akm \
     --preload-file meshes/old-tree-1.akm \
     --preload-file meshes/old-tree-2.akm \
-    --preload-file meshes/brick-1.akm
+    --preload-file meshes/brick-1.akm \
+    --preload-file meshes/tree-3.akm
 
 # run in mini-server
 
