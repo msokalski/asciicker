@@ -4135,7 +4135,7 @@ void my_render(A3D_WND* wnd)
 
 	ImGuiIO& io = ImGui::GetIO();
 	
-	static bool oldRight = false; // HACK(xylit): prob not a good solution, but works it works :p
+	// static bool oldRight = false; // HACK(xylit): prob not a good solution, but works it works :p
 
 	#ifdef MOUSE_QUEUE
 	while (mouse_queue_len) // accumulate wheel sequence only
@@ -4208,20 +4208,20 @@ void my_render(A3D_WND* wnd)
 			break;
 	}
 	
-	// NOTE(xylit): if a mouse (*cough* apple mouse *cough*) doesn't have a middle mouse button
-	// the alternative will be alt + right mouse button
-	if (io.KeyAlt && (io.MouseDown[1] || oldRight)) {
-		io.MouseDown[1] = false;
-		io.MouseDown[2] = true;
-		oldRight = true;
-	} else {
-		io.MouseDown[2] = false;
-	}
+	// // NOTE(xylit): if a mouse (*cough* apple mouse *cough*) doesn't have a middle mouse button
+	// // the alternative will be alt + right mouse button
+	// if (io.KeyAlt && (io.MouseDown[1] || oldRight)) {
+	// 	io.MouseDown[1] = false;
+	// 	io.MouseDown[2] = true;
+	// 	oldRight = true;
+	// } else {
+	// 	io.MouseDown[2] = false;
+	// }
 	
-	if (!io.KeyAlt && !io.MouseDown[2] && oldRight) {
-		io.MouseDown[1] = true;
-		oldRight = false;
-	}
+	// if (!io.KeyAlt && !io.MouseDown[2] && oldRight) {
+	// 	io.MouseDown[1] = true;
+	// 	oldRight = false;
+	// }
 	
 	#endif
 
