@@ -9,6 +9,8 @@
 
 #ifdef __linux__
 #include <linux/limits.h>
+#elif defined(__APPLE__)
+#include <limits.h>
 #else
 #define PATH_MAX 1024
 #endif
@@ -18,7 +20,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "gl.h"
@@ -4132,6 +4134,8 @@ void my_render(A3D_WND* wnd)
 {
 
 	ImGuiIO& io = ImGui::GetIO();
+	
+	// static bool oldRight = false; // HACK(xylit): prob not a good solution, but works it works :p
 
 	#ifdef MOUSE_QUEUE
 	while (mouse_queue_len) // accumulate wheel sequence only
@@ -4203,6 +4207,22 @@ void my_render(A3D_WND* wnd)
 		if (sync)
 			break;
 	}
+	
+	// // NOTE(xylit): if a mouse (*cough* apple mouse *cough*) doesn't have a middle mouse button
+	// // the alternative will be alt + right mouse button
+	// if (io.KeyAlt && (io.MouseDown[1] || oldRight)) {
+	// 	io.MouseDown[1] = false;
+	// 	io.MouseDown[2] = true;
+	// 	oldRight = true;
+	// } else {
+	// 	io.MouseDown[2] = false;
+	// }
+	
+	// if (!io.KeyAlt && !io.MouseDown[2] && oldRight) {
+	// 	io.MouseDown[1] = true;
+	// 	oldRight = false;
+	// }
+	
 	#endif
 
 	// THINGZ
@@ -8062,7 +8082,7 @@ int main(int argc, char *argv[])
         size_t len = 2;
 		strcpy(abs_buf, "./");
 		abs_path = abs_buf;
-		#ifdef __linux__
+		#if defined(__linux__) || defined(__APPLE__)
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (last_slash)

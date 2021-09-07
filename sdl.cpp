@@ -3,7 +3,7 @@
 #include <sys/stat.h>
 
 #include <time.h>
-#include <malloc.h>
+#include <stdlib.h>
 
 #include <stdio.h>
 #include <stdint.h>
@@ -22,7 +22,11 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #endif
+#ifdef __linux__
 #include <GL/gl.h>
+#elif defined(__APPLE__) 
+#include <OpenGL/gl.h>
+#endif
 
 A3D_WND* wnd_head = 0;
 A3D_WND* wnd_tail = 0;
@@ -1161,5 +1165,3 @@ bool a3dGetCurDir(char* dir_path, int size)
 
 #endif // windows
 #endif // USE_SDL
-
-
