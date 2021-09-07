@@ -130,9 +130,6 @@ emcc --emrun -O3 \
     --preload-file sprites/character.xp \
     --preload-file sprites/desert_plants.xp \
     --preload-file sprites/inventory.xp \
-    --preload-file sprites/wolfie-0011.xp \
-    --preload-file sprites/wolfie-0012.xp \
-    --preload-file sprites/wolfie.xp \
     --preload-file sprites/player-nude.xp \
     --preload-file sprites/player-0000.xp \
     --preload-file sprites/player-0001.xp \
@@ -146,11 +143,6 @@ emcc --emrun -O3 \
     --preload-file sprites/plydie-0010.xp \
     --preload-file sprites/plydie-0011.xp \
     --preload-file sprites/plydie-0012.xp \
-    --preload-file sprites/wolack-0001.xp \
-    --preload-file sprites/wolack-0011.xp \
-    --preload-file sprites/wolfie-0000.xp \
-    --preload-file sprites/wolfie-0001.xp \
-    --preload-file sprites/wolfie-0010.xp \
     --preload-file sprites/attack-0001.xp \
     --preload-file sprites/attack-0011.xp \
     --preload-file sprites/attack-0101.xp \
@@ -195,12 +187,21 @@ emcc --emrun -O3 \
     --preload-file sprites/plydie-1110.xp \
     --preload-file sprites/plydie-1111.xp \
     --preload-file sprites/plydie-1112.xp \
+    --preload-file sprites/wolfie.xp \
+    --preload-file sprites/wolack-0001.xp \
+    --preload-file sprites/wolack-0011.xp \
     --preload-file sprites/wolack-0101.xp \
     --preload-file sprites/wolack-0111.xp \
     --preload-file sprites/wolack-1001.xp \
     --preload-file sprites/wolack-1011.xp \
     --preload-file sprites/wolack-1101.xp \
     --preload-file sprites/wolack-1111.xp \
+    --preload-file sprites/wolfie-0000.xp \
+    --preload-file sprites/wolfie-0001.xp \
+    --preload-file sprites/wolfie-0002.xp \
+    --preload-file sprites/wolfie-0010.xp \
+    --preload-file sprites/wolfie-0011.xp \
+    --preload-file sprites/wolfie-0012.xp \
     --preload-file sprites/wolfie-0100.xp \
     --preload-file sprites/wolfie-0101.xp \
     --preload-file sprites/wolfie-0102.xp \
