@@ -1,5 +1,5 @@
 
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #define _USE_MATH_DEFINES

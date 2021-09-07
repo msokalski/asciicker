@@ -1,7 +1,7 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <assert.h>
 #include "matrix.h"
 #include "physics.h"
