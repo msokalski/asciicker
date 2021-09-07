@@ -219,6 +219,31 @@ emcc --emrun -O3 \
     --preload-file sprites/wolfie-1110.xp \
     --preload-file sprites/wolfie-1111.xp \
     --preload-file sprites/wolfie-1112.xp \
+    --preload-file sprites/bigbee-0000.xp \
+    --preload-file sprites/bigbee-0001.xp \
+    --preload-file sprites/bigbee-0002.xp \
+    --preload-file sprites/bigbee-0010.xp \
+    --preload-file sprites/bigbee-0011.xp \
+    --preload-file sprites/bigbee-0012.xp \
+    --preload-file sprites/bigbee-0100.xp \
+    --preload-file sprites/bigbee-0101.xp \
+    --preload-file sprites/bigbee-0102.xp \
+    --preload-file sprites/bigbee-0110.xp \
+    --preload-file sprites/bigbee-0111.xp \
+    --preload-file sprites/bigbee-0112.xp \
+    --preload-file sprites/bigbee-1000.xp \
+    --preload-file sprites/bigbee-1001.xp \
+    --preload-file sprites/bigbee-1002.xp \
+    --preload-file sprites/bigbee-1010.xp \
+    --preload-file sprites/bigbee-1011.xp \
+    --preload-file sprites/bigbee-1012.xp \
+    --preload-file sprites/bigbee-1100.xp \
+    --preload-file sprites/bigbee-1101.xp \
+    --preload-file sprites/bigbee-1102.xp \
+    --preload-file sprites/bigbee-1110.xp \
+    --preload-file sprites/bigbee-1111.xp \
+    --preload-file sprites/bigbee-1112.xp \
+    --preload-file sprites/bigbee.xp \
     --preload-file meshes/bridge-1.akm \
     --preload-file meshes/fence.akm \
     --preload-file meshes/rock-1.akm \
