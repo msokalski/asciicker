@@ -2229,7 +2229,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 			enemy->clr = 1;
 			enemy->req.kind = SpriteReq::HUMAN;
-			enemy->req.mount = MOUNT::NONE;// +((r >> 1) & 1);
+			enemy->req.mount = MOUNT::NONE;
 			enemy->req.armor = fast_rand() % 11 < eg->armor ? ARMOR::NONE : ARMOR::REGULAR_ARMOR;
 			enemy->req.helmet = fast_rand() % 11 < eg->helmet ? HELMET::NONE : HELMET::REGULAR_HELMET;
 			enemy->req.shield = fast_rand() % 11 < eg->shield ? SHIELD::NONE : SHIELD::REGULAR_SHIELD;
@@ -3678,10 +3678,25 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// blocked by enemies? (closest one)
 	// ...
 
+	static bool prev_grounded = false;
+
+	if (prev_grounded && player.req.mount == MOUNT::BEE)
+	{
+		float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
+		if (len > 0.5f)
+		{
+			float mul = 0.5 / len;
+			io.x_force *= mul;
+			io.y_force *= mul;
+		}
+	}
+
 	int steps = Animate(physics, _stamp, &io, player.req.mount);
 
 	if (io.grounded)
 		BloodLeak(&player, steps);
+
+	prev_grounded = io.grounded;
 
 	player.impulse[0] = io.x_impulse;
 	player.impulse[1] = io.y_impulse;
@@ -5600,23 +5615,12 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			if (key == A3D_END)
 				player.SetActionFall(stamp);
 
-			/*
-			if (key == A3D_NUMPAD_1)
+			if (key == A3D_OEM_PERIOD)
 				player.SetMount(MOUNT::WOLF);
-			if (key == A3D_NUMPAD_2)
+			if (key == A3D_OEM_SLASH)
 				player.SetMount(MOUNT::BEE);
-			if (key == A3D_NUMPAD_0)
+			if (key == A3D_OEM_COMMA)
 				player.SetMount(MOUNT::NONE);
-			*/
-
-			/*
-			if (key == A3D_1)
-				player.SetMount(!player.req.mount);
-			if (key == A3D_2)
-				player.SetWeapon(!player.req.weapon);
-			if (key == A3D_3)
-				player.SetShield(!player.req.shield);
-			*/
 		}
 
 		if (!auto_rep)
