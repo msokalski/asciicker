@@ -6,7 +6,7 @@
         {
             "label": "run",
             "type": "shell",
-            "command": ".run/game",
+            "command": "build/asciicker_sdl",
             "problemMatcher": [
                 "$gcc"
             ],
@@ -16,6 +16,9 @@
             }
         },
         {
+            "options": {
+                "cwd": "Scripts"
+            },
             "label": "build",
             "type": "shell",
             "command": "./build.sh",
@@ -28,6 +31,9 @@
             }
         },
         {
+            "options": {
+                "cwd": "Scripts"
+            },
             "label": "clean",
             "type": "shell",
             "command": "./clean.sh",
