@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.16)   
 
+option(COMPILE_SERVER "Compile server" ON)
+option(COMPILE_GAME "Compile game" ON)
+option(COMPILE_GAME_TERM "Compile game_term" ON)
+option(COMPILE_ASCIIID "Compile asciiid" ON)
+
 project("asciicker_binaries") 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,10 +25,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++0x -save-temps=obj -pthread -D
 
 set(CMAKE_EXE_LINKER_FLAGS "-lutil -lGL -lX11 -lXinerama -lgpm -lSDL2")
 
-include(CMake/make_asciiid.cmake)
+if(COMPILE_ASCIIID)
+  include(CMake/make_asciiid.cmake)
+endif()
 
-include(CMake/make_game.cmake)
+if(COMPILE_GAME)
+  include(CMake/make_asciicker.cmake)
+endif()
 
-include(CMake/make_game_term.cmake)
+if(COMPILE_GAME_TERM)
+  include(CMake/make_asciicker_term.cmake)
+endif()
 
-include(CMake/make_server.cmake)
+if(COMPILE_SERVER)
+  include(CMake/make_asciicker_server.cmake)
+endif()

@@ -1,2 +1,4 @@
+#!/bin/bash
+
 setfont ../fonts/cp437_10x10.png.psf
-../build/game_term
+../build/asciicker_term

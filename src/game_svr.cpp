@@ -8,8 +8,12 @@
 #include "game.h"
 #include "network.h"
 
+#if defined(__linux__) || defined(__APPLE__)
 #ifdef __linux__
 #include <linux/limits.h>
+#else
+#include <limits.h>
+#endif
 
 // work around including <netinet/tcp.h>
 // which also defines TCP_CLOSE
@@ -951,7 +955,7 @@ int main(int argc, char* argv[])
         size_t len = 2;
 		strcpy(abs_buf, "./");
 		abs_path = abs_buf;
-		#ifdef __linux__
+		#if defined(__linux__) || defined(__APPLE__)
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (last_slash)

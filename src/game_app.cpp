@@ -2,18 +2,24 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdarg.h>
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <sys/ioctl.h>
 #include <sys/poll.h>
-#include <linux/limits.h>
+#ifdef __linux__
+# include <linux/limits.h>
+#else
+# include <limits.h>
+#endif
 #include <unistd.h>
 #include <signal.h>
 #include <termios.h>
 #include <time.h>
-#include <gpm.h>
+#ifdef USE_GPM
+# include <gpm.h>
+#endif
 
 // work around including <netinet/tcp.h>
 // which also defines TCP_CLOSE
@@ -54,7 +60,7 @@ const char* GetConfPath()
     return "asciicker.cfg";
 }
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 /*
 https://superuser.com/questions/1185824/configure-vga-colors-linux-ubuntu
 https://int10h.org/oldschool-pc-fonts/fontlist/
@@ -284,6 +290,7 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
     int fg16 = 0;
     int bk16 = 1;
 
+#ifdef USE_GPM
     if (gpm>=0)
     {
         // bake mouse into buffer
@@ -293,6 +300,7 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
             buf[mouse_x + w*(h-1-mouse_y)] = mouse;
         }
     }
+#endif // USE_GPM
 
 
     if (tty>=0)
@@ -909,7 +917,7 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
 
 extern "C" void DumpLeakCounter();
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 
 static int find_tty()
 {
@@ -979,7 +987,7 @@ int main(int argc, char* argv[])
     else
     {
         size_t len = 0;
-        #ifdef __linux__
+        #if defined(__linux__) || defined(__APPLE__)
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (!last_slash)
@@ -1096,7 +1104,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y7/";
+	const char* path = "/ws/y8/";
 	const char* port = "80";
 	*/
 
@@ -1104,7 +1112,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y7/";
+	const char* path = "/ws/y8/";
 	const char* port = "443";
 	*/
 
@@ -1112,7 +1120,7 @@ int main(int argc, char* argv[])
 	/*
 	const char* user = "player";
 	const char* addr = "asciicker.com";
-	const char* path = "/ws/y7/"; // just to check if same as server expects
+	const char* path = "/ws/y8/"; // just to check if same as server expects
 	const char* port = "8080";
 	*/
 
@@ -1135,6 +1143,8 @@ int main(int argc, char* argv[])
 	// if url is given try to open connection
 	GameServer* gs = 0;
 
+	// Y7+ are not multiplayer
+	/*
 	if (url)
 	{
 		// [user@]server_address/path[:port]
@@ -1184,7 +1194,10 @@ int main(int argc, char* argv[])
 		// here we should know if server is present or not
 		// so we can creare game or term with or without server
 		// ...
-	} else {
+	}
+    else
+	*/
+    {
         strcpy(player_name, "player");
     }
     
@@ -1202,7 +1215,7 @@ int main(int argc, char* argv[])
 
 	{
         char a3d_path[1024];
-        sprintf(a3d_path,"%sa3d/game_map_y7.a3d", base_path);
+        sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
 		FILE* f = fopen(a3d_path, "rb");
 
 		// TODO:
@@ -1331,7 +1344,7 @@ int main(int argc, char* argv[])
 
 #endif // #ifndef PURE_TERM
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 
     // recursively check if we are on TTY console or 'vt'
     const char* term_env = getenv("TERM");
@@ -1347,6 +1360,7 @@ int main(int argc, char* argv[])
 
     if (tty > 0)
     {
+#ifdef USE_GPM
         Gpm_Connect conn;
         conn.eventMask  = ~0;   /* Want to know about all the events */
         conn.defaultMask = 0;   /* don't handle anything by default  */
@@ -1370,6 +1384,7 @@ int main(int argc, char* argv[])
             printf("failed to connect to gpm\n");
             exit(0);
         }
+#endif // USE_GPM
     }
     else if (strncmp(term_env,"xterm",5)==0) {
         printf("VIRTUAL TERMINAL EMULGLATOR\n");
@@ -1556,6 +1571,7 @@ int main(int argc, char* argv[])
 
             poll(pfds, 2, 0); // 0 no timeout, -1 block
 
+#ifdef USE_GPM
             if (pfds[1].revents & POLLIN)
             {
                 static int mouse_read = 0;
@@ -1657,6 +1673,7 @@ int main(int argc, char* argv[])
                     mouse_read = 0;
                 }
             }
+#endif // USE_GPM
         }
         else
         {
@@ -2231,10 +2248,12 @@ int main(int argc, char* argv[])
     exit:
     uint64_t end = GetTime();
 
+#ifdef USE_GPM
     if (gpm>=0)
     {
         Gpm_Close();
     }
+#endif // USE_GPM
 
     if (terrain)
         DeleteTerrain(terrain);

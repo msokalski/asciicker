@@ -3,7 +3,7 @@
 #include <sys/stat.h>
 
 #include <time.h>
-#include <malloc.h>
+#include <stdlib.h>
 
 #include <stdio.h>
 #include <stdint.h>
@@ -22,7 +22,11 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #endif
+#ifdef __linux__
 #include <GL/gl.h>
+#elif defined(__APPLE__) 
+#include <OpenGL/gl.h>
+#endif
 
 A3D_WND* wnd_head = 0;
 A3D_WND* wnd_tail = 0;
@@ -202,6 +206,10 @@ WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh)
 		SDL_GetWindowPosition(wnd->win, xywh + 0, xywh + 1);
 		SDL_GetWindowSize(wnd->win, xywh + 2, xywh + 3);
 	}
+
+	uint32_t f = SDL_GetWindowFlags(wnd->win);
+	if (f & SDL_WINDOW_FULLSCREEN)
+		return WndMode::A3D_WND_FULLSCREEN;
 	return WndMode::A3D_WND_NORMAL; // not critical
 }
 
@@ -212,6 +220,13 @@ bool a3dSetRect(A3D_WND* wnd, const int* xywh, WndMode wnd_mode)
 		SDL_SetWindowPosition(wnd->win, xywh[0], xywh[1]);
 		SDL_SetWindowSize(wnd->win, xywh[2], xywh[3]);
 	}
+
+	if (wnd_mode == WndMode::A3D_WND_FULLSCREEN)
+		SDL_SetWindowFullscreen(wnd->win, SDL_WINDOW_FULLSCREEN_DESKTOP);
+	else
+	if (wnd_mode != WndMode::A3D_WND_CURRENT)
+		SDL_SetWindowFullscreen(wnd->win, 0);
+
 	return true;
 }
 
@@ -695,6 +710,21 @@ void a3dLoop()
 					if (wnd && wnd->platform_api.keyb_key)
 						wnd->platform_api.keyb_key(wnd,ki,Event.type==SDL_KEYDOWN);
 
+					// cure sdl, it doesn't report all keys to SDL_TEXTINPUT
+					// TODO: test if sdl on MAC also requires this cure
+					if (Event.type == SDL_KEYDOWN)
+					{
+						switch (ki)
+						{
+							case A3D_DELETE: wnd->platform_api.keyb_char(wnd, 127); break;
+							case A3D_BACKSPACE: wnd->platform_api.keyb_char(wnd, 8); break;
+							case A3D_ENTER: 
+							case A3D_NUMPAD_ENTER:
+								wnd->platform_api.keyb_char(wnd, 13); break;
+							// case A3D_TAB: we dont use tab in key_char()
+						}
+					}
+
 					break;
 				}
 
@@ -1135,5 +1165,3 @@ bool a3dGetCurDir(char* dir_path, int size)
 
 #endif // windows
 #endif // USE_SDL
-
-

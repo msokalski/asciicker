@@ -12,7 +12,7 @@ xterm \
     -xrm "xterm*font4: -gumix-*-*-*-*-*-16-*-*-*-*-*-*" \
     -xrm "xterm*font5: -gumix-*-*-*-*-*-18-*-*-*-*-*-*" \
     -xrm "xterm*font6: -gumix-*-*-*-*-*-20-*-*-*-*-*-*" \
-    -e ../build/game_term 
+    -e ../build/asciicker_term 
 
 #cleanup
 xset fp- ../fonts

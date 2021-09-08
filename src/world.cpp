@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -4627,6 +4627,14 @@ World* LoadWorld(FILE* f, bool editor)
 					return 0;
 				}
 			}
+
+			/*
+			if (strstr(mesh_id,"untitled"))
+			{
+				strcpy(mesh_id,"tree-3.akm");
+			}
+			*/
+
 
 			// mesh id lookup
 			Mesh* m = w->head_mesh;

@@ -1,5 +1,7 @@
 # Fork of msokalski/asciiid
 
+![GIF](misc/asciicker.gif)
+
 ## Installation
 Firstly, you need to choose build type:
 - Cmake (Every OS)
@@ -8,14 +10,14 @@ Firstly, you need to choose build type:
 
 For windows it's recommended to use Visual Studio build system:
 1) Install [Visual Studio](https://visualstudio.microsoft.com/)
-2) ![Download repository](https://github.com/Niki4tap/asciiid/raw/master/misc/github.png) and unzip it, the folder should be named `asciiid-sdl`, rename it to `asciiid` (Important!)
+2) ![Download repository](misc/github.png) and unzip it, the folder should be named `asciiid-sdl`, rename it to `asciiid` (Important!)
 3) Open VisualStudio and click `Import project`, then navigate to the folder where you stored `asciiid` and select it 
 4) Retarget solutions (this step may not be needed in some cases)
-![Retarget](https://github.com/Niki4tap/asciiid/raw/master/misc/VS_Retarget.png)
+![Retarget](misc/VS_Retarget.png)
 5) Install [SDL2](https://www.libsdl.org/download-2.0.php)
 
 
-![SDL](https://github.com/Niki4tap/asciiid/raw/sdl/misc/SDL.png)
+![SDL](misc/SDL.png)
 
 
 5) Copy `include` and `lib` directories into `SDL\` directory in the root of the repository

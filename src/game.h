@@ -56,6 +56,7 @@ struct MOUNT { enum
 {
 	NONE = 0,
 	WOLF,
+	BEE,
 	SIZE
 };};
 
@@ -64,7 +65,8 @@ struct SpriteReq
 	enum KIND
 	{
 		HUMAN = 0,
-		WOLF = 1
+		WOLF = 1,
+		BEE = 2,
 	};
 
 	KIND kind;
@@ -117,6 +119,9 @@ struct Character
 	Character* next;
 
 	SpriteReq req; // kind of character is inside (human / wolf)!!!
+
+	int leak; // blood / guts
+	int leak_steps;
 
 	Inst* inst; // only server players
 	int clr;
@@ -425,3 +430,6 @@ void DeleteGame(Game* g);
 
 void LoadSprites();
 void FreeSprites();
+
+void PaintTerrain(float* xy, float r, int matid);
+void BloodLeak(Character* c, int steps);

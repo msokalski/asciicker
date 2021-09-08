@@ -1,7 +1,7 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <assert.h>
 #include "matrix.h"
 #include "physics.h"
@@ -475,6 +475,8 @@ struct Physics
 	float collect_mul_xy;
 	float collect_mul_z;
 
+	float max_height;
+
     //bool collision_failure;
 
     float slope;
@@ -515,18 +517,21 @@ struct Physics
 		float tmv[4];
 
 		Product(phys->collect_tm, v[0], tmv);
+		phys->max_height = fmaxf(tmv[2], phys->max_height);
 
 		item->tri[0][0] = tmv[0] * phys->collect_mul_xy;
 		item->tri[0][1] = tmv[1] * phys->collect_mul_xy;
 		item->tri[0][2] = tmv[2] * phys->collect_mul_z;
 
 		Product(phys->collect_tm, v[1], tmv);
+		phys->max_height = fmaxf(tmv[2], phys->max_height);
 
 		item->tri[1][0] = tmv[0] * phys->collect_mul_xy;
 		item->tri[1][1] = tmv[1] * phys->collect_mul_xy;
 		item->tri[1][2] = tmv[2] * phys->collect_mul_z;
 
 		Product(phys->collect_tm, v[2], tmv);
+		phys->max_height = fmaxf(tmv[2], phys->max_height);
 
 		item->tri[2][0] = tmv[0] * phys->collect_mul_xy;
 		item->tri[2][1] = tmv[1] * phys->collect_mul_xy;
@@ -591,6 +596,9 @@ struct Physics
 		bool hit = false;
 
 		int rot = GetTerrainDiag(p);
+
+		float hi = GetTerrainHi(p);
+		phys->max_height = fmaxf(hi, phys->max_height);
 
 		for (int hy = 0; hy < HEIGHT_CELLS; hy++)
 		{
@@ -739,7 +747,7 @@ struct Physics
 	}    
 };
 
-int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 {
 	float xy_speed = 0.13;
 	float radius_cells = mount ? 3 : 2; // in full x-cells
@@ -874,7 +882,9 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 			{
 				phys->vel[0] = 0;
 				phys->vel[1] = 0;
-				phys->player_stp = -1;
+
+				if (mount<2)
+					phys->player_stp = -1;
 			}
 			else
 			{
@@ -901,7 +911,11 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 					phys->player_stp = 0;
 
 				// so 8 frame walk anim divides stp / 1024 to get frame num
-				phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * sqrt(sqr_vel_xy)));
+
+				if (mount>1) // slower for flying mounts
+					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * sqrt(sqr_vel_xy)));
+				else
+					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * sqrt(sqr_vel_xy)));
 
 				float vel_damp = powf(0.9f, dt);
 				phys->vel[0] *= vel_damp;
@@ -935,6 +949,9 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 
 			float xy_res = powf(1.0 - 0.5 * res, dt);
 			float z_res = powf(1.0 - 0.1 * res, dt);
+
+			if (mount>1 && phys->vel[2] < 0)
+				z_res = powf(1.0 - 0.1, dt);
 
 			phys->vel[0] *= xy_res;
 			phys->vel[1] *= xy_res;
@@ -978,6 +995,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 			phys->soup_items = 0;
 			phys->collect_mul_xy = 1.0 / world_radius;
 			phys->collect_mul_z = 2.0 / world_height;
+
+			phys->max_height = io->water;
 
 			QueryWorldCB cb = { Physics::MeshCollect , Physics::SpriteCollect };
 			QueryWorld(phys->world, 4, clip_world, &cb, phys);
@@ -1250,25 +1269,47 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, bool mount)
 			phys->accum_contact = 5;
 
 		// if (contact_normal_z > 0.0)
-		if (phys->accum_contact >= 1.0)
+		if (phys->accum_contact >= 1.0 || mount>1)
 		{
 			if (io->jump)
 			{
+
 				phys->accum_contact = 0;
 
-				if (phys->vel[2] < 0)
-					phys->vel[2] = 10;
-				else
-					phys->vel[2] += 10;
+				// ensure for mount>1 current height is not > ground + max_fly_height
+				if (mount < 2 || phys->pos[2] < phys->max_height + 100)
+				{
+
+					if (phys->vel[2] < 0)
+						phys->vel[2] = 10;
+					else
+						phys->vel[2] += 10;
+				}
+
 				io->jump = false;
 			}
 		}
+
+		io->grounded = phys->accum_contact >= 1.0;
 
 		phys->accum_contact *= 0.9f;
 
 		if (phys->vel[2] > 20)
 			phys->vel[2] = 20;
 
+		if (mount > 1)
+		{
+			if (!io->grounded)
+			{
+				float v = fmaxf(1.0f, phys->vel[2]);
+				phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(v * 64 * 2));
+			}
+			else
+			if (!io->x_force && !io->y_force)
+			{
+				phys->player_stp = -1;
+			}
+		}
 
 		for (int h = 63; h > 0; h--)
 		{

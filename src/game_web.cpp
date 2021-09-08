@@ -93,7 +93,7 @@ int Main()
     LoadSprites();
 
     {
-        FILE* f = fopen("a3d/game_map_y7.a3d","rb");
+        FILE* f = fopen("a3d/game_map_y8.a3d","rb");
 
         if (f)
         {

@@ -9,6 +9,8 @@
 
 #ifdef __linux__
 #include <linux/limits.h>
+#elif defined(__APPLE__)
+#include <limits.h>
 #else
 #define PATH_MAX 1024
 #endif
@@ -18,7 +20,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "gl.h"
@@ -3849,38 +3851,111 @@ void New()
 	{
 		static void cb(void* cookie, A3D_ImageFormat f, int w, int h, const void* data, int palsize, const void* palbuf)
 		{
-			if (f != A3D_RGB8 && f != A3D_LUMINANCE8)
+			if (f != A3D_RGB8 && f != A3D_LUMINANCE8 && f != A3D_RGBA8)
 				return;
 			int patches_x = (w-1) / 4;
 			int patches_y = (h-1) / 4;
 
 			uint8_t* rgb = (uint8_t*)data;
 
-			for (int py = 0; py < patches_y; py++)
+			int max_n = 0;
+
+			// skip 1 patch at each edge (safe normals)
+			for (int py = 1; py < patches_y-1; py++)
 			{
-				for (int px = 0; px < patches_x; px++)
+				for (int px = 1; px < patches_x-1; px++)
 				{
 					Patch* p = AddTerrainPatch(terrain, px, py, 0);
 					uint16_t* map = GetTerrainHeightMap(p);
+					uint16_t* vmap = GetTerrainVisualMap(p);
 					const uint8_t* pix;
-					if (f != A3D_RGB8)
+					if (f == A3D_LUMINANCE8)
 						pix = (const uint8_t*)data + HEIGHT_CELLS * px + (HEIGHT_CELLS * py)*w;
 					else
+					if (f == A3D_RGB8)
 						pix = (const uint8_t*)data + 3 * (HEIGHT_CELLS * px + (HEIGHT_CELLS * py)*w);
+					else
+					if (f == A3D_RGBA8)
+						pix = (const uint8_t*)data + 4 * (HEIGHT_CELLS * px + (HEIGHT_CELLS * py)*w);
+
 					for (int vy = 0; vy <= HEIGHT_CELLS; vy++)
 					{
 						for (int vx = 0; vx <= HEIGHT_CELLS; vx++)
 						{
 							if (f == A3D_RGB8)
-								map[vx + vy * (HEIGHT_CELLS + 1)] = 4 * pix[3*(vx+vy*w)+2];
+								map[vx + vy * (HEIGHT_CELLS + 1)] = 4 * pix[3*(vx+vy*w)+2]; // B
 							else
-								map[vx + vy * (HEIGHT_CELLS + 1)] = 4 * pix[vx + vy * w];
+							if (f == A3D_LUMINANCE8)
+								map[vx + vy * (HEIGHT_CELLS + 1)] = 4 * pix[vx + vy * w]; // L
+							else
+							if (f == A3D_RGBA8)
+							{
+								map[vx + vy * (HEIGHT_CELLS + 1)] = 8 * pix[4*(vx + vy * w)+0]; // R?
+							}
 						}
 					}
+
 					UpdateTerrainHeightMap(p);
+
+					if (f == A3D_RGBA8)
+					{
+						for (int vy = 0; vy < VISUAL_CELLS; vy++)
+						{
+							for (int vx = 0; vx < VISUAL_CELLS; vx++)
+							{
+								uint16_t* m = vmap + (vx + vy * VISUAL_CELLS);
+
+								int n = 0;
+								n += std::abs(pix[4*((vx/2+1) + (vy/2+0) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+								n += std::abs(pix[4*((vx/2+0) + (vy/2+1) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+								n += std::abs(pix[4*((vx/2-1) + (vy/2+0) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+								n += std::abs(pix[4*((vx/2+0) + (vy/2-1) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+								n += std::abs(pix[4*((vx/2-1) + (vy/2-1) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+								n += std::abs(pix[4*((vx/2+1) + (vy/2+1) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+								n += std::abs(pix[4*((vx/2-1) + (vy/2+1) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+								n += std::abs(pix[4*((vx/2+1) + (vy/2-1) * w)+0] - pix[4*(vx/2 + vy/2 * w)+0]);
+
+								max_n = std::max(max_n,n);
+
+								if (n<20)
+								{
+									int w = 0;
+									w += pix[4*((vx/2+0) + (vy/2+0) * w)+2]; // B
+									w += pix[4*((vx/2+1) + (vy/2+0) * w)+2]; // B
+									w += pix[4*((vx/2+0) + (vy/2+1) * w)+2]; // B
+									w += pix[4*((vx/2+1) + (vy/2+1) * w)+2]; // B
+
+									if (w<=100)
+									{
+										// FLAT GREEN
+										*m = 1;
+									}
+									else
+									{
+										// FLAT SAND
+										*m = 2;
+
+										// greenish soil
+										// soil
+										// sand
+										// wet sand
+										// water
+									}
+								}
+								else
+								{
+									// ROCK
+									*m = 4;
+								}
+							}
+						}
+
+						UpdateTerrainVisualMap(p);
+					}
 				}
 			}
 
+			printf("MAX_N=%d\n",max_n);
 		};
 	};
 
@@ -4059,6 +4134,8 @@ void my_render(A3D_WND* wnd)
 {
 
 	ImGuiIO& io = ImGui::GetIO();
+	
+	// static bool oldRight = false; // HACK(xylit): prob not a good solution, but works it works :p
 
 	#ifdef MOUSE_QUEUE
 	while (mouse_queue_len) // accumulate wheel sequence only
@@ -4130,6 +4207,22 @@ void my_render(A3D_WND* wnd)
 		if (sync)
 			break;
 	}
+	
+	// // NOTE(xylit): if a mouse (*cough* apple mouse *cough*) doesn't have a middle mouse button
+	// // the alternative will be alt + right mouse button
+	// if (io.KeyAlt && (io.MouseDown[1] || oldRight)) {
+	// 	io.MouseDown[1] = false;
+	// 	io.MouseDown[2] = true;
+	// 	oldRight = true;
+	// } else {
+	// 	io.MouseDown[2] = false;
+	// }
+	
+	// if (!io.KeyAlt && !io.MouseDown[2] && oldRight) {
+	// 	io.MouseDown[1] = true;
+	// 	oldRight = false;
+	// }
+	
 	#endif
 
 	// THINGZ
@@ -7989,7 +8082,7 @@ int main(int argc, char *argv[])
         size_t len = 2;
 		strcpy(abs_buf, "./");
 		abs_path = abs_buf;
-		#ifdef __linux__
+		#if defined(__linux__) || defined(__APPLE__)
         abs_path = realpath(argv[0], abs_buf);
         char* last_slash = strrchr(abs_path, '/');
         if (last_slash)

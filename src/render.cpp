@@ -5,7 +5,7 @@
 //#include "game.h"
 
 #include <stdint.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include "terrain.h"
 #include "world.h"
@@ -4016,6 +4016,19 @@ void Render(Renderer* r, uint64_t stamp, Terrain* t, World* w, float water, floa
 				{
 					int hp = h->shoot_target->HP;
 					h->shoot_target->HP -= rand() % 50;
+
+					{
+						h->shoot_target->leak += (hp - h->shoot_target->HP) / 2;
+
+						float r = fast_rand() % 20 * 0.1f + 0.6;
+						if (hp > 0 && h->shoot_target->HP <= 0)
+							r = fmaxf(r, 2.5f);
+						float dR = 1.0;
+						float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
+						float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
+						float xy[2] = { h->shoot_target->pos[0] + dr * cosf(dt), h->shoot_target->pos[1] + dr * sinf(dt) };
+						PaintTerrain(xy, r, 5/*blood*/);
+					}
 
 					float dx = h->shoot_target->pos[0] - h->pos[0];
 					float dy = h->shoot_target->pos[1] - h->pos[1];

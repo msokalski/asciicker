@@ -4,7 +4,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
@@ -1415,6 +1415,13 @@ TexAlloc* GetTerrainTexAlloc(Patch* p)
 	return p->ta;
 }
 #endif
+
+uint16_t GetTerrainHi(Patch* p, uint16_t* lo)
+{
+	if (lo)
+		*lo = p->lo;
+	return p->hi;
+}
 
 uint16_t GetTerrainDiag(Patch* p)
 {
