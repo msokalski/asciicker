@@ -1,4 +1,4 @@
-# Fork of msokalski/asciiid
+# Asciiid
 
 ![GIF](misc/asciicker.gif)
 
