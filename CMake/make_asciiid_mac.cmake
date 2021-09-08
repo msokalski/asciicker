@@ -1,8 +1,8 @@
 #-----------
-# ASCIIID
+# ASCIIID_MAC
 #-----------
 
-set(ASCIID_SOURCE
+set(ASCIID_MAC_SOURCE
 	"src/asciiid.cpp"
 	"src/term.cpp"
 	"src/x11.cpp"
@@ -29,10 +29,10 @@ set(ASCIID_SOURCE
 	"src/imgui/imgui_widgets.cpp"
 )
 
-set(ASCIIID_COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -g -save-temps=obj -pthread -DEDITOR -DUSE_SDL")
+set(ASCIIID_MAC_COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -save-temps=obj -pthread -DEDITOR -O3 -DUSE_SDL")
 
-set(ASCIIID_LINKER_FLAGS -lGL -lX11 -lXinerama -lutil -lSDL2)
+set(ASCIIID_MAC_LINKER_FLAGS -lutil -framework OpenGL -lXinerama -lSDL2-2.0.0 -pthread)
 
-add_executable("asciiid" ${ASCIID_SOURCE})
+add_executable("asciiid_mac" ${ASCIID_MAC_SOURCE})
 
-set_target_properties("asciiid" PROPERTIES COMPILE_FLAGS ${ASCIIID_COMPILE_FLAGS} LINK_OPTIONS "${ASCIIID_LINKER_FLAGS}")
+set_target_properties("asciiid_mac" PROPERTIES COMPILE_FLAGS ${ASCIIID_MAC_COMPILE_FLAGS} LINK_OPTIONS "${ASCIIID_MAC_LINKER_FLAGS}")

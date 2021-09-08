@@ -42,5 +42,5 @@ MSYS:   cmake -G "MSYS Makefiles" && make
 MakeFiles:
 1) Install [git](https://git-scm.com/downloads)
 2) Install [Make](https://www.gnu.org/software/make/)
-3) Open terminal and enter: `git clone https://github.com/Niki4tap/asciiid.git && cd asciiid && mkdir build && cd MakeFiles && make -f makefile_asciiid && make -f makefile_game && make -f makefile_game_term && make -f makefile_server && cd ../build`
+3) Open terminal and enter: `git clone https://github.com/Niki4tap/asciiid.git && cd asciiid && mkdir build && cd Scripts && ./build.sh && cd ../build`
 4) Run `asciiid`!

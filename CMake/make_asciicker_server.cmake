@@ -17,6 +17,10 @@ set(SERVER_SOURCE
     "src/tinfl.c"
 )
 
+set(SERVER_COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -save-temps=obj -pthread -DSERVER -O3")
+
+set(SERVER_LINKER_FLAGS -lutil -pthread)
+
 add_executable("asciicker_server" ${SERVER_SOURCE})
 
-set_target_properties("asciicker_server" PROPERTIES COMPILE_FLAGS "-DSERVER")
+set_target_properties("asciicker_server" PROPERTIES COMPILE_FLAGS ${SERVER_COMPILE_FLAGS} LINK_OPTIONS "${SERVER_LINKER_FLAGS}")
