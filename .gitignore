@@ -3,5 +3,5 @@ build/
 imgui.ini
 *.bdf
 *.psf
-imgui.ini
+.idea
 asciicker.cfg
