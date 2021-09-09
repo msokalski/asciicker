@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <filesystem>
 
 #if defined(__linux__) || defined(__APPLE__)
 #include <sys/ioctl.h>
@@ -49,7 +50,7 @@
 #include "game.h"
 #include "enemygen.h"
 
-char base_path[1024] = "./";
+char base_path[1024] = "NOT_FOUND";
 
 void SyncConf()
 {
