@@ -34,9 +34,9 @@ Firstly, you need to choose build type:
 5) Build:
 ```
 Ninja:  cmake -G "Ninja" .. && ninja
-Make:   cmake -G "Unix MakeFiles" && make
-MinGW:  cmake -G "MinGW Makefiles" && mingw32-make
-MSYS:   cmake -G "MSYS Makefiles" && make
+Make:   cmake -G "Unix Makefiles" .. && make
+MinGW:  cmake -G "MinGW Makefiles" .. && mingw32-make
+MSYS:   cmake -G "MSYS Makefiles" .. && make
 ```
 6) Run `asciiid`!
 
