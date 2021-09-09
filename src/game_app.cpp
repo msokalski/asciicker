@@ -957,98 +957,51 @@ static int find_tty()
 
 int main(int argc, char* argv[])
 {
-	/*
-	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
-	for (int i = 0; i < 16; i++)
-	{
-		uint8_t col[3] = { 0,0,0 };
-		fwrite(col, 3, 1, fpal);
-	}
-	for (int r = 0; r < 6; r++)
-	for (int g = 0; g < 6; g++)
-	for (int b = 0; b < 6; b++)
-	{
-		uint8_t col[3] = { r*51,g*51,b*51 };
-		fwrite(col, 3, 1, fpal);
-	}
-	for (int i = 0; i < 24; i++)
-	{
-		uint8_t col[3] = { 0,0,0 };
-		fwrite(col, 3, 1, fpal);
-	}
-	return 0;
-	*/
+	size_t limit = 15;
 
-    char abs_buf[PATH_MAX];
-    char* abs_path = 0;
+    printf("INFO: Asciiid will now preform recursive search for it's assets, with %d maximum attempts\n", limit);
 
-    if (argc < 1)
-        strcpy(base_path,"./");
-    else
-    {
-        size_t len = 0;
-        #if defined(__linux__) || defined(__APPLE__)
-        abs_path = realpath(argv[0], abs_buf);
-        char* last_slash = strrchr(abs_path, '/');
-        if (!last_slash)
-            strcpy(base_path,"./");
-        else
-        {
-            len = last_slash - abs_path + 1;
-            memcpy(base_path,abs_path,len);
-            base_path[len] = 0;
-        }
-        #else
-        GetFullPathNameA(argv[0],1024,abs_buf,&abs_path);
-		memcpy(base_path, abs_buf, abs_path - abs_buf);
-		#endif
+    std::filesystem::path executable_path = std::filesystem::canonical(argv[0]);
 
-        		int max_attempts{15};
-		int attempts{0};
-		int new_len{0};
+    do {
+        limit -= 1;
+            if (!std::filesystem::is_directory(executable_path)) {
+                executable_path = executable_path.parent_path();
+            continue;
+            }
 
-		printf("WARN: Folder with all asciiid resources should be named 'asciiid'.\n");
+        printf("INFO: Searching in %s...\n", executable_path.c_str());
 
-		printf("INFO: Asciiid will now preform recursive search for this directory with %d max attempts...\n", max_attempts);
+        bool flags[5] = {false, false, false, false, false};
 
-#if defined(__linux__) || defined(__APPLE__)
-		while (strcmp(strrchr(base_path, '/'), "/asciiid") != 0) {
-			printf("INFO: Current directory: %s, searching for 'asciiid/', full path: %s\n", strrchr(base_path, '/'), base_path);
-			new_len = strlen(base_path) - strlen(strrchr(base_path, '/'));
-			if (new_len == 0) {
-				printf("ERR: Recursive search reached root.\n");
-				exit(1);
-			}
-			base_path[new_len] = 0;
-			if (max_attempts == attempts) {
-				printf("ERR: Recursive search exceeded maximum attempts.\n");
-				exit(1);
-			}
-			attempts++;
-		}
-#elif defined(_WIN32)
-		while (strcmp(strrchr(base_path, '\\'), "\\asciiid") != 0) {
-			printf("INFO: Current directory: %s, searching for 'asciiid\\', full path: %s\n", strrchr(base_path, '\\'), base_path);
-			new_len = strlen(base_path) - strlen(strrchr(base_path, '\\'));
-			if (new_len == 0) {
-				printf("ERR: Recursive search reached root.\n");
-				exit(1);
-			}
-			base_path[new_len] = 0;
-			if (max_attempts == attempts) {
-				printf("ERR: Recursive search exceeded maximum attempts.\n");
-				exit(1);
-			}
-			attempts++;
-		}
-#endif
-		size_t length = strlen(base_path);
-#if defined(__linux__) || defined(__APPLE__)
-		base_path[length] = '/';
-#elif _WIN32
-		base_path[length] = '\\';
-#endif
-		base_path[length + 1] = 0;
+            for (auto directory : std::filesystem::directory_iterator{executable_path}) {
+            if (strcmp(directory.path().filename().c_str(), "io_mesh_akm") == 0) {
+                flags[0] = true;
+            } else if (strcmp(directory.path().filename().c_str(), "meshes") == 0) {
+                flags[1] = true;
+            } else if (strcmp(directory.path().filename().c_str(), "palettes") == 0) {
+                flags[2] = true;
+            } else if (strcmp(directory.path().filename().c_str(), "sprites") == 0) {
+                flags[3] = true;
+            } else if (strcmp(directory.path().filename().c_str(), "fonts") == 0) {
+                flags[4] = true;
+            }
+            }
+
+        if (flags[0] && flags[1] && flags[2] && flags[3] && flags[4]) {
+            printf("INFO: Found assets in: %s\n", executable_path.c_str());
+            size_t length = strlen(executable_path.c_str());
+            strcpy(base_path, executable_path.c_str());
+            base_path[length] = '/';
+            base_path[length + 1] = '\0';
+            break;
+	    }
+        executable_path = executable_path.parent_path();
+    } while (!(executable_path.root_path() == executable_path) || limit == 0);
+
+    if (strcmp(base_path, "NOT_FOUND") == 0) {
+	    printf("ERR: Failed to find assets folder!\n");
+	    exit(1);
     }
 
     printf("INFO: Execution path: %s\n", argv[0]);
