@@ -249,7 +249,7 @@
           if (!ak_joined)
           {
             console.log("ws error (onerror), starting solo ...");
-            Load();
+            Load(player_name);
             Resize(null);
             window.requestAnimationFrame(AsciickerLoop);
           }
@@ -292,13 +292,13 @@
                   ak_packet = new Uint8Array(Module.HEAP8.buffer,mem,257);
                 }
 
-                Load();
+                Load(player_name);
                 Resize(null);
                 window.requestAnimationFrame(AsciickerLoop);
               }
               else
               {
-                Load();
+                Load(player_name);
                 Resize(null);
                 window.requestAnimationFrame(AsciickerLoop);
               }
@@ -706,7 +706,7 @@
           "Minus"        : 109,
           "Period"       : 110,
           "Slash"        : 111,
-          "BackQuote"    : 112,
+          "Backquote"    : 112,
           "BracketLeft"  : 113,
           "BracketRight" : 114,
           "Backslash"    : 115,
@@ -935,7 +935,7 @@
       {
         console.log('Loaded '+fonts.length+' fonts'); 
 
-        Load = Module.cwrap('Load', null, []);
+        Load = Module.cwrap('Load', null, ['string']);
         Render = Module.cwrap('Render', 'number', ['number','number']);
         Size = Module.cwrap('Size', null, ['number','number','number','number']);
         Keyb = Module.cwrap('Keyb', null, ['number','number']);
