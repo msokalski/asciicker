@@ -92,7 +92,7 @@ parts:
       - libx11-data
       - libxinerama1
       - libgl1-mesa-glx
-      - libsdl2
+      - libsdl2-2.0-0
       - kbd
 
     source: .
@@ -115,7 +115,7 @@ parts:
       - libx11-data
       - libxinerama1
       - libgl1-mesa-glx
-      - libsdl2
+      - libsdl2-2.0-0
 
     source: .
     plugin: nil
