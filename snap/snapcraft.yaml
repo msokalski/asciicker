@@ -136,24 +136,33 @@ parts:
       cp .run/server $SNAPCRAFT_PART_INSTALL
 
   assets:
+  
+    plugin: dump
+    source: ./
+    source-type: git
+    
+    organize:
+      a3d/: snap/a3d/
+      fonts/: snap/fonts/
+      icons/: snap/icons/
+      meshes/: snap/meshes/
+      sprites/: snap/sprites/
+      palettes/: snap/palettes/
 
-    plugin: nil
-    override-build: |
+   # mkdir $SNAPCRAFT_PART_INSTALL/icons
+   # cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
 
-      mkdir $SNAPCRAFT_PART_INSTALL/icons
-      cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
+   # mkdir $SNAPCRAFT_PART_INSTALL/a3d
+   # cp a3d/game_map_y8.a3d $SNAPCRAFT_PART_INSTALL/a3d
 
-      mkdir $SNAPCRAFT_PART_INSTALL/a3d
-      cp a3d/game_map_y8.a3d $SNAPCRAFT_PART_INSTALL/a3d
+   # mkdir $SNAPCRAFT_PART_INSTALL/fonts
+   # cp fonts/* $SNAPCRAFT_PART_INSTALL/fonts
 
-      mkdir $SNAPCRAFT_PART_INSTALL/fonts
-      cp fonts/* $SNAPCRAFT_PART_INSTALL/fonts
+   # mkdir $SNAPCRAFT_PART_INSTALL/sprites
+   # cp sprites/*.xp $SNAPCRAFT_PART_INSTALL/sprites
 
-      mkdir $SNAPCRAFT_PART_INSTALL/sprites
-      cp sprites/*.xp $SNAPCRAFT_PART_INSTALL/sprites
+   # mkdir $SNAPCRAFT_PART_INSTALL/meshes
+   # cp meshes/*.akm $SNAPCRAFT_PART_INSTALL/meshes
 
-      mkdir $SNAPCRAFT_PART_INSTALL/meshes
-      cp meshes/*.akm $SNAPCRAFT_PART_INSTALL/meshes
-
-      mkdir $SNAPCRAFT_PART_INSTALL/palettes
-      cp palettes/*.png $SNAPCRAFT_PART_INSTALL/palettes
+   # mkdir $SNAPCRAFT_PART_INSTALL/palettes
+   # cp palettes/*.png $SNAPCRAFT_PART_INSTALL/palettes
