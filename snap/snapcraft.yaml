@@ -83,6 +83,7 @@ parts:
       - libgpm-dev
       - xorg-dev
       - libgl1-mesa-dev
+      - libsdl2-dev
 
     stage-packages:
       - gpm
@@ -91,6 +92,7 @@ parts:
       - libx11-data
       - libxinerama1
       - libgl1-mesa-glx
+      - libsdl2
       - kbd
 
     source: .
@@ -106,12 +108,14 @@ parts:
       - make
       - xorg-dev
       - libgl1-mesa-dev
+      - libsdl2-dev
 
     stage-packages:
       - libx11-6
       - libx11-data
       - libxinerama1
       - libgl1-mesa-glx
+      - libsdl2
 
     source: .
     plugin: nil
