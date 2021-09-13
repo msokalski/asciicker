@@ -20,11 +20,11 @@ description: |
 #  - build-on: i386
 #    run-on: i386
 
-# grade: devel # must be 'stable' to release into candidate/stable channels
-grade: stable # must be 'stable' to release into candidate/stable channels
+grade: devel # must be 'stable' to release into candidate/stable channels
+# grade: stable
 
-# confinement: devmode # use 'strict' once you have the right plugs and slots
 confinement: devmode # use 'strict' once you have the right plugs and slots
+# confinement: classic
 
 apps:
   asciicker-font-6:
