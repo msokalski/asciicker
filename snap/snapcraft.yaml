@@ -135,12 +135,10 @@ parts:
       make -f makefile_server
       cp .run/server $SNAPCRAFT_PART_INSTALL
 
-#  assets:
-# 
-#    plugin: dump
-#    source: ./
-#    source-type: git
-#   
+  fonts:
+    plugin: dump
+    source: ./fonts/
+   
 #    organize:
 #      a3d/: a3d/
 #      fonts/: fonts/
