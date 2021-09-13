@@ -139,7 +139,10 @@ parts:
 
     plugin: nil
     override-build: |
-      
+
+      mkdir $SNAPCRAFT_PART_INSTALL/icons
+      cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
+
       mkdir $SNAPCRAFT_PART_INSTALL/a3d
       cp a3d/game_map_y8.a3d $SNAPCRAFT_PART_INSTALL/a3d
 
@@ -148,9 +151,6 @@ parts:
 
       mkdir $SNAPCRAFT_PART_INSTALL/sprites
       cp sprites/*.xp $SNAPCRAFT_PART_INSTALL/sprites
-
-      mkdir $SNAPCRAFT_PART_INSTALL/icons
-      cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
 
       mkdir $SNAPCRAFT_PART_INSTALL/meshes
       cp meshes/*.akm $SNAPCRAFT_PART_INSTALL/meshes
