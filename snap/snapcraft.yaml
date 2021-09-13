@@ -142,12 +142,12 @@ parts:
     source-type: git
     
     organize:
-      a3d/: snap/a3d/
-      fonts/: snap/fonts/
-      icons/: snap/icons/
-      meshes/: snap/meshes/
-      sprites/: snap/sprites/
-      palettes/: snap/palettes/
+      a3d/: $SNAP/a3d/
+      fonts/: $SNAP/fonts/
+      icons/: $SNAP/icons/
+      meshes/: $SNAP/meshes/
+      sprites/: $SNAP/sprites/
+      palettes/: $SNAP/palettes/
 
    # mkdir $SNAPCRAFT_PART_INSTALL/icons
    # cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
