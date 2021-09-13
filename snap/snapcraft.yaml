@@ -141,7 +141,7 @@ parts:
     override-build: |
       
       mkdir $SNAPCRAFT_PART_INSTALL/a3d
-      cp a3d/*.a3d $SNAPCRAFT_PART_INSTALL/a3d
+      cp a3d/game_map_y8.a3d $SNAPCRAFT_PART_INSTALL/a3d
 
       mkdir $SNAPCRAFT_PART_INSTALL/fonts
       cp fonts/* $SNAPCRAFT_PART_INSTALL/fonts
