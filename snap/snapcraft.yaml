@@ -135,17 +135,17 @@ parts:
       make -f makefile_server
       cp .run/server $SNAPCRAFT_PART_INSTALL
 
-  fonts:
+  assets:
     plugin: dump
-    source: ./fonts/
+    source: .
    
-#    organize:
-#      a3d/: a3d/
-#      fonts/: fonts/
-#      icons/: icons/
-#      meshes/: meshes/
-#      sprites/: sprites/
-#      palettes/: palettes/
+    stage:
+      - fonts/
+      - a3d/
+      - icons/
+      - meshes/
+      - sprites/
+      - palettes/
 
    # mkdir $SNAPCRAFT_PART_INSTALL/icons
    # cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
