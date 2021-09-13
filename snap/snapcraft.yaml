@@ -5,9 +5,6 @@ summary: 3D textmode RPG prototype # 79 char long summary
 
 description: |
   This is WIP (work in progress) of 3D textmode RPG (role playing game) prototype.
-  Project has started in 2017, initially written in javascript and targetting only web.
-  In 2019 development changed to C++ language and now it is targetting almost anything.
-  Currently builds are provided for linux, windows and web.
 
 #architectures:
 #  - build-on: s390x
@@ -27,40 +24,40 @@ grade: devel # must be 'stable' to release into candidate/stable channels
 confinement: devmode # use 'strict' once you have the right plugs and slots
 
 apps:
-  font-6:
+  asciicker-font-6:
     command: setfont $SNAP/fonts/cp437_6x6.png.psf
-  font-8:
+  asciicker-font-8:
     command: setfont $SNAP/fonts/cp437_8x8.png.psf
-  font-10:
+  asciicker-font-10:
     command: setfont $SNAP/fonts/cp437_10x10.png.psf
-  font-12:
+  asciicker-font-12:
     command: setfont $SNAP/fonts/cp437_12x12.png.psf
-  font-14:
+  asciicker-font-14:
     command: setfont $SNAP/fonts/cp437_14x14.png.psf
-  font-16:
+  asciicker-font-16:
     command: setfont $SNAP/fonts/cp437_16x16.png.psf
-  font-18:
+  asciicker-font-18:
     command: setfont $SNAP/fonts/cp437_18x18.png.psf
-  font-20:
+  asciicker-font-20:
     command: setfont $SNAP/fonts/cp437_20x20.png.psf
-  font-24:
+  asciicker-font-24:
     command: setfont $SNAP/fonts/cp437_24x24.png.psf
-  font-28:
+  asciicker-font-28:
     command: setfont $SNAP/fonts/cp437_28x28.png.psf
-  font-32:
+  asciicker-font-32:
     command: setfont $SNAP/fonts/cp437_32x32.png.psf
-  term:
+  asciicker-term:
     command: ./game_term
-  x11:
+  asciicker-sdl:
     command: ./game
-  edit:
+  asciicker-edit:
     command: ./asciiid
-  server:
+  asciicker-server:
     command: ./server
 
 parts:
 
-  game-term:
+  asciicker-term:
 
     build-packages:
       - g++
@@ -78,7 +75,7 @@ parts:
       make -f makefile_game_term
       cp .run/game_term $SNAPCRAFT_PART_INSTALL
 
-  game:
+  asciicker-sdl:
 
     build-packages:
       - g++
@@ -102,7 +99,7 @@ parts:
       make -f makefile_game
       cp .run/game $SNAPCRAFT_PART_INSTALL
 
-  asciiid:
+  asciicker-edit:
 
     build-packages:
       - g++
@@ -122,7 +119,7 @@ parts:
       make -f makefile_asciiid
       cp .run/asciiid $SNAPCRAFT_PART_INSTALL
 
-  server:
+  asciicker-server:
 
     build-packages:
       - g++
@@ -140,7 +137,7 @@ parts:
     override-build: |
       
       mkdir $SNAPCRAFT_PART_INSTALL/a3d
-      cp a3d/game_map.a3d $SNAPCRAFT_PART_INSTALL/a3d
+      cp a3d/*.a3d $SNAPCRAFT_PART_INSTALL/a3d
 
       mkdir $SNAPCRAFT_PART_INSTALL/fonts
       cp fonts/* $SNAPCRAFT_PART_INSTALL/fonts
