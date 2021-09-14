@@ -121,6 +121,8 @@ parts:
       - libx11-data
       - libxinerama1
       - libgl1-mesa-glx
+      - libglu1-mesa
+      - libgl1-mesa-dri
       - libsdl2-2.0-0
       - kbd
 
@@ -144,6 +146,8 @@ parts:
       - libx11-data
       - libxinerama1
       - libgl1-mesa-glx
+      - libglu1-mesa
+      - libgl1-mesa-dri
       - libsdl2-2.0-0
 
     source: .
