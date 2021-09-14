@@ -1343,7 +1343,7 @@ int main(int argc, char* argv[])
         tty = find_tty();
     }
 
-    if (tty >= 0)
+    if (tty > 0)
     {
 #ifdef USE_GPM
         Gpm_Connect conn;
