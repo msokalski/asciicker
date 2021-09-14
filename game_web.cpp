@@ -191,8 +191,14 @@ int Main()
 
 extern "C"
 {
-    void Load()
+    void Load(const char* name)
     {
+        if (name)
+        {
+            strcpy(player_name,name);
+            ConvertToCP437(player_name_cp437,player_name);
+        }
+
         Main();
     }
 
@@ -249,7 +255,12 @@ extern "C"
             }
                return 0;
         }
-        strcpy(player_name,name);
+
+        if (name)
+        {
+            strcpy(player_name,name);
+            ConvertToCP437(player_name_cp437,player_name);
+        }
         // alloc server, prepare for Packet()s
         GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
         memset(gs,0,sizeof(GameServer));

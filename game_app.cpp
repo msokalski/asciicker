@@ -1128,8 +1128,6 @@ int main(int argc, char* argv[])
 	// if url is given try to open connection
 	GameServer* gs = 0;
 
-	// Y7+ are not multiplayer
-	/*
 	if (url)
 	{
 		// [user@]server_address/path[:port]
@@ -1175,15 +1173,16 @@ int main(int argc, char* argv[])
         }
 
 		strcpy(player_name, user);
+        ConvertToCP437(player_name_cp437, player_name);
 
 		// here we should know if server is present or not
 		// so we can creare game or term with or without server
 		// ...
 	}
     else
-	*/
     {
         strcpy(player_name, "player");
+        ConvertToCP437(player_name_cp437, player_name);
     }
     
 
