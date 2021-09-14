@@ -55,7 +55,7 @@ apps:
       - network
       - network-bind    
   asciicker:
-    command: $SNAP/launcher game
+    command: ./launcher game
     plugs:
       - audio-playback
       - desktop
@@ -67,7 +67,7 @@ apps:
       - wayland
       - x11    
   editor:
-    command: $SNAP/launcher asciiid
+    command: ./launcher asciiid
     plugs:
       - audio-playback
       - desktop
