@@ -185,10 +185,10 @@ parts:
       - sprites/
       - palettes/
 
-#  launcher:
-#    plugin: dump
-#    source: ./snap
+  launcher:
+    plugin: dump
+    source: ./snap
 
-#    stage:
-#      - launcher
+    stage:
+      - launcher
 
