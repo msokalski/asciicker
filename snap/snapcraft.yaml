@@ -27,6 +27,7 @@ grade: stable
 confinement: strict
 
 apps:
+
   font-6:
     command: setfont $SNAP/fonts/cp437_6x6.png.psf
   font-8:
@@ -49,11 +50,13 @@ apps:
     command: setfont $SNAP/fonts/cp437_28x28.png.psf
   font-32:
     command: setfont $SNAP/fonts/cp437_32x32.png.psf
+
   term:
     command: ./game_term
     plugs:
       - network
       - network-bind    
+
   asciicker:
     command: ./launcher game
     plugs:
@@ -66,6 +69,7 @@ apps:
       - pulseaudio
       - wayland
       - x11    
+
   editor:
     command: ./launcher asciiid
     plugs:
@@ -78,6 +82,7 @@ apps:
       - pulseaudio
       - wayland
       - x11    
+
   server:
     command: ./server
     plugs:
@@ -180,27 +185,10 @@ parts:
       - sprites/
       - palettes/
 
-  launcher:
-    plugin: dump
-    source: ./snap
-   
-    stage:
-      - launcher
+#  launcher:
+#    plugin: dump
+#    source: ./snap
 
-   # mkdir $SNAPCRAFT_PART_INSTALL/icons
-   # cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
+#    stage:
+#      - launcher
 
-   # mkdir $SNAPCRAFT_PART_INSTALL/a3d
-   # cp a3d/game_map_y8.a3d $SNAPCRAFT_PART_INSTALL/a3d
-
-   # mkdir $SNAPCRAFT_PART_INSTALL/fonts
-   # cp fonts/* $SNAPCRAFT_PART_INSTALL/fonts
-
-   # mkdir $SNAPCRAFT_PART_INSTALL/sprites
-   # cp sprites/*.xp $SNAPCRAFT_PART_INSTALL/sprites
-
-   # mkdir $SNAPCRAFT_PART_INSTALL/meshes
-   # cp meshes/*.akm $SNAPCRAFT_PART_INSTALL/meshes
-
-   # mkdir $SNAPCRAFT_PART_INSTALL/palettes
-   # cp palettes/*.png $SNAPCRAFT_PART_INSTALL/palettes
