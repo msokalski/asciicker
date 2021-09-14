@@ -63,4 +63,4 @@ export LOCPATH="$SNAP/usr/lib/locale"
 export LC_ALL=C.UTF-8
 
 #finally run
-exec $SNAP/game
+exec $SNAP/$1
