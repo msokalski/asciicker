@@ -20,11 +20,11 @@ description: |
 #  - build-on: i386
 #    run-on: i386
 
-grade: devel
-# grade: stable
+# grade: devel
+grade: stable
 
-confinement: devmode
-# confinement: strict
+# confinement: devmode
+confinement: strict
 
 apps:
 
