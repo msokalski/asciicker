@@ -2,7 +2,7 @@
 Name=asciicker
 Exec=asciicker
 Comment=3D ASCII game concept
-Icon=${SNAP}/meta/gui/ascii-patrol.png
+Icon=${SNAP}/meta/gui/asciicker.png
 Type=Application
 Terminal=false
 StartupNotify=false
