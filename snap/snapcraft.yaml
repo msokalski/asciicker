@@ -27,32 +27,35 @@ grade: stable
 confinement: strict
 
 apps:
-  asciicker-font-6:
+  font-6:
     command: setfont $SNAP/fonts/cp437_6x6.png.psf
-  asciicker-font-8:
+  font-8:
     command: setfont $SNAP/fonts/cp437_8x8.png.psf
-  asciicker-font-10:
+  font-10:
     command: setfont $SNAP/fonts/cp437_10x10.png.psf
-  asciicker-font-12:
+  font-12:
     command: setfont $SNAP/fonts/cp437_12x12.png.psf
-  asciicker-font-14:
+  font-14:
     command: setfont $SNAP/fonts/cp437_14x14.png.psf
-  asciicker-font-16:
+  font-16:
     command: setfont $SNAP/fonts/cp437_16x16.png.psf
-  asciicker-font-18:
+  font-18:
     command: setfont $SNAP/fonts/cp437_18x18.png.psf
-  asciicker-font-20:
+  font-20:
     command: setfont $SNAP/fonts/cp437_20x20.png.psf
-  asciicker-font-24:
+  font-24:
     command: setfont $SNAP/fonts/cp437_24x24.png.psf
-  asciicker-font-28:
+  font-28:
     command: setfont $SNAP/fonts/cp437_28x28.png.psf
-  asciicker-font-32:
+  font-32:
     command: setfont $SNAP/fonts/cp437_32x32.png.psf
-  asciicker-term:
+  term:
     command: ./game_term
-  asciicker-sdl:
-    command: ./game
+    plugs:
+      - network
+      - network-bind    
+  asciicker:
+    command: $SNAP/launcher game
     plugs:
       - audio-playback
       - desktop
@@ -63,8 +66,8 @@ apps:
       - pulseaudio
       - wayland
       - x11    
-  asciicker-edit:
-    command: ./asciiid
+  editor:
+    command: $SNAP/launcher asciiid
     plugs:
       - audio-playback
       - desktop
@@ -75,7 +78,7 @@ apps:
       - pulseaudio
       - wayland
       - x11    
-  asciicker-server:
+  server:
     command: ./server
     plugs:
       - network
@@ -127,7 +130,7 @@ parts:
       make -f makefile_game
       cp .run/game $SNAPCRAFT_PART_INSTALL
 
-  asciicker-edit:
+  asciicker-editor:
 
     build-packages:
       - g++
@@ -172,6 +175,13 @@ parts:
       - meshes/
       - sprites/
       - palettes/
+
+  launcher:
+    plugin: dump
+    source: ./snap
+   
+    stage:
+      - launcher
 
    # mkdir $SNAPCRAFT_PART_INSTALL/icons
    # cp icons/app.png $SNAPCRAFT_PART_INSTALL/icons
