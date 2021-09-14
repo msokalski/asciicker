@@ -20,11 +20,11 @@ description: |
 #  - build-on: i386
 #    run-on: i386
 
-grade: devel # must be 'stable' to release into candidate/stable channels
-# grade: stable
+# grade: devel
+grade: stable
 
-confinement: devmode # use 'strict' once you have the right plugs and slots
-# confinement: classic
+# confinement: devmode
+confinement: strict
 
 apps:
   asciicker-font-6:
@@ -53,10 +53,33 @@ apps:
     command: ./game_term
   asciicker-sdl:
     command: ./game
+    plugs:
+      - audio-playback
+      - desktop
+      - desktop-legacy
+      - network
+      - network-bind
+      - opengl
+      - pulseaudio
+      - wayland
+      - x11    
   asciicker-edit:
     command: ./asciiid
+    plugs:
+      - audio-playback
+      - desktop
+      - desktop-legacy
+      - network
+      - network-bind
+      - opengl
+      - pulseaudio
+      - wayland
+      - x11    
   asciicker-server:
     command: ./server
+    plugs:
+      - network
+      - network-bind
 
 parts:
 
