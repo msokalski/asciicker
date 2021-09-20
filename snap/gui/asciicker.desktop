@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=asciicker
+Exec=asciicker
+Comment=3D ASCII game concept
+Icon=${SNAP}/meta/gui/asciicker.png
+Type=Application
+Terminal=false
+StartupNotify=false
+Categories=Game;

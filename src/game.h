@@ -9,8 +9,10 @@
 #include "inventory.h"
 #include "network.h"
 
-extern char player_name[];
+void ConvertToCP437(char* cp437, const char* utf8);
 
+extern char player_name[];
+extern char player_name_cp437[];
 
 struct ACTION { enum
 {
@@ -145,7 +147,8 @@ Sprite* GetSprite(const SpriteReq* req, int clr = 0);
 
 struct Human : Character
 {
-	char name[32];
+	char name[32*4];
+	char name_cp437[32];
 
 	int level;
 
