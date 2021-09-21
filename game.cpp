@@ -1489,7 +1489,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 	return true;
 }
 
-
+#if 0
 struct KeyCap
 {
 	// key_width  = border(1) + bevels(2) + size(min 2) + WIDTH_DELTA*current_size_multiplier(0-9)
@@ -1715,6 +1715,7 @@ struct Keyb
 	int mul_size;
 	KeyRow rows[5];
 
+public:
 	static const int hide = 1 + 5 * 5 + 1; // 1 cell above bottom + 5 rows x 5 cells + 1 border
 
 	int GetCap(int dx, int dy, int width_mul, char* ch, bool shift_on) const
@@ -2014,6 +2015,463 @@ static const Keyb keyb =
 	}
 };
 
+#endif
+
+Sprite* keyb_sprite[5] = { 0,0,0,0,0 };
+Sprite* caps_sprite[3] = { 0,0,0 };
+
+struct Keyb
+{
+	int plane = 1;
+
+	enum
+	{
+		// private virtual keys
+		KBD_COMMA = A3D_MAPEND, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL,
+		KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND,
+		KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE,
+		KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE
+	};
+
+	static constexpr int caps_plane[3][3][10] =
+	{
+		{
+			{ A3D_Q, A3D_W, A3D_E, A3D_R, A3D_T, A3D_Y, A3D_U, A3D_I, A3D_O, A3D_P },
+			{ A3D_A, A3D_S, A3D_D, A3D_F, A3D_G, A3D_H, A3D_J, A3D_K, A3D_L, A3D_ENTER },
+			{ A3D_LSHIFT, A3D_Z, A3D_X, A3D_C, A3D_V, A3D_B, A3D_N, A3D_M, A3D_SPACE, A3D_RSHIFT },
+		},
+		{
+			{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
+			{ KBD_COMMA, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL, A3D_ENTER},
+			{ A3D_LSHIFT, KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE, A3D_SPACE, A3D_RSHIFT}
+		},
+		{
+			{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
+			{ KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE, A3D_ENTER},
+			{ A3D_LSHIFT, KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND, A3D_SPACE, A3D_RSHIFT}
+		},
+	};
+
+	static constexpr char char_plane[3][3][10] =
+	{
+		{
+			{ 'q','w','e','r','t','y','u','i','o','p' },
+			{ 'a','s','d','f','g','h','j','k','l', '\n' },
+			{  1 ,'z','x','c','v','b','n','m',' ', 2  },
+		},
+		{
+			{ '0','1','2','3','4','5','6','7','8','9' },
+			{ ',','.','?','+','-','*','/','_','=', '\n'  },
+			{  1,'\\',':',';','\'','"','`','|',' ', 2  },
+		},
+		{
+			{ '0','1','2','3','4','5','6','7','8','9' },
+			{ '(',')','{','}','[',']','<','>','~', '\n'  },
+			{  1 ,'!','@','#','$','%','^','&',' ', 2  },
+		}
+	};
+
+	int GetCap(int dx, int dy, int width, int height, char* ch, bool shift_on) const
+	{
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		int center_x = (width - keyb_w) / 2;
+
+
+		static int press_j = -1;
+		static int press_i = -1;
+
+		static int clicker = 0;
+		clicker++;
+		if (clicker == 10)
+		{
+			press_j = fast_rand() % 3;
+			press_i = fast_rand() % 10;
+		}
+		if (clicker == 15)
+		{
+			clicker = 0;
+			press_j = -1;
+			press_i = -1;
+		}
+
+		int hide = 0;
+
+		for (int j = 0; j < 3; j++)
+		{
+			for (int i = 0; i < 10; i++)
+			{
+				int x = center_x + i * (sprite_w - 1) + (j & 1) * delta_x;
+				int y = j * delta_y - hide;
+
+				Sprite::Frame* sf = keyb_sprite[sprite_i]->atlas;
+
+				int cx = dx - x;
+				int cy = dy - y;
+				if (cx >= 0 && cy >= 0 && cx < sprite_w && cy < sprite_h)
+				{
+					AnsiCell* ac = sf->cell + cy * sf->width + cx;
+
+					// opaqueness test
+					if (ac->bk != 255 && ac->gl != 32 && ac->gl != 0 || ac->fg != 255 && ac->gl != 219)
+					{
+						if (ch)
+						{
+							char cc = char_plane[plane][2 - j][i];
+							if (shift_on)
+							{
+								if (cc >= 'a' && cc <= 'z')
+									cc += 'A' - 'a';
+								if (cc == ' ')
+									cc = 8; // shift + space = backspace !!!
+							}
+							*ch = cc;
+						}
+
+						return caps_plane[plane][2 - j][i];
+					}
+				}
+			}
+		}
+
+		if (ch)
+			*ch = 0;
+		return -1; // return 0 if it was very close to keyb
+	}
+
+	int Width(int width, int height) const
+	{
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		return keyb_w;
+	}
+
+	int Height(int width, int height) const
+	{
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		return keyb_h;
+	}
+
+	void Paint(AnsiCell* ptr, int width, int height, int hide, const uint8_t key[32]) const
+	{
+		// hide should be netween 0 and Height()
+
+		// shift modifies appeariance of space->BS and enter->LF, (possibly caps az->AZ)
+		bool shift_on = key[A3D_LSHIFT >> 3] & (1 << (A3D_LSHIFT & 7));
+		shift_on |= key[A3D_RSHIFT >> 3] & (1 << (A3D_RSHIFT & 7));
+
+
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		int center_x = (width - keyb_w) / 2;
+
+
+		/*
+		static int press_j = -1;
+		static int press_i = -1;
+
+		static int clicker = 0;
+		clicker++;
+		if (clicker == 10)
+		{
+			press_j = fast_rand() % 3;
+			press_i = fast_rand() % 10;
+		}
+		if (clicker == 15)
+		{
+			clicker = 0;
+			press_j = -1;
+			press_i = -1;
+		}
+		*/
+
+		for (int j = 2; j >= 0; j--)
+		{
+			for (int i = 9; i >= 0; i--)
+			{
+				int x = center_x + i * (sprite_w - 1) + (j & 1) * delta_x;
+				int y = j * delta_y - hide;
+
+				Sprite::Frame* sf = keyb_sprite[sprite_i]->atlas;
+
+				int clip[] = { 0,0,sprite_w,sprite_h };
+
+				int cap = caps_plane[plane][2-j][i];
+
+				if (key[cap>>3] & (1<<(cap&7)))
+				{
+					y -= delta_d;
+					clip[0] = 2 * sprite_w;
+					clip[2] = 3 * sprite_w;
+				}
+
+				BlitSprite(ptr, width, height, sf, x, y, clip);
+
+				int caps_clip[] = {i*5, j*5, (i+1) * 5, (j+1) * 5 };
+
+				Sprite::Frame* caps_sf = caps_sprite[plane]->atlas;
+				BlitSprite(ptr, width, height, caps_sf, x + sprite_w/2 - 2, y + sprite_h/2 - 2 + caps_dy, caps_clip);
+			}
+		}
+
+	}
+};
+
+Keyb keyb;
+
 ////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -2075,6 +2533,16 @@ void LoadSprites()
 	// main buts
 	character_button = LoadSpriteBP("character.xp", 0, false);
 	inventory_sprite = LoadSpriteBP("inventory.xp", 0, false);
+
+	keyb_sprite[0] = LoadSpriteBP("keyb-07.xp", 0, false);
+	keyb_sprite[1] = LoadSpriteBP("keyb-09.xp", 0, false);
+	keyb_sprite[2] = LoadSpriteBP("keyb-11.xp", 0, false);
+	keyb_sprite[3] = LoadSpriteBP("keyb-13.xp", 0, false);
+	keyb_sprite[4] = LoadSpriteBP("keyb-15.xp", 0, false);
+
+	caps_sprite[0] = LoadSpriteBP("keyb-caps-a.xp", 0, false);
+	caps_sprite[1] = LoadSpriteBP("keyb-caps-b.xp", 0, false);
+	caps_sprite[2] = LoadSpriteBP("keyb-caps-c.xp", 0, false);
 
 	fire_sprite = LoadSpriteBP("fire.xp", 0, false);
 
@@ -2856,7 +3324,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->show_buts = true;
 	g->bars_pos = 7;
 
-	g->keyb_hide = keyb.hide;
+	int width = 112, height = 63;
+	g->keyb_hide = 1000;// keyb.Height(width, height);
 
 	g->renderer = CreateRenderer(stamp);
 	g->physics = CreatePhysics(terrain, world, pos, dir, yaw, stamp);
@@ -3758,6 +4227,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 		// revert it (OnKeyb nulls it)
 		KeybAutoRepChar = ch;
+	}
+
+	if (render_size[0] != width || render_size[1] != height)
+	{
+		int kh = keyb.Height(width, height);
+		if (!show_keyb || keyb_hide > kh)
+			keyb_hide = kh;
 	}
 
 	render_size[0] = width;
@@ -5575,8 +6051,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (!show_buts && bars_pos > 0)
 		bars_pos--;
 
-	if (show_keyb || keyb_hide < 1 + 5 * 5 + 1)
+	int kh = keyb.Height(width, height);
+
+	if (show_keyb || keyb_hide < kh)
 	{
+		#if 0
 		int mul, keyb_width;
 		for (int mode = 1; mode <= 16; mode++)
 		{
@@ -5598,10 +6077,26 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		for (int i = 0; i < 32; i++)
 			key[i] = keyb_key[i] | input.key[i];
 		keyb.Paint(ptr, keyb_pos[0], keyb_pos[1], width, height, keyb_mul, key);
+		#endif
+
+		// w = (sprite_w-1) * 10.5 + 1
+
+		// (sprite_w-1) * 10.5 = w-1
+		// sprite_w-1 = (w-1)/10.5
+		// sprite_w = (w-1)/10.5 + 1
+
+
+		uint8_t key[32];
+		for (int i = 0; i < 32; i++)
+			key[i] = keyb_key[i] | input.key[i];
+		keyb.Paint(ptr, width, height, keyb_hide, key);
 	}
 	
 	if (show_keyb)
 	{
+		if (keyb_hide > kh)
+			keyb_hide = kh;
+
 		if (keyb_hide > 0)
 		{
 			keyb_hide -= f120;
@@ -5611,11 +6106,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	}
 	else
 	{
-		if (keyb_hide < keyb.hide)
+		if (keyb_hide < kh)
 		{
 			keyb_hide += f120;
-			if (keyb_hide > keyb.hide)
-				keyb_hide = keyb.hide;
+			if (keyb_hide > kh)
+				keyb_hide = kh;
 		}
 	}
 
@@ -6599,7 +7094,14 @@ void Game::StartContact(int id, int x, int y, int b)
 		{
 			bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
 			char ch=0;
+			
+			#if 0
 			cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, &ch, shift_on);
+			#endif
+			cap = keyb.GetCap(cp[0], cp[1], render_size[0], render_size[1], &ch, shift_on);
+
+			if (shift_on && cap == A3D_RSHIFT)
+				keyb.plane = (keyb.plane + 1) % 3;
 
 			if (b!=1 && cap > 0)
 				cap = 0;
@@ -6939,7 +7441,11 @@ void Game::MoveContact(int id, int x, int y)
 		{			
 			int cp[2] = { x,y };
 			ScreenToCell(cp);
+			#if 0 
 			int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, 0,false);
+			#endif
+			int cap = keyb.GetCap(cp[0], cp[1], render_size[0], render_size[1], 0, false);
+
 			if (cap != con->keyb_cap)
 			{
 				con->action = Input::Contact::NONE;
