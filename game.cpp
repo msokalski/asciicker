@@ -2020,56 +2020,56 @@ static const Keyb keyb =
 Sprite* keyb_sprite[5] = { 0,0,0,0,0 };
 Sprite* caps_sprite[3] = { 0,0,0 };
 
+enum
+{
+	// private virtual keys
+	KBD_COMMA = A3D_MAPEND, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL,
+	KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND,
+	KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE,
+	KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE
+};
+
+static const int caps_plane[3][3][10] =
+{
+	{
+		{ A3D_Q, A3D_W, A3D_E, A3D_R, A3D_T, A3D_Y, A3D_U, A3D_I, A3D_O, A3D_P },
+		{ A3D_A, A3D_S, A3D_D, A3D_F, A3D_G, A3D_H, A3D_J, A3D_K, A3D_L, A3D_ENTER },
+		{ A3D_LSHIFT, A3D_Z, A3D_X, A3D_C, A3D_V, A3D_B, A3D_N, A3D_M, A3D_SPACE, A3D_RSHIFT },
+	},
+	{
+		{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
+		{ KBD_COMMA, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL, A3D_ENTER},
+		{ A3D_LSHIFT, KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE, A3D_SPACE, A3D_RSHIFT}
+	},
+	{
+		{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
+		{ KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE, A3D_ENTER},
+		{ A3D_LSHIFT, KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND, A3D_SPACE, A3D_RSHIFT}
+	},
+};
+
+static const char char_plane[3][3][10] =
+{
+	{
+		{ 'q','w','e','r','t','y','u','i','o','p' },
+		{ 'a','s','d','f','g','h','j','k','l', '\n' },
+		{  1 ,'z','x','c','v','b','n','m',' ', 2  },
+	},
+	{
+		{ '0','1','2','3','4','5','6','7','8','9' },
+		{ ',','.','?','+','-','*','/','_','=', '\n'  },
+		{  1,'\\',':',';','\'','"','`','|',' ', 2  },
+	},
+	{
+		{ '0','1','2','3','4','5','6','7','8','9' },
+		{ '(',')','{','}','[',']','<','>','~', '\n'  },
+		{  1 ,'!','@','#','$','%','^','&',' ', 2  },
+	}
+};
+
 struct Keyb
 {
 	int plane = 1;
-
-	enum
-	{
-		// private virtual keys
-		KBD_COMMA = A3D_MAPEND, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL,
-		KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND,
-		KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE,
-		KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE
-	};
-
-	static constexpr int caps_plane[3][3][10] =
-	{
-		{
-			{ A3D_Q, A3D_W, A3D_E, A3D_R, A3D_T, A3D_Y, A3D_U, A3D_I, A3D_O, A3D_P },
-			{ A3D_A, A3D_S, A3D_D, A3D_F, A3D_G, A3D_H, A3D_J, A3D_K, A3D_L, A3D_ENTER },
-			{ A3D_LSHIFT, A3D_Z, A3D_X, A3D_C, A3D_V, A3D_B, A3D_N, A3D_M, A3D_SPACE, A3D_RSHIFT },
-		},
-		{
-			{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
-			{ KBD_COMMA, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL, A3D_ENTER},
-			{ A3D_LSHIFT, KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE, A3D_SPACE, A3D_RSHIFT}
-		},
-		{
-			{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
-			{ KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE, A3D_ENTER},
-			{ A3D_LSHIFT, KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND, A3D_SPACE, A3D_RSHIFT}
-		},
-	};
-
-	static constexpr char char_plane[3][3][10] =
-	{
-		{
-			{ 'q','w','e','r','t','y','u','i','o','p' },
-			{ 'a','s','d','f','g','h','j','k','l', '\n' },
-			{  1 ,'z','x','c','v','b','n','m',' ', 2  },
-		},
-		{
-			{ '0','1','2','3','4','5','6','7','8','9' },
-			{ ',','.','?','+','-','*','/','_','=', '\n'  },
-			{  1,'\\',':',';','\'','"','`','|',' ', 2  },
-		},
-		{
-			{ '0','1','2','3','4','5','6','7','8','9' },
-			{ '(',')','{','}','[',']','<','>','~', '\n'  },
-			{  1 ,'!','@','#','$','%','^','&',' ', 2  },
-		}
-	};
 
 	int GetCap(int dx, int dy, int width, int height, char* ch, bool shift_on) const
 	{
