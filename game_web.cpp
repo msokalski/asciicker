@@ -13,6 +13,18 @@
 
 char base_path[1024] = "./"; // (const)
 
+
+void Buzz()
+{
+    EM_ASM(
+    {
+        if ("vibrate" in navigator) 
+        {
+            navigator.vibrate(50);
+        }
+    });
+}
+
 uint64_t GetTime()
 {
 	static timespec ts;

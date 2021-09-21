@@ -245,6 +245,14 @@ emcc --emrun -O3 \
     --preload-file sprites/bigbee-1111.xp \
     --preload-file sprites/bigbee-1112.xp \
     --preload-file sprites/bigbee.xp \
+    --preload-file sprites/keyb-07.xp \
+    --preload-file sprites/keyb-09.xp \
+    --preload-file sprites/keyb-11.xp \
+    --preload-file sprites/keyb-13.xp \
+    --preload-file sprites/keyb-15.xp \
+    --preload-file sprites/keyb-caps-a.xp \
+    --preload-file sprites/keyb-caps-b.xp \
+    --preload-file sprites/keyb-caps-c.xp \
     --preload-file meshes/bridge-1.akm \
     --preload-file meshes/fence.akm \
     --preload-file meshes/rock-1.akm \

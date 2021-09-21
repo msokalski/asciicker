@@ -9,6 +9,9 @@
 #include "inventory.h"
 #include "network.h"
 
+
+void Buzz();
+
 void ConvertToCP437(char* cp437, const char* utf8);
 
 extern char player_name[];

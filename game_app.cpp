@@ -49,6 +49,10 @@
 #include "game.h"
 #include "enemygen.h"
 
+void Buzz()
+{
+}
+
 char base_path[1024] = "./";
 
 void SyncConf()
@@ -1312,7 +1316,7 @@ int main(int argc, char* argv[])
             DeleteTerrain(terrain);
 
         if (world)
-            DeleteWorld(world);
+            DeleteWorld(world);void Buzz()
 
 		PurgeItemInstCache();
 

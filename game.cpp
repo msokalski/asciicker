@@ -7106,6 +7106,9 @@ void Game::StartContact(int id, int x, int y, int b)
 			if (b!=1 && cap > 0)
 				cap = 0;
 
+			if (ch>=32 && ch<127)
+				Buzz();
+
 			if (cap>0)
 			{
 				// ensure one contact per keycap
