@@ -24,6 +24,7 @@ description: |
 grade: stable
 
 # confinement: devmode
+# confinement: classic
 confinement: strict
 
 apps:

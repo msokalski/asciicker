@@ -1340,6 +1340,7 @@ int main(int argc, char* argv[])
     if (strcmp( term_env, "linux" ) == 0)
     {
         tty = find_tty();
+        printf("tty %d\n",tty);
     }
 
     if (tty > 0)

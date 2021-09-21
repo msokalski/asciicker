@@ -265,15 +265,13 @@ int Gpm_Open(Gpm_Connect *conn, int flag)
         tty=strdup(consolename);
 
       if (gpm_consolefd == -1)
-      {
         gpm_consolefd = 0;
-      /*
+        /*
          if ((gpm_consolefd=open(tty,O_WRONLY)) < 0) {
             gpm_report(GPM_PR_ERR,GPM_MESS_DOUBLE_S,tty,strerror(errno));
             goto err;
          }
-      */
-      }
+        */
    }
 
    new->info=*conn;
@@ -429,7 +427,7 @@ int Gpm_Close(void)
 #ifdef SIGWINCH
   sigaction(SIGWINCH, &gpm_saved_winch_hook, 0);
 #endif
-  // close(gpm_consolefd);
+  //close(gpm_consolefd);
   gpm_consolefd=-1;
   return 0;
 }
