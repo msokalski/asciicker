@@ -2069,7 +2069,7 @@ static const char char_plane[3][3][10] =
 
 struct Keyb
 {
-	int plane = 1;
+	int plane = 0;
 
 	int GetCap(int dx, int dy, int width, int height, char* ch, bool shift_on) const
 	{
@@ -7092,7 +7092,10 @@ void Game::StartContact(int id, int x, int y, int b)
 	{
 		if (show_keyb)
 		{
-			bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+			bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+			bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
+			bool shift_on = left_shift || right_shift;
+			
 			char ch=0;
 			
 			#if 0
@@ -7100,13 +7103,17 @@ void Game::StartContact(int id, int x, int y, int b)
 			#endif
 			cap = keyb.GetCap(cp[0], cp[1], render_size[0], render_size[1], &ch, shift_on);
 
-			if (shift_on && cap == A3D_RSHIFT)
-				keyb.plane = (keyb.plane + 1) % 3;
+			if (left_shift && cap == A3D_RSHIFT)
+				keyb.plane = (keyb.plane + 1) % 3; // cycle++
+			else
+			if (right_shift && cap == A3D_LSHIFT)
+				keyb.plane = (keyb.plane + 2) % 3; // cycle--
+			
 
 			if (b!=1 && cap > 0)
 				cap = 0;
 
-			if (ch>=32 && ch<127)
+			if (ch>=32 && ch<127 || ch==8 || ch=='\n')
 				Buzz();
 
 			if (cap>0)
@@ -7125,7 +7132,10 @@ void Game::StartContact(int id, int x, int y, int b)
 			{
 				if (cap == A3D_LSHIFT)
 				{
-					keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
+					if (id==0)
+						keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
+					else
+						keyb_key[cap >> 3] |= 1 << (cap & 7);
 				}
 				else
 				{
@@ -7454,7 +7464,7 @@ void Game::MoveContact(int id, int x, int y)
 				con->action = Input::Contact::NONE;
 				
 				int uncap = con->keyb_cap;
-				if (uncap != A3D_LSHIFT)
+				if (uncap != A3D_LSHIFT || id!=0)
 					keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
 
 				if (uncap == KeybAutoRepCap)
@@ -7591,7 +7601,7 @@ void Game::EndContact(int id, int x, int y)
 		case Input::Contact::KEYBCAP:
 		{
 			// maybe we should clear it also when another cap is pressed?
-			if (con->keyb_cap!=A3D_LSHIFT)
+			if (con->keyb_cap!=A3D_LSHIFT || id!=0)
 				keyb_key[con->keyb_cap >> 3] &= ~(1 << (con->keyb_cap & 7));  // un-hilight keycap
 
 			if (KeybAutoRepCap == con->keyb_cap)
@@ -7905,7 +7915,8 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 		case TOUCH_CANCEL:
 			if (input.contact[id].action == Input::Contact::KEYBCAP)
 			{
-				if (input.contact[id].keyb_cap!=A3D_LSHIFT)
+				// this should be always true
+				if (input.contact[id].keyb_cap!=A3D_LSHIFT || id!=0)
 					keyb_key[input.contact[id].keyb_cap >> 3] &= ~(1 << (input.contact[id].keyb_cap & 7));  // un-hilight keycap
 			 
 				if (input.contact[id].keyb_cap == KeybAutoRepCap)

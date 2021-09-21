@@ -1316,7 +1316,7 @@ int main(int argc, char* argv[])
             DeleteTerrain(terrain);
 
         if (world)
-            DeleteWorld(world);void Buzz()
+            DeleteWorld(world);
 
 		PurgeItemInstCache();
 
