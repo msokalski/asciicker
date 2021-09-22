@@ -261,6 +261,12 @@ MouseInfo a3dGetMouse(A3D_WND* wnd, int* x, int* y); // returns but flags, mouse
 // keyb_key
 bool a3dGetKeyb(A3D_WND* wnd, KeyInfo ki); // return true if vk is down, keyb_char has no state
 
+// gamepad
+
+uint32_t a3dGetGamePadButtons();
+float a3dGetGamePadAxis(int id);
+
+
 // keyb_focus
 bool a3dGetFocus(A3D_WND* wnd);
 void a3dSetFocus(A3D_WND* wnd);

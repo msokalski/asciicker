@@ -53,6 +53,7 @@ struct A3D_WND
 
 	SDL_Window* win;
 	SDL_GLContext rc;
+	SDL_GameController* gc;
 
 	bool mapped;
 	void* cookie;
@@ -97,6 +98,19 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->cookie = 0;
 	wnd->mapped = false;
 
+	wnd->gc = 0;
+	int ngc = SDL_NumJoysticks();
+	for (int igc = 0; igc < ngc; igc++)
+	{
+		SDL_GameController* gc = SDL_GameControllerOpen(igc);
+		if (gc)
+		{
+			wnd->gc = gc;
+			break;
+		}
+	}
+	
+	
 	if (share)
 	{
 		SDL_GL_MakeCurrent(share->win, share->rc);
@@ -183,6 +197,9 @@ void a3dClose(A3D_WND* wnd)
 
 	SDL_GL_DeleteContext(wnd->rc);
 	SDL_DestroyWindow(wnd->win);
+
+	if (wnd->gc)
+		SDL_GameControllerClose(wnd->gc);
 
 	if (wnd->prev)
 		wnd->prev->next = wnd->next;
@@ -574,9 +591,46 @@ void a3dLoop()
 		SDL_Event Event;
 		while (SDL_PollEvent(&Event))
 		{
+			const char* ev_name = 0;
+			#define CASE(t) case t: ev_name = ev_name ? ev_name : #t;
+
 			switch (Event.type)
 			{
 				case SDL_QUIT: Running = 0; break;
+
+				CASE(SDL_CONTROLLERDEVICEADDED) 
+				CASE(SDL_CONTROLLERDEVICEREMOVED)
+				CASE(SDL_CONTROLLERDEVICEREMAPPED)
+				{
+					SDL_ControllerDeviceEvent* ev = &Event.cdevice;
+					printf("%s %d\n", ev_name, ev->which);
+					break;
+				}
+
+				CASE(SDL_CONTROLLERAXISMOTION)
+				{
+					SDL_ControllerAxisEvent* ev = &Event.caxis;
+					printf("%s %d %d = %f\n", ev_name, ev->which, ev->axis, ev->value/32767.0f);
+					break;
+				}
+
+				CASE(SDL_CONTROLLERBUTTONDOWN)
+				CASE(SDL_CONTROLLERBUTTONUP)
+				{
+					SDL_ControllerButtonEvent* ev = &Event.cbutton;
+					printf("%s %d %d = %d\n", ev_name, ev->which, ev->button, ev->state);
+					break;
+				}
+
+				/* PS only?
+				case SDL_CONTROLLERTOUCHPADDOWN:  
+				case SDL_CONTROLLERTOUCHPADMOTION:
+				case SDL_CONTROLLERTOUCHPADUP:
+				*/
+
+				/* WII only?
+				case SDL_CONTROLLERSENSORUPDATE:  
+				*/
 
 				case SDL_TEXTINPUT:
 				{
