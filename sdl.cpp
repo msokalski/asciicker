@@ -1,3 +1,4 @@
+
 #ifdef USE_SDL
 
 #include <sys/stat.h>
@@ -35,6 +36,8 @@ struct GlobalSDL
 {
 	GlobalSDL()
 	{
+		//SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+		//SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC);
 		SDL_Init(SDL_INIT_EVERYTHING);
 	}
 
@@ -99,6 +102,8 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->mapped = false;
 
 	wnd->gc = 0;
+
+	// todo: move to event pump
 	int ngc = SDL_NumJoysticks();
 	for (int igc = 0; igc < ngc; igc++)
 	{
@@ -109,7 +114,21 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 			break;
 		}
 	}
-	
+
+	/*
+		Buzz:
+		SDL_Joystick* joy = SDL_JoystickOpen(joy_idx);		
+		SDL_Haptic* haptic = SDL_HapticOpenFromJoystick(joy);
+		if (SDL_HapticRumbleSupported(haptic))
+		{
+			SDL_HapticRumbleInit(haptic);
+			SDL_HapticRumblePlay(haptic, 1.0, 3000);
+			// SDL_HapticRumbleStop(haptic);
+		}
+	*/
+
+	if (wnd->gc)
+		printf("opened gamepad\n");
 	
 	if (share)
 	{
@@ -571,6 +590,7 @@ KeyInfo SDL2A3D[/*128*/] =
 
 void a3dLoop()
 {
+	SDL_GameControllerEventState(SDL_ENABLE);
 	// for all created wnds, force size notifications
 	A3D_WND* wnd = wnd_head;
 	while (wnd)
@@ -607,12 +627,31 @@ void a3dLoop()
 					break;
 				}
 
+				/*
+				CASE(SDL_JOYAXISMOTION)
+				{
+					SDL_JoyAxisEvent* ev = &Event.jaxis;
+					printf("%s %d %d = %f\n", ev_name, ev->which, ev->axis, ev->value/32767.0f);
+					break;
+				}
+				*/
+
 				CASE(SDL_CONTROLLERAXISMOTION)
 				{
 					SDL_ControllerAxisEvent* ev = &Event.caxis;
 					printf("%s %d %d = %f\n", ev_name, ev->which, ev->axis, ev->value/32767.0f);
 					break;
 				}
+
+				/*
+				CASE(SDL_JOYBUTTONDOWN)
+				CASE(SDL_JOYBUTTONUP)
+				{
+					SDL_JoyButtonEvent* ev = &Event.jbutton;
+					printf("%s %d %d = %d\n", ev_name, ev->which, ev->button, ev->state);
+					break;
+				}
+				*/
 
 				CASE(SDL_CONTROLLERBUTTONDOWN)
 				CASE(SDL_CONTROLLERBUTTONUP)
