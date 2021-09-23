@@ -8,8 +8,11 @@
 #if defined(__linux__) || defined(__APPLE__)
 #include <sys/ioctl.h>
 #include <sys/poll.h>
+#include <fcntl.h>
 #ifdef __linux__
 # include <linux/limits.h>
+#include <linux/input.h>
+#include <linux/joystick.h>
 #else
 # include <limits.h>
 #endif
@@ -49,6 +52,9 @@
 #include "game.h"
 #include "enemygen.h"
 
+
+// configurable, or auto lookup?
+static const char js_term_dev[] = "/dev/input/js0";
 
 void Buzz()
 {
@@ -383,12 +389,14 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
     FLUSH();
 }
 
+int debug_js = 0;
 
 bool running = false;
 void exit_handler(int signum)
 {
     running = false;
     SetScreen(false);
+    printf("processed %d js events\n",debug_js);
     exit(0);
 }
 
@@ -960,6 +968,95 @@ static int find_tty()
 }
 #endif
 
+
+bool read_js(int fd)
+{
+    #ifdef __linux__
+        js_event js_arr[1000];
+        int size = read(fd, js_arr, sizeof(js_event)*1000);
+        if (size % sizeof(js_event))
+            return false;
+
+        static const int button_reorder[]=
+        {
+            0,1,2,3,
+            9,10, // shoulders
+            7,//back
+            6,//menu
+            5,//guide
+
+            // 9,10 l/r strick buttons
+
+            // 11-14 would be dpad
+        };
+
+        static const int axis_reorder[]=
+        {
+            0,1, //lstick
+            4,//ltrig
+            2,3, // rstick
+            5,//rtrig
+
+            // 6,7 is dirpad
+        };
+
+        static int dirpad_x = 0;
+        static int dirpad_y = 0;
+
+        int n = size / sizeof(js_event);
+        for (int i=0; i<n; i++)
+        {
+            js_event* js = js_arr+i;
+
+            // process
+            switch(js->type & ~JS_EVENT_INIT) 
+            {
+                case JS_EVENT_BUTTON:
+                    if (js->number < sizeof(button_reorder)/sizeof(int))
+                        GamePadButton(button_reorder[js->number],js->value!=0);
+                    break;
+                case JS_EVENT_AXIS:
+                    if (js->number < sizeof(axis_reorder)/sizeof(int))
+                        GamePadAxis(axis_reorder[js->number],js->value);
+                    else
+                    if (js->number==6)
+                    {
+                        if (dirpad_x<0 && js->value>=0)
+                            GamePadButton(13,false);
+                        if (dirpad_x<=0 && js->value>0)
+                            GamePadButton(14,true);
+
+                        if (dirpad_x>0 && js->value<=0)
+                            GamePadButton(14,false);
+                        if (dirpad_x>=0 && js->value<0)
+                            GamePadButton(13,true);
+                    }
+                    else
+                    if (js->number==7)
+                    {
+                        if (dirpad_x<0 && js->value>=0)
+                            GamePadButton(11,false);
+                        if (dirpad_x<=0 && js->value>0)
+                            GamePadButton(12,true);
+
+                        if (dirpad_x>0 && js->value<=0)
+                            GamePadButton(12,false);
+                        if (dirpad_x>=0 && js->value<0)
+                            GamePadButton(11,true);
+                    }
+
+                    break;
+            }
+
+            debug_js++;
+        }
+
+        return true;
+    #endif
+
+    return false;
+}
+
 int main(int argc, char* argv[])
 {
 	/*
@@ -1433,6 +1530,47 @@ int main(int argc, char* argv[])
     else
         printf("UNKNOWN TERMINAL\n");
 
+    // try opening js device
+    int jsfd = -1;
+    #ifdef __linux__
+    if ((jsfd = open(js_term_dev, O_RDONLY)) < 0) 
+    {
+        printf("can't open %s\n", js_term_dev);
+		jsfd = -1;
+	}
+    else
+    {
+        #define NAME_LENGTH 128
+        #define KEY_MAX_LARGE 0x2FF
+        #define KEY_MAX_SMALL 0x1FF
+
+        /* Axis map size. */
+        #define AXMAP_SIZE (ABS_MAX + 1)
+
+        /* Button map size. */
+        #define BTNMAP_SIZE (KEY_MAX_LARGE - BTN_MISC + 1)
+
+        unsigned char axes = 2;
+        unsigned char buttons = 2;
+        int version = 0x000800;
+        char name[NAME_LENGTH] = "Unknown";
+        uint16_t btnmap[BTNMAP_SIZE];
+        uint8_t axmap[AXMAP_SIZE];
+        int btnmapok = 1;
+
+        ioctl(jsfd, JSIOCGVERSION, &version);
+        ioctl(jsfd, JSIOCGAXES, &axes);
+        ioctl(jsfd, JSIOCGBUTTONS, &buttons);
+        ioctl(jsfd, JSIOCGNAME(NAME_LENGTH), name);
+
+        printf("Connected to %s:\n", js_term_dev);
+        printf(" name:    %s\n", name);
+        printf(" ver:     %d\n", version);
+        printf(" axes:    %d\n", axes);
+        printf(" buttons: %d\n", buttons);
+    }
+    #endif        
+
     SetScreen(true);
 
     int signals[]={SIGTERM,SIGHUP,SIGINT,SIGTRAP,SIGILL,SIGABRT,SIGKILL,0};
@@ -1530,6 +1668,12 @@ int main(int argc, char* argv[])
 
     game = CreateGame(water,pos,yaw,dir,stamp);
 
+    if (jsfd>=0)
+    {
+        // report mount
+        GamePadMount(true);
+    }
+
     while(running)
     {
       
@@ -1550,7 +1694,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        struct pollfd pfds[2]={0};
+        struct pollfd pfds[3]={0};
         if (gpm>=0)
         {
             pfds[0].fd = STDIN_FILENO;
@@ -1561,7 +1705,25 @@ int main(int argc, char* argv[])
             pfds[1].events = POLLIN; 
             pfds[1].revents = 0;
 
-            poll(pfds, 2, 0); // 0 no timeout, -1 block
+            if (jsfd>=0)
+            {
+                pfds[2].fd = jsfd;
+                pfds[2].events = POLLIN; 
+                pfds[2].revents = 0;
+                poll(pfds, 3, 0); // 0 no timeout, -1 block
+
+                if (pfds[2].revents & POLLIN) 
+                {
+                    if (!read_js(jsfd))
+                    {
+                        GamePadMount(false);
+                        close(jsfd);
+                        jsfd=-1;
+                    }
+                }
+            }
+            else
+                poll(pfds, 2, 0); // 0 no timeout, -1 block
 
 #ifdef USE_GPM
             if (pfds[1].revents & POLLIN)
@@ -1676,7 +1838,25 @@ int main(int argc, char* argv[])
             pfds[0].events = POLLIN; 
             pfds[0].revents = 0;
 
-            poll(pfds, 1, 0); // 0 no timeout, -1 block
+            if (jsfd>=0)
+            {
+                pfds[1].fd = jsfd;
+                pfds[1].events = POLLIN; 
+                pfds[1].revents = 0;
+                poll(pfds, 2, 0); // 0 no timeout, -1 block
+
+                if (pfds[1].revents & POLLIN) 
+                {
+                    if (!read_js(jsfd))
+                    {
+                        GamePadMount(false);
+                        close(jsfd);
+                        jsfd=-1;
+                    }
+                }
+            }
+            else
+                poll(pfds, 1, 0); // 0 no timeout, -1 block
         }
 
         if (pfds[0].revents & POLLIN) 
@@ -2238,6 +2418,13 @@ int main(int argc, char* argv[])
         frames++;
     }
 
+    if (jsfd>=0)
+    {
+        GamePadMount(false);
+        close(jsfd);
+        jsfd = -1;
+    }
+
 	// NET_TODO:
 	// close network if open
 	// ...
@@ -2281,6 +2468,8 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	_CrtDumpMemoryLeaks();
 #endif
+
+    printf("processed %d js events\n",debug_js);
 
 	return 0;
 }

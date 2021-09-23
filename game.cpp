@@ -8124,6 +8124,8 @@ void Game::OnPadMount(bool connect)
 	input.pad_connected = connect;
 	input.pad_button = 0;
 	memset(input.pad_axis, 0, sizeof(int16_t) * 32);
+	if (connect)
+		OnPadAxis(-1, 0);
 }
 
 void Game::OnPadButton(int b, bool down)
