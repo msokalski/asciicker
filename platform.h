@@ -238,7 +238,18 @@ void a3dClose(A3D_WND* wnd); // if PlatformInterface::close==null it is called a
 void a3dSetCookie(A3D_WND* wnd, void* cookie);
 void* a3dGetCookie(A3D_WND* wnd);
 
-void a3dLoop();
+struct LoopInterface
+{
+	void(*gpad_mount)(bool connected);
+	void(*gpad_button)(int b, bool down);
+	void(*gpad_axis)(int a, int16_t pos);
+};
+
+bool a3dGetGamePad();
+bool a3dGetGamePadButton(int b);
+int16_t a3dGetGamePadAxis(int a);
+
+void a3dLoop(const LoopInterface* li=0);
 
 //void a3dSwapBuffers();
 uint64_t a3dGetTime(); // in microsecs, wraps every 584542 years
@@ -260,12 +271,6 @@ MouseInfo a3dGetMouse(A3D_WND* wnd, int* x, int* y); // returns but flags, mouse
 
 // keyb_key
 bool a3dGetKeyb(A3D_WND* wnd, KeyInfo ki); // return true if vk is down, keyb_char has no state
-
-// gamepad
-
-uint32_t a3dGetGamePadButtons();
-float a3dGetGamePadAxis(int id);
-
 
 // keyb_focus
 bool a3dGetFocus(A3D_WND* wnd);

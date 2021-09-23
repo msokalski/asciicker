@@ -36,15 +36,23 @@ struct GlobalSDL
 {
 	GlobalSDL()
 	{
-		//SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+		gamepad = 0;
+		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 		//SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC);
 		SDL_Init(SDL_INIT_EVERYTHING);
 	}
 
 	~GlobalSDL()
 	{
+		if (gamepad)
+		{
+			SDL_GameControllerClose(gamepad);
+			gamepad = 0;
+		}
 		SDL_Quit();
 	}
+
+	SDL_GameController* gamepad;
 };
 
 static GlobalSDL sdl;
@@ -56,7 +64,6 @@ struct A3D_WND
 
 	SDL_Window* win;
 	SDL_GLContext rc;
-	SDL_GameController* gc;
 
 	bool mapped;
 	void* cookie;
@@ -101,20 +108,6 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->cookie = 0;
 	wnd->mapped = false;
 
-	wnd->gc = 0;
-
-	// todo: move to event pump
-	int ngc = SDL_NumJoysticks();
-	for (int igc = 0; igc < ngc; igc++)
-	{
-		SDL_GameController* gc = SDL_GameControllerOpen(igc);
-		if (gc)
-		{
-			wnd->gc = gc;
-			break;
-		}
-	}
-
 	/*
 		Buzz:
 		SDL_Joystick* joy = SDL_JoystickOpen(joy_idx);		
@@ -127,9 +120,6 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 		}
 	*/
 
-	if (wnd->gc)
-		printf("opened gamepad\n");
-	
 	if (share)
 	{
 		SDL_GL_MakeCurrent(share->win, share->rc);
@@ -216,9 +206,6 @@ void a3dClose(A3D_WND* wnd)
 
 	SDL_GL_DeleteContext(wnd->rc);
 	SDL_DestroyWindow(wnd->win);
-
-	if (wnd->gc)
-		SDL_GameControllerClose(wnd->gc);
 
 	if (wnd->prev)
 		wnd->prev->next = wnd->next;
@@ -588,7 +575,7 @@ KeyInfo SDL2A3D[/*128*/] =
 	A3D_NONE
 };
 
-void a3dLoop()
+void a3dLoop(const LoopInterface* li)
 {
 	SDL_GameControllerEventState(SDL_ENABLE);
 	// for all created wnds, force size notifications
@@ -618,46 +605,81 @@ void a3dLoop()
 			{
 				case SDL_QUIT: Running = 0; break;
 
-				CASE(SDL_CONTROLLERDEVICEADDED) 
-				CASE(SDL_CONTROLLERDEVICEREMOVED)
+				CASE(SDL_CONTROLLERDEVICEADDED)
+				{
+					SDL_ControllerDeviceEvent* ev = &Event.cdevice;
+					//printf("%s %d\n", ev_name, ev->which);
+					if (!sdl.gamepad)
+						sdl.gamepad = SDL_GameControllerOpen(ev->which);
+					if (sdl.gamepad && li && li->gpad_mount)
+						li->gpad_mount(true);
+					break;
+				}
+				
 				CASE(SDL_CONTROLLERDEVICEREMAPPED)
 				{
 					SDL_ControllerDeviceEvent* ev = &Event.cdevice;
-					printf("%s %d\n", ev_name, ev->which);
+					//printf("%s %d\n", ev_name, ev->which);
 					break;
 				}
-
-				/*
-				CASE(SDL_JOYAXISMOTION)
+				
+				CASE(SDL_CONTROLLERDEVICEREMOVED) 
 				{
-					SDL_JoyAxisEvent* ev = &Event.jaxis;
-					printf("%s %d %d = %f\n", ev_name, ev->which, ev->axis, ev->value/32767.0f);
+					SDL_ControllerDeviceEvent* ev = &Event.cdevice;
+					//printf("%s %d\n", ev_name, ev->which);
+					SDL_GameController* gc = SDL_GameControllerFromInstanceID(ev->which);
+					if (gc && gc == sdl.gamepad)
+					{
+						if (li && li->gpad_mount)
+							li->gpad_mount(false);
+						SDL_GameControllerClose(sdl.gamepad);
+						sdl.gamepad = 0;
+
+						// try reconnecting to something else
+						int n = SDL_NumJoysticks();
+						for (int i = 0; i < n; i++)
+						{
+							if (SDL_IsGameController(i))
+							{
+								sdl.gamepad = SDL_GameControllerOpen(i);
+								if (sdl.gamepad)
+								{
+									if (li && li->gpad_mount)
+										li->gpad_mount(true);
+									break;
+								}
+							}
+						}
+					}
 					break;
 				}
-				*/
 
 				CASE(SDL_CONTROLLERAXISMOTION)
 				{
 					SDL_ControllerAxisEvent* ev = &Event.caxis;
-					printf("%s %d %d = %f\n", ev_name, ev->which, ev->axis, ev->value/32767.0f);
+					const char* aname = SDL_GameControllerGetStringForAxis((SDL_GameControllerAxis)ev->axis);
+					//printf("%s %d %d = %f (%s)\n", ev_name, ev->which, ev->axis, ev->value/32767.0f, aname);
+					SDL_GameController* gc = SDL_GameControllerFromInstanceID(ev->which);
+					if (gc && gc == sdl.gamepad)
+					{
+						if (li && li->gpad_axis)
+							li->gpad_axis(ev->axis, ev->value);
+					}
 					break;
 				}
-
-				/*
-				CASE(SDL_JOYBUTTONDOWN)
-				CASE(SDL_JOYBUTTONUP)
-				{
-					SDL_JoyButtonEvent* ev = &Event.jbutton;
-					printf("%s %d %d = %d\n", ev_name, ev->which, ev->button, ev->state);
-					break;
-				}
-				*/
 
 				CASE(SDL_CONTROLLERBUTTONDOWN)
 				CASE(SDL_CONTROLLERBUTTONUP)
 				{
 					SDL_ControllerButtonEvent* ev = &Event.cbutton;
-					printf("%s %d %d = %d\n", ev_name, ev->which, ev->button, ev->state);
+					const char* bname = SDL_GameControllerGetStringForButton((SDL_GameControllerButton)ev->button);
+					//printf("%s %d %d = %d (%s)\n", ev_name, ev->which, ev->button, ev->state, bname);
+					SDL_GameController* gc = SDL_GameControllerFromInstanceID(ev->which);
+					if (gc && gc == sdl.gamepad)
+					{
+						if (li && li->gpad_button)
+							li->gpad_button(ev->button, ev->state != 0);
+					}
 					break;
 				}
 

@@ -331,6 +331,11 @@ struct Game
 		int last_hit_char;
 		uint8_t key[32]; // keyb state
 
+		// pad state
+		bool pad_connected;
+		uint32_t pad_button;
+		int16_t pad_axis[32];
+
 		// we split touch input to multiple separate mice with left button only
 		struct Contact
 		{
@@ -426,6 +431,10 @@ struct Game
 	void OnSize(int w, int h, int fw, int fh);
 	void OnMessage(const uint8_t* msg, int len);
 
+	void OnPadMount(bool connect);
+	void OnPadButton(int b, bool down);
+	void OnPadAxis(int a, int16_t pos);
+
 	// update physics with accumulated input then render state to output
 	void Render(uint64_t _stamp, AnsiCell* ptr, int width, int height);
 	void ScreenToCell(int p[2]) const;
@@ -439,3 +448,8 @@ void FreeSprites();
 
 void PaintTerrain(float* xy, float r, int matid);
 void BloodLeak(Character* c, int steps);
+
+
+void GamePadMount(bool connected);
+void GamePadButton(int b, bool down);
+void GamePadAxis(int a, int16_t pos);

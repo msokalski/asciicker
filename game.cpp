@@ -259,6 +259,8 @@ static const uint8_t dk_green = 16 + 0 * 1 + 3 * 6 + 0 * 36;
 extern Terrain* terrain;
 extern World* world;
 
+Game* prime_game = 0;
+
 // asciiid pseudo-multiplayer
 // or game npcs?
 Character* player_head = 0;
@@ -2070,6 +2072,52 @@ static const char char_plane[3][3][10] =
 struct Keyb
 {
 	int plane = 0;
+	int sect = 0;
+	int dir = 11; // 11: sector mode, 0-10: direction mode
+
+	int GetPadCap(char* ch, bool shift_on)
+	{
+		if (dir == 11)
+		{
+			if (ch)
+				*ch = 0;
+			return 0;
+		}
+
+
+		int i = 0;
+		int j = 0;
+		switch (dir) 
+		{
+			case 0: i = 1; j = 1; break;
+			case 1: i = 2; j = 2; break;
+			case 2: i = 3; j = 2; break;
+			case 3: i = 2; j = 1; break;
+			case 4: i = 3; j = 0; break;
+			case 5: i = 2; j = 0; break;
+			case 6: i = 1; j = 0; break;
+			case 7: i = 0; j = 0; break;
+			case 8: i = 0; j = 1; break;
+			case 9: i = 0; j = 2; break;
+			case 10: i = 1; j = 2; break;
+		}
+
+		i += sect * 3;
+
+		char cc = char_plane[plane][2-j][i];
+		if (shift_on)
+		{
+			if (cc >= 'a' && cc <= 'z')
+				cc += 'A' - 'a';
+			if (cc == ' ')
+				cc = 8; // shift + space = backspace !!!
+		}
+
+		if (ch)
+			*ch = cc;
+
+		return caps_plane[plane][2-j][i];
+	}
 
 	int GetCap(int dx, int dy, int width, int height, char* ch, bool shift_on) const
 	{
@@ -2342,7 +2390,7 @@ struct Keyb
 		return keyb_h;
 	}
 
-	void Paint(AnsiCell* ptr, int width, int height, int hide, const uint8_t key[32]) const
+	void Paint(AnsiCell* ptr, int width, int height, int hide, const uint8_t key[32], bool gamepad) const
 	{
 		// hide should be netween 0 and Height()
 
@@ -2447,13 +2495,113 @@ struct Keyb
 
 				Sprite::Frame* sf = keyb_sprite[sprite_i]->atlas;
 
+				bool press = false;
+
 				int clip[] = { 0,0,sprite_w,sprite_h };
+				if (gamepad)
+				{
+					if (j == 2)  // 4
+					{
+						if (sect == 0 && i < 4 ||
+							sect == 1 && i >= 3 && i < 7 ||
+							sect == 2 && i >= 6 && i < 10)
+						{
+							bool hi = false;
+							int k = i - 3 * sect;
+							switch (dir)
+							{
+								case 9: hi = k == 0; break; // leftmost
+								case 10: hi = k == 1; break; // left
+								case 1: hi = k == 2; break; // right
+								case 2: hi = k == 3; break; // rightmost
+							}
+
+							if (hi)
+							{
+								clip[0] = 2 * sprite_w;
+								clip[2] = 3 * sprite_w;
+								if (!press)
+									y -= delta_d;
+								press = true;
+							}
+							else
+							{
+								clip[0] = sprite_w;
+								clip[2] = 2 * sprite_w;
+							}
+						}
+					}
+					else
+					if (j == 1) // 3
+					{
+						if (sect == 0 && i < 3 ||
+							sect == 1 && i >= 3 && i < 6 ||
+							sect == 2 && i >= 6 && i < 9)
+						{
+							bool hi = false;
+							int k = i - 3 * sect;
+							switch (dir)
+							{
+								case 8: hi = k == 0; break; // left
+								case 0: hi = k == 1; break; // center
+								case 3: hi = k == 2; break; // right
+							}
+
+							if (hi)
+							{
+								clip[0] = 2 * sprite_w;
+								clip[2] = 3 * sprite_w;
+								if (!press)
+									y -= delta_d;
+								press = true;
+							}
+							else
+							{
+								clip[0] = sprite_w;
+								clip[2] = 2 * sprite_w;
+							}
+						}
+					}
+					else 
+					if (j == 0) // 4
+					{
+						if (sect == 0 && i < 4 ||
+							sect == 1 && i >= 3 && i < 7 ||
+							sect == 2 && i >= 6 && i < 10)
+						{
+							bool hi = false;
+							int k = i - 3 * sect;
+							switch (dir)
+							{
+								case 7: hi = k == 0; break; // leftmost
+								case 6: hi = k == 1; break; // left
+								case 5: hi = k == 2; break; // right
+								case 4: hi = k == 3; break; // rightmost
+							}
+
+							if (hi)
+							{
+								clip[0] = 2 * sprite_w;
+								clip[2] = 3 * sprite_w;
+								if (!press)
+									y -= delta_d;
+								press = true;
+							}
+							else
+							{
+								clip[0] = sprite_w;
+								clip[2] = 2 * sprite_w;
+							}
+						}
+					}
+				}
 
 				int cap = caps_plane[plane][2-j][i];
 
 				if (key[cap>>3] & (1<<(cap&7)))
 				{
-					y -= delta_d;
+					if (!press)
+						y -= delta_d;
 					clip[0] = 2 * sprite_w;
 					clip[2] = 3 * sprite_w;
 				}
@@ -3368,6 +3516,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->player_inst = CreateInst(world, g->player.sprite, flags, pos, yaw, g->player.anim, g->player.frame, reps, 0, -1/*not in story*/);
 	SetInstSpriteData(g->player_inst, &g->player);
 
+	if (!prime_game)
+		prime_game = g;
 	return g;
 }
 
@@ -3375,6 +3525,9 @@ void DeleteGame(Game* g)
 {
 	if (g)
 	{
+		if (g == prime_game)
+			prime_game = 0;
+
 		DeleteInst(g->player_inst);
 
 		for (int i = 0; i < g->inventory.my_items; i++)
@@ -4352,6 +4505,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			io.y_force *= speed;
 		}
 
+		io.x_force += input.pad_axis[0] / 1024 / 32.0f;
+		io.y_force -= input.pad_axis[1] / 1024 / 32.0f;
+
 		if (!torque_handled)
 		{
 			io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
@@ -4361,6 +4517,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			//io.y_force = 1;
 		}
 	}
+
+	io.torque += (input.pad_axis[4] - input.pad_axis[5]) / 1024 / 32.0f;
 
 	io.jump = input.jump;
 
@@ -5549,7 +5707,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	int contact_items = 0;
 	int contact_item[4] = { -1,-1,-1,-1 };
 
-	inventory.UpdateLayout(width,height,scene_shift);
+	inventory.UpdateLayout(width,height,scene_shift,bars_pos);
 
 	if (scene_shift > 0)
 	{
@@ -6089,7 +6247,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		uint8_t key[32];
 		for (int i = 0; i < 32; i++)
 			key[i] = keyb_key[i] | input.key[i];
-		keyb.Paint(ptr, width, height, keyb_hide, key);
+		keyb.Paint(ptr, width, height, keyb_hide, key, input.pad_connected);
 	}
 	
 	if (show_keyb)
@@ -6196,7 +6354,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 void Game::OnSize(int w, int h, int fw, int fh)
 {
+	bool pad = input.pad_connected;
 	memset(&input, 0, sizeof(Input));
+	input.pad_connected = pad;
 	input.size[0] = w;
 	input.size[1] = h;
 	font_size[0] = fw;
@@ -6230,7 +6390,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 		if ((key == A3D_TAB || key == A3D_ESCAPE) && !auto_rep)
 		{
-			if (!player.talk_box && key == A3D_TAB && show_buts)
+			if (!player.talk_box && key == A3D_TAB/* && show_buts*/)
 			{
 				CancelItemContacts();
 				//show_buts = false;
@@ -6700,7 +6860,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		if (key == A3D_TAB)
 		{
 			// HANDLED BY EMULATION!
-			if (!player.talk_box && show_buts)
+			if (!player.talk_box/* && show_buts*/)
 			{
 				CancelItemContacts();
 				//show_buts = false;
@@ -6796,7 +6956,7 @@ void Game::StartContact(int id, int x, int y, int b)
 	float yaw = 0;
 	Item* item = 0;
 
-	if (show_buts && cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0] >= render_size[0] - bars_pos) && b == 1)
+	if (/*show_buts &&*/ cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0] >= render_size[0] - bars_pos) && b == 1)
 	{
 		// main but
 		// perform action immediately
@@ -7645,7 +7805,7 @@ void Game::EndContact(int id, int x, int y)
 					}
 				}
 				else
-				if (show_buts)
+				//if (show_buts)
 				{
 					CancelItemContacts();
 					//show_buts = false;
@@ -7945,7 +8105,9 @@ void Game::OnFocus(bool set)
 		}
 
 		int w = input.size[0], h = input.size[1];
+		bool pad = input.pad_connected;
 		memset(&input, 0, sizeof(Input));
+		input.pad_connected = pad;
 		input.size[0] = w;
 		input.size[1] = h;
 	}
@@ -7957,7 +8119,311 @@ void Game::OnMessage(const uint8_t* msg, int len)
 	// this is called by JS or game_app (already on game's thread)
 }
 
+void Game::OnPadMount(bool connect)
+{
+	input.pad_connected = connect;
+	input.pad_button = 0;
+	memset(input.pad_axis, 0, sizeof(int16_t) * 32);
+}
 
+void Game::OnPadButton(int b, bool down)
+{
+	if (b >= 0 && b < 32)
+	{
+		if (down)
+			input.pad_button |= 1 << b;
+		else
+			input.pad_button &= ~(1 << b);
+
+		if (down)
+		{
+			if (!player.talk_box)
+			{
+				switch (b)
+				{
+					case 0:
+					{
+						input.shoot = true;
+						input.shoot_xy[0] = -1;
+						input.shoot_xy[1] = -1;
+						player.SetActionAttack(stamp);
+						break;
+					}
+
+					case 1: 
+					{
+						input.jump = true;
+						break;
+					}
+
+					case 5:
+					{
+						if (show_inventory)
+						{
+							// show gampad help for inventory operations
+							// and item pick up
+						}
+						else
+						{
+							// show gamepad help for run, jump, attack
+							// camera rot, open inventory, open chat
+							// and item pick up
+						}
+						// lock processing any input until any key is pressed
+						// then close this vidget
+						break;
+					}
+
+					case 6:
+					{
+						// mini-menu
+						perspective = !perspective;
+						show_buts = !show_buts; // just test
+						break;
+					}
+
+					case 9:
+					{
+						show_inventory = !show_inventory;
+						break;
+					}
+
+					case 10:
+					{
+						//if (show_buts)
+						{
+							CancelItemContacts();
+							//show_buts = false;
+							// open talk_box (and keyb if not open)
+							TalkBox_blink = 32;
+							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+							memset(player.talk_box, 0, sizeof(TalkBox));
+							player.talk_box->max_width = 33;
+							player.talk_box->max_height = 7; // 0: off
+							int s[2],p[2];
+							player.talk_box->Reflow(s,p);
+							player.talk_box->size[0] = s[0];
+							player.talk_box->size[1] = s[1];
+							player.talk_box->cursor_xy[0] = p[0];
+							player.talk_box->cursor_xy[1] = p[1];
+				
+							show_keyb = true;
+						}
+
+						break;
+					}
+
+					case 11:
+					{
+						if (show_inventory)
+							inventory.FocusNext(0, 1);
+						break;
+					}
+					case 12:
+					{
+						if (show_inventory)
+							inventory.FocusNext(0, -1);
+						break;
+					}
+					case 13:
+					{
+						if (show_inventory)
+							inventory.FocusNext(-1, 0);
+						break;
+					}
+					case 14:
+					{
+						if (show_inventory)
+							inventory.FocusNext(1, 0);
+						break;
+					}
+				}
+			}
+			else
+			{
+				switch (b)
+				{
+					case 5: // guide / logo
+					{
+						// show gampad help for typing
+						// lock processing any input until any key is pressed
+						// then close this vidget
+						break;
+					}
+
+					case 6: // start
+					{
+						// mini-menu
+						perspective = !perspective;
+						show_buts = !show_buts; // just test
+						break;
+					}
+
+					case 9:
+					{
+						show_inventory = !show_inventory;
+						break;
+					}
+
+					case 10:
+					{
+						// start showing main buts
+						//show_buts = true;
+
+						// close talk_box (and keyb if also open)
+						free(player.talk_box);
+						player.talk_box = 0;
+						if (show_keyb)
+							memset(keyb_key, 0, 32);
+						show_keyb = false;
+						KeybAutoRepChar = 0;
+						KeybAutoRepCap = 0;
+						for (int i = 0; i < 4; i++)
+						{
+							if (input.contact[i].action == Input::Contact::KEYBCAP)
+								input.contact[i].action = Input::Contact::NONE;
+						}
+						break;
+					}
+
+					case 11:
+						player.talk_box->MoveCursorY(-1);
+						break;
+					case 12:
+						player.talk_box->MoveCursorY(+1);
+						break;
+					case 13:
+						player.talk_box->MoveCursorX(-1);
+						break;
+					case 14:
+						player.talk_box->MoveCursorX(+1);
+						break;
+
+					case 2: // backspace
+						player.talk_box->Input(8);
+						break;
+					case 3: // delete
+						player.talk_box->Input(127);
+						break;
+				}
+			}
+		}
+		else
+		{
+			// up!
+			// todo: check if this button release should generate keyb char!
+			// ...
+			if (show_keyb)
+			{
+				if (b == 0 || b == 1)
+				{
+					bool shift_on = b == 1;
+					char ch = 0;
+					int key = keyb.GetPadCap(&ch,shift_on);
+					if (ch)
+					{
+						TalkBox_blink = 0;
+						if (player.talk_box)
+							player.talk_box->Input(ch);
+					}
+				}
+			}
+		}
+	}
+
+	// just update states
+	OnPadAxis(-1, 0);
+}
+
+void Game::OnPadAxis(int a, int16_t pos)
+{
+	if (a>=0 && a<32)
+		input.pad_axis[a] = pos;
+
+	//if (show_keyb)
+	{
+		if (show_keyb && (input.pad_button & 3))
+		{
+			// locked plane and sect, change dir
+			if (a == 0 || a == 1 || a == -1)
+			{
+				int dir = 11, ang;
+				if (input.pad_axis[0] >= -20000 && input.pad_axis[0] <= +20000 &&
+					input.pad_axis[1] >= -20000 && input.pad_axis[1] <= +20000)
+				{
+					dir = 0;
+				}
+				else
+				{
+					if (input.pad_axis[0] < 0) // left
+					{
+						ang = (int)(atan2(-input.pad_axis[1], -input.pad_axis[0]) / M_PI * 180);
+						if (ang < -54)
+							dir = 6;
+						else
+						if (ang < -18)
+							dir = 7;
+						else
+						if (ang < +18)
+							dir = 8;
+						else
+						if (ang < +54)
+							dir = 9;
+						else
+							dir = 10;
+					}
+					else // right
+					{
+						ang = (int)(atan2(input.pad_axis[1], input.pad_axis[0]) / M_PI * 180);
+						if (ang < -54)
+							dir = 1;
+						else
+						if (ang < -18)
+							dir = 2;
+						else
+						if (ang < +18)
+							dir = 3;
+						else
+						if (ang < +54)
+							dir = 4;
+						else
+							dir = 5;
+					}
+				}
+
+				keyb.dir = dir;
+				//printf("ang=%d, dir=%d\n", ang,dir);
+			}
+		}
+		else
+		{
+			// change sect, undefine dir
+			if (a == 0 || a == -1)
+			{
+				keyb.dir = 11;
+				if (input.pad_axis[0] < -10000)
+					keyb.sect = 0;
+				else
+				if (input.pad_axis[0] > +10000)
+					keyb.sect = 2;
+				else
+					keyb.sect = 1;
+			}
+			else
+			if (a == 1 || a == -1)
+			{
+				keyb.dir = 11;
+				if (input.pad_axis[1] < -10000)
+					keyb.plane = 1;
+				else
+				if (input.pad_axis[1] > +10000)
+					keyb.plane = 2;
+				else
+					keyb.plane = 0;
+			}
+		}
+	}
+}
 
 struct MatIDStamp
 {
@@ -8033,4 +8499,26 @@ void BloodLeak(Character* c, int steps)
 
 		c->leak--;
 	}
+}
+
+// they are global (not related to game / player or anything)
+// but if something calls them, we can be certainly sure we have exactly 1 game object
+// so let's use prime_game blindly
+
+void GamePadMount(bool connected)
+{
+	if (prime_game)
+		prime_game->OnPadMount(connected);
+}
+
+void GamePadButton(int b, bool down)
+{
+	if (prime_game)
+		prime_game->OnPadButton(b,down);
+}
+
+void GamePadAxis(int a, int16_t pos)
+{
+	if (prime_game)
+		prime_game->OnPadAxis(a, pos);
 }

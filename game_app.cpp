@@ -49,6 +49,7 @@
 #include "game.h"
 #include "enemygen.h"
 
+
 void Buzz()
 {
 }
@@ -1305,7 +1306,9 @@ int main(int argc, char* argv[])
             sprintf(font_dirname, "%sfonts", base_path); // = "./fonts";
             fonts_loaded = 0;
             a3dListDir(font_dirname, MyFont::Scan, font_dirname);
-            a3dLoop();
+
+			LoopInterface li = { GamePadMount, GamePadButton, GamePadAxis };
+            a3dLoop(&li);
         }
 
 		// NET_TODO:

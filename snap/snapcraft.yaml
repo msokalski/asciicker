@@ -55,7 +55,9 @@ apps:
     command: ./game_term
     plugs:
       - network
-      - network-bind    
+      - network-bind
+  	  - joystick
+	  # - gpm (would be fantastic)
 
   asciicker:
     command: ./launcher game
@@ -65,6 +67,7 @@ apps:
       - desktop-legacy
       - network
       - network-bind
+	  - joystick
       - opengl
       - pulseaudio
       - wayland
@@ -78,6 +81,7 @@ apps:
       - desktop-legacy
       - network
       - network-bind
+ 	  - joystick
       - opengl
       - pulseaudio
       - wayland
@@ -114,14 +118,11 @@ parts:
     build-packages:
       - g++
       - make
-      - libgpm-dev
       - xorg-dev
       - libgl1-mesa-dev
       - libsdl2-dev
 
     stage-packages:
-      - gpm
-      - libgpm2
       - libx11-6
       - libx11-data
       - libxinerama1
