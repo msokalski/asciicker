@@ -54,7 +54,6 @@
 
 
 // configurable, or auto lookup?
-static const char js_term_dev[] = "/dev/input/js0";
 
 void Buzz()
 {
@@ -969,12 +968,80 @@ static int find_tty()
 #endif
 
 
+int scan_js()
+{
+    #ifdef __linux__
+    static int index = 0;
+    static int skip = 0;
+
+    if (skip>0)
+    {
+        skip--;
+        return -1;
+    }
+
+    char js_term_dev[32];
+    sprintf(js_term_dev,"/dev/input/js%d",index);
+
+    int fd = -1;
+    if ((fd = open(js_term_dev, O_RDONLY)) < 0) 
+    {
+        // printf("can't open %s\n", js_term_dev);
+        index = (index+1) & 0xF;
+        skip = 10;
+		fd = -1;
+	}
+    else
+    {
+        #define NAME_LENGTH 128
+        #define KEY_MAX_LARGE 0x2FF
+        #define KEY_MAX_SMALL 0x1FF
+
+        /* Axis map size. */
+        #define AXMAP_SIZE (ABS_MAX + 1)
+
+        /* Button map size. */
+        #define BTNMAP_SIZE (KEY_MAX_LARGE - BTN_MISC + 1)
+
+        unsigned char axes = 2;
+        unsigned char buttons = 2;
+        int version = 0x000800;
+        char name[NAME_LENGTH] = "Unknown";
+        uint16_t btnmap[BTNMAP_SIZE];
+        uint8_t axmap[AXMAP_SIZE];
+        int btnmapok = 1;
+
+        ioctl(fd, JSIOCGVERSION, &version);
+        ioctl(fd, JSIOCGAXES, &axes);
+        ioctl(fd, JSIOCGBUTTONS, &buttons);
+        ioctl(fd, JSIOCGNAME(NAME_LENGTH), name);
+
+        /*
+        printf("Connected to %s:\n", js_term_dev);
+        printf(" name:    %s\n", name);
+        printf(" ver:     %d\n", version);
+        printf(" axes:    %d\n", axes);
+        printf(" buttons: %d\n", buttons);
+        */
+
+        skip = 10;
+        index = 0;
+    }
+
+    return fd;
+    #endif        
+
+    return -1;    
+}
+
+
 bool read_js(int fd)
 {
     #ifdef __linux__
-        js_event js_arr[1000];
-        int size = read(fd, js_arr, sizeof(js_event)*1000);
-        if (size % sizeof(js_event))
+        #define MAX_JS_READ 64
+        js_event js_arr[MAX_JS_READ];
+        int size = read(fd, js_arr, sizeof(js_event)*MAX_JS_READ);
+        if (size<=0 || size % sizeof(js_event))
             return false;
 
         static const int button_reorder[]=
@@ -1531,45 +1598,7 @@ int main(int argc, char* argv[])
         printf("UNKNOWN TERMINAL\n");
 
     // try opening js device
-    int jsfd = -1;
-    #ifdef __linux__
-    if ((jsfd = open(js_term_dev, O_RDONLY)) < 0) 
-    {
-        printf("can't open %s\n", js_term_dev);
-		jsfd = -1;
-	}
-    else
-    {
-        #define NAME_LENGTH 128
-        #define KEY_MAX_LARGE 0x2FF
-        #define KEY_MAX_SMALL 0x1FF
-
-        /* Axis map size. */
-        #define AXMAP_SIZE (ABS_MAX + 1)
-
-        /* Button map size. */
-        #define BTNMAP_SIZE (KEY_MAX_LARGE - BTN_MISC + 1)
-
-        unsigned char axes = 2;
-        unsigned char buttons = 2;
-        int version = 0x000800;
-        char name[NAME_LENGTH] = "Unknown";
-        uint16_t btnmap[BTNMAP_SIZE];
-        uint8_t axmap[AXMAP_SIZE];
-        int btnmapok = 1;
-
-        ioctl(jsfd, JSIOCGVERSION, &version);
-        ioctl(jsfd, JSIOCGAXES, &axes);
-        ioctl(jsfd, JSIOCGBUTTONS, &buttons);
-        ioctl(jsfd, JSIOCGNAME(NAME_LENGTH), name);
-
-        printf("Connected to %s:\n", js_term_dev);
-        printf(" name:    %s\n", name);
-        printf(" ver:     %d\n", version);
-        printf(" axes:    %d\n", axes);
-        printf(" buttons: %d\n", buttons);
-    }
-    #endif        
+    int jsfd = scan_js();
 
     SetScreen(true);
 
@@ -1676,6 +1705,14 @@ int main(int argc, char* argv[])
 
     while(running)
     {
+
+        if (jsfd<0)
+        {
+            // report mount
+            jsfd = scan_js();
+            if (jsfd >= 0)
+                GamePadMount(true);
+        }        
       
         bool mouse_j = false;
 
@@ -1708,10 +1745,17 @@ int main(int argc, char* argv[])
             if (jsfd>=0)
             {
                 pfds[2].fd = jsfd;
-                pfds[2].events = POLLIN; 
+                pfds[2].events = POLLIN|POLL_HUP|POLL_ERR; 
                 pfds[2].revents = 0;
                 poll(pfds, 3, 0); // 0 no timeout, -1 block
 
+                if (pfds[2].revents & (POLLHUP|POLLERR))
+                {
+                    GamePadMount(false);
+                    close(jsfd);
+                    jsfd=-1;                    
+                }
+                else
                 if (pfds[2].revents & POLLIN) 
                 {
                     if (!read_js(jsfd))
@@ -1841,10 +1885,17 @@ int main(int argc, char* argv[])
             if (jsfd>=0)
             {
                 pfds[1].fd = jsfd;
-                pfds[1].events = POLLIN; 
+                pfds[1].events = POLLIN|POLLHUP|POLLERR; 
                 pfds[1].revents = 0;
                 poll(pfds, 2, 0); // 0 no timeout, -1 block
 
+                if (pfds[1].revents & (POLLHUP|POLLERR))
+                {
+                    GamePadMount(false);
+                    close(jsfd);
+                    jsfd=-1;                    
+                }
+                else
                 if (pfds[1].revents & POLLIN) 
                 {
                     if (!read_js(jsfd))
