@@ -968,6 +968,39 @@ static int find_tty()
 #endif
 
 
+#define KEY_MAX_LARGE 0x2FF
+//#define KEY_MAX_SMALL 0x1FF
+#define AXMAP_SIZE (ABS_MAX + 1)
+#define BTNMAP_SIZE (KEY_MAX_LARGE - BTN_MISC + 1)
+
+static uint16_t js_btnmap[BTNMAP_SIZE];
+static uint8_t  js_axmap[AXMAP_SIZE];
+
+static const int js_btnmap_sdl[]=
+{
+    0, 1, -1,    // A,B
+    2, 3, -1,    // X,Y
+    9,10, -1,-1, // L,R SHOULDERS
+    4,6,5,       // BACK, START, GUIDE
+    7,8, -1,     // L,R STICK
+    -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1    
+};
+
+static const int js_axmap_sdl[]=
+{
+    0,1,4, // LEFT X,Y,TRIG
+    2,3,5, // RIGHT X,Y,TRIG
+
+    -1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1,
+
+    0xFE,0xFF, // X,Y AXIS FOR DIRPAD (left:13, right:14, up:11, down:12) !!!
+    -1,-1, -1,-1,-1,-1, 
+    -1,-1,-1,-1, -1,-1,-1,-1
+};
+
+
 int scan_js()
 {
     #ifdef __linux__
@@ -994,35 +1027,50 @@ int scan_js()
     else
     {
         #define NAME_LENGTH 128
-        #define KEY_MAX_LARGE 0x2FF
-        #define KEY_MAX_SMALL 0x1FF
-
-        /* Axis map size. */
-        #define AXMAP_SIZE (ABS_MAX + 1)
-
-        /* Button map size. */
-        #define BTNMAP_SIZE (KEY_MAX_LARGE - BTN_MISC + 1)
-
         unsigned char axes = 2;
         unsigned char buttons = 2;
         int version = 0x000800;
         char name[NAME_LENGTH] = "Unknown";
-        uint16_t btnmap[BTNMAP_SIZE];
-        uint8_t axmap[AXMAP_SIZE];
-        int btnmapok = 1;
 
         ioctl(fd, JSIOCGVERSION, &version);
         ioctl(fd, JSIOCGAXES, &axes);
         ioctl(fd, JSIOCGBUTTONS, &buttons);
         ioctl(fd, JSIOCGNAME(NAME_LENGTH), name);
 
-        /*
-        printf("Connected to %s:\n", js_term_dev);
-        printf(" name:    %s\n", name);
-        printf(" ver:     %d\n", version);
-        printf(" axes:    %d\n", axes);
-        printf(" buttons: %d\n", buttons);
-        */
+        // fetch button map
+        memset(js_btnmap,-1,sizeof(js_btnmap));
+        int btnmap_res = ioctl(fd, JSIOCGBTNMAP, js_btnmap);
+
+        // fetch axis map
+        memset(js_axmap,-1,sizeof(js_axmap));
+        int axmap_res = ioctl(fd, JSIOCGAXMAP, js_axmap);
+
+        // now remap to SDL
+        if (btnmap_res>=0)
+            for (int i=0; i<buttons; i++)
+            {
+                int j = js_btnmap[i]-BTN_GAMEPAD;
+                if (j>=0 && j<32)
+                    js_btnmap[i] = js_btnmap_sdl[j];
+                else
+                    js_btnmap[i] = -1;
+            }
+        else
+            for (int i=0; i<buttons; i++)
+                js_btnmap[i] = i<32 ? js_btnmap_sdl[i] : -1;
+
+        if (axmap_res>=0)
+            for (int i=0; i<axes; i++)
+            {
+                int j = js_axmap[i];
+                if (j>=0 && j<32)
+                    js_axmap[i] = js_axmap_sdl[j];
+                else
+                    js_axmap[i] = -1;
+            }
+        else
+            for (int i=0; i<axes; i++)
+                js_axmap[i] = i<32 ? js_axmap_sdl[i] : -1;
 
         skip = 10;
         index = 0;
@@ -1044,29 +1092,6 @@ bool read_js(int fd)
         if (size<=0 || size % sizeof(js_event))
             return false;
 
-        static const int button_reorder[]=
-        {
-            0,1,2,3,
-            9,10, // shoulders
-            7,//back
-            6,//menu
-            5,//guide
-
-            // 9,10 l/r strick buttons
-
-            // 11-14 would be dpad
-        };
-
-        static const int axis_reorder[]=
-        {
-            0,1, //lstick
-            4,//ltrig
-            2,3, // rstick
-            5,//rtrig
-
-            // 6,7 is dirpad
-        };
-
         static int dirpad_x = 0;
         static int dirpad_y = 0;
 
@@ -1079,37 +1104,51 @@ bool read_js(int fd)
             switch(js->type & ~JS_EVENT_INIT) 
             {
                 case JS_EVENT_BUTTON:
-                    if (js->number < sizeof(button_reorder)/sizeof(int))
-                        GamePadButton(button_reorder[js->number],js->value!=0);
+                    if (js->number < sizeof(js_btnmap)/2 && js_btnmap[js->number]>=0)
+                        GamePadButton(js_btnmap[js->number],js->value!=0);
                     break;
                 case JS_EVENT_AXIS:
-                    if (js->number < sizeof(axis_reorder)/sizeof(int))
-                        GamePadAxis(axis_reorder[js->number],js->value);
-                    else
-                    if (js->number==6)
+                    if (js->number < sizeof(js_axmap)/1 && js_axmap[js->number]>=0)
                     {
-                        if (dirpad_x<0 && js->value>=0)
-                            GamePadButton(13,false);
-                        if (dirpad_x<=0 && js->value>0)
-                            GamePadButton(14,true);
+                        int a = js_axmap[js->number];
+                        int16_t v = js->value;
 
-                        if (dirpad_x>0 && js->value<=0)
-                            GamePadButton(14,false);
-                        if (dirpad_x>=0 && js->value<0)
-                            GamePadButton(13,true);
-                    }
-                    else
-                    if (js->number==7)
-                    {
-                        if (dirpad_x<0 && js->value>=0)
-                            GamePadButton(11,false);
-                        if (dirpad_x<=0 && js->value>0)
-                            GamePadButton(12,true);
+                        if (a == 0xFE)
+                        {
+                            if (dirpad_x<-10000 && v>=-10000)
+                                GamePadButton(13,false);
+                            if (dirpad_x<=10000 && v>10000)
+                                GamePadButton(14,true);
 
-                        if (dirpad_x>0 && js->value<=0)
-                            GamePadButton(12,false);
-                        if (dirpad_x>=0 && js->value<0)
-                            GamePadButton(11,true);
+                            if (dirpad_x>10000 && v<=10000)
+                                GamePadButton(14,false);
+                            if (dirpad_x>=-10000 && v<-10000)
+                                GamePadButton(13,true);
+
+                            dirpad_x = v;
+                        }
+                        else
+                        if (a == 0xFF)
+                        {
+                            if (dirpad_y<-10000 && v>=-10000)
+                                GamePadButton(11,false);
+                            if (dirpad_y<=10000 && v>10000)
+                                GamePadButton(12,true);
+
+                            if (dirpad_y>10000 && v<=10000)
+                                GamePadButton(12,false);
+                            if (dirpad_y>=-10000 && v<-10000)
+                                GamePadButton(11,true);
+
+                            dirpad_y = v;
+                        }
+                        else
+                        {
+                            // unsigned compress triggers
+                            if (a == 4 || a==5)
+                                v = (v + 32767)/2;
+                            GamePadAxis(a,v);
+                        }
                     }
 
                     break;
