@@ -323,6 +323,9 @@
       var Mouse = null;
       var Touch = null;
       var Focus = null;
+      
+      var GamePad = null; // wasm handler
+      var gamepad = -1;   // gamepad in use, index into navigator.getGamepads();
 
       var ak_canvas;
       var ak_ctx;
@@ -774,6 +777,112 @@
         },{ passive: false });
       }
 
+      function setGamePadHandlers()
+      {
+        var poll_interval = -1;
+        var gm = null;
+        var axes = new Float32Array(16);
+        var buts = new Uint8Array(16);
+
+        function poll_handler()
+        {
+          if (GamePad)
+          {
+            var nb = gm.buttons.length;
+            if (nb > 16)
+              nb = 16;
+
+            for (var i=0; i<nb; i++)
+            {
+              if (buts[i] != gm.buttons[i].pressed)
+              {
+                GamePad(1,i,gm.buttons[i].pressed);
+                buts[i] = gm.buttons[i].pressed;
+              }
+            }
+
+            var na = gm.axes.length;
+            if (na > 16)
+              na = 16;
+
+            for (var i=0; i<na; i++)
+            {
+              if (axes[i] != gm.axes[i])
+              {
+                GamePad(2,i,gm.axes[i]);
+                axes[i] = gm.axes[i];
+              }
+            }
+          }
+        }
+
+        console.log("setting handlers...");
+        window.addEventListener("gamepadconnected", 
+          function(e) 
+          {
+            console.log("connected");
+
+            if (gamepad<0)
+            {
+              gamepad = e.gamepad.index;
+              gm = e.gamepad;
+              if (GamePad)
+                GamePad(0,1,0);
+              poll_interval = window.setInterval(poll_handler,1);
+            }
+          }, false);
+        
+        window.addEventListener("gamepaddisconnected", 
+          function(e) 
+          { 
+            console.log("disconnected");
+
+            if (gamepad==e.gamepad.index)
+            {
+              window.clearInterval(poll_interval);
+              poll_interval = -1;
+
+              if (GamePad)
+                GamePad(0,0,0);
+              gamepad = -1;
+              gm = null;
+
+              var arr = navigator.getGamepads();
+              for (var i=0; i<arr.length; i++)
+              {
+                if (arr[i] && arr[i].connected)
+                {
+                  console.log("re-scanned index "+i+" -> " + arr[i].index);
+                  gamepad = arr[i].index;
+                  gm = arr[i];
+                  poll_interval = window.setInterval(poll_handler,1);
+                  if (GamePad)
+                    GamePad(0,1,0);
+                  break;
+                }
+              }
+            }
+          }, false);
+
+        // do initial scan
+        if (gamepad<0)
+        {
+          var arr = navigator.getGamepads();
+          for (var i=0; i<arr.length; i++)
+          {
+            if (arr[i] && arr[i].connected)
+            {
+              console.log("inital scanned index "+i+" -> " + arr[i].index);
+              gamepad = arr[i].index;
+              gm = arr[i];
+              poll_interval = window.setInterval(poll_handler,1);
+              if (GamePad)
+                GamePad(0,1,0);
+            }
+          }
+        }          
+      }
+
       function setMouseHandlers()
       {
         function preventZoom(e)
@@ -940,6 +1049,7 @@
         Size = Module.cwrap('Size', null, ['number','number','number','number']);
         Keyb = Module.cwrap('Keyb', null, ['number','number']);
         Mouse = Module.cwrap('Mouse', null, ['number','number','number']);
+        GamePad = Module.cwrap('GamePad', null, ['number','number','number']);
         Touch = Module.cwrap('Touch', null, ['number','number','number','number']);
         Focus = Module.cwrap('Focus', null, ['number']);
         Join = Module.cwrap('Join', 'number', ['string','number','number']);
@@ -1052,6 +1162,7 @@
         setKeybHandlers();
         setTouchHandlers();
         setFocusHandlers();
+        setGamePadHandlers();
 
         window.addEventListener("resize",Resize); 
 

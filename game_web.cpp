@@ -249,6 +249,84 @@ extern "C"
             game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
     }
 
+    void GamePad(int ev, int idx, float val)
+    {
+        static const int butmap[16]=
+        {
+            0,1,2,3,
+            9,10,
+            4,6,5,
+            7,8,
+            -1,-1,-1,-1,-1
+        };
+
+        static const int axsmap[16]=
+        {
+            0,1, 4,
+            2,3, 5,
+            0xFE,0xFF,
+            -1,-1,-1,-1,
+            -1,-1,-1,-1
+        };
+
+        static int dirpad_x = 0;
+        static int dirpad_y = 0;        
+
+        switch (ev)
+        {
+            case 0:
+                GamePadMount(idx!=0);
+                break;
+            case 1:
+                idx = butmap[idx];
+                if (idx>=0)
+                    GamePadButton(idx,val>0);
+                break;
+            case 2:
+            {
+                int16_t v = (int16_t)(val*32767);
+                idx = axsmap[idx];
+                if (idx==0xFE)
+                {
+                    if (dirpad_x<-10000 && v>=-10000)
+                        GamePadButton(13,false);
+                    if (dirpad_x<=10000 && v>10000)
+                        GamePadButton(14,true);
+
+                    if (dirpad_x>10000 && v<=10000)
+                        GamePadButton(14,false);
+                    if (dirpad_x>=-10000 && v<-10000)
+                        GamePadButton(13,true);
+
+                    dirpad_x = v;
+                }
+                else
+                if (idx==0xFF)
+                {
+                    if (dirpad_y<-10000 && v>=-10000)
+                        GamePadButton(11,false);
+                    if (dirpad_y<=10000 && v>10000)
+                        GamePadButton(12,true);
+
+                    if (dirpad_y>10000 && v<=10000)
+                        GamePadButton(12,false);
+                    if (dirpad_y>=-10000 && v<-10000)
+                        GamePadButton(11,true);
+
+                    dirpad_y = v;
+                }
+                else
+                if (idx>=0)
+                {
+                    if (idx==4 || idx==5)
+                        v = (v+32767)/2;
+                    GamePadAxis(idx,v);
+                }
+                break;
+            }
+        }
+    }
+
     void Focus(int set)
     {
         if (game)

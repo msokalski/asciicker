@@ -45,7 +45,7 @@ emcc --emrun -O3 \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_Join","_Packet"]' \
+    -s EXPORTED_FUNCTIONS='["_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --no-heap-copy \
