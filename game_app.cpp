@@ -1470,7 +1470,7 @@ int main(int argc, char* argv[])
         else
         {
             printf("failed to connect to gpm\n");
-            exit(0);
+            // exit(0);
         }
 #endif // USE_GPM
     }

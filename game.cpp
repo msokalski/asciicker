@@ -2074,6 +2074,7 @@ struct Keyb
 	int plane = 0;
 	int sect = 0;
 	int dir = 11; // 11: sector mode, 0-10: direction mode
+	bool pad_plane = false;
 
 	int GetPadCap(char* ch, bool shift_on)
 	{
@@ -7264,10 +7265,16 @@ void Game::StartContact(int id, int x, int y, int b)
 			cap = keyb.GetCap(cp[0], cp[1], render_size[0], render_size[1], &ch, shift_on);
 
 			if (left_shift && cap == A3D_RSHIFT)
+			{
 				keyb.plane = (keyb.plane + 1) % 3; // cycle++
+				keyb.pad_plane = false; // prevent resetting by pad
+			}
 			else
 			if (right_shift && cap == A3D_LSHIFT)
+			{
 				keyb.plane = (keyb.plane + 2) % 3; // cycle--
+				keyb.pad_plane = false; // prevent resetting by pad
+			}
 			
 
 			if (b!=1 && cap > 0)
@@ -8416,12 +8423,24 @@ void Game::OnPadAxis(int a, int16_t pos)
 			{
 				keyb.dir = 11;
 				if (input.pad_axis[1] < -10000)
+				{
 					keyb.plane = 1;
+					keyb.pad_plane = true; // indicate we can reset plane by stick
+				}
 				else
 				if (input.pad_axis[1] > +10000)
+				{
 					keyb.plane = 2;
+					keyb.pad_plane = true; // indicate we can reset plane by stick
+				}
 				else
-					keyb.plane = 0;
+				{
+					// prevent resetting plane to 0
+					// if user set it with mouse or touch
+					// to something else
+					if (keyb.pad_plane)
+						keyb.plane = 0;
+				}
 			}
 		}
 	}
