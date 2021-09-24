@@ -56,8 +56,8 @@ apps:
     plugs:
       - network
       - network-bind
-  	  - joystick
-	  # - gpm (would be fantastic)
+      - joystick
+      # - gpm (would be fantastic)
 
   asciicker:
     command: ./launcher game
@@ -67,7 +67,7 @@ apps:
       - desktop-legacy
       - network
       - network-bind
-	  - joystick
+      - joystick
       - opengl
       - pulseaudio
       - wayland
@@ -81,7 +81,7 @@ apps:
       - desktop-legacy
       - network
       - network-bind
- 	  - joystick
+      - joystick
       - opengl
       - pulseaudio
       - wayland
