@@ -324,6 +324,7 @@
       var Touch = null;
       var Focus = null;
       
+      var PollGamePad = null; // js handler
       var GamePad = null; // wasm handler
       var gamepad = -1;   // gamepad in use, index into navigator.getGamepads();
 
@@ -421,6 +422,9 @@
 
         var display_x = (ak_ctx.drawingBufferWidth - display_w) >> 1;
         var display_y = (ak_ctx.drawingBufferHeight - display_h) >> 1;          
+
+        if (gamepad>=0 && GamePad)
+          PollGamePad();
 
         var mem = Render(render_w,render_h);
         if (mem != ak_prev_mem || Module.HEAP8 != ak_prev_arr || render_w != ak_width || render_h != ak_height)
@@ -779,31 +783,62 @@
 
       function setGamePadHandlers()
       {
-        var poll_interval = -1;
-        var gm = null;
-        var axes = new Float32Array(16);
-        var buts = new Uint8Array(16);
+        var axes = new Float32Array(4);
+        var buts = new Float32Array(17);
 
         function poll_handler()
         {
-          if (GamePad)
+          var gm = navigator.getGamepads()[gamepad];
+          if (GamePad && gm)
           {
             var nb = gm.buttons.length;
-            if (nb > 16)
-              nb = 16;
+            if (nb > 17)
+              nb = 17;
 
             for (var i=0; i<nb; i++)
             {
-              if (buts[i] != gm.buttons[i].pressed)
+              if (buts[i] != gm.buttons[i].value)
               {
-                GamePad(1,i,gm.buttons[i].pressed);
-                buts[i] = gm.buttons[i].pressed;
+                if (i==6)
+                  GamePad(2,4,gm.buttons[i].value);
+                else
+                if (i==7)
+                  GamePad(2,5,gm.buttons[i].value);
+                else
+                {
+                  // to sdl
+                  var j = i;
+                  switch (i)
+                  {
+                    // shoulders
+                    case 4: j=9; break;
+                    case 5: j=10; break;
+
+                    case 8: j=4; break; // back
+                    case 9: j=6; break; // start
+
+                    // thumbs
+                    case 10: j=7; break;
+                    case 11: j=8; break;
+
+                    // dpad
+                    case 12: j=11; break;
+                    case 13: j=12; break;
+                    case 14: j=13; break;
+                    case 15: j=14; break;
+
+                    // guide
+                    case 16: j=5; break;
+                  }
+                  GamePad(1,j,gm.buttons[i].value);
+                }
+                buts[i] = gm.buttons[i].value;
               }
             }
 
             var na = gm.axes.length;
-            if (na > 16)
-              na = 16;
+            if (na > 4)
+              na = 4;
 
             for (var i=0; i<na; i++)
             {
@@ -816,6 +851,8 @@
           }
         }
 
+        PollGamePad = poll_handler;
+
         console.log("setting handlers...");
         window.addEventListener("gamepadconnected", 
           function(e) 
@@ -824,11 +861,11 @@
 
             if (gamepad<0)
             {
+              axes.fill(0);
+              buts.fill(0);
               gamepad = e.gamepad.index;
-              gm = e.gamepad;
               if (GamePad)
                 GamePad(0,1,0);
-              poll_interval = window.setInterval(poll_handler,1);
             }
           }, false);
         
@@ -839,13 +876,9 @@
 
             if (gamepad==e.gamepad.index)
             {
-              window.clearInterval(poll_interval);
-              poll_interval = -1;
-
               if (GamePad)
                 GamePad(0,0,0);
               gamepad = -1;
-              gm = null;
 
               var arr = navigator.getGamepads();
               for (var i=0; i<arr.length; i++)
@@ -853,9 +886,9 @@
                 if (arr[i] && arr[i].connected)
                 {
                   console.log("re-scanned index "+i+" -> " + arr[i].index);
+                  axes.fill(0);
+                  buts.fill(0);
                   gamepad = arr[i].index;
-                  gm = arr[i];
-                  poll_interval = window.setInterval(poll_handler,1);
                   if (GamePad)
                     GamePad(0,1,0);
                   break;
@@ -873,9 +906,9 @@
             if (arr[i] && arr[i].connected)
             {
               console.log("inital scanned index "+i+" -> " + arr[i].index);
+              axes.fill(0);
+              buts.fill(0);              
               gamepad = arr[i].index;
-              gm = arr[i];
-              poll_interval = window.setInterval(poll_handler,1);
               if (GamePad)
                 GamePad(0,1,0);
             }
@@ -1162,7 +1195,9 @@
         setKeybHandlers();
         setTouchHandlers();
         setFocusHandlers();
-        setGamePadHandlers();
+
+        if ('getGamepads' in navigator)
+          setGamePadHandlers();
 
         window.addEventListener("resize",Resize); 
 
