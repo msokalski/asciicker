@@ -43,7 +43,20 @@ DISTOUTPUT := $(BIN).tar.gz
 # intermediate directory for generated object files
 OBJDIR := .o_asciiid
 
-# intermediate directory for generated fire
+# intermediate directory for generated dependency files
+DEPDIR := .d_asciiid
+
+# object files, auto generated from sourcce files
+OBJS := $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))
+
+# dependency files, auto generated from source files
+DEPS := $(patsubst %,$(DEPDIR)/%.d,$(basename $(SRCS)))
+
+# compilers (at least gcc and clang) don't create the subdirectories automatically
+$(shell mkdir -p $(dir $(OBJS)) >/dev/null)
+$(shell mkdir -p $(dir $(DEPS)) >/dev/null)
+
+# C compiler
 CC := gcc
 
 # C++ compiler
