@@ -25,6 +25,7 @@ SRCS :=	gl.c \
 		x11.cpp \
 		sdl.cpp \
         term.cpp \
+		font1.cpp \
 		game.cpp \
 		enemygen.cpp \
 		game_app.cpp \

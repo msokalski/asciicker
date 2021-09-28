@@ -7,6 +7,7 @@ BIN := .run/server
 SRCS :=	game_svr.cpp \
 		network.cpp \
 		sha1.c \
+		font1.cpp \
 		game.cpp \
 		enemygen.cpp \
 		render.cpp \
