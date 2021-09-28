@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="enemygen.h" />
     <ClInclude Include="fast_rand.h" />
+    <ClInclude Include="font1.h" />
     <ClInclude Include="game.h" />
     <ClInclude Include="inventory.h" />
     <ClInclude Include="network.h" />
@@ -32,6 +33,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="enemygen.cpp" />
+    <ClCompile Include="font1.cpp" />
     <ClCompile Include="game.cpp" />
     <ClCompile Include="game_svr.cpp" />
     <ClCompile Include="inventory.cpp" />

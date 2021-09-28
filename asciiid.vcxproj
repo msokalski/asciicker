@@ -171,6 +171,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="enemygen.h" />
+    <ClInclude Include="font1.h" />
     <ClInclude Include="game.h" />
     <ClInclude Include="gl45_emu.h" />
     <ClInclude Include="inventory.h" />
@@ -205,6 +206,7 @@
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <ClCompile Include="enemygen.cpp" />
+    <ClCompile Include="font1.cpp" />
     <ClCompile Include="game.cpp" />
     <ClCompile Include="gl45_emu.cpp" />
     <ClCompile Include="inventory.cpp" />

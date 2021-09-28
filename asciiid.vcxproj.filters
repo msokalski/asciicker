@@ -105,6 +105,9 @@
     <ClInclude Include="gl45_emu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="font1.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp">
@@ -183,6 +186,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="gl45_emu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="font1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

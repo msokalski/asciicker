@@ -388,14 +388,11 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
     FLUSH();
 }
 
-int debug_js = 0;
-
 bool running = false;
 void exit_handler(int signum)
 {
     running = false;
     SetScreen(false);
-    printf("processed %d js events\n",debug_js);
     exit(0);
 }
 
@@ -967,6 +964,7 @@ static int find_tty()
 }
 #endif
 
+#ifdef __linux__
 
 #define KEY_MAX_LARGE 0x2FF
 //#define KEY_MAX_SMALL 0x1FF
@@ -999,6 +997,7 @@ static const int js_axmap_sdl[]=
     -1,-1, -1,-1,-1,-1, 
     -1,-1,-1,-1, -1,-1,-1,-1
 };
+#endif
 
 
 int scan_js()
@@ -1153,8 +1152,6 @@ bool read_js(int fd)
 
                     break;
             }
-
-            debug_js++;
         }
 
         return true;
@@ -2558,8 +2555,6 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	_CrtDumpMemoryLeaks();
 #endif
-
-    printf("processed %d js events\n",debug_js);
 
 	return 0;
 }

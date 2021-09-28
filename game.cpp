@@ -9,6 +9,8 @@
 #include "matrix.h"
 #include "fast_rand.h"
 
+#include "font1.h"
+
 uint8_t ConvertToCP437(uint32_t uc)
 {
 	static const uint8_t tab00A1[95]=
@@ -2679,6 +2681,9 @@ void LoadSprites()
 	_set_printf_count_output(1);
 #endif
 
+	// load other sprtes...
+	LoadFont1();
+
 	// main buts
 	character_button = LoadSpriteBP("character.xp", 0, false);
 	inventory_sprite = LoadSpriteBP("inventory.xp", 0, false);
@@ -3032,6 +3037,7 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 
 void FreeSprites()
 {
+	FreeFont1();
 	// handles double refs but not sprite prefs!
 	while (Sprite* s = GetFirstSprite())
 		FreeSprite(s);
@@ -6351,6 +6357,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			server->Send((const uint8_t*)&req_pose, sizeof(STRUCT_REQ_POSE));
 		}
 	}
+
+	Font1Paint(ptr, width, height, 10, 22, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 0);
+	Font1Paint(ptr, width, height, 10, 10, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 1);
+	//Font1Paint(ptr, width, height, 10, 10, "III", 1);
+
 }
 
 void Game::OnSize(int w, int h, int fw, int fh)
