@@ -4514,8 +4514,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			io.y_force *= speed;
 		}
 
-		io.x_force += input.pad_axis[0] / 1024 / 32.0f;
-		io.y_force -= input.pad_axis[1] / 1024 / 32.0f;
+		if (menu_depth<0)
+		{
+			io.x_force += input.pad_axis[0] / 1024 / 32.0f;
+			io.y_force -= input.pad_axis[1] / 1024 / 32.0f;
+		}
 
 		if (!torque_handled)
 		{
@@ -4527,7 +4530,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	io.torque += (input.pad_axis[4] - input.pad_axis[5]) / 1024 / 32.0f;
+	if (menu_depth<0)
+		io.torque += (input.pad_axis[4] - input.pad_axis[5]) / 1024 / 32.0f;
 
 	io.jump = input.jump;
 
@@ -8682,9 +8686,14 @@ void menu_gamepad(Game* g)
 {
 }
 
+void exit_handler(int signum);
 void menu_yes_exit(Game* g)
 {
+	#ifdef USE_SDL
 	exit(0);
+	#else
+	exit_handler(0);
+	#endif
 }
 
 void menu_no_exit(Game* g)
@@ -8695,7 +8704,7 @@ void menu_no_exit(Game* g)
 // TODO:
 // - MAKE SIMILAR HACK FOR WEB !
 // - ON TTY: system("setfont ./fonts/font-%d.psf"); ?
-#ifdef USE_SDL
+#ifndef SERVER
 bool NextGLFont();
 bool PrevGLFont();
 void ToggleFullscreen(Game* g);
@@ -8704,14 +8713,14 @@ bool IsFullscreen(Game* g);
 
 void menu_fullscreen(Game* g)
 {
-	#ifdef USE_SDL
+	#ifndef SERVER
 	ToggleFullscreen(g);
 	#endif
 }
 
 bool menu_fullscreen_getter(Game* g)
 {
-	#ifdef USE_SDL
+	#ifndef SERVER
 	return IsFullscreen(g);
 	#endif
 	return false;
@@ -8719,14 +8728,14 @@ bool menu_fullscreen_getter(Game* g)
 
 void menu_zoomin(Game* g)
 {
-	#ifdef USE_SDL
+	#ifndef SERVER
 	NextGLFont();
 	#endif
 }
 
 void menu_zoomout(Game* g)
 {
-	#ifdef USE_SDL
+	#ifndef SERVER
 	PrevGLFont();
 	#endif
 }
@@ -8955,6 +8964,97 @@ void Game::MenuPadMount(bool connected)
 
 void Game::MenuPadButton(int b, bool down)
 {
+	if (!down)
+		return;
+
+	const Menu* m = game_menu;
+	for (int d=0; d<menu_depth; d++)
+		m = m[ menu_stack[d] ].sub;		
+
+	switch (b)
+	{
+		case 0:
+		{
+			if (m[ menu_stack[menu_depth] ].sub)
+			{
+				menu_depth++;
+				menu_stack[menu_depth]=0;
+			}
+			else
+			if (m[ menu_stack[menu_depth] ].action)
+			{
+				m[ menu_stack[menu_depth] ].action(this);
+			}
+			break;
+		}
+
+		case 1: 
+		{
+			// jump
+			break;
+		}
+
+		case 5:
+		{
+			break;
+		}
+
+		case 6:
+		{
+			CloseMenu();
+			break;
+		}
+
+		case 9:
+		{
+			// left shoulder
+			break;
+		}
+
+		case 10:
+		{
+			// right shoulder
+			break;
+		}
+
+		case 11:
+		{
+			// dir up
+			if (menu_stack[menu_depth]>0)
+				menu_stack[menu_depth]--;			
+			break;
+		}
+		case 12:
+		{
+			// dir down
+			if (m[menu_stack[menu_depth]+1].str)
+				menu_stack[menu_depth]++;			
+			break;
+		}
+		case 13:
+		{
+			// dir left
+			if (menu_depth==0)
+			{
+				CloseMenu();
+				return;
+			}
+			menu_depth--;
+			break;
+		}
+		case 14:
+		{
+			// dir right
+			// only sub, with dir_right
+			// action requires main button
+			if (m[ menu_stack[menu_depth] ].sub)
+			{
+				menu_depth++;
+				menu_stack[menu_depth]=0;
+			}
+			break;
+		}
+	}
 }
 
 void Game::MenuPadAxis(int a, int16_t pos)

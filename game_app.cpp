@@ -583,9 +583,60 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 	return f->tex;
 }
 
+static int tty_font = 4;
+static const int tty_fonts[] = {6,8,10,12,14,16,18,20,24,28,32,-1};
+
+// TODO WEB ZOOMING & FULLSCREENING!
+// ...
+
+#ifdef PURE_TERM
+static bool xterm_fullscreen = false;
+void ToggleFullscreen(Game* g)
+{
+    const char* term_env = getenv("TERM");
+    if (!term_env)
+        term_env = "";
+    if (strcmp( term_env, "linux" ) != 0)
+    {
+        xterm_fullscreen = !xterm_fullscreen;
+        if (xterm_fullscreen)
+            int w = write(STDOUT_FILENO, "\033[9;1t",6);
+        else
+            int w = write(STDOUT_FILENO, "\033[9;0t",6);
+    }
+}
+
+bool IsFullscreen(Game* g)
+{
+    return xterm_fullscreen;
+}
+#endif
+
 bool PrevGLFont()
 {
-    #ifndef PURE_TERM
+    #ifdef PURE_TERM
+    const char* term_env = getenv("TERM");
+    if (!term_env)
+        term_env = "";
+    if (strcmp( term_env, "linux" ) == 0)
+    {
+        tty_font--;
+        if (tty_font<0)
+            tty_font=0;
+        char cmd[64];
+        sprintf(cmd,"setfont fonts/cp437_%dx%d.png.psf", tty_fonts[tty_font], tty_fonts[tty_font]);
+        system(cmd);
+    }
+    else
+    {
+        // this will work only if xterm has enabled font ops
+        int w = write(STDOUT_FILENO, "\033]50;#-1\a",9);
+        if (xterm_fullscreen)
+            int w = write(STDOUT_FILENO, "\033[9;1t",6);
+        else
+            int w = write(STDOUT_FILENO, "\033[9;0t",6);
+    }
+    #else
 	font_zoom--;
 	if (font_zoom < -fonts_loaded / 2)
 	{
@@ -599,7 +650,29 @@ bool PrevGLFont()
 
 bool NextGLFont()
 {
-    #ifndef PURE_TERM
+    #ifdef PURE_TERM
+    const char* term_env = getenv("TERM");
+    if (!term_env)
+        term_env = "";
+    if (strcmp( term_env, "linux" ) == 0)
+    {
+        tty_font++;
+        if (tty_fonts[tty_font]<0)
+            tty_font--;
+        char cmd[64];
+        sprintf(cmd,"setfont fonts/cp437_%dx%d.png.psf", tty_fonts[tty_font], tty_fonts[tty_font]);
+        system(cmd);
+    }
+    else
+    {
+        // this will work only if xterm has enabled font ops
+        int w = write(STDOUT_FILENO, "\033]50;#+1\a",9);
+        if (xterm_fullscreen)
+            int w = write(STDOUT_FILENO, "\033[9;1t",6);
+        else
+            int w = write(STDOUT_FILENO, "\033[9;0t",6);
+    }
+    #else
 	font_zoom++;
 	if (font_zoom > fonts_loaded/2)
 	{
@@ -1551,6 +1624,13 @@ int main(int argc, char* argv[])
 
     if (tty > 0)
     {
+        // setup default font
+        if (tty_fonts[tty_font]<0)
+            tty_font--;
+        char cmd[64];
+        sprintf(cmd,"setfont fonts/cp437_%dx%d.png.psf", tty_fonts[tty_font], tty_fonts[tty_font]);
+        system(cmd);
+
 #ifdef USE_GPM
         Gpm_Connect conn;
         conn.eventMask  = ~0;   /* Want to know about all the events */
