@@ -334,6 +334,7 @@
       var ak_prg;
       var ak_tex;
 
+      var user_zoom = 0;
       var ak_fonts;
       var ak_font;
 
@@ -384,14 +385,21 @@
 				var rw = ak_ctx.canvas.width*0.001;
 				var rh = ak_ctx.canvas.height*0.001;
 				var rs = 7.5*Math.sqrt(rw*rw+rh*rh) * ak_ratio;
-				for (var i=0; i<ak_fonts.length; i++)
+
+        ak_font = 0;
+				for (var i=1; i<ak_fonts.length; i++)
 				{
-					if (Math.abs(ak_fonts[ak_font].size - rs) >
-					    Math.abs(ak_fonts[i].size - rs))
+					if (Math.abs(ak_fonts[ak_font].size - rs) > Math.abs(ak_fonts[i].size - rs))
 					{
             ak_font = i;
 					}
         }
+
+        ak_font += user_zoom;
+        if (ak_font < 0)
+          ak_font = 0;
+        if (ak_font >= ak_fonts.length)
+          ak_font = ak_fonts.length-1;
 
         console.log("FONT="+ak_font);
 

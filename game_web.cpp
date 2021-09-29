@@ -97,6 +97,70 @@ void* GetMaterialArr()
     return mat;
 }
 
+int user_zoom = 0;
+bool PrevGLFont()
+{
+    user_zoom--;
+    if (user_zoom<-8)
+        user_zoom=-8;
+
+    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
+    return true;
+}
+
+bool NextGLFont()
+{
+    user_zoom++;
+    if (user_zoom>8)
+        user_zoom=8;
+
+    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
+    return true;
+}
+
+void exit_handler(int signum)
+{
+    EM_ASM({history.back();});
+}
+
+void ToggleFullscreen(Game* g)
+{
+    EM_ASM(
+    {
+        let elem = document.body;
+
+        if (!document.fullscreenElement) 
+        {
+            elem.requestFullscreen().catch(err => { });
+        } 
+        else 
+        {
+            document.exitFullscreen();
+        }
+    });
+}
+
+bool IsFullscreen(Game* g)
+{
+    int fs = 
+    EM_ASM_INT(
+    {
+        let elem = document.body;
+
+        if (!document.fullscreenElement) 
+        {
+            return 0;
+        } 
+        else 
+        {
+            return 1;
+        }
+    });
+
+    return fs!=0;
+}
+
+
 int main(int argc, char* argv[])
 {
     return 0;
