@@ -3052,6 +3052,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->menu_depth = -1;
 
 	g->perspective = true;
+	g->blood = true;
 
 	fast_srand(stamp);
 
@@ -4570,7 +4571,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int steps = Animate(physics, _stamp, &io, player.req.mount);
 
-	if (io.grounded)
+	if (io.grounded && blood)
 		BloodLeak(&player, steps);
 
 	prev_grounded = io.grounded;
@@ -4843,7 +4844,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 
-					if (pio.grounded)
+					if (pio.grounded && blood)
 						BloodLeak(h, s);
 
 					if (h->target)
@@ -4918,7 +4919,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					}
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 
-					if (pio.grounded)
+					if (pio.grounded && blood)
 						BloodLeak(h, s);
 				}
 
@@ -4967,7 +4968,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 												float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
 												float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
 												float xy[2] = { h->target->pos[0] + dr * cosf(dt), h->target->pos[0] + dr * sinf(dt) };
-												PaintTerrain(xy, r, 5/*blood*/);
+												if (blood)
+													PaintTerrain(xy, r, 5/*blood*/);
 											}
 
 											float d = 15.0f / sqrtf(dx*dx + dy * dy);
@@ -5196,7 +5198,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
 									float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
 									float xy[2] = { h->target->pos[0] + dr * cosf(dt), h->target->pos[0] + dr * sinf(dt) };
-									PaintTerrain(xy, r, 5/*blood*/);
+									if (blood)
+										PaintTerrain(xy, r, 5/*blood*/);
 								}
 
 								float d = 15.0f / sqrtf(dx*dx + dy * dy);
@@ -8675,11 +8678,12 @@ bool menu_perspective_getter(Game* g)
 
 void menu_blood(Game* g)
 {
+	g->blood = !g->blood;
 }
 
 bool menu_blood_getter(Game* g)
 {
-	return true;
+	return g->blood;
 }
 
 void menu_gamepad(Game* g)

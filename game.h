@@ -253,6 +253,7 @@ struct Game
 	int render_size[2];
 
 	bool perspective;
+	bool blood;
 
 	//bool player_hit; // helper for detecting clicks on the player sprite
 	bool show_keyb; // activated together with talk_box by clicking on character
