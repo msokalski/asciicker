@@ -3049,6 +3049,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
 
+	g->menu_depth = -1;
+
 	g->perspective = true;
 
 	fast_srand(stamp);
@@ -6358,10 +6360,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
+	PaintMenu(ptr, width, height);
+	/*
 	Font1Paint(ptr, width, height, 10, 22, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 0);
 	Font1Paint(ptr, width, height, 10, 10, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 1);
-	//Font1Paint(ptr, width, height, 10, 10, "III", 1);
-
+	*/
+	
 }
 
 void Game::OnSize(int w, int h, int fw, int fh)
@@ -6378,6 +6382,11 @@ void Game::OnSize(int w, int h, int fw, int fh)
 void Game::OnKeyb(GAME_KEYB keyb, int key)
 {
 	// handle layers first ...
+	if (menu_depth>=0)
+	{
+		MenuKeyb(keyb,key);
+		return;
+	}
 
 	// if nothing focused 
 
@@ -6660,7 +6669,10 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			}
 
 			if (key == '\\' || key == '|')
-				perspective = !perspective;
+			{
+				// perspective = !perspective;
+				ToggleMenu();
+			}
 
 			if (key == '0')
 			{
@@ -6977,7 +6989,8 @@ void Game::StartContact(int id, int x, int y, int b)
 		if (cp[0] >= render_size[0] - bars_pos)
 		{
 			// temporarily switch ortho/perspective
-			perspective = !perspective;
+			//perspective = !perspective;
+			ToggleMenu();
 
 			// temporarily drop item
 			/*
@@ -7885,6 +7898,13 @@ int FirstFree(int size, int* arr)
 
 void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 {
+	// handle layers first ...
+	if (menu_depth>=0)
+	{
+		MenuMouse(mouse,x,y);
+		return;
+	}
+
 	#ifdef TOUCH_EMU
 	static int buts_id[3] = {-1,-1,-1}; // L,R,M
 	// emulate touches for easier testing
@@ -8075,6 +8095,14 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 	if (id<1 || id>3)
 		return;
 
+	// handle layers first ...
+	if (menu_depth>=0)
+	{
+		MenuTouch(touch,id,x,y);
+		return;
+	}
+
+
 	switch (touch)
 	{
 		case TOUCH_BEGIN:
@@ -8144,6 +8172,11 @@ void Game::OnPadMount(bool connect)
 	memset(input.pad_axis, 0, sizeof(int16_t) * 32);
 	if (connect)
 		OnPadAxis(-1, 0);
+
+	if (menu_depth>=0)
+	{
+		MenuPadMount(connect);
+	}
 }
 
 void Game::OnPadButton(int b, bool down)
@@ -8154,6 +8187,13 @@ void Game::OnPadButton(int b, bool down)
 			input.pad_button |= 1 << b;
 		else
 			input.pad_button &= ~(1 << b);
+
+		if (menu_depth>=0)
+		{
+			// handle menu navi
+			MenuPadButton(b,down);
+			return;
+		}
 
 		if (down)
 		{
@@ -8197,8 +8237,9 @@ void Game::OnPadButton(int b, bool down)
 					case 6:
 					{
 						// mini-menu
-						perspective = !perspective;
-						show_buts = !show_buts; // just test
+						//perspective = !perspective;
+						//show_buts = !show_buts; // just test
+						ToggleMenu();
 						break;
 					}
 
@@ -8274,8 +8315,9 @@ void Game::OnPadButton(int b, bool down)
 					case 6: // start
 					{
 						// mini-menu
-						perspective = !perspective;
-						show_buts = !show_buts; // just test
+						//perspective = !perspective;
+						//show_buts = !show_buts; // just test
+						ToggleMenu();
 						break;
 					}
 
@@ -8404,6 +8446,13 @@ void Game::OnPadAxis(int a, int16_t pos)
 {
 	if (a>=0 && a<32)
 		input.pad_axis[a] = pos;
+
+	if (menu_depth>=0)
+	{
+		// handle menu navi
+		MenuPadAxis(a,pos);
+		return;
+	}
 
 	//if (show_keyb)
 	{
@@ -8598,4 +8647,316 @@ void GamePadAxis(int a, int16_t pos)
 {
 	if (prime_game)
 		prime_game->OnPadAxis(a, pos);
+}
+
+////////////////////////////////////////////////////////
+
+struct Menu
+{
+	const char* str; // if 0 this is terminator
+	const Menu* sub; // for terminator this is back menu
+	void (*action)(Game* g);
+	bool (*getter)(Game* g);
+};
+
+void menu_perspective(Game* g)
+{
+	g->perspective = !g->perspective;
+}
+
+bool menu_perspective_getter(Game* g)
+{
+	return g->perspective;
+}
+
+void menu_blood(Game* g)
+{
+}
+
+bool menu_blood_getter(Game* g)
+{
+	return true;
+}
+
+void menu_gamepad(Game* g)
+{
+}
+
+void menu_yes_exit(Game* g)
+{
+	exit(0);
+}
+
+void menu_no_exit(Game* g)
+{
+	g->menu_depth--;
+}
+
+// TODO:
+// - MAKE SIMILAR HACK FOR WEB !
+// - ON TTY: system("setfont ./fonts/font-%d.psf"); ?
+#ifdef USE_SDL
+bool NextGLFont();
+bool PrevGLFont();
+void ToggleFullscreen(Game* g);
+bool IsFullscreen(Game* g);
+#endif
+
+void menu_fullscreen(Game* g)
+{
+	#ifdef USE_SDL
+	ToggleFullscreen(g);
+	#endif
+}
+
+bool menu_fullscreen_getter(Game* g)
+{
+	#ifdef USE_SDL
+	return IsFullscreen(g);
+	#endif
+	return false;
+}
+
+void menu_zoomin(Game* g)
+{
+	#ifdef USE_SDL
+	NextGLFont();
+	#endif
+}
+
+void menu_zoomout(Game* g)
+{
+	#ifdef USE_SDL
+	PrevGLFont();
+	#endif
+}
+
+static const Menu settings_menu[]=
+{
+	{"ZOOM IN", 0, menu_zoomin, 0},
+	{"ZOOM OUT", 0, menu_zoomout, 0},
+	{"FULL SCREEN", 0, menu_fullscreen, menu_fullscreen_getter},
+	{"PERSPECTIVE", 0, menu_perspective, menu_perspective_getter},
+	{"SHOW BLOOD", 0, menu_blood, menu_blood_getter},
+	{0}
+};
+
+static const Menu controls_menu[]=
+{
+	{"KEYBOARD", 0, 0, 0},
+	{"MOUSE", 0, 0, 0},
+	{"TOUCH", 0, 0, 0},
+	{"GAMEPAD", 0, 0, 0},
+	{0}
+};
+
+static const Menu exit_menu[]=
+{
+	{"NO", 0, menu_no_exit, 0},
+	{"YES", 0, menu_yes_exit, 0},
+	{0}
+};
+
+
+static const Menu game_menu[]=
+{
+	{"SETTINGS", settings_menu, 0, 0},
+	{"CONTROLS", controls_menu, 0, 0},
+	{"EXIT?", exit_menu, 0, 0},
+	{0}
+};
+
+
+void Game::OpenMenu()
+{
+	if (menu_depth>=0)
+		return;
+
+	if (player.talk_box)
+	{
+		free(player.talk_box);
+		player.talk_box = 0;
+	}
+
+	if (show_keyb)
+		memset(keyb_key, 0, 32);
+	show_keyb = false;
+	KeybAutoRepChar = 0;
+	KeybAutoRepCap = 0;
+	for (int i=0; i<4; i++)
+	{
+		if (input.contact[i].action == Input::Contact::KEYBCAP)
+			input.contact[i].action = Input::Contact::NONE;
+	}
+
+	CancelItemContacts();
+	show_inventory = false;	
+
+	show_buts = false;
+	menu_depth = 0;
+	menu_stack[menu_depth] = 0;
+}
+
+void Game::CloseMenu()
+{
+	if (menu_depth<0)
+		return;
+	show_buts = true;
+	menu_depth = -1;
+}
+
+void Game::ToggleMenu()
+{
+	if (menu_depth>=0)
+		CloseMenu();
+	else
+		OpenMenu();
+}
+
+void Game::PaintMenu(AnsiCell* ptr, int width, int height)
+{
+	if (menu_depth<0)
+		return;
+
+	const Menu* m = game_menu;
+	const char* title = "MENU";
+	for (int d=0; d<menu_depth; d++)
+	{
+		title = m[ menu_stack[d] ].str;
+		m = m[ menu_stack[d] ].sub;
+	}
+
+
+	// right align
+
+	int x = width-5;
+	int y = height-10;
+
+	// paint title
+	{
+		int w = 0, h = 0;
+		Font1Size(title,&w,&h);
+		Font1Paint(ptr,width,height,3+x-w,y,title,FONT1_PINK_SKIN);
+		y -= h+2;
+	}
+
+
+	int i=0;
+	while(m[i].str)
+	{
+		int w = 0, h = 0;
+		Font1Size(m[i].str,&w,&h);
+
+		int skin = i == menu_stack[menu_depth] ? FONT1_GOLD_SKIN : FONT1_GREY_SKIN;
+		Font1Paint(ptr,width,height,x-w,y,m[i].str,skin);
+
+		const char* str = 0;
+		if (m[i].sub)
+			str = "\x03";
+		else
+		if (m[i].getter)
+			str = m[i].getter(this) ? "\x02" : "\x01";
+
+		if (str)
+			Font1Paint(ptr,width,height,x,y,str,FONT1_PINK_SKIN);
+
+		y -= h+1;
+		i++;
+	}
+	
+}
+
+void Game::MenuKeyb(GAME_KEYB keyb, int key)
+{
+	if (keyb==KEYB_DOWN && (key==A3D_ENTER || key==A3D_NUMPAD_ENTER))
+	{
+		// handle only char->press!
+		return;
+	}
+
+	if (keyb==KEYB_CHAR && (key=='\\' || key=='|') ||
+		keyb==KEYB_DOWN && key==A3D_ESCAPE)
+	{
+		CloseMenu();
+		return;
+	}
+
+	if (keyb==KEYB_CHAR && key==8)
+	{
+		keyb=KEYB_PRESS;
+		key=A3D_BACKSPACE;
+	}
+
+	if (keyb==KEYB_CHAR && (key=='\n' || key=='\r'))
+	{
+		keyb=KEYB_PRESS;
+		key=A3D_ENTER;
+	}
+
+	if (keyb==KEYB_DOWN || keyb==KEYB_PRESS)
+	{
+		const Menu* m = game_menu;
+		for (int d=0; d<menu_depth; d++)
+			m = m[ menu_stack[d] ].sub;
+
+		if (key==A3D_RIGHT && m[ menu_stack[menu_depth] ].sub || key==A3D_ENTER)
+		{
+			if (m[ menu_stack[menu_depth] ].sub)
+			{
+				menu_depth++;
+				menu_stack[menu_depth]=0;
+			}
+			else
+			if (m[ menu_stack[menu_depth] ].action)
+			{
+				m[ menu_stack[menu_depth] ].action(this);
+			}
+			return;
+		}
+
+		if (key==A3D_LEFT || keyb==KEYB_PRESS && key==A3D_BACKSPACE)
+		{
+			if (menu_depth==0)
+			{
+				CloseMenu();
+				return;
+			}
+			menu_depth--;
+			return;
+		}
+
+		if (key==A3D_DOWN)
+		{
+			if (m[menu_stack[menu_depth]+1].str)
+				menu_stack[menu_depth]++;
+			return;
+		}
+
+		if (key==A3D_UP)
+		{
+			if (menu_stack[menu_depth]>0)
+				menu_stack[menu_depth]--;
+			return;
+		}
+	}
+}
+
+void Game::MenuMouse(GAME_MOUSE mouse, int x, int y)
+{
+}
+
+void Game::MenuTouch(GAME_TOUCH touch, int id, int x, int y)
+{
+}
+
+void Game::MenuPadMount(bool connected)
+{
+}
+
+void Game::MenuPadButton(int b, bool down)
+{
+}
+
+void Game::MenuPadAxis(int a, int16_t pos)
+{
 }

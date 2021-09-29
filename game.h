@@ -438,6 +438,24 @@ struct Game
 	// update physics with accumulated input then render state to output
 	void Render(uint64_t _stamp, AnsiCell* ptr, int width, int height);
 	void ScreenToCell(int p[2]) const;
+
+
+
+	void MenuKeyb(GAME_KEYB keyb, int key);
+	void MenuMouse(GAME_MOUSE mouse, int x, int y);
+	void MenuTouch(GAME_TOUCH touch, int id, int x, int y);
+	void MenuPadMount(bool connected);
+	void MenuPadButton(int b, bool down);
+	void MenuPadAxis(int a, int16_t pos);
+
+	void OpenMenu();
+	void CloseMenu();
+	void ToggleMenu();
+	void PaintMenu(AnsiCell* ptr, int width, int height);
+
+	// menu context
+	int menu_stack[4]; // menu_stack[menu_depth] contains current item (hilight)
+	int menu_depth; // -1 when closed, 0 just after OpenMenu
 };
 
 Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp);

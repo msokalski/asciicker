@@ -16,6 +16,9 @@
 #define CODE(...) #__VA_ARGS__
 #define DEFN(a,s) "#define " #a #s "\n"
 
+void ToggleFullscreen(Game* g);
+bool IsFullscreen(Game* g);
+
 struct TERM_LIST
 {
 	TERM_LIST* prev;
@@ -436,10 +439,7 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 		else
 		if (ki == A3D_F11)
 		{
-			if (a3dGetRect(wnd,0,0) != A3D_WND_FULLSCREEN)
-				a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
-			else
-				a3dSetRect(wnd, 0, A3D_WND_NORMAL);
+			ToggleFullscreen(term->game);
 		}
 		else
 			term->game->OnKeyb(Game::GAME_KEYB::KEYB_DOWN, ki);
@@ -574,4 +574,42 @@ void TermResizeAll()
 		term_resize(term->wnd, wh[0],wh[1]);
 		term = next;
 	}
+}
+
+void ToggleFullscreen(Game* g)
+{
+	TERM_LIST* term = term_head;
+	while (term)
+	{
+		if (term->game == g)
+			break;
+		term = term->next;
+	}
+
+	if (!term)
+		return;
+
+	if (a3dGetRect(term->wnd,0,0) != A3D_WND_FULLSCREEN)
+		a3dSetRect(term->wnd, 0, A3D_WND_FULLSCREEN);
+	else
+		a3dSetRect(term->wnd, 0, A3D_WND_NORMAL);
+
+}
+
+bool IsFullscreen(Game* g)
+{
+	TERM_LIST* term = term_head;
+	while (term)
+	{
+		if (term->game == g)
+			break;
+		term = term->next;
+	}
+
+	if (!term)
+		return false;
+
+	if (a3dGetRect(term->wnd,0,0) == A3D_WND_FULLSCREEN)
+		return true;
+	return false;
 }
