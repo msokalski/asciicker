@@ -69,8 +69,9 @@ void SyncConf()
 char conf_path[1024]="";
 const char* GetConfPath()
 {
-    if (conf_path[0]==0)
-    {
+	if (conf_path[0] == 0)
+	{
+		#if defined(__linux__) || defined(__APPLE__)
         const char* user_dir = getenv("SNAP_USER_DATA");
         if (!user_dir || user_dir[0]==0)
         {
@@ -82,8 +83,19 @@ const char* GetConfPath()
         }
         else
             sprintf(conf_path,"%s/asciicker.cfg",user_dir);
-    }    
-    return conf_path;
+
+ 		#elif defined(_WIN32)
+		
+		const char* user_dir = getenv("APPDATA");
+		if (!user_dir || user_dir[0] == 0)
+			sprintf(conf_path, "%sasciicker.cfg", base_path);
+		else
+			sprintf(conf_path, "%s\\asciicker.cfg", user_dir);
+		
+		#endif
+	}
+
+	return conf_path;
 }
 
 #if defined(__linux__) || defined(__APPLE__)
