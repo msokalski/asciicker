@@ -393,6 +393,17 @@ void exit_handler(int signum)
 {
     running = false;
     SetScreen(false);
+    if (tty>0)
+    {
+        // restore old font
+        const char* temp_dir = getenv("SNAP_USER_DATA");
+        if (!temp_dir || !temp_dir[0])
+            temp_dir = "/tmp/";
+        
+        char cmd[2048];
+        sprintf(cmd,"setfont %sasciicker.%d.psf; rm %sasciicker.%d.psf; clear;", temp_dir, tty, temp_dir, tty);
+        system(cmd);
+    }
     exit(0);
 }
 
@@ -615,16 +626,13 @@ bool IsFullscreen(Game* g)
 bool PrevGLFont()
 {
     #ifdef PURE_TERM
-    const char* term_env = getenv("TERM");
-    if (!term_env)
-        term_env = "";
-    if (strcmp( term_env, "linux" ) == 0)
+    if (tty>0)
     {
         tty_font--;
         if (tty_font<0)
             tty_font=0;
-        char cmd[64];
-        sprintf(cmd,"setfont fonts/cp437_%dx%d.png.psf", tty_fonts[tty_font], tty_fonts[tty_font]);
+        char cmd[1024];
+        sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
         system(cmd);
     }
     else
@@ -651,16 +659,13 @@ bool PrevGLFont()
 bool NextGLFont()
 {
     #ifdef PURE_TERM
-    const char* term_env = getenv("TERM");
-    if (!term_env)
-        term_env = "";
-    if (strcmp( term_env, "linux" ) == 0)
+    if (tty>0)
     {
         tty_font++;
         if (tty_fonts[tty_font]<0)
             tty_font--;
-        char cmd[64];
-        sprintf(cmd,"setfont fonts/cp437_%dx%d.png.psf", tty_fonts[tty_font], tty_fonts[tty_font]);
+        char cmd[1024];
+        sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
         system(cmd);
     }
     else
@@ -1624,11 +1629,16 @@ int main(int argc, char* argv[])
 
     if (tty > 0)
     {
+        // store current font
+        char cmd[1024];
+        const char* temp_dir = getenv("SNAP_USER_DATA");
+        if (!temp_dir || !temp_dir[0])
+            temp_dir = "/tmp/";
+        sprintf(cmd,"setfont -O %sasciicker.%d.psf;", temp_dir,tty);
+        system(cmd);
+
         // setup default font
-        if (tty_fonts[tty_font]<0)
-            tty_font--;
-        char cmd[64];
-        sprintf(cmd,"setfont fonts/cp437_%dx%d.png.psf", tty_fonts[tty_font], tty_fonts[tty_font]);
+        sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
         system(cmd);
 
 #ifdef USE_GPM
