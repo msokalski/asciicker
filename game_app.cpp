@@ -52,6 +52,7 @@
 #include "game.h"
 #include "enemygen.h"
 
+int tty = -1;
 
 // configurable, or auto lookup?
 
@@ -65,9 +66,24 @@ void SyncConf()
 {
 }
 
+char conf_path[1024]="";
 const char* GetConfPath()
 {
-    return "asciicker.cfg";
+    if (conf_path[0]==0)
+    {
+        const char* user_dir = getenv("SNAP_USER_DATA");
+        if (!user_dir || user_dir[0]==0)
+        {
+            user_dir = getenv("HOME");
+            if (!user_dir || user_dir[0]==0)
+                sprintf(conf_path,"%sasciicker.cfg",base_path);
+            else
+                sprintf(conf_path,"%s/asciicker.cfg",user_dir);
+        }
+        else
+            sprintf(conf_path,"%s/asciicker.cfg",user_dir);
+    }    
+    return conf_path;
 }
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -139,7 +155,6 @@ bool xterm_kitty = false;
 int mouse_x = -1;
 int mouse_y = -1;
 int mouse_down = 0;
-int tty = -1;
 int gpm = -1;
 
 bool GetWH(int wh[2])
@@ -398,12 +413,13 @@ void exit_handler(int signum)
         // restore old font
         const char* temp_dir = getenv("SNAP_USER_DATA");
         if (!temp_dir || !temp_dir[0])
-            temp_dir = "/tmp/";
+            temp_dir = "/tmp";
         
         char cmd[2048];
-        sprintf(cmd,"setfont %sasciicker.%d.psf; rm %sasciicker.%d.psf; clear;", temp_dir, tty, temp_dir, tty);
+        sprintf(cmd,"setfont %s/asciicker.%d.psf; rm %s/asciicker.%d.psf; clear;", temp_dir, tty, temp_dir, tty);
         system(cmd);
     }
+
     exit(0);
 }
 
@@ -1633,8 +1649,8 @@ int main(int argc, char* argv[])
         char cmd[1024];
         const char* temp_dir = getenv("SNAP_USER_DATA");
         if (!temp_dir || !temp_dir[0])
-            temp_dir = "/tmp/";
-        sprintf(cmd,"setfont -O %sasciicker.%d.psf;", temp_dir,tty);
+            temp_dir = "/tmp";
+        sprintf(cmd,"setfont -O %s/asciicker.%d.psf;", temp_dir,tty);
         system(cmd);
 
         // setup default font

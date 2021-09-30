@@ -291,6 +291,10 @@ void ReadConf(Game* g)
 	{
 		//printf("ReadConf ok\n");
 		int r = fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+
+		fread(&g->perspective, 1, 1, f);
+		fread(&g->blood, 1, 1, f);
+
 		fclose(f);
 	}
 	else
@@ -307,6 +311,10 @@ void WriteConf(Game* g)
 	{
 		//printf("WriteConf ok\n");
 		fwrite(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+
+		fwrite(&g->perspective, 1, 1, f);
+		fwrite(&g->blood, 1, 1, f);
+
 		fclose(f);
 	}
 	else
@@ -8672,6 +8680,7 @@ struct Menu
 void menu_perspective(Game* g)
 {
 	g->perspective = !g->perspective;
+	WriteConf(g);
 }
 
 bool menu_perspective_getter(Game* g)
@@ -8682,6 +8691,7 @@ bool menu_perspective_getter(Game* g)
 void menu_blood(Game* g)
 {
 	g->blood = !g->blood;
+	WriteConf(g);
 }
 
 bool menu_blood_getter(Game* g)
