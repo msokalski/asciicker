@@ -30,6 +30,10 @@ char base_path[1024] = "./";
 #define MAX_CLIENTS 50
 Server* server = 0; // this is to fullfil game.cpp externs!
 
+void exit_handler(int)
+{
+}
+
 void Buzz()
 {
 }

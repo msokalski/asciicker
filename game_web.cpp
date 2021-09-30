@@ -131,11 +131,13 @@ void ToggleFullscreen(Game* g)
 
         if (!document.fullscreenElement) 
         {
-            elem.requestFullscreen().catch(err => { });
+            if ("requestFullscreen" in elem)
+                elem.requestFullscreen().catch(err => { });
         } 
         else 
         {
-            document.exitFullscreen();
+            if ("exitFullscreen" in document)
+                document.exitFullscreen();
         }
     });
 }

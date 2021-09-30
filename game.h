@@ -449,14 +449,24 @@ struct Game
 	void MenuPadButton(int b, bool down);
 	void MenuPadAxis(int a, int16_t pos);
 
-	void OpenMenu();
+	void OpenMenu(int method);
 	void CloseMenu();
-	void ToggleMenu();
+	void ToggleMenu(int method);
 	void PaintMenu(AnsiCell* ptr, int width, int height);
+	int  HitMenu(int hx, int hy);
 
 	// menu context
 	int menu_stack[4]; // menu_stack[menu_depth] contains current item (hilight)
 	int menu_depth; // -1 when closed, 0 just after OpenMenu
+
+	// menu mouse / touch state
+	int menu_down; // 0: released, 1:mouse_captured, 2:touch_captured
+	int menu_down_x;
+	int menu_down_y;
+
+	// when mouse/touch is taking over, store current hilight here
+	// so we can revert hilight when pad/keyb is back
+	int menu_temp; 
 };
 
 Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp);

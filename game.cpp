@@ -6678,7 +6678,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			if (key == '\\' || key == '|')
 			{
 				// perspective = !perspective;
-				ToggleMenu();
+				ToggleMenu(0);
 			}
 
 			if (key == '0')
@@ -6997,7 +6997,10 @@ void Game::StartContact(int id, int x, int y, int b)
 		{
 			// temporarily switch ortho/perspective
 			//perspective = !perspective;
-			ToggleMenu();
+			if (id==0)
+				ToggleMenu(1);
+			else
+				ToggleMenu(2);
 
 			// temporarily drop item
 			/*
@@ -8246,7 +8249,7 @@ void Game::OnPadButton(int b, bool down)
 						// mini-menu
 						//perspective = !perspective;
 						//show_buts = !show_buts; // just test
-						ToggleMenu();
+						ToggleMenu(3);
 						break;
 					}
 
@@ -8324,7 +8327,7 @@ void Game::OnPadButton(int b, bool down)
 						// mini-menu
 						//perspective = !perspective;
 						//show_buts = !show_buts; // just test
-						ToggleMenu();
+						ToggleMenu(3);
 						break;
 					}
 
@@ -8703,6 +8706,7 @@ void menu_yes_exit(Game* g)
 void menu_no_exit(Game* g)
 {
 	g->menu_depth--;
+	g->menu_temp = g->menu_stack[g->menu_depth];
 }
 
 // TODO:
@@ -8780,10 +8784,15 @@ static const Menu game_menu[]=
 };
 
 
-void Game::OpenMenu()
+void Game::OpenMenu(int method)
 {
 	if (menu_depth>=0)
 		return;
+
+	menu_temp = 0;
+	menu_down = 0;
+	menu_down_x = 0;
+	menu_down_y = 0;
 
 	if (player.talk_box)
 	{
@@ -8807,7 +8816,8 @@ void Game::OpenMenu()
 
 	show_buts = false;
 	menu_depth = 0;
-	menu_stack[menu_depth] = 0;
+
+	menu_stack[menu_depth] = method != 1 && method != 2 ? 0 : -1;
 }
 
 void Game::CloseMenu()
@@ -8816,14 +8826,72 @@ void Game::CloseMenu()
 		return;
 	show_buts = true;
 	menu_depth = -1;
+
+	// clear input
+	input.but = 0;
 }
 
-void Game::ToggleMenu()
+void Game::ToggleMenu(int method)
 {
 	if (menu_depth>=0)
 		CloseMenu();
 	else
-		OpenMenu();
+		OpenMenu(method);
+}
+
+int Game::HitMenu(int hx, int hy)
+{
+	if (menu_depth<0)
+		return -3;
+
+	int cp[2] = { hx, hy };
+	ScreenToCell(cp);
+	hx=cp[0];
+	hy=cp[1];
+
+	const Menu* m = game_menu;
+	const char* title = "MENU";
+	for (int d=0; d<menu_depth; d++)
+	{
+		title = m[ menu_stack[d] ].str;
+		m = m[ menu_stack[d] ].sub;
+	}
+
+	// right align
+	int x = render_size[0]-5;
+	int y = render_size[1]-10;
+
+	// title test
+	{
+		int w = 0, h = 0;
+		Font1Size(title,&w,&h);
+
+		if (hx >= 3+x-w /*&& hx<3+x*/ && hy >=y && hy<y+h)
+		{
+			// title hit
+			return -1;
+		}
+
+		y -= h+2;
+	}
+
+	int i=0;
+	while(m[i].str)
+	{
+		int w = 0, h = 0;
+		Font1Size(m[i].str,&w,&h);
+
+		if (hx >= x-w /*&& hx < x*/ && hy>=y && hy<y+h)
+		{
+			// item hit
+			return i;
+		}
+
+		y -= h+1;
+		i++;
+	}
+
+	return -2;
 }
 
 void Game::PaintMenu(AnsiCell* ptr, int width, int height)
@@ -8839,9 +8907,7 @@ void Game::PaintMenu(AnsiCell* ptr, int width, int height)
 		m = m[ menu_stack[d] ].sub;
 	}
 
-
 	// right align
-
 	int x = width-5;
 	int y = height-10;
 
@@ -8881,6 +8947,9 @@ void Game::PaintMenu(AnsiCell* ptr, int width, int height)
 
 void Game::MenuKeyb(GAME_KEYB keyb, int key)
 {
+	if (menu_down)
+		return; // captured by mouse/touch
+
 	if (keyb==KEYB_DOWN && (key==A3D_ENTER || key==A3D_NUMPAD_ENTER))
 	{
 		// handle only char->press!
@@ -8912,19 +8981,28 @@ void Game::MenuKeyb(GAME_KEYB keyb, int key)
 		for (int d=0; d<menu_depth; d++)
 			m = m[ menu_stack[d] ].sub;
 
-		if (key==A3D_RIGHT && m[ menu_stack[menu_depth] ].sub || key==A3D_ENTER)
+		if (menu_stack[menu_depth]>=0)
 		{
-			if (m[ menu_stack[menu_depth] ].sub)
+			if (key==A3D_RIGHT && m[ menu_stack[menu_depth] ].sub || key==A3D_ENTER)
 			{
-				menu_depth++;
-				menu_stack[menu_depth]=0;
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+				if (m[ menu_stack[menu_depth] ].action)
+				{
+					m[ menu_stack[menu_depth] ].action(this);
+				}
+				return;
 			}
-			else
-			if (m[ menu_stack[menu_depth] ].action)
-			{
-				m[ menu_stack[menu_depth] ].action(this);
-			}
-			return;
+		}
+		else
+		if (key==A3D_RIGHT || key==A3D_ENTER)
+		{
+			menu_stack[menu_depth]=menu_temp;
 		}
 
 		if (key==A3D_LEFT || keyb==KEYB_PRESS && key==A3D_BACKSPACE)
@@ -8935,31 +9013,223 @@ void Game::MenuKeyb(GAME_KEYB keyb, int key)
 				return;
 			}
 			menu_depth--;
+			menu_temp = menu_stack[menu_depth];
 			return;
 		}
 
 		if (key==A3D_DOWN)
 		{
+			if (menu_stack[menu_depth] < 0)
+				menu_stack[menu_depth] = menu_temp;
+			else
 			if (m[menu_stack[menu_depth]+1].str)
+			{
 				menu_stack[menu_depth]++;
+				menu_temp = menu_stack[menu_depth];
+			}
 			return;
 		}
 
 		if (key==A3D_UP)
 		{
+			if (menu_stack[menu_depth] < 0)
+				menu_stack[menu_depth] = menu_temp;
+			else
 			if (menu_stack[menu_depth]>0)
+			{
 				menu_stack[menu_depth]--;
+				menu_temp = menu_stack[menu_depth];
+			}
 			return;
 		}
 	}
 }
 
+
 void Game::MenuMouse(GAME_MOUSE mouse, int x, int y)
 {
+	if (menu_down==2)
+		return; // captured by touch
+
+	if (mouse == GAME_MOUSE::MOUSE_MOVE)
+	{
+		if (menu_down)
+		{
+			// retest
+			int hit = HitMenu(x,y);
+			if (hit != menu_stack[menu_depth])
+				menu_stack[menu_depth] = -1;
+		}
+	}
+
+	if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_DOWN)
+	{
+		menu_down = 1;
+
+		int hit = HitMenu(x,y);
+		if (hit<-1)
+		{
+			CloseMenu();
+			return;						
+		}
+
+		if (hit>=0)
+		{
+			menu_stack[menu_depth]=hit;
+			menu_temp = menu_stack[menu_depth];
+		}
+		else
+			menu_stack[menu_depth]=-1;
+
+		return;
+	}
+
+	if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_UP)
+	{
+		if (menu_down)
+		{
+			// retest
+			int hit = HitMenu(x,y);
+			if (hit == menu_stack[menu_depth])
+			{
+				if (hit==-1)
+				{
+					// go back
+					if (menu_depth==0)
+					{
+						CloseMenu();
+						return;						
+					}
+					else
+					{
+						menu_depth--;
+						menu_temp = menu_stack[menu_depth];
+					}
+				}
+				else
+				if (hit>=0)
+				{
+					const Menu* m = game_menu;
+					for (int d=0; d<menu_depth; d++)
+						m = m[ menu_stack[d] ].sub;		
+
+					// action!
+					if (m[ menu_stack[menu_depth] ].sub)
+					{
+						menu_depth++;
+						menu_stack[menu_depth]=-1; // clear next hilight
+						menu_temp = 0;
+					}
+					else
+					if (m[ menu_stack[menu_depth] ].action)
+					{
+						m[ menu_stack[menu_depth] ].action(this);
+					}
+				}
+			}
+		}
+
+		menu_down = 0;
+		menu_stack[menu_depth]=-1;
+	}
 }
 
 void Game::MenuTouch(GAME_TOUCH touch, int id, int x, int y)
 {
+	if (menu_down==1)
+		return; // captured by mouse
+
+	if (id==1)
+	{
+		switch(touch)
+		{
+			case GAME_TOUCH::TOUCH_BEGIN:
+			{
+				menu_down = 2;
+				int hit = HitMenu(x,y);
+				if (hit<-1)
+				{
+					CloseMenu();
+					return;						
+				}
+
+				if (hit>=0)
+				{
+					menu_stack[menu_depth]=hit;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+					menu_stack[menu_depth]=-1;
+
+				break;
+			}
+
+			case GAME_TOUCH::TOUCH_MOVE:
+				if (menu_down)
+				{
+					// retest
+					int hit = HitMenu(x,y);
+					if (hit != menu_stack[menu_depth])
+						menu_stack[menu_depth] = -1;
+				}
+				break;
+
+			case GAME_TOUCH::TOUCH_END:
+			{
+				if (menu_down)
+				{
+					// retest
+					int hit = HitMenu(x,y);
+					if (hit == menu_stack[menu_depth])
+					{
+						if (hit==-1)
+						{
+							// go back
+							if (menu_depth==0)
+							{
+								CloseMenu();
+								return;						
+							}
+							else
+							{
+								menu_depth--;
+								menu_temp = menu_stack[menu_depth];
+							}
+						}
+						else
+						if (hit>=0)
+						{
+							const Menu* m = game_menu;
+							for (int d=0; d<menu_depth; d++)
+								m = m[ menu_stack[d] ].sub;		
+
+							// action!
+							if (m[ menu_stack[menu_depth] ].sub)
+							{
+								menu_depth++;
+								menu_stack[menu_depth]=-1; // clear next hilight
+								menu_temp = 0;
+							}
+							else
+							if (m[ menu_stack[menu_depth] ].action)
+							{
+								m[ menu_stack[menu_depth] ].action(this);
+							}
+						}
+					}
+				}
+
+				menu_down = 0;
+				menu_stack[menu_depth]=-1;				
+				break;
+			}
+
+			case GAME_TOUCH::TOUCH_CANCEL:
+				menu_down = 0;
+				menu_stack[menu_depth]=-1;
+				break;
+		}
+	}
 }
 
 void Game::MenuPadMount(bool connected)
@@ -8968,6 +9238,9 @@ void Game::MenuPadMount(bool connected)
 
 void Game::MenuPadButton(int b, bool down)
 {
+	if (menu_down)
+		return; // captured by mouse/touch
+
 	if (!down)
 		return;
 
@@ -8979,16 +9252,22 @@ void Game::MenuPadButton(int b, bool down)
 	{
 		case 0:
 		{
-			if (m[ menu_stack[menu_depth] ].sub)
+			if (menu_stack[menu_depth]>=0)
 			{
-				menu_depth++;
-				menu_stack[menu_depth]=0;
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+				if (m[ menu_stack[menu_depth] ].action)
+				{
+					m[ menu_stack[menu_depth] ].action(this);
+				}
 			}
 			else
-			if (m[ menu_stack[menu_depth] ].action)
-			{
-				m[ menu_stack[menu_depth] ].action(this);
-			}
+				menu_stack[menu_depth]=menu_temp;
 			break;
 		}
 
@@ -9024,15 +9303,27 @@ void Game::MenuPadButton(int b, bool down)
 		case 11:
 		{
 			// dir up
+			if (menu_stack[menu_depth]<0)
+				menu_stack[menu_depth]=menu_temp;
+			else
 			if (menu_stack[menu_depth]>0)
+			{
 				menu_stack[menu_depth]--;			
+				menu_temp = menu_stack[menu_depth];
+			}
 			break;
 		}
 		case 12:
 		{
 			// dir down
+			if (menu_stack[menu_depth]<0)
+				menu_stack[menu_depth]=menu_temp;
+			else
 			if (m[menu_stack[menu_depth]+1].str)
+			{
 				menu_stack[menu_depth]++;			
+				menu_temp = menu_stack[menu_depth];
+			}
 			break;
 		}
 		case 13:
@@ -9044,18 +9335,25 @@ void Game::MenuPadButton(int b, bool down)
 				return;
 			}
 			menu_depth--;
+			menu_temp = menu_stack[menu_depth];
 			break;
 		}
 		case 14:
 		{
-			// dir right
-			// only sub, with dir_right
-			// action requires main button
-			if (m[ menu_stack[menu_depth] ].sub)
+			if (menu_stack[menu_depth]>=0)
 			{
-				menu_depth++;
-				menu_stack[menu_depth]=0;
+				// dir right
+				// only sub, with dir_right
+				// action requires main button
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
 			}
+			else
+				menu_stack[menu_depth]=menu_temp;
 			break;
 		}
 	}
