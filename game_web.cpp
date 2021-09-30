@@ -120,7 +120,25 @@ bool NextGLFont()
 
 void exit_handler(int signum)
 {
-    EM_ASM({history.back();});
+    EM_ASM(
+    {
+        try 
+        { 
+            if (window.history.length<=1)
+                window.close();
+            else
+            if (history.state && history.state.inline == 1)
+            {
+                // we can't close, we cant go back
+                // should we really go forward?
+
+                // history.forward(); 
+            }
+            else
+                history.back();
+        }
+        catch(e) {}
+    });
 }
 
 void ToggleFullscreen(Game* g)

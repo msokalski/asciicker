@@ -80,6 +80,9 @@
             console.log('ServiceWorker registration failed: ', err);
           });
         });
+
+        if (history.state === null)
+          history.replaceState({inline:history.length},document.title,location.href);
       }
     </script>
 
@@ -1044,7 +1047,7 @@
 				var failed = 0;
 				
 				// start with default size
-				var fonts = [10, 6,8,12,16,14,18,20];
+				var fonts = [10, 6,8,12,16,14,18,20,24,28,32,36,40];
 				
 				var required = fonts.length;
 				
