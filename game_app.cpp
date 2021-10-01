@@ -2076,6 +2076,14 @@ int main(int argc, char* argv[])
 
             int bytes = stream_bytes + fresh_bytes;
 
+            /*
+            FILE* kl = fopen("keylog.txt","a");
+            for (int i=0; i<bytes; i++)
+                fprintf(kl,"0x%02X, ",stream[i]);
+            fprintf(kl,"\n");
+            fclose(kl);
+            */
+
             int i = 0;
             while (i<bytes)
             {

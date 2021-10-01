@@ -4372,6 +4372,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (_stamp-stamp > 500000) // treat lags longer than 0.5s as stall
 		stamp = _stamp;
 
+	// handle dirpad autorep
+	if (input.pad_connected && input.pad_autorep>0)
+	{
+		if (stamp - input.pad_stamp > 500000)
+		{
+			input.pad_stamp = stamp - 500000 + 50000; // 20Hz
+			OnPadButton(input.pad_autorep-1, true);
+		}
+	}
+
 	if (PressKey && _stamp - PressStamp > 50000 /*500000*/)
 	{
 		// in render(): 
@@ -4525,8 +4535,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		if (menu_depth<0)
 		{
-			io.x_force += input.pad_axis[0] / 1024 / 32.0f;
-			io.y_force -= input.pad_axis[1] / 1024 / 32.0f;
+			if (input.contact[3].action == Input::Contact::NONE)
+			{
+				io.x_force += input.pad_axis[0] / 1024 / 32.0f;
+				io.y_force -= input.pad_axis[1] / 1024 / 32.0f;
+			}
 		}
 
 		if (!torque_handled)
@@ -6016,6 +6029,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		items_count = items;
 		items_inrange = inrange;
 
+		// crop pad_item index (note: it is in range (0..items_count, where 0 means no selection)
+		input.pad_item = input.pad_item < items_count ? input.pad_item : items_count;
 
 		int clip_width = width - scene_shift/2;
 
@@ -6058,6 +6073,26 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			items_xarr[i] = items_x-1;
 
 			Sprite::Frame* frame = inrange[i]->proto->sprite_2d->atlas;
+
+			if (i+1 == input.pad_item)
+			{
+				int x0 = items_x;
+				int x1 = items_x + frame->width - 1;
+				int y0 = items_y - max_height;
+				int y1 = items_y - 1;
+
+				AnsiCell* ac;
+				for (int y=y0; y<=y1; y++)
+				{
+					for (int x=x0; x<=x1; x++)
+					{
+						ac = ptr + x + y * width;
+						ac->bk = brown;
+						ac->fg = black;
+						ac->gl = 32;
+					}
+				}
+			}			
 
 			// check if in contact
 			int in_contact = -1;
@@ -6167,6 +6202,57 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		items_xarr[items] = items_x - 1;
 		items_ylo = items_y - max_height - 1;
 		items_yhi = items_y;
+
+		if (input.pad_item)
+		{
+			// redraw frame hilight
+			int x0 = items_xarr[input.pad_item-1];
+			int x1 = items_xarr[input.pad_item];
+			int y0 = items_ylo;
+			int y1 = items_yhi;
+
+			int xc = (x0+x1)/2;
+
+			AnsiCell* ac;
+
+			ac = ptr + x0 + y0 * width;
+			ac->fg = yellow;
+			ac->gl = 192; // ll
+
+			ac = ptr + x1 + y0 * width;
+			ac->fg = yellow;
+			ac->gl = 217; // lr
+
+			ac = ptr + x0 + y1 * width;
+			ac->fg = yellow;
+			ac->gl = 218; // ul
+
+			ac = ptr + x1 + y1 * width;
+			ac->fg = yellow;
+			ac->gl = 191; // ur
+
+			for (int x=x0+1; x< x1; x++)
+			{
+				ac = ptr + x + y0 * width;
+				ac->fg = yellow;
+				if (x != xc)
+					ac->gl = 196; // hor
+
+				ac = ptr + x + y1 * width;
+				ac->fg = yellow;
+				ac->gl = 196; // hor
+			}
+			for (int y=y0+1; y< y1; y++)
+			{
+				ac = ptr + x0 + y * width;
+				ac->fg = yellow;
+				ac->gl = 179; // ver
+
+				ac = ptr + x1 + y * width;
+				ac->fg = yellow;
+				ac->gl = 179; // ver
+			}
+		}
 	}
 	else
 	{
@@ -6646,20 +6732,41 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (show_inventory)
 			{
-				switch (key)
+				if (input.contact[3].action == Input::Contact::ITEM_GRID_DRAG)
 				{
-					case A3D_UP:
-						inventory.FocusNext(0, 1);
-						break;
-					case A3D_DOWN:
-						inventory.FocusNext(0, -1);
-						break;
-					case A3D_LEFT:
-						inventory.FocusNext(-1, 0);
-						break;
-					case A3D_RIGHT:
-						inventory.FocusNext(1, 0);
-						break;
+					switch (key)
+					{
+						case A3D_UP:
+							input.contact[3].pos[1]-=font_size[1];
+							break;
+						case A3D_DOWN:
+							input.contact[3].pos[1]+=font_size[1];
+							break;
+						case A3D_LEFT:
+							input.contact[3].pos[0]-=font_size[0];
+							break;
+						case A3D_RIGHT:
+							input.contact[3].pos[0]+=font_size[0];
+							break;
+					}
+				}
+				else
+				{
+					switch (key)
+					{
+						case A3D_UP:
+							inventory.FocusNext(0, 1);
+							break;
+						case A3D_DOWN:
+							inventory.FocusNext(0, -1);
+							break;
+						case A3D_LEFT:
+							inventory.FocusNext(-1, 0);
+							break;
+						case A3D_RIGHT:
+							inventory.FocusNext(1, 0);
+							break;
+					}
 				}
 			}
 		}
@@ -6699,6 +6806,72 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 						// only if not in use
 						if (!inventory.my_item[inventory.focus].in_use)
 							DropItem(inventory.focus);
+					}
+				}
+			}
+
+			if (key=='y' || key=='Y')
+			{
+				if (show_inventory)
+				{
+					Input::Contact* con = input.contact+3;
+					if (con->action == Input::Contact::NONE && inventory.focus>=0)
+					{
+						// cancel all contacts
+						// ... or prevent entering 'y' state if already there is item contact
+						CancelItemContacts();
+
+						// get xy from focused item
+						int* xy = inventory.my_item[inventory.focus].xy;
+
+						// keyb_y = 0
+						// gamepad_x = 1
+						// gamepad_y = 2
+
+						int but = 0; // keyb_y
+						// StartContact(3/*KEYB/PAD*/, xy[0],xy[1], but);
+
+						// synthetize contact
+						
+						con->action = Input::Contact::ITEM_GRID_DRAG;
+						con->item = inventory.my_item[inventory.focus].item;
+
+
+						con->my_item = inventory.focus; // ?
+
+						// calc synthetized scrren position for contact
+
+						int ix = inventory.layout_x + xy[0]*4 + 4;
+						int iy = inventory.layout_y + xy[1]*4 + 
+								 inventory.layout_height - 6 - (inventory.height*4-1) + 
+								 inventory.scroll;
+
+						// centered on item
+						ix += con->item->proto->sprite_2d->atlas->width/2;
+						iy += con->item->proto->sprite_2d->atlas->height/2;	
+
+						// shift slightly UP (so user can see we're in moving state)
+						iy++;
+
+						// flip y axis (sceen coords are top to bottom)
+						iy = render_size[1] - 1 - iy;	
+
+						con->drag = 0; // button
+						con->pos[0] = ix*font_size[0] + font_size[0]/2;
+						con->pos[1] = iy*font_size[1] + font_size[1]/2;
+						con->drag_from[0] = con->pos[0];
+						con->drag_from[1] = con->pos[1];
+
+						con->keyb_cap = -1;
+						con->margin = 0;
+						con->player_hit = false;
+						con->start_yaw = 0;
+					}
+					else
+					if (con->action == Input::Contact::ITEM_GRID_DRAG)
+					{
+						// try to emplace item
+						EndContact(3,con->pos[0],con->pos[1]);
 					}
 				}
 			}
@@ -8187,6 +8360,9 @@ void Game::OnPadMount(bool connect)
 {
 	input.pad_connected = connect;
 	input.pad_button = 0;
+	input.pad_autorep = 0;
+	input.pad_item = 0;
+	input.pad_stamp = stamp;
 	memset(input.pad_axis, 0, sizeof(int16_t) * 32);
 	if (connect)
 		OnPadAxis(-1, 0);
@@ -8199,12 +8375,33 @@ void Game::OnPadMount(bool connect)
 
 void Game::OnPadButton(int b, bool down)
 {
+	if (input.pad_autorep == 2+1 && !player.talk_box)
+	{
+		// clear and or ignore delete autorep if not in chat_box
+		input.pad_autorep = 0;
+		if (b==2 && !down)
+			return;
+	}
+
 	if (b >= 0 && b < 32)
 	{
 		if (down)
+		{
+			if (b>=11 && b <=14 || b==2 && player.talk_box) // autorep dirpad and delete char in talk_box
+			{
+				if (input.pad_autorep != b+1)
+				{
+					input.pad_autorep = b+1; // +1 so mem-setting to 0 is fine
+					input.pad_stamp = stamp;
+				}
+			}
 			input.pad_button |= 1 << b;
+		}
 		else
+		{
+			input.pad_autorep = 0;
 			input.pad_button &= ~(1 << b);
+		}
 
 		if (menu_depth>=0)
 		{
@@ -8231,6 +8428,83 @@ void Game::OnPadButton(int b, bool down)
 					case 1: 
 					{
 						input.jump = true;
+						break;
+					}
+
+					case 2:
+					{
+						// item_grid (inventory ops)
+						if (show_inventory)
+						{
+							Input::Contact* con = input.contact+3;
+							if (con->action == Input::Contact::NONE && inventory.focus>=0)
+							{
+								// cancel all contacts
+								// ... or prevent entering 'y' state if already there is item contact
+								CancelItemContacts();
+
+								// get xy from focused item
+								int* xy = inventory.my_item[inventory.focus].xy;
+
+								// keyb_y = 0
+								// gamepad_x = 1
+								// gamepad_y = 2
+
+								int but = 0; // keyb_y
+								// StartContact(3/*KEYB/PAD*/, xy[0],xy[1], but);
+
+								// synthetize contact
+								
+								// note: until dirpad we're in CLICK state (not DRAG)
+								con->action = Input::Contact::ITEM_GRID_CLICK;
+
+								con->item = inventory.my_item[inventory.focus].item;
+
+
+								con->my_item = inventory.focus; // ?
+
+								// calc synthetized scrren position for contact
+
+								int ix = inventory.layout_x + xy[0]*4 + 4;
+								int iy = inventory.layout_y + xy[1]*4 + 
+										inventory.layout_height - 6 - (inventory.height*4-1) + 
+										inventory.scroll;
+
+								// centered on item
+								ix += con->item->proto->sprite_2d->atlas->width/2;
+								iy += con->item->proto->sprite_2d->atlas->height/2;	
+
+								// note: until dirpad we're in CLICK state (not DRAG)
+								// shift slightly UP (so user can see we're in moving state)
+								// iy++;
+
+								// flip y axis (sceen coords are top to bottom)
+								iy = render_size[1] - 1 - iy;	
+
+								con->drag = 0; // button
+								con->pos[0] = ix*font_size[0] + font_size[0]/2;
+								con->pos[1] = iy*font_size[1] + font_size[1]/2;
+								con->drag_from[0] = con->pos[0];
+								con->drag_from[1] = con->pos[1];
+
+								con->keyb_cap = -1;
+								con->margin = 0;
+								con->player_hit = false;
+								con->start_yaw = 0;
+							}
+						}
+						break;
+					}
+
+					case 3:
+					{
+						// item_list (pickup popup)
+						Input::Contact* con = input.contact+3;
+						if (con->action == Input::Contact::NONE && !player.talk_box && items_count)
+						{
+							// hilight first
+							input.pad_item = 0+1;
+						}
 						break;
 					}
 
@@ -8263,6 +8537,7 @@ void Game::OnPadButton(int b, bool down)
 
 					case 9:
 					{
+						CancelItemContacts();
 						show_inventory = !show_inventory;
 						break;
 					}
@@ -8295,25 +8570,72 @@ void Game::OnPadButton(int b, bool down)
 					case 11:
 					{
 						if (show_inventory)
-							inventory.FocusNext(0, 1);
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(0, 1);
+							else
+							{
+								input.contact[3].pos[1]-=font_size[1];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
 						break;
 					}
 					case 12:
 					{
 						if (show_inventory)
-							inventory.FocusNext(0, -1);
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(0, -1);
+							else
+							{
+								input.contact[3].pos[1]+=font_size[1];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
+
 						break;
 					}
 					case 13:
 					{
+						if (input.pad_item>1)
+						{
+							input.pad_item--;
+						}
+						else
 						if (show_inventory)
-							inventory.FocusNext(-1, 0);
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(-1, 0);
+							else
+							{
+								input.contact[3].pos[0]-=font_size[0];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
 						break;
 					}
 					case 14:
 					{
+						if (input.pad_item && input.pad_item<items_count)
+						{
+							input.pad_item++;
+						}
+						else
 						if (show_inventory)
-							inventory.FocusNext(1, 0);
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(1, 0);
+							else
+							{
+								input.contact[3].pos[0]+=font_size[0];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
 						break;
 					}
 				}
@@ -8383,6 +8705,7 @@ void Game::OnPadButton(int b, bool down)
 						player.talk_box->Input(8);
 						break;
 					case 3: // SEND
+					{
 						Buzz();
 						if (player.talk_box->len > 0)
 						{
@@ -8429,6 +8752,7 @@ void Game::OnPadButton(int b, bool down)
 							player.talk_box->cursor_xy[1] = p[1];
 						}
 						break;
+					}	
 				}
 			}
 		}
@@ -8437,6 +8761,26 @@ void Game::OnPadButton(int b, bool down)
 			// up!
 			// todo: check if this button release should generate keyb char!
 			// ...
+
+			if (b==2)
+			{
+				if (input.contact[3].action!=Input::Contact::NONE)
+				{
+					if (input.contact[3].action==Input::Contact::ITEM_GRID_CLICK)
+						ExecuteItem(inventory.focus);
+					EndContact(3,input.contact[3].pos[0],input.contact[3].pos[1]);
+				}
+			}
+
+			if (b==3)
+			{
+				if (input.pad_item>0 && input.pad_item<=items_count)
+					PickItem(items_inrange[input.pad_item-1]);
+
+				// reset item pickup hilight 
+				input.pad_item = 0;
+			}
+
 			if (show_keyb)
 			{
 				if (b == 0 || b == 1)

@@ -333,7 +333,10 @@ struct Game
 		uint8_t key[32]; // keyb state
 
 		// pad state
+		int pad_item; // item index to pick + 1
 		bool pad_connected;
+		int pad_autorep; // button+1
+		uint64_t pad_stamp;
 		uint32_t pad_button;
 		int16_t pad_axis[32];
 
@@ -370,7 +373,7 @@ struct Game
 			int scroll;
 		};
 
-		Contact contact[4]; // 0:mouse, 1:primary_touch 2:secondary_touch 3:unused
+		Contact contact[4]; // 0:mouse, 1:primary_touch 2:secondary_touch ( 3:unused -> GAMEPAD/KEYB )
 
 		uint8_t but; // real mouse buttons currently down
 		int wheel;   // relative mouse wheel (only from real mouse)
