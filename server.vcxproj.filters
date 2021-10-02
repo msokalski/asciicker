@@ -41,6 +41,7 @@
     </ClInclude>
     <ClInclude Include="enemygen.h" />
     <ClInclude Include="font1.h" />
+    <ClInclude Include="gamepad.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="world.cpp">
@@ -78,5 +79,8 @@
     </ClCompile>
     <ClCompile Include="enemygen.cpp" />
     <ClCompile Include="font1.cpp" />
+    <ClCompile Include="gamepad.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

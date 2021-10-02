@@ -23,6 +23,7 @@
     <ClInclude Include="fast_rand.h" />
     <ClInclude Include="font1.h" />
     <ClInclude Include="game.h" />
+    <ClInclude Include="gamepad.h" />
     <ClInclude Include="inventory.h" />
     <ClInclude Include="network.h" />
     <ClInclude Include="physics.h" />
@@ -35,6 +36,7 @@
     <ClCompile Include="enemygen.cpp" />
     <ClCompile Include="font1.cpp" />
     <ClCompile Include="game.cpp" />
+    <ClCompile Include="gamepad.cpp" />
     <ClCompile Include="game_svr.cpp" />
     <ClCompile Include="inventory.cpp" />
     <ClCompile Include="network.cpp" />

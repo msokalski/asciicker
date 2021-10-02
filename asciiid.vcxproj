@@ -173,6 +173,7 @@
     <ClInclude Include="enemygen.h" />
     <ClInclude Include="font1.h" />
     <ClInclude Include="game.h" />
+    <ClInclude Include="gamepad.h" />
     <ClInclude Include="gl45_emu.h" />
     <ClInclude Include="inventory.h" />
     <ClInclude Include="platform.h" />
@@ -208,6 +209,7 @@
     <ClCompile Include="enemygen.cpp" />
     <ClCompile Include="font1.cpp" />
     <ClCompile Include="game.cpp" />
+    <ClCompile Include="gamepad.cpp" />
     <ClCompile Include="gl45_emu.cpp" />
     <ClCompile Include="inventory.cpp" />
     <ClCompile Include="mswin.cpp" />

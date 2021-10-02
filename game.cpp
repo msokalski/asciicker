@@ -10,6 +10,7 @@
 #include "fast_rand.h"
 
 #include "font1.h"
+#include "gamepad.h"
 
 uint8_t ConvertToCP437(uint32_t uc)
 {
@@ -2691,6 +2692,7 @@ void LoadSprites()
 
 	// load other sprtes...
 	LoadFont1();
+	LoadGamePad();
 
 	// main buts
 	character_button = LoadSpriteBP("character.xp", 0, false);
@@ -3046,6 +3048,8 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 void FreeSprites()
 {
 	FreeFont1();
+	FreeGamePad();
+
 	// handles double refs but not sprite prefs!
 	while (Sprite* s = GetFirstSprite())
 		FreeSprite(s);
@@ -6461,6 +6465,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
+	PaintGamePad(ptr, width, height);
 	PaintMenu(ptr, width, height);
 	/*
 	Font1Paint(ptr, width, height, 10, 22, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 0);
@@ -8995,18 +9000,26 @@ void BloodLeak(Character* c, int steps)
 
 void GamePadMount(bool connected)
 {
+	if (connected)
+		ConnectGamePad("temp", 4, 0, 0, 0);
+	else
+		DisconnectGamePad();
+
 	if (prime_game)
 		prime_game->OnPadMount(connected);
 }
 
 void GamePadButton(int b, bool down)
 {
+	UpdateGamePadButton(b, down ? 32767 : 0);
 	if (prime_game)
 		prime_game->OnPadButton(b,down);
 }
 
 void GamePadAxis(int a, int16_t pos)
 {
+	UpdateGamePadAxis(a, pos);
+
 	if (prime_game)
 		prime_game->OnPadAxis(a, pos);
 }
