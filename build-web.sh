@@ -33,6 +33,7 @@ cp asciicker.js .web/asciicker.js
 
 emcc --emrun -O3 \
     font1.cpp \
+	gamepad.cpp \
     game.cpp \
     game_web.cpp \
     enemygen.cpp \
@@ -54,6 +55,7 @@ emcc --emrun -O3 \
     -lidbfs.js \
     --preload-file a3d/game_map_y8.a3d \
     --preload-file sprites/font-1.xp \
+    --preload-file sprites/gamepad.xp \
     --preload-file sprites/fire.xp \
     --preload-file sprites/grid-alpha-sword.xp \
     --preload-file sprites/grid-apple.xp \

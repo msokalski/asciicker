@@ -1210,7 +1210,7 @@ bool read_js(int fd)
             {
                 case JS_EVENT_BUTTON:
                     if (js->number < sizeof(js_btnmap)/2 && js_btnmap[js->number]>=0)
-                        GamePadButton(js_btnmap[js->number],js->value!=0);
+                        GamePadButton(js_btnmap[js->number],js->value ? 32767 : 0);
                     break;
                 case JS_EVENT_AXIS:
                     if (js->number < sizeof(js_axmap)/1 && js_axmap[js->number]>=0)
@@ -1221,14 +1221,14 @@ bool read_js(int fd)
                         if (a == 0xFE)
                         {
                             if (dirpad_x<-10000 && v>=-10000)
-                                GamePadButton(13,false);
+                                GamePadButton(13,0);
                             if (dirpad_x<=10000 && v>10000)
-                                GamePadButton(14,true);
+                                GamePadButton(14,32767);
 
                             if (dirpad_x>10000 && v<=10000)
-                                GamePadButton(14,false);
+                                GamePadButton(14,0);
                             if (dirpad_x>=-10000 && v<-10000)
-                                GamePadButton(13,true);
+                                GamePadButton(13,32767);
 
                             dirpad_x = v;
                         }
@@ -1236,14 +1236,14 @@ bool read_js(int fd)
                         if (a == 0xFF)
                         {
                             if (dirpad_y<-10000 && v>=-10000)
-                                GamePadButton(11,false);
+                                GamePadButton(11,0);
                             if (dirpad_y<=10000 && v>10000)
-                                GamePadButton(12,true);
+                                GamePadButton(12,32767);
 
                             if (dirpad_y>10000 && v<=10000)
-                                GamePadButton(12,false);
+                                GamePadButton(12,0);
                             if (dirpad_y>=-10000 && v<-10000)
-                                GamePadButton(11,true);
+                                GamePadButton(11,32767);
 
                             dirpad_y = v;
                         }
@@ -1854,7 +1854,7 @@ int main(int argc, char* argv[])
     if (jsfd>=0)
     {
         // report mount
-        GamePadMount(true);
+        GamePadMount("fixme",6,16);
     }
 
     while(running)
@@ -1865,7 +1865,7 @@ int main(int argc, char* argv[])
             // report mount
             jsfd = scan_js();
             if (jsfd >= 0)
-                GamePadMount(true);
+                GamePadMount("fixme",6,16);
         }        
       
         bool mouse_j = false;
@@ -1905,7 +1905,7 @@ int main(int argc, char* argv[])
 
                 if (pfds[2].revents & (POLLHUP|POLLERR))
                 {
-                    GamePadMount(false);
+                    GamePadUnmount();
                     close(jsfd);
                     jsfd=-1;                    
                 }
@@ -1914,7 +1914,7 @@ int main(int argc, char* argv[])
                 {
                     if (!read_js(jsfd))
                     {
-                        GamePadMount(false);
+                        GamePadUnmount();
                         close(jsfd);
                         jsfd=-1;
                     }
@@ -2045,7 +2045,7 @@ int main(int argc, char* argv[])
 
                 if (pfds[1].revents & (POLLHUP|POLLERR))
                 {
-                    GamePadMount(false);
+                    GamePadUnmount();
                     close(jsfd);
                     jsfd=-1;                    
                 }
@@ -2054,7 +2054,7 @@ int main(int argc, char* argv[])
                 {
                     if (!read_js(jsfd))
                     {
-                        GamePadMount(false);
+                        GamePadUnmount();
                         close(jsfd);
                         jsfd=-1;
                     }
@@ -2633,7 +2633,7 @@ int main(int argc, char* argv[])
 
     if (jsfd>=0)
     {
-        GamePadMount(false);
+        GamePadUnmount();
         close(jsfd);
         jsfd = -1;
     }

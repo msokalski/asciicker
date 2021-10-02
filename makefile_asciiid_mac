@@ -11,6 +11,7 @@ SRCS :=	asciiid.cpp \
 		sdl.cpp \
 		urdo.cpp \
 		font1.cpp \
+		gamepad.cpp \
 		game.cpp \
 		enemygen.cpp \
 		render.cpp \

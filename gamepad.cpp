@@ -1,3 +1,4 @@
+#include <string.h>
 
 #include "sprite.h"
 #include "gamepad.h"

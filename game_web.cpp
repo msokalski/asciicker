@@ -348,14 +348,20 @@ extern "C"
         switch (ev)
         {
             case 0:
-                GamePadMount(idx!=0);
+                if (!idx)
+                    GamePadUnmount();
+                else
+                    GamePadMount("fixme",6,16);
                 break;
             case 1:
+            {
+                int16_t v = (int16_t)(val*32767);
                 if (idx>=0 && idx<16)
                 {
-                    GamePadButton(idx,val>0.5f);
+                    GamePadButton(idx,v);
                 }
                 break;
+            }
             case 2:
             {
                 int16_t v = (int16_t)(val*32767);
