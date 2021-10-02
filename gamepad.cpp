@@ -87,18 +87,21 @@ void FreeGamePad()
 	gamepad_sprite = 0;
 }
 
-void UpdateGamePadAxis(int a, int16_t pos)
+uint32_t UpdateGamePadAxis(int a, int16_t pos)
 {
 	gamepad_axis[a] = pos;
+	return 0;
 }
 
-void UpdateGamePadButton(int b, int16_t pos)
+uint32_t UpdateGamePadButton(int b, int16_t pos)
 {
 	gamepad_button[b] = pos;
+	return 0;
 }
 
 void ConnectGamePad(const char* name, int axes, int buttons, const int16_t axis[], const int16_t button[])
 {
+	printf("GAMEPAD MOUNT: %s %d axes %d buttons\n", name, axes, buttons);
 	strcpy(gamepad_name, name);
 	gamepad_buttons = buttons;
 	gamepad_axes = axes;

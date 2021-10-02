@@ -482,6 +482,7 @@ void PaintTerrain(float* xy, float r, int matid);
 void BloodLeak(Character* c, int steps);
 
 
-void GamePadMount(bool connected);
-void GamePadButton(int b, bool down);
+void GamePadMount(const char* name, int axes, int buttons);
+void GamePadUnmount();
+void GamePadButton(int b, int16_t pos);
 void GamePadAxis(int a, int16_t pos);

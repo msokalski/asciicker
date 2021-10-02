@@ -240,8 +240,9 @@ void* a3dGetCookie(A3D_WND* wnd);
 
 struct LoopInterface
 {
-	void(*gpad_mount)(bool connected);
-	void(*gpad_button)(int b, bool down);
+	void(*gpad_mount)(const char* name, int axes, int buttons);
+	void(*gpad_unmount)();
+	void(*gpad_button)(int b, int16_t pos);
 	void(*gpad_axis)(int a, int16_t pos);
 };
 

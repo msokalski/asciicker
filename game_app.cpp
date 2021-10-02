@@ -1613,7 +1613,7 @@ int main(int argc, char* argv[])
             fonts_loaded = 0;
             a3dListDir(font_dirname, MyFont::Scan, font_dirname);
 
-			LoopInterface li = { GamePadMount, GamePadButton, GamePadAxis };
+			LoopInterface li = { GamePadMount, GamePadUnmount, GamePadButton, GamePadAxis };
             a3dLoop(&li);
         }
 

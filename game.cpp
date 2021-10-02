@@ -8998,30 +8998,78 @@ void BloodLeak(Character* c, int steps)
 // but if something calls them, we can be certainly sure we have exactly 1 game object
 // so let's use prime_game blindly
 
-void GamePadMount(bool connected)
+void GamePadMount(const char* name, int axes, int buttons)
 {
-	if (connected)
-		ConnectGamePad("temp", 4, 0, 0, 0);
-	else
-		DisconnectGamePad();
+	ConnectGamePad(name, axes, buttons, 0, 0);
 
 	if (prime_game)
-		prime_game->OnPadMount(connected);
+		prime_game->OnPadMount(true);
 }
 
-void GamePadButton(int b, bool down)
+void GamePadUnmount()
 {
-	UpdateGamePadButton(b, down ? 32767 : 0);
+	DisconnectGamePad();
+
 	if (prime_game)
-		prime_game->OnPadButton(b,down);
+		prime_game->OnPadMount(false);
+}
+
+void GamePadButton(int b, int16_t pos)
+{
+	uint32_t map = UpdateGamePadButton(b, pos < 0 ? 0 : pos);
+
+	// mapped value: 0x0000FFFF
+	// mapping kind: 0x00FF0000
+	// mapped index: 0xFF000000
+
+	if (prime_game)
+	{
+		switch ((map >> 16) & 0xFF)
+		{
+			case 0: 
+				// use default mapping
+				prime_game->OnPadButton(b, pos >= 16384);
+				break;
+			case 1: 
+				// mapped to button
+				prime_game->OnPadButton(((map >> 24) & 0xFF), (int16_t)(map & 0xffff) >= 16384);
+				break;
+			case 2:
+				// mapped to axis
+				prime_game->OnPadAxis(((map >> 24) & 0xFF), (int16_t)(map & 0xffff));
+				break;
+			default:
+				// mapping clear
+				break;
+		}
+	}
 }
 
 void GamePadAxis(int a, int16_t pos)
 {
-	UpdateGamePadAxis(a, pos);
+	uint32_t map = UpdateGamePadAxis(a, pos);
 
 	if (prime_game)
-		prime_game->OnPadAxis(a, pos);
+	{
+		switch ((map >> 16) & 0xFF)
+		{
+		case 0:
+			// use default mapping
+			prime_game->OnPadAxis(a, pos);
+			break;
+		case 1:
+			// mapped to button
+			prime_game->OnPadButton(((map >> 24) & 0xFF), (int16_t)(map & 0xffff) >= 16384);
+			break;
+		case 2:
+			// mapped to axis
+			prime_game->OnPadAxis(((map >> 24) & 0xFF), (int16_t)(map & 0xffff));
+			break;
+		default:
+			// mapping clear
+			break;
+		}
+	}
 }
 
 ////////////////////////////////////////////////////////

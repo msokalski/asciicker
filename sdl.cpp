@@ -612,7 +612,18 @@ void a3dLoop(const LoopInterface* li)
 					if (!sdl.gamepad)
 						sdl.gamepad = SDL_GameControllerOpen(ev->which);
 					if (sdl.gamepad && li && li->gpad_mount)
-						li->gpad_mount(true);
+					{
+						SDL_Joystick* joy = SDL_GameControllerGetJoystick(sdl.gamepad);
+						int axes = SDL_JoystickNumAxes(joy);
+						int buttons = SDL_JoystickNumButtons(joy);
+						int hats = SDL_JoystickNumHats(joy); // each has 4 buttons - included in num_buttons!
+						char* sdlmap_str = SDL_GameControllerMapping(sdl.gamepad);
+						// todo:
+						// convert sdlmap_str to out = arr[in] and pass it to li->gpad_mount
+						printf("MAP: %s\n", sdlmap_str);
+						SDL_free(sdlmap_str);
+						li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons);
+					}
 					break;
 				}
 				
@@ -630,8 +641,8 @@ void a3dLoop(const LoopInterface* li)
 					SDL_GameController* gc = SDL_GameControllerFromInstanceID(ev->which);
 					if (gc && gc == sdl.gamepad)
 					{
-						if (li && li->gpad_mount)
-							li->gpad_mount(false);
+						if (li && li->gpad_unmount)
+							li->gpad_unmount();
 						SDL_GameControllerClose(sdl.gamepad);
 						sdl.gamepad = 0;
 
@@ -645,7 +656,18 @@ void a3dLoop(const LoopInterface* li)
 								if (sdl.gamepad)
 								{
 									if (li && li->gpad_mount)
-										li->gpad_mount(true);
+									{
+										SDL_Joystick* joy = SDL_GameControllerGetJoystick(sdl.gamepad);
+										int axes = SDL_JoystickNumAxes(joy);
+										int buttons = SDL_JoystickNumButtons(joy);
+										int hats = SDL_JoystickNumHats(joy); // each has 4 buttons - included in num_buttons!
+										char* sdlmap_str = SDL_GameControllerMapping(sdl.gamepad);
+										// todo:
+										// convert sdlmap_str to out = arr[in] and pass it to li->gpad_mount
+										printf("MAP: %s\n", sdlmap_str);
+										SDL_free(sdlmap_str);
+										li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons);
+									}
 									break;
 								}
 							}
@@ -678,7 +700,7 @@ void a3dLoop(const LoopInterface* li)
 					if (gc && gc == sdl.gamepad)
 					{
 						if (li && li->gpad_button)
-							li->gpad_button(ev->button, ev->state != 0);
+							li->gpad_button(ev->button, ev->state ? 32767 : 0);
 					}
 					break;
 				}
