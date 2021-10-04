@@ -122,10 +122,25 @@ static int UpdateAxisOutput(int a, uint32_t* out)
 		int v = gamepad_input[d];
 		int m = gamepad_mapping[d];
 
-		if (m&0x40)
-			accum -= v;
+		// check hacked unsigned
+		int in = d>>1;
+		if (((m&0x80) == 0) && gamepad_mapping[2*in] == gamepad_mapping[2*in+1])
+		{
+			if (d&1) // update once per hack pair
+			{
+				if (m&0x40)
+					accum += ((int)gamepad_input[2*in] - (int)gamepad_input[2*in+1] + 32768)/2; // unsigned flipped
+				else
+					accum += ((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2; // unsigned normal
+			}
+		}
 		else
-			accum += v;
+		{
+			if (m&0x40)
+				accum -= v;
+			else
+				accum += v;
+		}
 
 		dep++;
 	}

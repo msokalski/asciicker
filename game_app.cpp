@@ -1202,7 +1202,7 @@ int scan_js(char* gamepad_name, int* gamepad_axes, int* gamepad_buttons, uint8_t
                     break;
 
                 case 2: // left-z (compressed, 0x04 output is unsigned )
-                    m[neg] = 0xFF; //(0<<7) | (1<<6) | 0x04;
+                    m[neg] = (0<<7) | (0<<6) | 0x04;
                     m[pos] = (0<<7) | (0<<6) | 0x04; 
                     break;
 
@@ -1217,7 +1217,7 @@ int scan_js(char* gamepad_name, int* gamepad_axes, int* gamepad_buttons, uint8_t
                     break;
 
                 case 5: //right-z (compressed, 0x05 output is unsigned )
-                    m[neg] = 0xFF; //(0<<7) | (1<<6) | 0x05; 
+                    m[neg] = (0<<7) | (0<<6) | 0x05; 
                     m[pos] = (0<<7) | (0<<6) | 0x05; 
                     break;
 
@@ -1301,61 +1301,10 @@ bool read_js(int fd)
             switch(js->type & ~JS_EVENT_INIT) 
             {
                 case JS_EVENT_BUTTON:
-                    // RAW
                     GamePadButton(js->number,js->value ? 32767 : 0);
                     break;
-                    /*
-                    if (js->number < sizeof(js_btnmap)/2 && js_btnmap[js->number]>=0)
-                        GamePadButton(js_btnmap[js->number],js->value ? 32767 : 0);
-                    */
-                    break;
                 case JS_EVENT_AXIS:
-                    // RAW
                     GamePadAxis(js->number,js->value);
-                    /*
-                    if (js->number < sizeof(js_axmap)/1 && js_axmap[js->number]>=0)
-                    {
-                        int a = js_axmap[js->number];
-                        int16_t v = js->value;
-
-                        if (a == 0xFE)
-                        {
-                            if (dirpad_x<-10000 && v>=-10000)
-                                GamePadButton(13,0);
-                            if (dirpad_x<=10000 && v>10000)
-                                GamePadButton(14,32767);
-
-                            if (dirpad_x>10000 && v<=10000)
-                                GamePadButton(14,0);
-                            if (dirpad_x>=-10000 && v<-10000)
-                                GamePadButton(13,32767);
-
-                            dirpad_x = v;
-                        }
-                        else
-                        if (a == 0xFF)
-                        {
-                            if (dirpad_y<-10000 && v>=-10000)
-                                GamePadButton(11,0);
-                            if (dirpad_y<=10000 && v>10000)
-                                GamePadButton(12,32767);
-
-                            if (dirpad_y>10000 && v<=10000)
-                                GamePadButton(12,0);
-                            if (dirpad_y>=-10000 && v<-10000)
-                                GamePadButton(11,32767);
-
-                            dirpad_y = v;
-                        }
-                        else
-                        {
-                            // unsigned compress triggers
-                            if (a == 4 || a==5)
-                                v = (v + 32767)/2;
-                            GamePadAxis(a,v);
-                        }
-                    }
-                    */
                     break;
             }
         }

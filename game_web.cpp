@@ -348,7 +348,7 @@ extern "C"
         static int gamepad_axes = 0;
         static int gamepad_buttons = 0;
         static uint8_t gamepad_mapping[256];
-        
+
         switch (ev)
         {
             case 0:
@@ -362,19 +362,13 @@ extern "C"
             case 1:
             {
                 int16_t v = (int16_t)(val*32767);
-                if (idx>=0 && idx<16)
-                {
-                    GamePadButton(idx,v);
-                }
+                GamePadButton(idx,v);
                 break;
             }
             case 2:
             {
                 int16_t v = (int16_t)(val*32767);
-                if (idx>=0 && idx<16)
-                {
-                    GamePadAxis(idx,v);
-                }
+                GamePadAxis(idx,v);
                 break;
             }
             case 3:
