@@ -5524,7 +5524,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				else
 					player.shoot_target = 0;
 
-				printf(hit ? "HIT!\n" : "MISS\n");
+				//printf(hit ? "HIT!\n" : "MISS\n");
 			}
 		}
 
@@ -5562,7 +5562,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			if (UnprojectCoords2D(renderer, input.shoot_xy, player.shoot_to))
 			{
-				printf("shot_to.z = %f\n", player.shoot_to[2]);
+				//printf("shot_to.z = %f\n", player.shoot_to[2]);
 				//player.shoot_to[0] /= HEIGHT_CELLS;
 				//player.shoot_to[1] /= HEIGHT_CELLS;
 
@@ -8998,9 +8998,9 @@ void BloodLeak(Character* c, int steps)
 // but if something calls them, we can be certainly sure we have exactly 1 game object
 // so let's use prime_game blindly
 
-void GamePadMount(const char* name, int axes, int buttons)
+void GamePadMount(const char* name, int axes, int buttons, const uint8_t mapping[])
 {
-	ConnectGamePad(name, axes, buttons, 0, 0);
+	ConnectGamePad(name, axes, buttons, mapping);
 
 	if (prime_game)
 		prime_game->OnPadMount(true);
@@ -9016,58 +9016,46 @@ void GamePadUnmount()
 
 void GamePadButton(int b, int16_t pos)
 {
-	uint32_t map = UpdateGamePadButton(b, pos < 0 ? 0 : pos);
-
-	// mapped value: 0x0000FFFF
-	// mapping kind: 0x00FF0000
-	// mapped index: 0xFF000000
+	uint32_t out[1];
+	int outs = UpdateGamePadButton(b, pos < 0 ? 0 : pos, out);
 
 	if (prime_game)
 	{
-		switch ((map >> 16) & 0xFF)
+		for (int o=0; o<outs; o++)
 		{
-			case 0: 
-				// use default mapping
-				prime_game->OnPadButton(b, pos >= 16384);
-				break;
-			case 1: 
-				// mapped to button
-				prime_game->OnPadButton(((map >> 24) & 0xFF), (int16_t)(map & 0xffff) >= 16384);
-				break;
-			case 2:
-				// mapped to axis
-				prime_game->OnPadAxis(((map >> 24) & 0xFF), (int16_t)(map & 0xffff));
-				break;
-			default:
-				// mapping clear
-				break;
+			uint32_t map = out[o];
+			switch ((map >> 16) & 0xFF)
+			{
+				case 0:
+					prime_game->OnPadAxis(map>>24, (int16_t)(map&0xFFFF));
+					break;
+				case 1:
+					prime_game->OnPadButton(map>>24, (int16_t)(map&0xFFFF) >= 16384);
+					break;
+			}
 		}
 	}
 }
 
 void GamePadAxis(int a, int16_t pos)
 {
-	uint32_t map = UpdateGamePadAxis(a, pos);
+	uint32_t out[2];
+	int outs = UpdateGamePadAxis(a, pos, out);
 
 	if (prime_game)
 	{
-		switch ((map >> 16) & 0xFF)
+		for (int o=0; o<outs; o++)
 		{
-		case 0:
-			// use default mapping
-			prime_game->OnPadAxis(a, pos);
-			break;
-		case 1:
-			// mapped to button
-			prime_game->OnPadButton(((map >> 24) & 0xFF), (int16_t)(map & 0xffff) >= 16384);
-			break;
-		case 2:
-			// mapped to axis
-			prime_game->OnPadAxis(((map >> 24) & 0xFF), (int16_t)(map & 0xffff));
-			break;
-		default:
-			// mapping clear
-			break;
+			uint32_t map = out[o];
+			switch ((map >> 16) & 0xFF)
+			{
+				case 0:
+					prime_game->OnPadAxis(map>>24, (int16_t)(map&0xFFFF));
+					break;
+				case 1:
+					prime_game->OnPadButton(map>>24, (int16_t)(map&0xFFFF) >= 16384);
+					break;
+			}
 		}
 	}
 }

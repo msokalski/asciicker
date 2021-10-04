@@ -855,7 +855,7 @@ void Server::Proc()
 
 void Server::Log(const char* str)
 {
-    printf("%s",str);
+    //printf("%s",str);
 }
 
 GameServer* Connect(const char* addr, const char* port, const char* path, const char* user)
@@ -1106,7 +1106,7 @@ static const int js_axmap_sdl[]=
 #endif
 
 
-int scan_js()
+int scan_js(char* gamepad_name, int* gamepad_axes, int* gamepad_buttons, uint8_t* gamepad_mapping)
 {
     #ifdef __linux__
     static int index = 0;
@@ -1142,6 +1142,10 @@ int scan_js()
         ioctl(fd, JSIOCGBUTTONS, &buttons);
         ioctl(fd, JSIOCGNAME(NAME_LENGTH), name);
 
+        strcpy(gamepad_name,name);
+        *gamepad_axes = axes;
+        *gamepad_buttons = buttons;
+
         // fetch button map
         memset(js_btnmap,-1,sizeof(js_btnmap));
         int btnmap_res = ioctl(fd, JSIOCGBTNMAP, js_btnmap);
@@ -1149,6 +1153,91 @@ int scan_js()
         // fetch axis map
         memset(js_axmap,-1,sizeof(js_axmap));
         int axmap_res = ioctl(fd, JSIOCGAXMAP, js_axmap);
+
+
+        // construct mapping
+        uint8_t* m = gamepad_mapping;
+        for (int i=0; i<buttons; i++)
+        {
+            int abs = 2*axes + i;
+            switch(js_btnmap[i])
+            {
+                case BTN_A: m[abs] = (1<<7) | (0<<6) | 0x00; break;
+                case BTN_B: m[abs] = (1<<7) | (0<<6) | 0x01; break;
+                case BTN_X: m[abs] = (1<<7) | (0<<6) | 0x02; break;
+                case BTN_Y: m[abs] = (1<<7) | (0<<6) | 0x03; break;
+
+                case BTN_SELECT: m[abs] = (1<<7) | (0<<6) | 0x04/*back_button*/; break;
+                case BTN_MODE:   m[abs] = (1<<7) | (0<<6) | 0x05/*guide_button*/; break;
+                case BTN_START:  m[abs] = (1<<7) | (0<<6) | 0x06/*start_button*/; break;
+
+                case BTN_THUMBL: m[abs] = (1<<7) | (0<<6) | 0x07/*left_stick_button*/; break;
+                case BTN_THUMBR: m[abs] = (1<<7) | (0<<6) | 0x08/*right_stick_button*/; break;
+
+                case BTN_TL: m[abs] = (1<<7) | (0<<6) | 0x09/*left_shoulder_button*/; break;
+                case BTN_TR: m[abs] = (1<<7) | (0<<6) | 0x0A/*right_shoulder_button*/; break;
+
+                case BTN_TL2: m[abs] = (0<<7) | (0<<6) | 0x02/*left_trigger_axis*/; break;
+                case BTN_TR2: m[abs] = (0<<7) | (0<<6) | 0x05/*right_trigger_axis*/; break;
+
+                default: 
+                    m[i] = 0xFF;
+            }
+        }
+
+        for (int i=0; i<axes; i++)
+        {
+            int neg = 2*i;
+            int pos = 2*i+1;
+            switch(js_axmap[i])
+            {
+                case 0: //left-x
+                    m[neg] = (0<<7) | (1<<6) | 0x00; 
+                    m[pos] = (0<<7) | (0<<6) | 0x00; 
+                    break;
+
+                case 1: //left-y
+                    m[neg] = (0<<7) | (1<<6) | 0x01; 
+                    m[pos] = (0<<7) | (0<<6) | 0x01; 
+                    break;
+
+                case 2: // left-z (compressed, 0x04 output is unsigned )
+                    m[neg] = 0xFF; //(0<<7) | (1<<6) | 0x04;
+                    m[pos] = (0<<7) | (0<<6) | 0x04; 
+                    break;
+
+                case 3: //right-x
+                    m[neg] = (0<<7) | (1<<6) | 0x02; 
+                    m[pos] = (0<<7) | (0<<6) | 0x02; 
+                    break;
+
+                case 4: //right-y
+                    m[neg] = (0<<7) | (1<<6) | 0x03; 
+                    m[pos] = (0<<7) | (0<<6) | 0x03; 
+                    break;
+
+                case 5: //right-z (compressed, 0x05 output is unsigned )
+                    m[neg] = 0xFF; //(0<<7) | (1<<6) | 0x05; 
+                    m[pos] = (0<<7) | (0<<6) | 0x05; 
+                    break;
+
+                case 16: // dirpad-x
+                    m[neg] = (1<<7) | (0<<6) | 0x0D; 
+                    m[pos] = (1<<7) | (0<<6) | 0x0E; 
+                    break;
+
+                case 17: // dirpad-y
+                    m[neg] = (1<<7) | (0<<6) | 0x0B; 
+                    m[pos] = (1<<7) | (0<<6) | 0x0C; 
+                    break;
+
+                default: 
+                    m[i] = 0xFF;
+            }
+        }
+
+
+        #if 0
 
         // now remap to SDL
         if (btnmap_res>=0)
@@ -1179,6 +1268,7 @@ int scan_js()
 
         skip = 10;
         index = 0;
+        #endif
     }
 
     return fd;
@@ -1197,8 +1287,10 @@ bool read_js(int fd)
         if (size<=0 || size % sizeof(js_event))
             return false;
 
+        /*
         static int dirpad_x = 0;
         static int dirpad_y = 0;
+        */
 
         int n = size / sizeof(js_event);
         for (int i=0; i<n; i++)
@@ -1209,10 +1301,18 @@ bool read_js(int fd)
             switch(js->type & ~JS_EVENT_INIT) 
             {
                 case JS_EVENT_BUTTON:
+                    // RAW
+                    GamePadButton(js->number,js->value ? 32767 : 0);
+                    break;
+                    /*
                     if (js->number < sizeof(js_btnmap)/2 && js_btnmap[js->number]>=0)
                         GamePadButton(js_btnmap[js->number],js->value ? 32767 : 0);
+                    */
                     break;
                 case JS_EVENT_AXIS:
+                    // RAW
+                    GamePadAxis(js->number,js->value);
+                    /*
                     if (js->number < sizeof(js_axmap)/1 && js_axmap[js->number]>=0)
                     {
                         int a = js_axmap[js->number];
@@ -1255,7 +1355,7 @@ bool read_js(int fd)
                             GamePadAxis(a,v);
                         }
                     }
-
+                    */
                     break;
             }
         }
@@ -1752,7 +1852,11 @@ int main(int argc, char* argv[])
         printf("UNKNOWN TERMINAL\n");
 
     // try opening js device
-    int jsfd = scan_js();
+    int gamepad_axes = 0;
+    int gamepad_buttons = 0;
+    char gamepad_name[256] = {0};
+    uint8_t gamepad_mapping[256] = {0};
+    int jsfd = scan_js(gamepad_name,&gamepad_axes,&gamepad_buttons,gamepad_mapping);
 
     SetScreen(true);
 
@@ -1854,7 +1958,7 @@ int main(int argc, char* argv[])
     if (jsfd>=0)
     {
         // report mount
-        GamePadMount("fixme",6,16);
+        GamePadMount(gamepad_name,gamepad_axes,gamepad_buttons,gamepad_mapping);
     }
 
     while(running)
@@ -1863,9 +1967,9 @@ int main(int argc, char* argv[])
         if (jsfd<0)
         {
             // report mount
-            jsfd = scan_js();
+            jsfd = scan_js(gamepad_name,&gamepad_axes,&gamepad_buttons,gamepad_mapping);
             if (jsfd >= 0)
-                GamePadMount("fixme",6,16);
+                GamePadMount(gamepad_name,gamepad_axes,gamepad_buttons,gamepad_mapping);
         }        
       
         bool mouse_j = false;

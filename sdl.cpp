@@ -613,16 +613,29 @@ void a3dLoop(const LoopInterface* li)
 						sdl.gamepad = SDL_GameControllerOpen(ev->which);
 					if (sdl.gamepad && li && li->gpad_mount)
 					{
-						SDL_Joystick* joy = SDL_GameControllerGetJoystick(sdl.gamepad);
-						int axes = SDL_JoystickNumAxes(joy);
-						int buttons = SDL_JoystickNumButtons(joy);
-						int hats = SDL_JoystickNumHats(joy); // each has 4 buttons - included in num_buttons!
-						char* sdlmap_str = SDL_GameControllerMapping(sdl.gamepad);
-						// todo:
-						// convert sdlmap_str to out = arr[in] and pass it to li->gpad_mount
-						printf("MAP: %s\n", sdlmap_str);
-						SDL_free(sdlmap_str);
-						li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons);
+						int axes = SDL_CONTROLLER_AXIS_MAX;
+						int buttons = SDL_CONTROLLER_BUTTON_MAX;
+						uint8_t mapping[2*SDL_CONTROLLER_AXIS_MAX + SDL_CONTROLLER_BUTTON_MAX];
+						int imap = 0;
+						for (int i=0; i<axes; i++)
+						{
+							uint8_t m = i<6 ? (0<<7 /*to axis*/) | (0<<6 /*no flip*/) | i : 0xFF;
+
+							if (i==4 || i==5)
+								mapping[imap++] = 0xFF; // clear negs, sdl knows it is unsigned
+							else
+								mapping[imap++] = m | (1<<6); // neg in
+							mapping[imap++] = m; // pos in
+						}
+						for (int i=0; i<buttons; i++)
+						{
+							if (i>=15)
+								mapping[imap++] = 0xFF;
+							else
+								mapping[imap++] = (1<<7 /*to button*/) | (0<<6 /*no flip*/) | i; 
+						}
+
+						li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons, mapping);
 					}
 					break;
 				}
@@ -657,16 +670,29 @@ void a3dLoop(const LoopInterface* li)
 								{
 									if (li && li->gpad_mount)
 									{
-										SDL_Joystick* joy = SDL_GameControllerGetJoystick(sdl.gamepad);
-										int axes = SDL_JoystickNumAxes(joy);
-										int buttons = SDL_JoystickNumButtons(joy);
-										int hats = SDL_JoystickNumHats(joy); // each has 4 buttons - included in num_buttons!
-										char* sdlmap_str = SDL_GameControllerMapping(sdl.gamepad);
-										// todo:
-										// convert sdlmap_str to out = arr[in] and pass it to li->gpad_mount
-										printf("MAP: %s\n", sdlmap_str);
-										SDL_free(sdlmap_str);
-										li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons);
+										int axes = SDL_CONTROLLER_AXIS_MAX;
+										int buttons = SDL_CONTROLLER_BUTTON_MAX;
+										uint8_t mapping[2*SDL_CONTROLLER_AXIS_MAX + SDL_CONTROLLER_BUTTON_MAX];
+										int imap = 0;
+										for (int i=0; i<axes; i++)
+										{
+											uint8_t m = i<6 ? (0<<7 /*to axis*/) | (0<<6 /*no flip*/) | i : 0xFF;
+
+											if (i==4 || i==5)
+												mapping[imap++] = 0xFF; // clear negs, sdl knows it is unsigned
+											else
+												mapping[imap++] = m | (1<<6); // neg in
+											mapping[imap++] = m; // pos in
+										}
+										for (int i=0; i<buttons; i++)
+										{
+											if (i>=15)
+												mapping[imap++] = 0xFF;
+											else
+												mapping[imap++] = (1<<7 /*to button*/) | (0<<6 /*no flip*/) | i; 
+										}
+
+										li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons, mapping);
 									}
 									break;
 								}

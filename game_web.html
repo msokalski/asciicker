@@ -794,8 +794,108 @@
 
       function setGamePadHandlers()
       {
-        var axes = new Float32Array(4);
-        var buts = new Float32Array(17);
+        var axes = null;
+        var buts = null;
+
+        function GamePadMap(gp)
+        {
+          GamePad(3,gp.buttons.length | (gp.axes.length<<16),0);
+          if (gp.mapping=='standard')
+          {
+            for (var a=0; a<gp.axes.length; a++)
+            {
+              var m = 0xFFFF;
+              if (a<4)
+              {
+                m = (a | (1<<6)) | (a<<8);
+              }
+              GamePad(5,(a<<16) | m,0);
+            }
+            for (var b=0; b<gp.buttons.length; b++)
+            {
+              var m = 0xFF;
+              if (b<17)
+              {
+                switch (b)
+                {
+                  case 0: m=0 | (1<<7); break;
+                  case 1: m=1 | (1<<7); break;
+                  case 2: m=2 | (1<<7); break;
+                  case 3: m=3 | (1<<7); break;
+
+                  // shoulders
+                  case 4: m=9 | (1<<7); break;
+                  case 5: m=10 | (1<<7); break;
+
+                  // triggers
+                  case 6: m=4; break;
+                  case 7: m=5; break;
+
+                  case 8: m=4 | (1<<7); break; // back
+                  case 9: m=6 | (1<<7); break; // start
+
+                  // thumbs
+                  case 10: m=7 | (1<<7); break;
+                  case 11: m=8 | (1<<7); break;
+
+                  // dpad
+                  case 12: m=11 | (1<<7); break;
+                  case 13: m=12 | (1<<7); break;
+                  case 14: m=13 | (1<<7); break;
+                  case 15: m=14 | (1<<7); break;
+
+                  // guide
+                  case 16: m=5 | (1<<7); break;                  
+                }
+              }
+
+              GamePad(4,(b<<8) | m,0);
+            }
+          }
+          else
+          {
+            // generic x-box pad
+            for (var b=0; b<gp.buttons.length; b++)
+            {
+              var m = 0xFF;
+              switch (b)
+              {
+                case 0x00: m = (1<<7) | 0x00; break;
+                case 0x01: m = (1<<7) | 0x01; break;
+                case 0x02: m = (1<<7) | 0x02; break;
+                case 0x03: m = (1<<7) | 0x03; break;
+
+                case 0x06: m = (1<<7) | 0x04; break;
+                case 0x08: m = (1<<7) | 0x05; break;
+                case 0x07: m = (1<<7) | 0x06; break;
+
+                case 0x09: m = (1<<7) | 0x07; break;
+                case 0x0A: m = (1<<7) | 0x08; break;
+
+                case 0x04: m = (1<<7) | 0x09; break;
+                case 0x05: m = (1<<7) | 0x0A; break;
+              }
+              GamePad(4,(b<<8) | m,0);
+            }
+            for (var a=0; a<gp.axes.length; a++)
+            {
+              var m = 0xFFFF;
+              switch (a)
+              {
+                case 0: m = ((0<<7) | (1<<6) | 0x00) | ((0<<7) | (0<<6) | 0x00)<<8; break;
+                case 1: m = ((0<<7) | (1<<6) | 0x01) | ((0<<7) | (0<<6) | 0x01)<<8; break;
+                case 2: m =                     0xFF | ((0<<7) | (0<<6) | 0x04)<<8; break;
+                case 3: m = ((0<<7) | (1<<6) | 0x02) | ((0<<7) | (0<<6) | 0x02)<<8; break;
+                case 4: m = ((0<<7) | (1<<6) | 0x03) | ((0<<7) | (0<<6) | 0x03)<<8; break;
+                case 5: m =                     0xFF | ((0<<7) | (0<<6) | 0x05)<<8; break;
+
+                case 6: m = ((1<<7) | (0<<6) | 0x0D) | ((1<<7) | (0<<6) | 0x0E)<<8; break;
+                case 7: m = ((1<<7) | (0<<6) | 0x0B) | ((1<<7) | (0<<6) | 0x0C)<<8; break;
+              }
+              GamePad(5,(a<<16) | m,0);
+            }
+          }            
+        }
 
         function poll_handler()
         {
@@ -803,53 +903,17 @@
           if (GamePad && gm)
           {
             var nb = gm.buttons.length;
-            if (nb > 17)
-              nb = 17;
 
             for (var i=0; i<nb; i++)
             {
               if (buts[i] != gm.buttons[i].value)
               {
-                if (i==6)
-                  GamePad(2,4,gm.buttons[i].value);
-                else
-                if (i==7)
-                  GamePad(2,5,gm.buttons[i].value);
-                else
-                {
-                  // to sdl
-                  var j = i;
-                  switch (i)
-                  {
-                    // shoulders
-                    case 4: j=9; break;
-                    case 5: j=10; break;
-
-                    case 8: j=4; break; // back
-                    case 9: j=6; break; // start
-
-                    // thumbs
-                    case 10: j=7; break;
-                    case 11: j=8; break;
-
-                    // dpad
-                    case 12: j=11; break;
-                    case 13: j=12; break;
-                    case 14: j=13; break;
-                    case 15: j=14; break;
-
-                    // guide
-                    case 16: j=5; break;
-                  }
-                  GamePad(1,j,gm.buttons[i].value);
-                }
+                GamePad(1,i,gm.buttons[i].value);
                 buts[i] = gm.buttons[i].value;
               }
             }
 
             var na = gm.axes.length;
-            if (na > 4)
-              na = 4;
 
             for (var i=0; i<na; i++)
             {
@@ -872,11 +936,15 @@
 
             if (gamepad<0)
             {
-              axes.fill(0);
-              buts.fill(0);
+              axes = new Float32Array(e.gamepad.axes.length);
+              buts = new Float32Array(e.gamepad.buttons.length);              
               gamepad = e.gamepad.index;
+
               if (GamePad)
+              {
+                GamePadMap(e.gamepad);
                 GamePad(0,1,0);
+              }
             }
           }, false);
         
@@ -901,7 +969,10 @@
                   buts.fill(0);
                   gamepad = arr[i].index;
                   if (GamePad)
+                  {
+                    GamePadMap(arr[i]);
                     GamePad(0,1,0);
+                  }
                   break;
                 }
               }
@@ -917,11 +988,14 @@
             if (arr[i] && arr[i].connected)
             {
               console.log("inital scanned index "+i+" -> " + arr[i].index);
-              axes.fill(0);
-              buts.fill(0);              
+              axes = new Float32Array(e.gamepad.axes.length);
+              buts = new Float32Array(e.gamepad.buttons.length);              
               gamepad = arr[i].index;
               if (GamePad)
+              {
+                GamePadMap(arr[i]);
                 GamePad(0,1,0);
+              }
             }
           }
         }          

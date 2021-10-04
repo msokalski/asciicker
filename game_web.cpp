@@ -345,14 +345,20 @@ extern "C"
 
     void GamePad(int ev, int idx, float val)
     {
+        static int gamepad_axes = 0;
+        static int gamepad_buttons = 0;
+        static uint8_t gamepad_mapping[256];
+        
         switch (ev)
         {
             case 0:
+            {
                 if (!idx)
                     GamePadUnmount();
                 else
-                    GamePadMount("fixme",6,16);
+                    GamePadMount("fixme",gamepad_axes,gamepad_buttons,gamepad_mapping);
                 break;
+            }
             case 1:
             {
                 int16_t v = (int16_t)(val*32767);
@@ -369,6 +375,29 @@ extern "C"
                 {
                     GamePadAxis(idx,v);
                 }
+                break;
+            }
+            case 3:
+            {
+                // mapping size loword buttons, hiword axes
+                gamepad_buttons = idx & 0xFFFF;
+                gamepad_axes = (idx>>16) & 0xFFFF;
+                break;
+            }
+            case 4:
+            {
+                // map button, byte0 val, byte1 button idx
+                int map_idx = ((idx>>8) & 0xFF) + 2 * gamepad_axes; 
+                gamepad_mapping[map_idx] = idx&0xFF;
+                break;
+            }
+            case 5:
+            {
+                // map axis, byte0 neg, byte1 pos, byte2 axis idx
+                int map_neg = 2*((idx>>16) & 0xFF); 
+                int map_pos = map_neg+1;
+                gamepad_mapping[map_neg] = idx&0xFF;
+                gamepad_mapping[map_pos] = (idx>>8)&0xFF;
                 break;
             }
         }

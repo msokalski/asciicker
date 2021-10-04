@@ -4,11 +4,12 @@
 void LoadGamePad();
 void FreeGamePad();
 
-void ConnectGamePad(const char* name, int axes, int buttons, const int16_t axis[]=0, const int16_t button[]=0);
+void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mapping[]);
 void DisconnectGamePad();
 
-uint32_t UpdateGamePadAxis(int a, int16_t pos);
-uint32_t UpdateGamePadButton(int b, int16_t pos);
+// return num of outs
+int UpdateGamePadAxis(int a, int16_t pos, uint32_t out[2]);
+int UpdateGamePadButton(int b, int16_t pos, uint32_t out[1]);
 
 void PaintGamePad(AnsiCell* ptr, int width, int height);
 
