@@ -1,7 +1,13 @@
 #include <string.h>
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 #include "sprite.h"
 #include "gamepad.h"
+
+#include "fast_rand.h"
+
 
 extern char base_path[1024];
 static Sprite* gamepad_sprite = 0;
@@ -25,14 +31,56 @@ static int16_t gamepad_axis_output[6] = {0};
 static int16_t gamepad_button_output[15] = {0};
 
 // used for painting raw inputs 
-static int gamepad_axis[256] = { 0 };
-static int gamepad_button[256] = { 0 };
+static int16_t gamepad_axis[256] = { 0 };
+static int16_t gamepad_button[256] = { 0 };
 
 struct SpriteElem
 {
 	int src_x, src_y; // position on atlas (top to bottom!)
 	int w, h;         // element width, height
 	int dst_x, dst_y; // assembly shift (top to bottom!)
+};
+
+struct InputElem
+{
+	int src_x, src_y;
+	int w, h;
+};
+
+static const InputElem axis_proto[] =
+{
+	{ 1,40, 10,3 },
+	{ 1,43, 10,3 },
+	{ 1,46, 10,3 },
+
+	{ 11,40, 10,3 },
+	{ 11,43, 10,3 },
+	{ 11,46, 10,3 },
+
+	{ 21,40, 10,3 },
+	{ 21,43, 10,3 },
+	{ 21,46, 10,3 },
+	{0}
+};
+
+static const InputElem button_proto[] =
+{
+	{1,50,10,3},
+	{1,53,10,3},
+	{1,56,10,3},
+	{11,50,10,3},
+	{11,53,10,3},
+	{11,56,10,3},
+	{21,50,10,3},
+	{21,53,10,3},
+	{21,56,10,3},
+	{0}
+};
+
+static const InputElem slot_proto[] =
+{
+	{42,45, 4,3},
+	{ 0 }
 };
 
 static const SpriteElem gamepad_proto[] =
@@ -337,8 +385,8 @@ void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mappi
 	memset(gamepad_axis_output, 0, sizeof(int16_t)*6);
 	memset(gamepad_button_output, 0, sizeof(int16_t)*15);
 	memset(gamepad_input, 0, sizeof(int16_t)*(2*axes+buttons));
-	memset(gamepad_axis, 0, sizeof(int)*axes);
-	memset(gamepad_button, 0, sizeof(int)*buttons);
+	memset(gamepad_axis, 0, sizeof(int16_t)*axes);
+	memset(gamepad_button, 0, sizeof(int16_t)*buttons);
 }
 
 void DisconnectGamePad()
@@ -440,4 +488,107 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 	}
+
+	int _gamepad_axes = 4;
+	int _gamepad_buttons = 17;
+
+	int col_x[3] = { 1,16,31 };
+	int row = 0;
+	int col = 2;
+
+	static int t = 0;
+	t++;
+	if (t == 100)
+		t = 0;
+
+	for (int a = 0; a < _gamepad_axes; a++)
+	{
+		// all in col=2
+		int v = sinf((a*10 + t)*2*M_PI / 100) * 32767;
+		int i = v * 9 / 2 / 32767 +4;
+
+		int dx, dy;
+		int clip[4];
+
+		dx = x + col_x[col];
+		dy = y + h - 1 - (28 + row * 3);
+
+		clip[0] = axis_proto[i].src_x;
+		clip[1] = h - 1 - (axis_proto[i].src_y + axis_proto[i].h - 1);
+		clip[2] = clip[0] + axis_proto[i].w;
+		clip[3] = clip[1] + axis_proto[i].h;
+
+		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+		AnsiCell* label = ptr + (dx + 1) + (dy + 1) * width;
+		label[1].gl = '0' + a / 10;
+		label[2].gl = '0' + a % 10;
+
+		clip[0] = slot_proto[0].src_x;
+		clip[1] = h - 1 - (slot_proto[0].src_y + slot_proto[0].h - 1);
+		clip[2] = clip[0] + slot_proto[0].w;
+		clip[3] = clip[1] + slot_proto[0].h;
+
+		dx += button_proto[i].w;
+		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+		dx += slot_proto[0].w;
+		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+		row++;
+	}
+
+	row = 0;
+	col = 0;
+
+	for (int b = 0; b < _gamepad_buttons; b++)
+	{
+		int v = sinf((b*10 + t) * 2 * M_PI / 100) * 16383 + 16384;
+		int i = (v * 8 + 16384) / 32767;
+
+		int dx, dy;
+		int clip[4];
+
+		dx = x + col_x[col];
+		dy = y + h - 1 - (28 + row * 3);
+
+		clip[0] = button_proto[i].src_x;
+		clip[1] = h - 1 - (button_proto[i].src_y + button_proto[i].h - 1);
+		clip[2] = clip[0] + button_proto[i].w;
+		clip[3] = clip[1] + button_proto[i].h;
+
+		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+		AnsiCell* label = ptr + (dx + 1) + (dy + 1) * width;
+		label[1].gl = '0' + b / 10;
+		label[2].gl = '0' + b % 10;
+
+		clip[0] = slot_proto[0].src_x;
+		clip[1] = h - 1 - (slot_proto[0].src_y + slot_proto[0].h - 1);
+		clip[2] = clip[0] + slot_proto[0].w;
+		clip[3] = clip[1] + slot_proto[0].h;
+
+		dx += button_proto[i].w;
+		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+		col++;
+
+		if (row >= _gamepad_axes)
+		{
+			if (col == 3)
+			{
+				col = 0;
+				row++;
+			}
+		}
+		else
+		{
+			if (col == 2)
+			{
+				col = 0;
+				row++;
+			}
+		}
+	}
+
 }
