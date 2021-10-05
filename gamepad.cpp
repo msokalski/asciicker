@@ -121,19 +121,19 @@ static const SpriteElem gamepad_proto[] =
 	{ 34,45, 5,5, 29,18 }, // r-stick hilight
 
 	// move to overlays ...
-	{ 46,6, 4,3, 15,19 }, // DL	
-	{ 46,10, 4,3, 20,19}, // DR
+	{ 46,6, 4,4, 15,19 }, // DL	
+	{ 46,10, 4,4, 20,19}, // DR
 	{ 47,1, 3,4, 18,16}, // DU
-	{ 47,14, 3,4, 18,21}, // DD
+	{ 47,14, 3,5, 18,21}, // DD
 
-	{ 47,35, 3,3, 36,16 }, // A
-	{ 47,39, 3,3, 39,13 }, // B
-	{ 47,27, 3,3, 33,13 }, // X
-	{ 47,31, 3,3, 36,10 }, // Y
+	{ 47,35, 3,4, 36,16 }, // A
+	{ 47,39, 3,4, 39,13 }, // B
+	{ 47,27, 3,4, 33,13 }, // X
+	{ 47,31, 3,4, 36,10 }, // Y
 
-	{ 47,43, 3,3, 20,13 }, // Q
-	{ 47,47, 3,3, 28,13 }, // M
-	{ 47,51, 3,3, 24,11 }, // G
+	{ 47,43, 3,4, 20,13 }, // Q
+	{ 47,47, 3,4, 28,13 }, // M
+	{ 47,51, 3,4, 24,11 }, // G
 
 	// move to after stick bkgs
 	{ 12,1, 6,2, 12,7}, // Lt
@@ -461,11 +461,22 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 			continue;
 		if (e == 22 && gamepad_button_output[5] <= 32767 / 2)
 			continue;
-
+		/*
 		if (e == 24 && gamepad_axis_output[4] <= 32767 / 2)
 			continue;
 		if (e == 26 && gamepad_axis_output[5] <= 32767 / 2)
 			continue;
+		*/
+
+		int clip_left = 0;
+		int clip_right = 0;
+
+		if (e == 24)
+			clip_right = (gamepad_proto[e].w-2) - gamepad_axis_output[4] * (gamepad_proto[e].w-2) / 32767;
+
+		if (e == 26)
+			clip_left = (gamepad_proto[e].w-2) - gamepad_axis_output[5] * (gamepad_proto[e].w-2) / 32767;
+
 		if (e == 28 && gamepad_button_output[9] <= 32767 / 2)
 			continue;
 		if (e == 30 && gamepad_button_output[10] <= 32767 / 2)
@@ -492,15 +503,16 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 				dy -= gamepad_axis_output[3] * 2 / 22000;
 		}
 
-		clip[0] = gamepad_proto[e].src_x;
+		clip[0] = gamepad_proto[e].src_x + clip_left;
 		clip[1] = h - 1 - (gamepad_proto[e].src_y + gamepad_proto[e].h - 1);
-		clip[2] = clip[0] + gamepad_proto[e].w;
+		clip[2] = clip[0] + gamepad_proto[e].w - clip_right;
 		clip[3] = clip[1] + gamepad_proto[e].h;
 
-		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+		BlitSprite(ptr, width, height, sf, dx + clip_left, dy, clip);
 	}
 
-	int col_x[3] = { 1,16,31 };
+	int col_x[3] = { 1+3,16+1,31-1 };
+	int row_y = 35;
 	int row = 0;
 	int col = 2;
 
@@ -522,7 +534,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		int clip[4];
 
 		dx = x + col_x[col];
-		dy = y + h - 1 - (28 + row * 3);
+		dy = y + h - 1 - (row_y + row * 3);
 
 		clip[0] = axis_proto[i].src_x;
 		clip[1] = h - 1 - (axis_proto[i].src_y + axis_proto[i].h - 1);
@@ -546,7 +558,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		clip[2] = clip[0] + slot_proto[0].w;
 		clip[3] = clip[1] + slot_proto[0].h;
 
-		dx += button_proto[i].w;
+		dx += button_proto[i].w - 1;
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 
 		uint8_t neg = gamepad_mapping[2*a];
@@ -562,7 +574,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 			label[1].gl = name[1];
 		}
 
-		dx += slot_proto[0].w;
+		dx += slot_proto[0].w - 1;
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 
 		uint8_t pos = gamepad_mapping[2*a+1];
@@ -594,7 +606,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		int clip[4];
 
 		dx = x + col_x[col];
-		dy = y + h - 1 - (28 + row * 3);
+		dy = y + h - 1 - (row_y + row * 3);
 
 		clip[0] = button_proto[i].src_x;
 		clip[1] = h - 1 - (button_proto[i].src_y + button_proto[i].h - 1);
@@ -617,7 +629,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		clip[2] = clip[0] + slot_proto[0].w;
 		clip[3] = clip[1] + slot_proto[0].h;
 
-		dx += button_proto[i].w;
+		dx += button_proto[i].w - 1;
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 
 		uint8_t pos = gamepad_mapping[2*gamepad_axes + b];
@@ -654,3 +666,22 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 	}
 
 }
+
+/*
+
+add save and exit buttons to mapper
+
+On mapper open:
+- save current map to spare array
+- disable all gamepad input processing (other than tool)
+- clicking on input slot: UNMAP
+- draggin from gamepad picture onto input slot: MAP/REMAP
+- closing tool REVERTS ALL spare mapping to current
+- clicking on SAVE overwrites spare with current and re-writes cfg file
+
+On gamepad connect:
+- check if cfg contains mapping for this gamepad (by name, and number of axes and buttons)
+- if not, display black ribbon warning at the bottom and mount with defaults from OS
+- otherwise mount with mapping from cfg
+
+*/
