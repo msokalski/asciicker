@@ -34,6 +34,17 @@ static int16_t gamepad_button_output[15] = {0};
 static int16_t gamepad_axis[256] = { 0 };
 static int16_t gamepad_button[256] = { 0 };
 
+
+static const char* gamepad_half_axis_name[]=
+{
+	"Ll","Lr", "Lu","Ld", "Rl","Rr", "Ru","Rd", "Lt","Lt", "Rt","Rt"
+};
+
+static const char* gamepad_button_name[]=
+{
+	"A ","B ","X ","Y ", "Q ","G ","M ", "L ","R ", "Ls","Rs", "Du","Dd","Dl","Dr"
+};
+
 struct SpriteElem
 {
 	int src_x, src_y; // position on atlas (top to bottom!)
@@ -489,22 +500,22 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 	}
 
-	int _gamepad_axes = 4;
-	int _gamepad_buttons = 17;
-
 	int col_x[3] = { 1,16,31 };
 	int row = 0;
 	int col = 2;
 
+	/*
 	static int t = 0;
 	t++;
 	if (t == 100)
 		t = 0;
+	*/
 
-	for (int a = 0; a < _gamepad_axes; a++)
+	for (int a = 0; a < gamepad_axes; a++)
 	{
 		// all in col=2
-		int v = sinf((a*10 + t)*2*M_PI / 100) * 32767;
+		//int v = sinf((a*10 + t)*2*M_PI / 100) * 32767;
+		int v = gamepad_axis[a];
 		int i = v * 9 / 2 / 32767 +4;
 
 		int dx, dy;
@@ -521,8 +532,14 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 
 		AnsiCell* label = ptr + (dx + 1) + (dy + 1) * width;
-		label[1].gl = '0' + a / 10;
-		label[2].gl = '0' + a % 10;
+		if (dy+1>=0 && dy+1<height)
+		{
+			if (dx+2>=0 && dx+2<width)
+				label[1].gl = '0' + a / 10;
+			if (dx+3>=0 && dx+3<width)
+				label[2].gl = '0' + a % 10;
+		}
+
 
 		clip[0] = slot_proto[0].src_x;
 		clip[1] = h - 1 - (slot_proto[0].src_y + slot_proto[0].h - 1);
@@ -532,8 +549,34 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		dx += button_proto[i].w;
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 
+		uint8_t neg = gamepad_mapping[2*a];
+		if (neg!=0xFF && dy+1>=0 && dy+1<height && dx+1>=0 && dx+1<width)
+		{
+			label = ptr + (dx + 1) + (dy + 1) * width;
+			const char* name;
+			if (neg&0x80)
+				name = gamepad_button_name[neg&0x3F];
+			else
+				name = gamepad_half_axis_name[2*(neg&0x3F) + (neg&0x40 ? 0 : 1)];
+			label[0].gl = name[0];
+			label[1].gl = name[1];
+		}
+
 		dx += slot_proto[0].w;
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+		uint8_t pos = gamepad_mapping[2*a+1];
+		if (pos!=0xFF && dy+1>=0 && dy+1<height && dx+1>=0 && dx+1<width)
+		{
+			label = ptr + (dx + 1) + (dy + 1) * width;
+			const char* name;
+			if (pos&0x80)
+				name = gamepad_button_name[pos&0x3F];
+			else
+				name = gamepad_half_axis_name[2*(pos&0x3F) + (pos&0x40 ? 0 : 1)];
+			label[0].gl = name[0];
+			label[1].gl = name[1];
+		}
 
 		row++;
 	}
@@ -541,9 +584,10 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 	row = 0;
 	col = 0;
 
-	for (int b = 0; b < _gamepad_buttons; b++)
+	for (int b = 0; b < gamepad_buttons; b++)
 	{
-		int v = sinf((b*10 + t) * 2 * M_PI / 100) * 16383 + 16384;
+		//int v = sinf((b*10 + t) * 2 * M_PI / 100) * 16383 + 16384;
+		int v = gamepad_button[b];
 		int i = (v * 8 + 16384) / 32767;
 
 		int dx, dy;
@@ -560,8 +604,13 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 
 		AnsiCell* label = ptr + (dx + 1) + (dy + 1) * width;
-		label[1].gl = '0' + b / 10;
-		label[2].gl = '0' + b % 10;
+		if (dy+1>=0 && dy+1<height)
+		{
+			if (dx+2>=0 && dx+2<width)
+				label[1].gl = '0' + b / 10;
+			if (dx+3>=0 && dx+3<width)
+				label[2].gl = '0' + b % 10;
+		}
 
 		clip[0] = slot_proto[0].src_x;
 		clip[1] = h - 1 - (slot_proto[0].src_y + slot_proto[0].h - 1);
@@ -571,9 +620,22 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		dx += button_proto[i].w;
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 
+		uint8_t pos = gamepad_mapping[2*gamepad_axes + b];
+		if (pos!=0xFF && dy+1>=0 && dy+1<height && dx+1>=0 && dx+1<width)
+		{
+			label = ptr + (dx + 1) + (dy + 1) * width;
+			const char* name;
+			if (pos&0x80)
+				name = gamepad_button_name[pos&0x3F];
+			else
+				name = gamepad_half_axis_name[2*(pos&0x3F) + (pos&0x40 ? 0 : 1)];
+			label[0].gl = name[0];
+			label[1].gl = name[1];
+		}
+
 		col++;
 
-		if (row >= _gamepad_axes)
+		if (row >= gamepad_axes)
 		{
 			if (col == 3)
 			{

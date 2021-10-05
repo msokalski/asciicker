@@ -1903,7 +1903,7 @@ int main(int argc, char* argv[])
     stamp = begin;
 
     game = CreateGame(water,pos,yaw,dir,stamp);
-
+    
     if (jsfd>=0)
     {
         // report mount
@@ -1912,7 +1912,6 @@ int main(int argc, char* argv[])
 
     while(running)
     {
-
         if (jsfd<0)
         {
             // report mount
@@ -1920,7 +1919,7 @@ int main(int argc, char* argv[])
             if (jsfd >= 0)
                 GamePadMount(gamepad_name,gamepad_axes,gamepad_buttons,gamepad_mapping);
         }        
-      
+     
         bool mouse_j = false;
 
         // get time stamp
