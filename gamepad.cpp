@@ -415,18 +415,34 @@ void DisconnectGamePad()
 	gamepad_connected = false;
 }
 
+static bool CalcLayout(int width, int height, int layout[] /*ec,er,ew,eh*/);
+
 void PaintGamePad(AnsiCell* ptr, int width, int height)
 {
 	if (!gamepad_sprite)
 		return;
+
+	int layout[4];
+	CalcLayout(width, height, layout);
+
+	int ec = layout[0];
+	int er = layout[1];
+	int ew = layout[2];
+	int eh = layout[3];
 
 	Sprite::Frame* sf = gamepad_sprite->atlas;
 
 	int w = sf->width;
 	int h = sf->height;
 
+	/*
 	int x = (width - w) / 2;
 	int y = height - h + 8 - 4; // <- num of buttons, axes and screen height dependent !!!
+	*/
+
+	// upper left corner of layout
+	int x = (width - ew) / 2 -4; // -4 offset from sprite edge to handle 
+	int y = height - (height - eh) / 2 +8-2; // +8 pad body from sprite's top, -2 trigger height
 
 	int elems = 31;
 	for (int e = 0; e < elems; e++)
@@ -486,7 +502,10 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		int clip[4];
 
 		dx = x + gamepad_proto[e].dst_x;
-		dy = y + h - 1 - (gamepad_proto[e].dst_y + gamepad_proto[e].h - 1);
+		dy = y - (gamepad_proto[e].dst_y + gamepad_proto[e].h - 1);
+
+		//dx -= 3;
+		//dy += 5;
 
 		if (e == 8 || e == 10)
 		{
@@ -534,7 +553,10 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		int clip[4];
 
 		dx = x + col_x[col];
-		dy = y + h - 1 - (row_y + row * 3);
+		dy = y - (row_y + row * 3);
+
+		//dx -= 3;
+		//dy += 5;
 
 		clip[0] = axis_proto[i].src_x;
 		clip[1] = h - 1 - (axis_proto[i].src_y + axis_proto[i].h - 1);
@@ -606,7 +628,10 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		int clip[4];
 
 		dx = x + col_x[col];
-		dy = y + h - 1 - (row_y + row * 3);
+		dy = y - (row_y + row * 3);
+
+		//dx -= 3;		
+		//dy += 5;
 
 		clip[0] = button_proto[i].src_x;
 		clip[1] = h - 1 - (button_proto[i].src_y + button_proto[i].h - 1);
@@ -665,6 +690,80 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		}
 	}
 
+}
+
+static bool CalcLayout(int width, int height, int layout[] /*ec,er,w,h*/)
+{
+	// return number of columns
+
+	// rules:
+	// - rightmost column is a bit wider for axes
+	// - all axes are placed in rightmost column
+	// - buttons can be placed on any column
+
+	// optimal solution:
+	// 1 all inputs fits on screen
+	// 2 w/h aspect ratio is closest to width/height
+
+
+	int N = gamepad_axes + gamepad_buttons;
+
+	float perfect_aspect = logf((float)width/(float)height);
+
+	float best_err;
+	float best_as;
+	int best_ec;
+	int best_er;
+	int best_dw;
+	int best_dh;
+
+	bool valid = false;
+
+	for (int ec = 0; ec < 5; ec++) 
+	{
+		// N = ec*(7+er) + er*3
+		// N = 7ec + er(3+ec)
+		// er = (N - 7ec) / (3+ec)
+
+		int roundup = 2+ec;
+		int er = (N - 8*ec + roundup) / (3+ec);
+
+		if (ec==0)
+			er = er < gamepad_axes ? gamepad_axes : er;
+		else
+			er = er+8 < gamepad_axes ? gamepad_axes-8 : er;
+
+		int dw,dh;
+
+		dw = 43;
+		if (ec)
+			dw += 16 + 13*(ec-1); // first ec is 16, every next is 13
+
+		dh = er ? 26 + 3*er : 24;
+
+		float aspect = logf((float)dw / (float)dh);
+		float err = fabsf(aspect - perfect_aspect);
+
+		if (ec==0 || err < best_err && (!valid || dw<=width && dh<=height))
+		{
+			best_err = err;
+			best_ec = ec;
+			best_er = er;
+			best_dw = dw;
+			best_dh = dh;
+			best_as = aspect;
+
+			if (dw<=width && dh<=height)
+				valid = true;
+		}
+	}
+
+	layout[0] = best_ec;
+	layout[1] = best_er;
+	layout[2] = best_dw;
+	layout[3] = best_dh;
+
+	return valid;
 }
 
 /*
