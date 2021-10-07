@@ -4,6 +4,10 @@
 void LoadGamePad();
 void FreeGamePad();
 
+void SetGamePadMapping(const uint8_t* map);
+const uint8_t* GetGamePadMapping();
+const char* GetGamePad(int* axes, int* buttons);
+
 void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mapping[]);
 void DisconnectGamePad();
 
@@ -12,5 +16,18 @@ int UpdateGamePadAxis(int a, int16_t pos, uint32_t out[2]);
 int UpdateGamePadButton(int b, int16_t pos, uint32_t out[1]);
 
 void PaintGamePad(AnsiCell* ptr, int width, int height);
+
+void GamePadReset( void (*close)(void* _g), void* g );
+
+void GamePadContact(int id, int ev, int x, int y);
+/*
+    id = contact (0:lmb, 1:touch0, 2:touch1, ...)
+    ev = 0:begin 1;move 2:end 3:cancel
+*/
+
+void GamePadKeyb(int key);
+/*
+    key = 5:l,6:r,3:u,4:d, 1:enter, 0:space, 2:(backslash,escape,backspace), 7:(c,C), 8:(r,R)
+*/
 
 #endif

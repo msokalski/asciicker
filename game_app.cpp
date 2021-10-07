@@ -1235,40 +1235,6 @@ int scan_js(char* gamepad_name, int* gamepad_axes, int* gamepad_buttons, uint8_t
                     m[i] = 0xFF;
             }
         }
-
-
-        #if 0
-
-        // now remap to SDL
-        if (btnmap_res>=0)
-            for (int i=0; i<buttons; i++)
-            {
-                int j = js_btnmap[i]-BTN_GAMEPAD;
-                if (j>=0 && j<32)
-                    js_btnmap[i] = js_btnmap_sdl[j];
-                else
-                    js_btnmap[i] = -1;
-            }
-        else
-            for (int i=0; i<buttons; i++)
-                js_btnmap[i] = i<32 ? js_btnmap_sdl[i] : -1;
-
-        if (axmap_res>=0)
-            for (int i=0; i<axes; i++)
-            {
-                int j = js_axmap[i];
-                if (j>=0 && j<32)
-                    js_axmap[i] = js_axmap_sdl[j];
-                else
-                    js_axmap[i] = -1;
-            }
-        else
-            for (int i=0; i<axes; i++)
-                js_axmap[i] = i<32 ? js_axmap_sdl[i] : -1;
-
-        skip = 10;
-        index = 0;
-        #endif
     }
 
     return fd;
@@ -1769,6 +1735,12 @@ int main(int argc, char* argv[])
                     -xrm "xterm*font4: -gumix-*-*-*-*-*-16-*-*-*-*-*-*" \
                     -xrm "xterm*font5: -gumix-*-*-*-*-*-18-*-*-*-*-*-*" \
                     -xrm "xterm*font6: -gumix-*-*-*-*-*-20-*-*-*-*-*-*"
+
+                    -xrm "xterm*allowWindowOps: true"
+                    -xrm "xterm*allowFontOps: true"
+
+                    // color and mouse ops are enabled by default
+                    // title and TCap Ops are not neccessary 
 
                     user can switch between fonts using SHIFT+NUMPAD(+/-)
 

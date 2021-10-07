@@ -259,6 +259,8 @@ struct Game
 	bool show_keyb; // activated together with talk_box by clicking on character
 	int keyb_hide;  // show / hide animator (vertical position)
 
+	bool show_gamepad;
+
 	bool show_inventory;
 	int scene_shift;
 	bool show_buts; // true only if no popup is visible

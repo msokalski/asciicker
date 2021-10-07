@@ -285,6 +285,89 @@ void ChatLog(const char* fmt, ...)
 void SyncConf();
 const char* GetConfPath();
 
+bool GetGamePadConfPath(char* path, const char* name, int axes, int buttons)
+{
+	const char* cfg = GetConfPath();
+	const char* filepart1 = strrchr(cfg,'/');
+	const char* filepart2 = strrchr(cfg,'/');
+
+	if (!filepart1 && !filepart2)
+		return false;
+
+	if (!filepart2)
+		filepart2 = filepart1;
+	if (!filepart1)
+		filepart1 = filepart2;
+
+	int pos1 = filepart1 - cfg;
+	int pos2 = filepart2 - cfg;
+	int pos = pos1>pos2 ? pos1 : pos2;
+
+	memcpy(path,cfg,pos+1);
+	sprintf(path+pos+1,"asciicker_(%s)_A%d_B%d.cfg",name,axes,buttons);
+
+	for (int i=pos+1; path[i]; i++)
+	{
+		// fix characters not valid for path
+		if (path[i]<=32 || path[i]>=127)
+			path[i]='_';
+		else
+		if (path[i]=='<')
+			path[i]='[';
+		else
+		if (path[i]=='>')
+			path[i]=']';
+		else
+		if (path[i]=='/' || path[i]=='\\' || path[i]=='|' || path[i]=='?' || path[i]=='*')
+			path[i]='.';
+		else
+		if (path[i]=='\"')
+			path[i]='\'';
+		else
+		if (path[i]==':')
+			path[i]=';';
+	}
+
+	return true;
+}
+
+bool ReadGamePadConf(uint8_t map[256], const char* name, int axes, int buttons)
+{
+	char path[1024];
+	if (!GetGamePadConfPath(path,name,axes,buttons))
+		return false;
+
+	FILE* f = fopen(path,"rb");
+	if (!f)
+		return false;
+
+	int n = 2*axes+buttons;
+	int r = fread(map,1,n,f);
+	fclose(f);
+
+	return n==r;
+}
+
+bool WriteGamePadConf(const uint8_t* map, const char* name, int axes, int buttons)
+{
+	char path[1024];
+	if (!GetGamePadConfPath(path,name,axes,buttons))
+		return false;
+
+	FILE* f = fopen(path,"wb");
+	if (!f)
+		return false;
+
+	int n = 2*axes+buttons;
+	int w = fwrite(map,1,n,f);
+	fclose(f);
+
+	SyncConf();
+
+	return n==w;
+}
+
+
 void ReadConf(Game* g)
 {
 	FILE* f = fopen(GetConfPath(), "rb");
@@ -6386,43 +6469,6 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	if (input.shot)
-	{
-		input.shot = false;
-		FILE* f = fopen("./shot.xp", "wb");
-		if (f)
-		{
-			uint32_t hdr[4] = { (uint32_t)-1, (uint32_t)1, (uint32_t)width, (uint32_t)height };
-			fwrite(hdr, sizeof(uint32_t), 4, f);
-			for (int x = 0; x < width; x++)
-			{
-				for (int y = height - 1; y >= 0; y--)
-				{
-					AnsiCell* c = ptr + y * width + x;
-					int fg = c->fg - 16;
-					int f_r = (fg % 6) * 51; fg /= 6;
-					int f_g = (fg % 6) * 51; fg /= 6;
-					int f_b = (fg % 6) * 51; fg /= 6;
-
-					int bk = c->bk - 16;
-					int b_r = (bk % 6) * 51; bk /= 6;
-					int b_g = (bk % 6) * 51; bk /= 6;
-					int b_b = (bk % 6) * 51; bk /= 6;
-
-					uint8_t f_rgb[3] = { (uint8_t)f_b,(uint8_t)f_g,(uint8_t)f_r };
-					uint8_t b_rgb[3] = { (uint8_t)b_b,(uint8_t)b_g,(uint8_t)b_r };
-					uint32_t chr = c->gl;
-
-					fwrite(&chr, sizeof(uint32_t), 1, f);
-					fwrite(f_rgb, 1, 3, f);
-					fwrite(b_rgb, 1, 3, f);
-				}
-			}
-
-			fclose(f);
-		}
-	}
-
 	input.last_hit_char = 0;
 
 	stamp = _stamp;
@@ -6465,13 +6511,51 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	PaintGamePad(ptr, width, height);
+	if (show_gamepad)
+		PaintGamePad(ptr, width, height);
+		
 	PaintMenu(ptr, width, height);
 	/*
 	Font1Paint(ptr, width, height, 10, 22, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 0);
 	Font1Paint(ptr, width, height, 10, 10, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 1);
 	*/
-	
+
+	if (input.shot)
+	{
+		input.shot = false;
+		FILE* f = fopen("./shot.xp", "wb");
+		if (f)
+		{
+			uint32_t hdr[4] = { (uint32_t)-1, (uint32_t)1, (uint32_t)width, (uint32_t)height };
+			fwrite(hdr, sizeof(uint32_t), 4, f);
+			for (int x = 0; x < width; x++)
+			{
+				for (int y = height - 1; y >= 0; y--)
+				{
+					AnsiCell* c = ptr + y * width + x;
+					int fg = c->fg - 16;
+					int f_r = (fg % 6) * 51; fg /= 6;
+					int f_g = (fg % 6) * 51; fg /= 6;
+					int f_b = (fg % 6) * 51; fg /= 6;
+
+					int bk = c->bk - 16;
+					int b_r = (bk % 6) * 51; bk /= 6;
+					int b_g = (bk % 6) * 51; bk /= 6;
+					int b_b = (bk % 6) * 51; bk /= 6;
+
+					uint8_t f_rgb[3] = { (uint8_t)f_b,(uint8_t)f_g,(uint8_t)f_r };
+					uint8_t b_rgb[3] = { (uint8_t)b_b,(uint8_t)b_g,(uint8_t)b_r };
+					uint32_t chr = c->gl;
+
+					fwrite(&chr, sizeof(uint32_t), 1, f);
+					fwrite(f_rgb, 1, 3, f);
+					fwrite(b_rgb, 1, 3, f);
+				}
+			}
+
+			fclose(f);
+		}
+	}
 }
 
 void Game::OnSize(int w, int h, int fw, int fh)
@@ -6487,12 +6571,66 @@ void Game::OnSize(int w, int h, int fw, int fh)
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)
 {
+	if (keyb == GAME_KEYB::KEYB_DOWN)	
+	{
+		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
+		int shot_key = key & ~A3D_AUTO_REPEAT;
+
+		if (shot_key == A3D_F10 && !auto_rep)
+			input.shot = true;
+	}
+
 	// handle layers first ...
 	if (menu_depth>=0)
 	{
 		MenuKeyb(keyb,key);
 		return;
 	}
+
+	if (show_gamepad)
+	{
+		int k = -1;
+		switch (keyb)
+		{
+			case GAME_KEYB::KEYB_CHAR:
+			{
+				switch (key)
+				{
+					case 'c':
+					case 'C': k=7; break;
+					case 'r':
+					case 'R': k=8; break;
+					case ' ': k = 0; break;
+					case '\n': k = 1; break;
+					case 8:
+					case '\\':
+					case 27: k = 2; break;
+				}
+				break;
+			}
+
+			case GAME_KEYB::KEYB_PRESS:
+			case GAME_KEYB::KEYB_DOWN:
+			{
+				switch (key)
+				{
+					case A3D_ENTER: k = 1; break;
+					case A3D_ESCAPE: k = 2; break;
+					case A3D_UP: k = 3; break;
+					case A3D_DOWN: k = 4; break;
+					case A3D_LEFT: k = 5; break;
+					case A3D_RIGHT: k = 6; break;
+				}
+				break;
+			}
+		}
+
+		if (k>=0)
+			GamePadKeyb(k);
+
+		return;
+	}
+	
 
 	// if nothing focused 
 
@@ -6606,9 +6744,6 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				show_inventory = false;
 			}
 		}
-
-		if (key == A3D_F10 && !auto_rep)
-			input.shot = true;
 
 		if (!player.talk_box && !auto_rep)
 		{
@@ -8101,6 +8236,26 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 		return;
 	}
 
+	if (show_gamepad)
+	{
+		int ev = -1;
+		switch (mouse)
+		{
+			case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: ev = 0; break;
+			case GAME_MOUSE::MOUSE_MOVE: ev = 1; break;
+			case GAME_MOUSE::MOUSE_LEFT_BUT_UP: ev = 2; break;
+		}
+
+		if (ev>=0)
+		{
+			int p[2] = {x,y};
+			ScreenToCell(p);
+			GamePadContact(0,ev,p[0],p[1]);
+		}
+
+		return;
+	}
+
 	#ifdef TOUCH_EMU
 	static int buts_id[3] = {-1,-1,-1}; // L,R,M
 	// emulate touches for easier testing
@@ -8299,6 +8454,27 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 	}
 
 
+	if (show_gamepad)
+	{
+		int ev = -1;
+		switch (touch)
+		{
+			case GAME_TOUCH::TOUCH_BEGIN: ev = 0; break;
+			case GAME_TOUCH::TOUCH_MOVE: ev = 1; break;
+			case GAME_TOUCH::TOUCH_END: ev = 2; break;
+			case GAME_TOUCH::TOUCH_CANCEL: ev = 3; break;
+		}
+
+		if (ev>=0)
+		{
+			int p[2] = {x,y};
+			ScreenToCell(p);
+			GamePadContact(id,ev,p[0],p[1]);
+		}
+
+		return;
+	}
+
 	switch (touch)
 	{
 		case TOUCH_BEGIN:
@@ -8380,6 +8556,11 @@ void Game::OnPadMount(bool connect)
 
 void Game::OnPadButton(int b, bool down)
 {
+	if (show_gamepad)
+	{
+		return;
+	}		
+
 	if (input.pad_autorep == 2+1 && !player.talk_box)
 	{
 		// clear and or ignore delete autorep if not in chat_box
@@ -8811,6 +8992,11 @@ void Game::OnPadButton(int b, bool down)
 
 void Game::OnPadAxis(int a, int16_t pos)
 {
+	if (show_gamepad)
+	{
+		return;
+	}		
+
 	if (a>=0 && a<32)
 		input.pad_axis[a] = pos;
 
@@ -9002,6 +9188,13 @@ void GamePadMount(const char* name, int axes, int buttons, const uint8_t mapping
 {
 	ConnectGamePad(name, axes, buttons, mapping);
 
+	uint8_t map[256];
+	if (ReadGamePadConf(map,name,axes,buttons))
+		SetGamePadMapping(map);
+
+	// do specialized readconf with {name,axes,buttons} query
+	// if found, replace current mapping: GamePadLoad(map);
+
 	if (prime_game)
 		prime_game->OnPadMount(true);
 }
@@ -9092,10 +9285,6 @@ bool menu_blood_getter(Game* g)
 	return g->blood;
 }
 
-void menu_gamepad(Game* g)
-{
-}
-
 void exit_handler(int signum);
 void menu_yes_exit(Game* g)
 {
@@ -9151,6 +9340,30 @@ void menu_zoomout(Game* g)
 	#endif
 }
 
+void gamepad_close(void* _g)
+{
+	Game* g = (Game*)_g;
+	if (g)
+	{
+		g->show_gamepad = false;
+		g->show_buts = true;
+
+		const uint8_t* map = GetGamePadMapping();
+		int axes, buttons;
+		const char* name = GetGamePad(&axes, &buttons);
+		if (map && name)
+			WriteGamePadConf(map,name,axes,buttons);
+	}
+}
+
+void menu_gamepad(Game* g)
+{
+	g->CloseMenu();
+	g->show_gamepad = true;
+	g->show_buts = false;
+	GamePadReset(gamepad_close,(void*)g);
+}
+
 static const Menu settings_menu[]=
 {
 	{"ZOOM IN", 0, menu_zoomin, 0},
@@ -9166,7 +9379,7 @@ static const Menu controls_menu[]=
 	{"KEYBOARD", 0, 0, 0},
 	{"MOUSE", 0, 0, 0},
 	{"TOUCH", 0, 0, 0},
-	{"GAMEPAD", 0, 0, 0},
+	{"GAMEPAD", 0, menu_gamepad, 0},
 	{0}
 };
 
@@ -9196,6 +9409,11 @@ void Game::OpenMenu(int method)
 	menu_down = 0;
 	menu_down_x = 0;
 	menu_down_y = 0;
+
+	show_gamepad = false;
+	// will be cleared by menu
+	// show_buts = true; 
+
 
 	if (player.talk_box)
 	{
