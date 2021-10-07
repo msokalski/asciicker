@@ -269,23 +269,22 @@ static int UpdateButtonOutput(int b, uint32_t* out)
 	// b in [0..14]
 
 	uint8_t* dep = button_mapping[b];
-	if (!dep)
-		return 0;
-
 	int accum = 0;
-
-	while (*dep != 0xFF)
+	if (dep)
 	{
-		uint8_t d = *dep;
-		int v = gamepad_input[d];
-		int m = gamepad_mapping[d];
+		while (*dep != 0xFF)
+		{
+			uint8_t d = *dep;
+			int v = gamepad_input[d];
+			int m = gamepad_mapping[d];
 
-		if (m&0x40)
-			accum -= v;
-		else
-			accum += v;
+			if (m&0x40)
+				accum -= v;
+			else
+				accum += v;
 
-		dep++;
+			dep++;
+		}
 	}
 
 	if (accum < 0)
@@ -429,6 +428,13 @@ static void InvertMap(int mappings)
 				button_mapping[j][button_len[j]++] = i;
 		}
 	}
+
+	// update all outs
+	uint32_t spare = 0;
+	for (int a=0; a<6; a++)
+		UpdateAxisOutput(a,&spare);
+	for (int b=0; b<15; b++)
+		UpdateButtonOutput(b,&spare);
 }
 
 void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mapping[])
@@ -852,6 +858,49 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 	{
 		int index = gamepad_contact_output & 0x3F;
 		const char* str = 0;
+
+		// repaint input's slot if hovered
+		{
+			int x = gamepad_contact_pos[0];
+			int y = gamepad_contact_pos[1];
+
+			int sqrdist = 0;
+			int input = -1;
+			int mappings = gamepad_axes*2 + gamepad_buttons;
+
+			int ofs_x = gamepad_contact_output == 0xFF ? 1 : 0;
+			int ofs_y = gamepad_contact_output == 0xFF ? 1 : 0;
+			for (int i=0; i<mappings; i++)
+			{
+				int ix = gamepad_input_xy[2*i+0] + ofs_x;
+				int iy = gamepad_input_xy[2*i+1] + ofs_y;
+
+				int sd = (ix - x) * (ix - x) + (iy - y) * (iy - y);
+				if (i==0 || sqrdist>=sd)
+				{
+					sqrdist = sd;
+					input = i;
+				}		
+			}
+
+			if (sqrdist <= 2)
+			{
+				// hilight input ( it is at )
+				int ix = gamepad_input_xy[2*input+0];
+				int iy = gamepad_input_xy[2*input+1];
+
+				printf("SLOT:%d x=%d y=%d\n", input, ix,iy);
+
+				int clip[4];
+
+				clip[0] = slot_proto[1].src_x;
+				clip[1] = h - 1 - (slot_proto[1].src_y + slot_proto[1].h - 1);
+				clip[2] = clip[0] + slot_proto[1].w;
+				clip[3] = clip[1] + slot_proto[1].h;				
+
+				BlitSprite(ptr, width, height, sf, ix, iy, clip);
+			}
+		}
 
 		if (gamepad_contact_output & 0x80)
 		{
