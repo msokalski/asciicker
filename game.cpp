@@ -289,7 +289,7 @@ bool GetGamePadConfPath(char* path, const char* name, int axes, int buttons)
 {
 	const char* cfg = GetConfPath();
 	const char* filepart1 = strrchr(cfg,'/');
-	const char* filepart2 = strrchr(cfg,'/');
+	const char* filepart2 = strrchr(cfg,'\\');
 
 	if (!filepart1 && !filepart2)
 		return false;

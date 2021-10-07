@@ -22,6 +22,7 @@ static int gamepad_contact = -1;
 static int gamepad_contact_from[2] = {0,0};
 static int gamepad_contact_pos[2] = {0,0};
 static uint8_t gamepad_contact_output = 0xFF;
+static uint8_t gamepad_contact_ui = 0xFF;
 
 // inverse maps - dependences, 0xFF terminated!
 // rebuild them every time mapping changes
@@ -82,6 +83,15 @@ struct InputElem
 	int src_x, src_y;
 	int w, h;
 };
+
+static const InputElem ui_proto[] =
+{
+	{7,23, 7,3}, // clear
+	{22,23, 7,3}, // reset
+	{37,23, 7,3}, // close
+	{43,56, 7,3}, // frame
+};
+
 
 static const InputElem axis_proto[] =
 {
@@ -821,6 +831,23 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 	}
 	*/
 
+	if (gamepad_contact >= 0 && gamepad_contact_ui >= 0 && gamepad_contact_ui <= 2)
+	{
+		int dx, dy;
+		int clip[4];
+
+		int i = gamepad_contact_ui;
+		dx = x + ui_proto[i].src_x;
+		dy = y - (ui_proto[i].src_y + ui_proto[i].h - 1);
+
+		clip[0] = ui_proto[3].src_x;
+		clip[1] = h - 1 - (ui_proto[3].src_y + ui_proto[3].h - 1);
+		clip[2] = clip[0] + ui_proto[3].w;
+		clip[3] = clip[1] + ui_proto[3].h;
+
+		BlitSprite(ptr, width, height, sf, dx, dy, clip);
+	}
+
 	if (gamepad_contact>=0 && gamepad_contact_output!=0xFF)
 	{
 		int index = gamepad_contact_output & 0x3F;
@@ -860,7 +887,6 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 			clip[3] = clip[1] + slot_proto[1].h;
 			
 			BlitSprite(ptr, width, height, sf, gamepad_contact_pos[0], gamepad_contact_pos[1], clip);
-			AnsiCell* ac;
 			if (gamepad_contact_pos[1]+1>=0 && gamepad_contact_pos[1]+1<height)
 			{
 				int py = (gamepad_contact_pos[1]+1)*width;
@@ -1077,13 +1103,52 @@ void GamePadContact(int id, int ev, int x, int y)
 					// check drag/drop conditions
 					// perform action ...
 
+					if (gamepad_contact_ui >= 0 && gamepad_contact_ui <= 2)
+					{
+						int i = gamepad_contact_ui;
+						int ux = gamepad_layout_x + ui_proto[i].src_x;
+						int uy = gamepad_layout_y - ui_proto[i].src_y - ui_proto[i].h + 1;
+
+						if (x >= ux && x < ux + ui_proto[i].w &&
+							y >= uy && y < uy + ui_proto[i].h)
+						{
+							int mappings = gamepad_axes * 2 + gamepad_buttons;
+
+							if (i == 0)
+							{
+								memset(gamepad_mapping, 0xFF, mappings);
+								InvertMap(mappings);
+							}
+							if (i == 1)
+							{
+								memcpy(gamepad_mapping, gamepad_mount_mapping, mappings);
+								InvertMap(mappings);
+							}
+							if (i == 2)
+							{
+								if (gamepad_close_cb)
+									gamepad_close_cb(gamepad_close_g);
+							}
+
+							gamepad_contact = -1;
+							return;
+						}
+
+					}
+
+					// do this even if gamepad_contact_output == 0xFF
+					// (it magically handles clearing the input)
+
 					int sqrdist = 0;
 					int input = -1;
 					int mappings = gamepad_axes*2 + gamepad_buttons;
+
+					int ofs_x = gamepad_contact_output == 0xFF ? 1 : 0;
+					int ofs_y = gamepad_contact_output == 0xFF ? 1 : 0;
 					for (int i=0; i<mappings; i++)
 					{
-						int ix = gamepad_input_xy[2*i+0];
-						int iy = gamepad_input_xy[2*i+1];
+						int ix = gamepad_input_xy[2*i+0] + ofs_x;
+						int iy = gamepad_input_xy[2*i+1] + ofs_y;
 
 						int sd = (ix - x) * (ix - x) + (iy - y) * (iy - y);
 						if (i==0 || sqrdist>=sd)
@@ -1117,6 +1182,21 @@ void GamePadContact(int id, int ev, int x, int y)
 			gamepad_contact_from[1] = y;
 			gamepad_contact_pos[0] = x;
 			gamepad_contact_pos[1] = y;
+
+			// check ui
+			for (int i = 0; i < 3; i++)
+			{
+				int ux = gamepad_layout_x + ui_proto[i].src_x;
+				int uy = gamepad_layout_y - ui_proto[i].src_y - ui_proto[i].h + 1;
+
+				if (x >= ux && x < ux + ui_proto[i].w &&
+					y >= uy && y < uy + ui_proto[i].h)
+				{
+					gamepad_contact_output = 0xFF;
+					gamepad_contact_ui = i;
+					return;
+				}
+			}
 
 			// check input
 
@@ -1154,6 +1234,7 @@ void GamePadContact(int id, int ev, int x, int y)
 				output = 0xFF;
 
 			gamepad_contact_output = output;
+			gamepad_contact_ui = 0xFF;
 		}
 	}
 }
@@ -1166,7 +1247,6 @@ void GamePadKeyb(int key)
 		if (gamepad_close_cb)
 		{
 			gamepad_close_cb(gamepad_close_g);
-			// write current map to file: userdir/asciicker_gamepadname_AB.cfg
 		}
 	}
 
