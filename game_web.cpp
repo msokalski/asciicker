@@ -367,7 +367,7 @@ extern "C"
             }
             case 2:
             {
-                int16_t v = (int16_t)(val*32767);
+                int16_t v = val>1.0 ? (int16_t)-32768 : (int16_t)(val*32767);
                 GamePadAxis(idx,v);
                 break;
             }

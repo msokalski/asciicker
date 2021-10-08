@@ -1270,7 +1270,7 @@ bool read_js(int fd)
                     GamePadButton(js->number,js->value ? 32767 : 0);
                     break;
                 case JS_EVENT_AXIS:
-                    GamePadAxis(js->number,js->value);
+                    GamePadAxis(js->number,js->value == -32768 ? -32767 : js->value);
                     break;
             }
         }

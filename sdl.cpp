@@ -711,7 +711,7 @@ void a3dLoop(const LoopInterface* li)
 					if (gc && gc == sdl.gamepad)
 					{
 						if (li && li->gpad_axis)
-							li->gpad_axis(ev->axis, ev->value);
+							li->gpad_axis(ev->axis, ev->value == -32768 ? -32767 : ev->value);
 					}
 					break;
 				}

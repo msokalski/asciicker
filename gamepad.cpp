@@ -71,6 +71,8 @@ static const char* gamepad_button_name[]=
 	"A ","B ","X ","Y ", "Q ","G ","M ", "L ","R ", "Ls","Rs", "Du","Dd","Dl","Dr"
 };
 
+static const char* gamepad_special_name[] = { 0, "L-Joy", "R-Joy", "D-Pad" };
+
 struct SpriteElem
 {
 	int src_x, src_y; // position on atlas (top to bottom!)
@@ -127,6 +129,7 @@ static const InputElem slot_proto[] =
 {
 	{42,45, 4,3},
 	{42,41, 4,3}, // drag frame
+	{42,49, 4,3}, // prolong slot
 	{ 0 }
 };
 
@@ -215,38 +218,71 @@ static int UpdateAxisOutput(int a, uint32_t* out)
 	// clamp to int16_t, compare with previous value, if different update and return out
 
 	uint8_t* dep = axis_mapping[a];
-	if (!dep)
-		return 0;
 
 	int accum = 0;
 
-	while (*dep != 0xFF)
+	if (dep)
 	{
-		uint8_t d = *dep;
-		int v = gamepad_input[d];
-		int m = gamepad_mapping[d];
-
-		// check hacked unsigned
-		int in = d>>1;
-		if (((m&0x80) == 0) && gamepad_mapping[2*in] == gamepad_mapping[2*in+1])
+		while (*dep != 0xFF)
 		{
-			if (d&1) // update once per hack pair
+			uint8_t d = *dep;
+			int v = gamepad_input[d];
+			int m = gamepad_mapping[d];
+
+			if (m<0xFC)
 			{
-				if (m&0x40)
-					accum += ((int)gamepad_input[2*in] - (int)gamepad_input[2*in+1] + 32768)/2; // unsigned flipped
+				// check hacked unsigned
+				int in = d>>1;
+				if (((m&0x80) == 0) && gamepad_mapping[2*in] == gamepad_mapping[2*in+1])
+				{
+					/*
+					if ((d&1) // update once per hack pair
+					*/
+					// pair checking is unified in invertmap
+					{
+						if (m&0x40)
+							accum += ((int)gamepad_input[2*in] - (int)gamepad_input[2*in+1] + 32768)/2; // unsigned flipped
+						else
+							accum += ((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2; // unsigned normal
+					}
+				}
 				else
-					accum += ((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2; // unsigned normal
+				{
+					if (m&0x40)
+						accum -= v;
+					else
+						accum += v;
+				}
 			}
-		}
-		else
-		{
-			if (m&0x40)
-				accum -= v;
 			else
-				accum += v;
-		}
+			if (m<0xFF)
+			{
+				int in = d>>1;
+				int hat = gamepad_axis[in];
 
-		dep++;
+				// otherwise neutral, dont accum anything
+				if (hat > -32768)
+				{
+					// chromium bug work around
+					hat = (hat+32767)*7/8 - 32767;
+					float fa = hat*(float)M_PI/32767.0f;
+					
+					switch(a)
+					{
+						case 0: // L-JOY-X
+						case 2: // R-JOY-X
+							accum -= (int)(32767*sinf(fa)); 
+							break;
+						case 1: // L-JOY-Y 
+						case 3: // R-JOY-Y
+							accum += (int)(32767*cosf(fa)); break;
+					}
+
+				}
+			}
+
+			dep++;
+		}
 	}
 
 	if (accum < -32767)
@@ -278,10 +314,58 @@ static int UpdateButtonOutput(int b, uint32_t* out)
 			int v = gamepad_input[d];
 			int m = gamepad_mapping[d];
 
-			if (m&0x40)
-				accum -= v;
+			if (m<0xFC)
+			{
+				if (m&0x40)
+					accum -= v;
+				else
+					accum += v;
+			}
 			else
-				accum += v;
+			if (m<0xFF)
+			{
+				int in = d>>1;
+				int hat = gamepad_axis[in];
+
+				if (hat > -32768)
+				{
+					// chromium bug work around
+					hat = (hat+32767)*7/8 - 32767;
+					float fa = hat*(float)M_PI/32767.0f;				
+
+					switch (b)
+					{
+						case 11: // up
+						{
+							int delta = (int)(32767*cosf(fa));
+							if (delta<0)
+								accum -= delta;
+							break;
+						}
+						case 12: // down
+						{
+							int delta = (int)(32767*cosf(fa));
+							if (delta>0)
+								accum += delta;
+							break;
+						}
+						case 13: // left
+						{
+							int delta = -(int)(32767*sinf(fa)); 
+							if (delta<0)
+								accum -= delta;
+							break;
+						}
+						case 14: // right
+						{
+							int delta = -(int)(32767*sinf(fa)); 
+							if (delta>0)
+								accum += delta;
+							break;
+						}
+					}
+				}
+			}
 
 			dep++;
 		}
@@ -302,44 +386,71 @@ static int UpdateButtonOutput(int b, uint32_t* out)
 	return 0;
 }
 
-int UpdateGamePadAxis(int a, int16_t v, uint32_t out[2])
+int UpdateGamePadAxis(int a, int16_t v, uint32_t out[4])
 {
-	// prevent wrap	at -max flipping
-	if (v==-32768)
-		v=-32767;
-
 	gamepad_axis[a] = v;
 
 	int16_t neg = v<0 ? -v : 0;
 	int16_t pos = v>0 ? +v : 0;
 
+	// prevent wrap	at -max flipping
+	if (neg==-32768)
+		neg=-32767;	
+
 	int outs = 0;
 
-	if (gamepad_input[2*a+0] != neg)
+	uint8_t m = gamepad_mapping[2*a];
+	if (m<0xFF && m>=0xFC)
 	{
-		gamepad_input[2*a+0] = neg;
-		uint8_t m = gamepad_mapping[2*a+0];
-		if (m != 0xFF)
+		if (m == 0xFE)
 		{
-			// update negative part of input
-			if (m&0x80)
-				outs += UpdateButtonOutput(m&0x3F, out+outs);
-			else
-				outs += UpdateAxisOutput(m&0x3F, out+outs);
+			outs += UpdateAxisOutput(0, out+outs);
+			outs += UpdateAxisOutput(1, out+outs);
+		}
+		else
+		if (m == 0xFD)
+		{
+			outs += UpdateAxisOutput(2, out+outs);
+			outs += UpdateAxisOutput(3, out+outs);
+		}
+		else
+		if (m == 0xFC)
+		{
+			outs += UpdateButtonOutput(11, out+outs);
+			outs += UpdateButtonOutput(12, out+outs);
+			outs += UpdateButtonOutput(13, out+outs);
+			outs += UpdateButtonOutput(14, out+outs);
 		}
 	}
-
-	if (gamepad_input[2*a+1] != pos)
+	else
 	{
-		gamepad_input[2*a+1] = pos;
-		uint8_t m = gamepad_mapping[2*a+1];
-		if (m != 0xFF)
+
+		if (gamepad_input[2*a+0] != neg)
 		{
-			// update positive part of input
-			if (m&0x80)
-				outs += UpdateButtonOutput(m&0x3F, out+outs);
-			else
-				outs += UpdateAxisOutput(m&0x3F, out+outs);
+			gamepad_input[2*a+0] = neg;
+			uint8_t m = gamepad_mapping[2*a+0];
+			if (m < 0xFC)
+			{
+				// update negative part of input
+				if (m&0x80)
+					outs += UpdateButtonOutput(m&0x3F, out+outs);
+				else
+					outs += UpdateAxisOutput(m&0x3F, out+outs);
+			}
+		}
+
+		if (gamepad_input[2*a+1] != pos)
+		{
+			gamepad_input[2*a+1] = pos;
+			uint8_t m = gamepad_mapping[2*a+1];
+			if (m < 0xFC)
+			{
+				// update positive part of input
+				if (m&0x80)
+					outs += UpdateButtonOutput(m&0x3F, out+outs);
+				else
+					outs += UpdateAxisOutput(m&0x3F, out+outs);
+			}
 		}
 	}
 
@@ -358,7 +469,7 @@ int UpdateGamePadButton(int b, int16_t v, uint32_t out[1])
 	{
 		gamepad_input[2*gamepad_axes + b] = pos;
 		uint8_t m = gamepad_mapping[2*gamepad_axes + b];
-		if (m != 0xFF)
+		if (m < 0xFC)
 		{
 			if (m&0x80)
 				outs += UpdateButtonOutput(m&0x3F, out + outs);
@@ -380,13 +491,39 @@ static void InvertMap(int mappings)
 	{
 		uint8_t m = gamepad_mapping[i];
 
-		if (m!=0xFF)
+		if (m<0xFC)
 		{
 			int j = m&0x3F;
 			if ((m&0x80) == 0)
-				axis_len[j]++;
+			{
+				// count unsigned once
+				if ((i&1)==0 || m!=gamepad_mapping[i-1])
+					axis_len[j]++;
+			}
 			else
 				button_len[j]++;
+		}
+		else
+		if (m<0xFF && (i&1)==0)
+		{
+			int j = 0xFF-m;
+			switch (j)
+			{
+				case 1: // l-joy
+					axis_len[0]++;
+					axis_len[1]++;
+					break;
+				case 2: // r-joy
+					axis_len[2]++;
+					axis_len[3]++;
+					break;
+				case 3: // r-joy
+					button_len[11]++;
+					button_len[12]++;
+					button_len[13]++;
+					button_len[14]++;
+					break;
+			}
 		}
 	}
 
@@ -419,14 +556,40 @@ static void InvertMap(int mappings)
 	{
 		uint8_t m = gamepad_mapping[i];
 
-		if (m!=0xFF)
+		if (m<0xFC)
 		{
 			int j = m&0x3F;
 			if ((m&0x80) == 0)
-				axis_mapping[j][axis_len[j]++] = i;
+			{
+				// count unsigned once
+				if ((i&1)==0 || m!=gamepad_mapping[i-1])
+					axis_mapping[j][axis_len[j]++] = i;
+			}
 			else
 				button_mapping[j][button_len[j]++] = i;
 		}
+		else
+		if (m<0xFF && (i&1)==0)
+		{
+			int j = 0xFF-m;
+			switch (j)
+			{
+				case 1: // l-joy
+					axis_mapping[0][axis_len[0]++] = i;
+					axis_mapping[1][axis_len[1]++] = i;
+					break;
+				case 2: // r-joy
+					axis_mapping[2][axis_len[2]++] = i;
+					axis_mapping[3][axis_len[3]++] = i;
+					break;
+				case 3: // r-joy
+					button_mapping[11][button_len[11]++] = i;
+					button_mapping[12][button_len[12]++] = i;
+					button_mapping[13][button_len[13]++] = i;
+					button_mapping[14][button_len[14]++] = i;
+					break;
+			}
+		}		
 	}
 
 	// update all outs
@@ -664,50 +827,91 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 				label[2].gl = '0' + a % 10;
 		}
 
-
-		clip[0] = slot_proto[0].src_x;
-		clip[1] = h - 1 - (slot_proto[0].src_y + slot_proto[0].h - 1);
-		clip[2] = clip[0] + slot_proto[0].w;
-		clip[3] = clip[1] + slot_proto[0].h;
-
 		dx += button_proto[i].w - 1;
-		BlitSprite(ptr, width, height, sf, dx, dy, clip);
-
-		gamepad_input_xy[2*(2*a+0)+0] = dx;
-		gamepad_input_xy[2*(2*a+0)+1] = dy;
-
 
 		uint8_t neg = gamepad_mapping[2*a];
-		if (neg!=0xFF && dy+1>=0 && dy+1<height && dx+1>=0 && dx+1<width)
-		{
-			label = ptr + (dx + 1) + (dy + 1) * width;
-			const char* name;
-			if (neg&0x80)
-				name = gamepad_button_name[neg&0x3F];
-			else
-				name = gamepad_half_axis_name[2*(neg&0x3F) + (neg&0x40 ? 0 : 1)];
-			label[0].gl = name[0];
-			label[1].gl = name[1];
-		}
-
-		dx += slot_proto[0].w - 1;
-		BlitSprite(ptr, width, height, sf, dx, dy, clip);
-
-		gamepad_input_xy[2*(2*a+1)+0] = dx;
-		gamepad_input_xy[2*(2*a+1)+1] = dy;
-
-
 		uint8_t pos = gamepad_mapping[2*a+1];
-		if (pos!=0xFF && dy+1>=0 && dy+1<height && dx+1>=0 && dx+1<width)
+
+		// special mapping of 1 axis (pov-hat) to entire joy or dpad
+		if (neg!=0xFF && neg>=0xFC && pos==neg)
 		{
-			label = ptr + (dx + 1) + (dy + 1) * width;
-			const char* name;
-			if (pos&0x80)
-				name = gamepad_button_name[pos&0x3F];
-			else
-				name = gamepad_half_axis_name[2*(pos&0x3F) + (pos&0x40 ? 0 : 1)];
-			label[0].gl = name[0];
-			label[1].gl = name[1];
+			clip[0] = slot_proto[0].src_x;
+			clip[1] = h - 1 - (slot_proto[0].src_y + slot_proto[0].h - 1);
+			clip[2] = clip[0] + slot_proto[0].w;
+			clip[3] = clip[1] + slot_proto[0].h;
+
+			BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+			dx += slot_proto[2].w - 1;
+
+			clip[0] = slot_proto[2].src_x;
+			clip[1] = h - 1 - (slot_proto[2].src_y + slot_proto[2].h - 1);
+			clip[2] = clip[0] + slot_proto[2].w;
+			clip[3] = clip[1] + slot_proto[2].h;
+
+			BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+			dx -= slot_proto[2].w - 1;
+
+			if (dy+1>=0 && dy+1<height)
+			{
+				const char* name = gamepad_special_name[0xFF-neg];
+
+				for (int i=0; i<5; i++)
+				{
+					label = ptr + (dx + 1) + (dy + 1) * width;
+					if (dx+1+i>=0 && dx+1+i<width)
+						label[i].gl = name[i];
+				}
+			}
+		}
+		else
+		{
+			clip[0] = slot_proto[0].src_x;
+			clip[1] = h - 1 - (slot_proto[0].src_y + slot_proto[0].h - 1);
+			clip[2] = clip[0] + slot_proto[0].w;
+			clip[3] = clip[1] + slot_proto[0].h;
+
+			BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+			gamepad_input_xy[2*(2*a+0)+0] = dx;
+			gamepad_input_xy[2*(2*a+0)+1] = dy;
+
+
+			if (neg<0xFC && dy+1>=0 && dy+1<height)
+			{
+				label = ptr + (dx + 1) + (dy + 1) * width;
+				const char* name;
+				if (neg&0x80)
+					name = gamepad_button_name[neg&0x3F];
+				else
+					name = gamepad_half_axis_name[2*(neg&0x3F) + (neg&0x40 ? 0 : 1)];
+				
+				if (dx+1>=0 && dx+1<width)
+					label[0].gl = name[0];
+				if (dx+2>=0 && dx+2<width)
+					label[1].gl = name[1];
+			}
+
+			dx += slot_proto[0].w - 1;
+			BlitSprite(ptr, width, height, sf, dx, dy, clip);
+
+			gamepad_input_xy[2*(2*a+1)+0] = dx;
+			gamepad_input_xy[2*(2*a+1)+1] = dy;
+			
+			if (pos<0xFC && dy+1>=0 && dy+1<height)
+			{
+				label = ptr + (dx + 1) + (dy + 1) * width;
+				const char* name;
+				if (pos&0x80)
+					name = gamepad_button_name[pos&0x3F];
+				else
+					name = gamepad_half_axis_name[2*(pos&0x3F) + (pos&0x40 ? 0 : 1)];
+				if (dx+1>=0 && dx+1<width)
+					label[0].gl = name[0];
+				if (dx+2>=0 && dx+2<width)
+					label[1].gl = name[1];
+			}
 		}
 
 		row++;
@@ -889,8 +1093,6 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 				int ix = gamepad_input_xy[2*input+0];
 				int iy = gamepad_input_xy[2*input+1];
 
-				printf("SLOT:%d x=%d y=%d\n", input, ix,iy);
-
 				int clip[4];
 
 				clip[0] = slot_proto[1].src_x;
@@ -993,7 +1195,7 @@ static void BlitButton(AnsiCell* ptr, int width, int height, int x, int y, int w
 	gamepad_input_xy[2*(2*gamepad_axes+b)+1] = dy;
 
 	uint8_t pos = gamepad_mapping[2*gamepad_axes + b];
-	if (pos!=0xFF && dy+1>=0 && dy+1<height && dx+1>=0 && dx+1<width)
+	if (pos<0xFC && dy+1>=0 && dy+1<height)
 	{
 		label = ptr + (dx + 1) + (dy + 1) * width;
 		const char* name;
@@ -1001,8 +1203,10 @@ static void BlitButton(AnsiCell* ptr, int width, int height, int x, int y, int w
 			name = gamepad_button_name[pos&0x3F];
 		else
 			name = gamepad_half_axis_name[2*(pos&0x3F) + (pos&0x40 ? 0 : 1)];
-		label[0].gl = name[0];
-		label[1].gl = name[1];
+		if (dx+1>=0 && dx+1<width)
+			label[0].gl = name[0];
+		if (dx+2>=0 && dx+2<width)
+			label[1].gl = name[1];
 	}	
 }
 
@@ -1196,15 +1400,18 @@ void GamePadContact(int id, int ev, int x, int y)
 					int ofs_y = gamepad_contact_output == 0xFF ? 1 : 0;
 					for (int i=0; i<mappings; i++)
 					{
-						int ix = gamepad_input_xy[2*i+0] + ofs_x;
-						int iy = gamepad_input_xy[2*i+1] + ofs_y;
-
-						int sd = (ix - x) * (ix - x) + (iy - y) * (iy - y);
-						if (i==0 || sqrdist>=sd)
+						if (gamepad_mapping[i]==0xFF || gamepad_mapping[i]<0xFC)
 						{
-							sqrdist = sd;
-							input = i;
-						}		
+							int ix = gamepad_input_xy[2*i+0] + ofs_x;
+							int iy = gamepad_input_xy[2*i+1] + ofs_y;
+
+							int sd = (ix - x) * (ix - x) + (iy - y) * (iy - y);
+							if (i==0 || sqrdist>=sd)
+							{
+								sqrdist = sd;
+								input = i;
+							}		
+						}
 					}
 
 					if (sqrdist <= 2)
@@ -1247,9 +1454,9 @@ void GamePadContact(int id, int ev, int x, int y)
 				}
 			}
 
-			// check input
+			// check outputs
 
-			int sqrdist = 0;
+			int sqrdist = 10;
 			uint8_t output = 0xFF;
 			for (int i=0; i<12; i++)
 			{
@@ -1257,7 +1464,7 @@ void GamePadContact(int id, int ev, int x, int y)
 				int oy = gamepad_layout_y - gamepad_half_axis_xy[2*i+1];
 
 				int sd = (ox - x) * (ox - x) + (oy - y) * (oy - y);
-				if (i==0 || sqrdist>=sd)
+				if (sqrdist>=sd)
 				{
 					sqrdist = sd;
 					output = i/2;
@@ -1281,6 +1488,48 @@ void GamePadContact(int id, int ev, int x, int y)
 
 			if (sqrdist > 2)
 				output = 0xFF;
+
+			if (output == 0xFF)
+			{
+				// check clicking on axis input slots
+				// if both neg and pos are equal and empty or in special
+				// cycle special mode 0xFF->0xFE->0xFD->0xFC -> 0xFF->...
+				sqrdist = 10;
+				int input = -1;
+
+				for (int i=0; i<gamepad_axes*2; i++)
+				{
+					// pos == neg & >= 0xFC
+					int j = i>>1;
+					if (gamepad_mapping[2*j+0] >= 0xFC && gamepad_mapping[2*j+1] == gamepad_mapping[2*j+0])
+					{
+						int ix = gamepad_input_xy[2*i+0] + 1;
+						int iy = gamepad_input_xy[2*i+1] + 1;
+
+						int sd = (ix - x) * (ix - x) + (iy - y) * (iy - y);
+
+						if (sqrdist>=sd)
+						{
+							sqrdist = sd;
+							input = j;
+						}		
+					}
+				}
+
+				if (sqrdist <= 2)
+				{
+					int i = 2*input;
+
+					gamepad_mapping[i]--;
+					if (gamepad_mapping[i] < 0xFC)
+						gamepad_mapping[i] = 0xFF;
+					gamepad_mapping[i+1] = gamepad_mapping[i];
+
+					// build inv map
+					int mappings = gamepad_axes*2 + gamepad_buttons;
+					InvertMap(mappings);
+				}
+			}
 
 			gamepad_contact_output = output;
 			gamepad_contact_ui = 0xFF;

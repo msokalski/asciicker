@@ -9232,8 +9232,14 @@ void GamePadButton(int b, int16_t pos)
 
 void GamePadAxis(int a, int16_t pos)
 {
-	uint32_t out[2];
+	uint32_t out[4];
 	int outs = UpdateGamePadAxis(a, pos, out);
+
+	// 0 if unmapped
+	// 1 button/axis
+	// 2 buttons/axes
+	// 2 axes (when mapped on L/R-Joy)
+	// 4 buttons (when mapped on D-Pad)
 
 	if (prime_game)
 	{

@@ -12,7 +12,7 @@ void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mappi
 void DisconnectGamePad();
 
 // return num of outs
-int UpdateGamePadAxis(int a, int16_t pos, uint32_t out[2]);
+int UpdateGamePadAxis(int a, int16_t pos, uint32_t out[4]);
 int UpdateGamePadButton(int b, int16_t pos, uint32_t out[1]);
 
 void PaintGamePad(AnsiCell* ptr, int width, int height);
