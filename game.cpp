@@ -6596,15 +6596,15 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			{
 				switch (key)
 				{
-					case 'c':
-					case 'C': k=7; break;
-					case 'r':
-					case 'R': k=8; break;
 					case ' ': k = 0; break;
 					case '\n': k = 1; break;
 					case 8:
 					case '\\':
 					case 27: k = 2; break;
+
+					default:
+						if (key>32 && key<127)
+							k = key;
 				}
 				break;
 			}
