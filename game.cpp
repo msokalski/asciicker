@@ -9367,7 +9367,7 @@ void menu_gamepad(Game* g)
 	g->CloseMenu();
 	g->show_gamepad = true;
 	g->show_buts = false;
-	GamePadReset(gamepad_close,(void*)g);
+	GamePadOpen(gamepad_close,(void*)g);
 }
 
 static const Menu settings_menu[]=

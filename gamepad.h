@@ -17,7 +17,7 @@ int UpdateGamePadButton(int b, int16_t pos, uint32_t out[1]);
 
 void PaintGamePad(AnsiCell* ptr, int width, int height);
 
-void GamePadReset( void (*close)(void* _g), void* g );
+void GamePadOpen( void (*close)(void* _g), void* g );
 
 void GamePadContact(int id, int ev, int x, int y);
 /*

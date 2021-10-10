@@ -8,6 +8,17 @@
 
 #include "fast_rand.h"
 
+#if 0 // testing with no gamepad connected
+static int nopad()
+{
+	ConnectGamePad("NO GAMEPAD", 6, 15, 0);
+	return 1;
+}
+
+static int no_gamepad = nopad();
+#endif
+
+
 void (*gamepad_close_cb)(void* g) = 0;
 void* gamepad_close_g = 0;
 
@@ -67,12 +78,15 @@ static const int16_t gamepad_button_xy[2*15] =
 
 static const char* gamepad_half_axis_name[]=
 {
-	"Ll","Lr", "Lu","Ld", "Rl","Rr", "Ru","Rd", "Lt","Lt", "Rt","Rt"
+	"Ll","Lr", "Lu","Ld", "Rl","Rr", "Ru","Rd", "Lt","Lt", "Rt","Rt", 0
 };
 
 static const char* gamepad_button_name[]=
 {
-	"A ","B ","X ","Y ", "Q ","G ","M ", "L ","R ", "Ls","Rs", "Du","Dd","Dl","Dr"
+	// Q: (s)elect/back/quit  Q is taken by Quit, B is taken by B-button
+	// G: (g)uide
+	// M: (e)nter/start/menu/play  S is taken by Select-button, menu and play are ok
+	"A ","B ","X ","Y ", "Q ","G ","M ", "L ","R ", "Ls","Rs", "Du","Dd","Dl","Dr", 0
 };
 
 static const char* gamepad_special_name[] = { 0, "L-Joy", "R-Joy", "D-Pad" };
@@ -394,6 +408,21 @@ static int UpdateButtonOutput(int b, uint32_t* out)
 
 int UpdateGamePadAxis(int a, int16_t v, uint32_t out[4])
 {
+	if (gamepad_keyb_edit == 0xFF)
+	{
+		// if axis passes through - 16k / +16k treshold(in any direction)
+		// make keyb focus over this input 
+		if (gamepad_axis[a] < 16384 && v >= 16384)
+		{
+			gamepad_keyb_focus = 2 * gamepad_axes + 1;
+		}
+		else
+		if (gamepad_axis[a] > -16384 && v <= -16384)
+		{
+			gamepad_keyb_focus = 2 * gamepad_axes;
+		}
+	}
+
 	gamepad_axis[a] = v;
 
 	int16_t neg = v<0 ? -v : 0;
@@ -465,6 +494,16 @@ int UpdateGamePadAxis(int a, int16_t v, uint32_t out[4])
 
 int UpdateGamePadButton(int b, int16_t v, uint32_t out[1])
 {
+	if (gamepad_keyb_edit == 0xFF)
+	{
+		// if button passes through +16k treshold (in any direction)
+		// make keyb focus over this input 
+		if (gamepad_button[b] < 16384 && v >= 16384)
+		{
+			gamepad_keyb_focus = 2 * gamepad_axes + b;
+		}
+	}
+
 	gamepad_button[b] = v;
 
 	int16_t pos = v>0 ? +v : 0;
@@ -614,8 +653,16 @@ void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mappi
 	gamepad_connected = true;
 
 	int mappings = 2*axes+buttons;
-	memcpy(gamepad_mapping,mapping,mappings);
-	memcpy(gamepad_mount_mapping,mapping,mappings);
+	if (mapping)
+	{
+		memcpy(gamepad_mapping, mapping, mappings);
+		memcpy(gamepad_mount_mapping, mapping, mappings);
+	}
+	else
+	{
+		memset(gamepad_mapping, 0xFF, mappings);
+		memset(gamepad_mount_mapping, 0xFF, mappings);
+	}
 
 	InvertMap(mappings);
 
@@ -1078,7 +1125,65 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 	}
 
-	if (gamepad_contact>=0 && gamepad_contact_output!=0xFF)
+	if (gamepad_keyb_focus!=0xFF)
+	{
+		int i = gamepad_keyb_focus;
+		uint8_t m = gamepad_mapping[i];
+
+		int f = -1;
+		if (m == 0xFF || m < 0xFC)
+		{
+			// paint normal hilight ui_proto[5]
+			f=5;
+		}
+		else
+		{
+			// paint special hilight ui_proto[3]
+			f=3;
+			i = i&~1;
+		}
+
+		int clip[4];
+		clip[0] = ui_proto[f].src_x;
+		clip[1] = h - 1 - (ui_proto[f].src_y + ui_proto[f].h - 1);
+		clip[2] = clip[0] + ui_proto[f].w;
+		clip[3] = clip[1] + ui_proto[f].h;
+
+		int dx = gamepad_input_xy[2 * i + 0];
+		int dy = gamepad_input_xy[2 * i + 1];
+
+		BlitSprite(ptr, width, height, sf, dx,dy, clip);
+
+		if (gamepad_keyb_edit != 0xFF)
+		{
+			dx++;
+			dy++;
+
+			// todo check if we can write at dx,dy and dx+1,dy
+			// ...
+
+			// clear current contents with spaces
+			ptr[dx + width * dy].gl = ' ';
+			ptr[dx+1 + width * dy].gl = ' ';
+
+			// paint cursor
+			static int blink = 0;
+			blink++;
+			if (blink == 40)
+				blink = 0;
+
+			if (blink<20)
+				ptr[dx + gamepad_keyb_edit + width * dy].gl = 219;
+
+			if (gamepad_keyb_edit > 0)
+			{
+				// show first char typed so far
+				ptr[dx + width * dy].gl = gamepad_keyb_char[0] + 'A'-'a';
+			}
+		}
+	}
+
+	if (gamepad_contact >= 0 && gamepad_contact_output != 0xFF)
 	{
 		int index = gamepad_contact_output & 0x3F;
 		const char* str = 0;
@@ -1105,7 +1210,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 				{
 					sqrdist = sd;
 					input = i;
-				}		
+				}
 			}
 
 			if (sqrdist <= 2)
@@ -1119,7 +1224,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 				clip[0] = slot_proto[1].src_x;
 				clip[1] = h - 1 - (slot_proto[1].src_y + slot_proto[1].h - 1);
 				clip[2] = clip[0] + slot_proto[1].w;
-				clip[3] = clip[1] + slot_proto[1].h;				
+				clip[3] = clip[1] + slot_proto[1].h;
 
 				BlitSprite(ptr, width, height, sf, ix, iy, clip);
 			}
@@ -1129,7 +1234,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		if (gamepad_contact_output & 0x80)
 		{
 			// button
-			if (index<15)
+			if (index < 15)
 				str = gamepad_button_name[index];
 		}
 		else
@@ -1140,12 +1245,12 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 				if (gamepad_contact_output & 0x40)
 				{
 					// negative
-					str = gamepad_half_axis_name[2*index+0];
+					str = gamepad_half_axis_name[2 * index + 0];
 				}
 				else
 				{
 					// positive
-					str = gamepad_half_axis_name[2*index+1];
+					str = gamepad_half_axis_name[2 * index + 1];
 				}
 			}
 		}
@@ -1158,44 +1263,17 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 			clip[1] = h - 1 - (slot_proto[1].src_y + slot_proto[1].h - 1);
 			clip[2] = clip[0] + slot_proto[1].w;
 			clip[3] = clip[1] + slot_proto[1].h;
-			
+
 			BlitSprite(ptr, width, height, sf, gamepad_contact_pos[0], gamepad_contact_pos[1], clip);
-			if (gamepad_contact_pos[1]+1>=0 && gamepad_contact_pos[1]+1<height)
+			if (gamepad_contact_pos[1] + 1 >= 0 && gamepad_contact_pos[1] + 1 < height)
 			{
-				int py = (gamepad_contact_pos[1]+1)*width;
-				if (gamepad_contact_pos[0]+1>=0 && gamepad_contact_pos[0]+1<width )
-					ptr[gamepad_contact_pos[0]+1 + py].gl = str[0];
-				if (gamepad_contact_pos[0]+2>=0 && gamepad_contact_pos[0]+2<width )
-					ptr[gamepad_contact_pos[0]+2 + py].gl = str[1];
+				int py = (gamepad_contact_pos[1] + 1)*width;
+				if (gamepad_contact_pos[0] + 1 >= 0 && gamepad_contact_pos[0] + 1 < width)
+					ptr[gamepad_contact_pos[0] + 1 + py].gl = str[0];
+				if (gamepad_contact_pos[0] + 2 >= 0 && gamepad_contact_pos[0] + 2 < width)
+					ptr[gamepad_contact_pos[0] + 2 + py].gl = str[1];
 			}
 		}
-	}
-
-	if (gamepad_keyb_focus!=0xFF)
-	{
-		int i = gamepad_keyb_focus;
-		uint8_t m = gamepad_mapping[i];
-
-		int f = -1;
-		if (m == 0xFF || m < 0xFC)
-		{
-			// paint normal hilight ui_proto[5]
-			f=5;
-		}
-		else
-		{
-			// paint special hilight ui_proto[3]
-			f=3;
-			i = i&~1;
-		}
-
-		int clip[4];
-		clip[0] = ui_proto[f].src_x;
-		clip[1] = h - 1 - (ui_proto[f].src_y + ui_proto[f].h - 1);
-		clip[2] = clip[0] + ui_proto[f].w;
-		clip[3] = clip[1] + ui_proto[f].h;
-		
-		BlitSprite(ptr, width, height, sf, gamepad_input_xy[2*i+0], gamepad_input_xy[2*i+1], clip);
 	}
 }
 
@@ -1378,7 +1456,7 @@ const uint8_t* GetGamePadMapping()
 }
 
 
-void GamePadReset( void (*close_cb)(void* g), void* g )
+void GamePadOpen( void (*close_cb)(void* g), void* g )
 {
 	gamepad_close_cb = close_cb;
 	gamepad_close_g = g;
@@ -1514,7 +1592,7 @@ void GamePadContact(int id, int ev, int x, int y)
 	}
 	else
 	{
-		if (ev == 0)
+		if (ev == 0 && gamepad_keyb_edit==0xFF)
 		{
 			gamepad_contact = id;
 			gamepad_contact_from[0] = x;
@@ -1622,6 +1700,9 @@ void GamePadContact(int id, int ev, int x, int y)
 
 void GamePadKeyb(int key)
 {
+	if (gamepad_contact >= 0)
+		return;
+
 	if (key==2 || key=='q' || key=='Q') // 'Q'UIT (right)
 	{
 		// close
@@ -1629,6 +1710,7 @@ void GamePadKeyb(int key)
 		{
 			gamepad_close_cb(gamepad_close_g);
 		}
+		return;
 	}
 
 	if (key=='c' || key=='C') // 'C'LEAR (center)
@@ -1638,6 +1720,7 @@ void GamePadKeyb(int key)
 		memset(gamepad_mapping,0xFF,mappings);
 		InvertMap(mappings);		
 		gamepad_contact = -1;
+		return;
 	}
 
 	if (key=='i' || key=='I') // 'I'NIT (left)
@@ -1647,23 +1730,130 @@ void GamePadKeyb(int key)
 		memcpy(gamepad_mapping,gamepad_mount_mapping,mappings);
 		InvertMap(mappings);		
 		gamepad_contact = -1;
+		return;
 	}
 
-	if (key==1 || key>32) // enter
+	if (key==1 || key>32) // enter or char but not space
 	{
 		if (gamepad_keyb_focus!=0xFF)
 		{
-			// enter/leave editing mode
-			if (gamepad_keyb_edit==0xFF)
+			// first ensuse we're not special mapped
+			if (gamepad_mapping[gamepad_keyb_focus] >= 0xFC && gamepad_mapping[gamepad_keyb_focus] < 0xFF)
+				return;
+
+			if (key == 1)
 			{
-				gamepad_keyb_edit = 0;
+				// enter/leave editing mode
+				if (gamepad_keyb_edit == 0xFF)
+				{
+					gamepad_keyb_edit = 0;
+				}
+				else
+				{
+					if (gamepad_keyb_edit > 0)
+					{
+						// here only L and R may be applied
+						// no need to lookup
+						char k = gamepad_keyb_char[0];
+						uint8_t out = 0xFF;
+						if (k == 'l')
+						{
+							// left stick button ok
+							out = 0x80 | 0x07;
+						}
+						if (k == 'r')
+						{
+							// right stick button ok
+							out = 0x80 | 0x08;
+						}
+
+						if (out != 0xFF)
+						{
+							gamepad_mapping[gamepad_keyb_focus] = out;
+							int mappings = gamepad_axes * 2 + gamepad_buttons;
+							InvertMap(mappings);
+						}
+					}
+
+					// this should be done also on every other ui action
+					gamepad_keyb_edit = 0xFF;
+				}
 			}
 			else
 			{
-				// this should be done also on every other ui action
-				gamepad_keyb_edit = 0xFF;
+				int pos = gamepad_keyb_edit == 0xFF ? 0 : gamepad_keyb_edit;
+				
+				// check if key matches any name
+
+				char k = key;
+				if (k >= 'A' && k <= 'Z')
+					k += 'a' - 'A';
+
+				const char** name_list[] = { gamepad_half_axis_name, gamepad_button_name , 0 };
+				const char*** list = name_list + 0;
+				while (*list)
+				{
+					const char** arr = *list;
+					while (*arr)
+					{
+						const char* name = *arr;
+
+						char p = 0; 
+						if (pos == 1)
+						{
+							p = name[0];
+							if (p >= 'A' && p <= 'Z')
+								p += 'a' - 'A';
+						}
+						char c = name[pos];
+						if (c >= 'A' && c <= 'Z')
+							c += 'a' - 'A';
+						if (k == c && (pos==0 || p==gamepad_keyb_char[0]))
+						{
+							// match
+							// check for 1 char
+							if (pos == 1 || pos == 0 && c != 'l' && c != 'r' && c != 'd')
+							{
+								// apply immediately if there is no other 
+								uint8_t out = 0x00;
+								if (*list == gamepad_button_name)
+								{
+									int index = arr - gamepad_button_name;
+									out |= 0x80;
+									out |= index;
+								}
+								else
+								{
+									int index = arr - gamepad_half_axis_name;
+									if ((index & 1) == 0)
+										out |= 0x40; // neg
+									out |= (index>>1);
+								}
+
+								gamepad_keyb_edit = 0xFF;
+
+								gamepad_mapping[gamepad_keyb_focus] = out;
+								int mappings = gamepad_axes * 2 + gamepad_buttons;
+								InvertMap(mappings);
+							}
+							else
+							{
+								// pos must be 0 here
+								gamepad_keyb_char[pos] = k;
+								gamepad_keyb_edit = 1;
+							}
+
+							return;
+						}
+
+						arr++;
+					}
+
+					list++;
+				}
 			}
 		}
+		return;
 	}
 
 	if (key==0) // space
@@ -1699,6 +1889,7 @@ void GamePadKeyb(int key)
 			InvertMap(mappings);
 
 		}
+		return;
 	}
 
 	if (key>=3 && key<=6) // cursor
@@ -1708,6 +1899,16 @@ void GamePadKeyb(int key)
 		else
 		{
 			int i = gamepad_keyb_focus;
+
+			if (gamepad_keyb_edit == 1)
+			{
+				if (key == 5)
+				{
+					gamepad_keyb_edit = 0;
+					return;
+				}
+			}
+
 			// get current pos
 			int ix = gamepad_input_xy[2*i+0];
 			int iy = gamepad_input_xy[2*i+1];
@@ -1743,6 +1944,6 @@ void GamePadKeyb(int key)
 				gamepad_keyb_focus = best_j;
 			}
 		}
+		return;
 	}
-
 }
