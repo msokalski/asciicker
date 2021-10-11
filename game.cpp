@@ -5449,7 +5449,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss, perspective);
 
-	if (input.shoot /*&& !player.shooting*/ && player.req.weapon == WEAPON::REGULAR_CROSSBOW)
+	if (input.shoot /*&& !player.shooting*/ && 
+		player.req.weapon == WEAPON::REGULAR_CROSSBOW &&
+		stamp - player.shoot_stamp > 1000000) // 1s cooldown (would be nice to animate xbow reload)
 	{
 		// this should be done inside SetActionAttack() if weapon is crossbow
 
