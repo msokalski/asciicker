@@ -8,7 +8,7 @@
 
 #include "fast_rand.h"
 
-#if 0 // testing with no gamepad connected
+#if 1 // testing with no gamepad connected
 static int nopad()
 {
 	ConnectGamePad("NO GAMEPAD", 6, 15, 0);
@@ -83,10 +83,7 @@ static const char* gamepad_half_axis_name[]=
 
 static const char* gamepad_button_name[]=
 {
-	// Q: (s)elect/back/quit  Q is taken by Quit, B is taken by B-button
-	// G: (g)uide
-	// M: (e)nter/start/menu/play  S is taken by Select-button, menu and play are ok
-	"A ","B ","X ","Y ", "Q ","G ","M ", "L ","R ", "Ls","Rs", "Du","Dd","Dl","Dr", 0
+	"A ","B ","X ","Y ", "E ","G ","F ", "L ","R ", "Ls","Rs", "Du","Dd","Dl","Dr", 0
 };
 
 static const char* gamepad_special_name[] = { 0, "L-Joy", "R-Joy", "D-Pad" };
@@ -675,6 +672,8 @@ void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mappi
 	gamepad_contact = -1;
 	gamepad_keyb_focus = 0xFF; // no focus (pressing any arrow will )
 	gamepad_keyb_edit = 0xFF; // not editing, enter->0x00, char->0x01 
+
+	gamepad_keyb_focus = 0; // show focus as encouragement for using keyb
 }
 
 void DisconnectGamePad()
@@ -1182,54 +1181,10 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 			}
 		}
 	}
-
 	if (gamepad_contact >= 0 && gamepad_contact_output != 0xFF)
 	{
 		int index = gamepad_contact_output & 0x3F;
 		const char* str = 0;
-
-		// repaint input's slot if hovered
-		/*
-		{
-			int x = gamepad_contact_pos[0];
-			int y = gamepad_contact_pos[1];
-
-			int sqrdist = 0;
-			int input = -1;
-			int mappings = gamepad_axes*2 + gamepad_buttons;
-
-			int ofs_x = gamepad_contact_output == 0xFF ? 1 : 0;
-			int ofs_y = gamepad_contact_output == 0xFF ? 1 : 0;
-			for (int i=0; i<mappings; i++)
-			{
-				int ix = gamepad_input_xy[2*i+0] + ofs_x;
-				int iy = gamepad_input_xy[2*i+1] + ofs_y;
-
-				int sd = (ix - x) * (ix - x) + (iy - y) * (iy - y);
-				if (i==0 || sqrdist>=sd)
-				{
-					sqrdist = sd;
-					input = i;
-				}
-			}
-
-			if (sqrdist <= 2)
-			{
-				// hilight input ( it is at )
-				int ix = gamepad_input_xy[2*input+0];
-				int iy = gamepad_input_xy[2*input+1];
-
-				int clip[4];
-
-				clip[0] = slot_proto[1].src_x;
-				clip[1] = h - 1 - (slot_proto[1].src_y + slot_proto[1].h - 1);
-				clip[2] = clip[0] + slot_proto[1].w;
-				clip[3] = clip[1] + slot_proto[1].h;
-
-				BlitSprite(ptr, width, height, sf, ix, iy, clip);
-			}
-		}
-		*/
 
 		if (gamepad_contact_output & 0x80)
 		{
@@ -1426,6 +1381,13 @@ static bool CalcLayout(int width, int height, int layout[] /*ec,er,w,h,rpec*/)
 
 void SetGamePadMapping(const uint8_t* map)
 {
+	// break any ui
+	gamepad_contact = -1;
+	gamepad_keyb_focus = 0xFF;
+	gamepad_keyb_edit = 0xFF;
+
+	gamepad_keyb_focus = 0; // show focus as encouragement for using keyb
+
 	for (int i=0; i<6; i++)
 	{
 		if (axis_mapping[i])
@@ -1467,6 +1429,8 @@ void GamePadOpen( void (*close_cb)(void* g), void* g )
 	gamepad_contact = -1;
 	gamepad_keyb_focus = 0xFF; // no focus (pressing any arrow will )
 	gamepad_keyb_edit = 0xFF; // not editing, enter->0x00, char->0x01 
+
+	gamepad_keyb_focus = 0; // show focus as encouragement for using keyb
 }
 
 void GamePadContact(int id, int ev, int x, int y)
@@ -1553,7 +1517,7 @@ void GamePadContact(int id, int ev, int x, int y)
 						}
 					}
 
-					int sqrdist = 0;
+					int sqrdist = 10;
 					int input = -1;
 					int mappings = gamepad_axes*2 + gamepad_buttons;
 
@@ -1567,7 +1531,7 @@ void GamePadContact(int id, int ev, int x, int y)
 							int iy = gamepad_input_xy[2*i+1] + ofs_y;
 
 							int sd = (ix - x) * (ix - x) + (iy - y) * (iy - y);
-							if (i==0 || sqrdist>=sd)
+							if (sqrdist>=sd)
 							{
 								sqrdist = sd;
 								input = i;
@@ -1577,9 +1541,14 @@ void GamePadContact(int id, int ev, int x, int y)
 
 					if (sqrdist <= 2)
 					{
-						// finally, do what this thing is designed to do
-						gamepad_mapping[input] = gamepad_contact_output;
-						InvertMap(mappings);
+						if (gamepad_contact_output != 0xFF || input == gamepad_keyb_focus)
+						{
+							// finally, do what this thing is designed to do
+							gamepad_mapping[input] = gamepad_contact_output;
+							InvertMap(mappings);
+						}
+
+						gamepad_keyb_focus = input;
 					}
 				}
 
@@ -1657,6 +1626,7 @@ void GamePadContact(int id, int ev, int x, int y)
 				// cycle special mode 0xFF->0xFE->0xFD->0xFC -> 0xFF->...
 				sqrdist = 10;
 				int input = -1;
+				int slot = -1;
 
 				for (int i=0; i<gamepad_axes*2; i++)
 				{
@@ -1673,6 +1643,7 @@ void GamePadContact(int id, int ev, int x, int y)
 						{
 							sqrdist = sd;
 							input = j;
+							slot = i;
 						}		
 					}
 				}
@@ -1681,14 +1652,20 @@ void GamePadContact(int id, int ev, int x, int y)
 				{
 					int i = 2*input;
 
-					gamepad_mapping[i]--;
-					if (gamepad_mapping[i] < 0xFC)
-						gamepad_mapping[i] = 0xFF;
-					gamepad_mapping[i+1] = gamepad_mapping[i];
+					// if current mapping is 0xFF we require exact slot focus
+					// otherwise (current mappng is special) focus can be on any polarity slot
+					if (gamepad_keyb_focus == slot ||
+						(gamepad_keyb_focus == i || gamepad_keyb_focus == i+1) && gamepad_mapping[i] != 0xFF)
+					{
+						gamepad_mapping[i]--;
+						if (gamepad_mapping[i] < 0xFC)
+							gamepad_mapping[i] = 0xFF;
+						gamepad_mapping[i+1] = gamepad_mapping[i];
 
-					// build inv map
-					int mappings = gamepad_axes*2 + gamepad_buttons;
-					InvertMap(mappings);
+						// build inv map
+						int mappings = gamepad_axes*2 + gamepad_buttons;
+						InvertMap(mappings);
+					}
 				}
 			}
 
@@ -1705,6 +1682,9 @@ void GamePadKeyb(int key)
 
 	if (key==2 || key=='q' || key=='Q') // 'Q'UIT (right)
 	{
+		if (gamepad_keyb_edit != 0xFF)
+			return;
+
 		// close
 		if (gamepad_close_cb)
 		{
@@ -1715,6 +1695,9 @@ void GamePadKeyb(int key)
 
 	if (key=='c' || key=='C') // 'C'LEAR (center)
 	{
+		if (gamepad_keyb_edit != 0xFF)
+			return;
+
 		// clear
 		int mappings = gamepad_axes*2 + gamepad_buttons;
 		memset(gamepad_mapping,0xFF,mappings);
@@ -1725,6 +1708,9 @@ void GamePadKeyb(int key)
 
 	if (key=='i' || key=='I') // 'I'NIT (left)
 	{
+		if (gamepad_keyb_edit != 0xFF)
+			return;
+
 		// reset
 		int mappings = gamepad_axes*2 + gamepad_buttons;
 		memcpy(gamepad_mapping,gamepad_mount_mapping,mappings);
@@ -1861,6 +1847,9 @@ void GamePadKeyb(int key)
 		// clear / cycle if can
 		if (gamepad_keyb_focus!=0xFF)
 		{
+			if (gamepad_keyb_edit != 0xFF)
+				return;
+
 			int i = gamepad_keyb_focus;
 			uint8_t m = gamepad_mapping[i];
 
@@ -1900,13 +1889,14 @@ void GamePadKeyb(int key)
 		{
 			int i = gamepad_keyb_focus;
 
-			if (gamepad_keyb_edit == 1)
+			if (gamepad_keyb_edit != 0xFF)
 			{
-				if (key == 5)
+				if (key == 5 && gamepad_keyb_edit==1)
 				{
 					gamepad_keyb_edit = 0;
 					return;
 				}
+				gamepad_keyb_edit = 0xFF;
 			}
 
 			// get current pos
