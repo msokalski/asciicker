@@ -411,12 +411,12 @@ int UpdateGamePadAxis(int a, int16_t v, uint32_t out[4])
 		// make keyb focus over this input 
 		if (gamepad_axis[a] < 16384 && v >= 16384)
 		{
-			gamepad_keyb_focus = 2 * gamepad_axes + 1;
+			gamepad_keyb_focus = 2 * a + 1;
 		}
 		else
 		if (gamepad_axis[a] > -16384 && v <= -16384)
 		{
-			gamepad_keyb_focus = 2 * gamepad_axes;
+			gamepad_keyb_focus = 2 * a;
 		}
 	}
 
