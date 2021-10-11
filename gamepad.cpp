@@ -250,25 +250,40 @@ static int UpdateAxisOutput(int a, uint32_t* out)
 			{
 				// check hacked unsigned
 				int in = d>>1;
-				if (((m&0x80) == 0) && gamepad_mapping[2*in] == gamepad_mapping[2*in+1])
+				// if (((m&0x80) == 0) && gamepad_mapping[2*in] == gamepad_mapping[2*in+1])
+				if (in < gamepad_axes && gamepad_mapping[2*in] == gamepad_mapping[2*in+1])
 				{
-					/*
-					if ((d&1) // update once per hack pair
-					*/
-					// pair checking is unified in invertmap
 					{
+						/*
 						if (m&0x40)
+						{
+							if (a==0)
+								printf("v1=%d\n",((int)gamepad_input[2*in] - (int)gamepad_input[2*in+1] + 32768)/2);
 							accum += ((int)gamepad_input[2*in] - (int)gamepad_input[2*in+1] + 32768)/2; // unsigned flipped
+						}
 						else
+						*/
+						{
+							if (a==0)
+								printf("v2=%d\n",((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2);
 							accum += ((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2; // unsigned normal
+						}
 					}
 				}
 				else
 				{
 					if (m&0x40)
+					{
+						if (a==0)
+							printf("v3=%d\n",-v);
 						accum -= v;
+					}
 					else
+					{
+						if (a==0)
+							printf("v4=%d\n",v);
 						accum += v;
+					}
 				}
 			}
 			else
@@ -288,11 +303,16 @@ static int UpdateAxisOutput(int a, uint32_t* out)
 					{
 						case 0: // L-JOY-X
 						case 2: // R-JOY-X
+							if (a==0)
+								printf("v5=%d\n",-(int)(32767*sinf(fa)));
 							accum -= (int)(32767*sinf(fa)); 
 							break;
 						case 1: // L-JOY-Y 
 						case 3: // R-JOY-Y
-							accum += (int)(32767*cosf(fa)); break;
+							if (a==0)
+								printf("v6=%d\n",(int)(32767*cosf(fa)));
+							accum += (int)(32767*cosf(fa)); 
+							break;
 					}
 
 				}
@@ -301,6 +321,10 @@ static int UpdateAxisOutput(int a, uint32_t* out)
 			dep++;
 		}
 	}
+
+	if (a==0)
+		printf("accumulated: %d\n", accum);
+
 
 	if (accum < -32767)
 		accum = -32767;
