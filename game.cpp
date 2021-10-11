@@ -6512,7 +6512,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	}
 
 	if (show_gamepad)
-		PaintGamePad(ptr, width, height);
+		PaintGamePad(ptr, width, height, stamp);
 		
 	PaintMenu(ptr, width, height);
 	/*

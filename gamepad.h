@@ -15,7 +15,7 @@ void DisconnectGamePad();
 int UpdateGamePadAxis(int a, int16_t pos, uint32_t out[4]);
 int UpdateGamePadButton(int b, int16_t pos, uint32_t out[1]);
 
-void PaintGamePad(AnsiCell* ptr, int width, int height);
+void PaintGamePad(AnsiCell* ptr, int width, int height, uint64_t stamp);
 
 void GamePadOpen( void (*close)(void* _g), void* g );
 

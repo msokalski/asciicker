@@ -709,7 +709,7 @@ void DisconnectGamePad()
 static bool CalcLayout(int width, int height, int layout[] /*ec,er,ew,eh*/);
 static void BlitButton(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, int b, int col, int row, int row_y, const int col_x[]);
 
-void PaintGamePad(AnsiCell* ptr, int width, int height)
+void PaintGamePad(AnsiCell* ptr, int width, int height, uint64_t stamp)
 {
 	if (!gamepad_sprite)
 		return;
@@ -1124,7 +1124,7 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 		BlitSprite(ptr, width, height, sf, dx, dy, clip);
 	}
 
-	if (gamepad_keyb_focus!=0xFF)
+	if (gamepad_connected && gamepad_keyb_focus!=0xFF)
 	{
 		int i = gamepad_keyb_focus;
 		uint8_t m = gamepad_mapping[i];
@@ -1166,12 +1166,13 @@ void PaintGamePad(AnsiCell* ptr, int width, int height)
 			ptr[dx+1 + width * dy].gl = ' ';
 
 			// paint cursor
-			static int blink = 0;
-			blink++;
-			if (blink == 40)
-				blink = 0;
+			static uint64_t blink_stamp = stamp;
+			if (stamp - blink_stamp > 500000) // half sec period
+				blink_stamp = stamp;
 
-			if (blink<20)
+			bool blink_show = stamp - blink_stamp < 250000; // state switch every quarter sec 
+
+			if (blink_show)
 				ptr[dx + gamepad_keyb_edit + width * dy].gl = 219;
 
 			if (gamepad_keyb_edit > 0)
