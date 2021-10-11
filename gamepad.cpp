@@ -8,7 +8,7 @@
 
 #include "fast_rand.h"
 
-#if 1 // testing with no gamepad connected
+#if 0 // testing with no gamepad connected
 static int nopad()
 {
 	ConnectGamePad("NO GAMEPAD", 6, 15, 0);
