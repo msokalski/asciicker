@@ -6625,10 +6625,13 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				}
 				break;
 			}
+
+			default:
+				break;
 		}
 
 		if (k>=0)
-			GamePadKeyb(k);
+			GamePadKeyb(k, stamp);
 
 		return;
 	}
@@ -8246,13 +8249,16 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 			case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: ev = 0; break;
 			case GAME_MOUSE::MOUSE_MOVE: ev = 1; break;
 			case GAME_MOUSE::MOUSE_LEFT_BUT_UP: ev = 2; break;
+
+			default:
+				break;
 		}
 
 		if (ev>=0)
 		{
 			int p[2] = {x,y};
 			ScreenToCell(p);
-			GamePadContact(0,ev,p[0],p[1]);
+			GamePadContact(0,ev,p[0],p[1], stamp);
 		}
 
 		return;
@@ -8471,7 +8477,7 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 		{
 			int p[2] = {x,y};
 			ScreenToCell(p);
-			GamePadContact(id,ev,p[0],p[1]);
+			GamePadContact(id,ev,p[0],p[1], stamp);
 		}
 
 		return;

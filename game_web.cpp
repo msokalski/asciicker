@@ -367,7 +367,12 @@ extern "C"
             }
             case 2:
             {
-                int16_t v = val>1.0 ? (int16_t)-32768 : (int16_t)(val*32767);
+                // works on chrome
+                // int16_t v = val>1.0 ? (int16_t)-32768 : (int16_t)(val*32767);
+
+                // maybe firefox too:
+                int16_t v = val>1.0 || val<-1.0 ? (int16_t)-32768 : (int16_t)(val*32767);
+
                 GamePadAxis(idx,v);
                 break;
             }

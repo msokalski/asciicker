@@ -66,15 +66,29 @@ static uint8_t gamepad_keyb_edit = 0xFF; // not editing, enter->0x00, char->0x01
 static char    gamepad_keyb_char[2]; // 
 
 // output positions, relative to SPRITE (y is top to bottom!)
-static const int16_t gamepad_half_axis_xy[2*12] = 
+static const int16_t xbox_half_axis_xy[2*12] = 
 { 
 	10,14, 16,14, 13,11, 13,17, 28,20, 34,20, 31,17, 31,23, 16,8,16,8, 34,8,34,8 
 };
 
-static const int16_t gamepad_button_xy[2*15] = 
+static const int16_t xbox_button_xy[2*15] = 
 {
 	37,17, 40,14, 34,14, 37,11, 21,14, 25,12, 29,14, 13,14, 31,20, 13,9, 37,9, 19,17, 19,23, 16,20, 22,20
 };
+
+static const int16_t ps5_half_axis_xy[2*12] = 
+{ 
+	16,20, 22,20, 19,17, 19,23, 28,20, 34,20, 31,17, 31,23, 16,8,16,8, 34,8,34,8 
+};
+
+static const int16_t ps5_button_xy[2*15] = 
+{
+	37,17, 40,14, 34,14, 37,11, 17,10, 25,19, 33,10, 19,20, 31,20, 13,9, 37,9, 13,11, 13,17, 10,14, 16,14
+};
+
+static const int16_t* gamepad_half_axis_xy = xbox_half_axis_xy;
+static const int16_t* gamepad_button_xy = xbox_button_xy;
+static int gamepad_assembly = 0; // 0:xbox, 1:ps5
 
 static const char* gamepad_half_axis_name[]=
 {
@@ -93,6 +107,7 @@ struct SpriteElem
 	int src_x, src_y; // position on atlas (top to bottom!)
 	int w, h;         // element width, height
 	int dst_x, dst_y; // assembly shift (top to bottom!)
+	int dst_x2, dst_y2; // assembly shift (for alternate assembly)
 };
 
 struct InputElem
@@ -152,57 +167,85 @@ static const InputElem slot_proto[] =
 
 static const SpriteElem gamepad_proto[] =
 {
-	{ 8,8, 35,19, 8,8 }, // body
+	{ 8,8, 35,19, 8,8 ,8,8}, // body
 
-	{ 4,27, 11,12, 4,20 }, // l-handle
-	{ 36,27, 11,12, 36,20 }, // r-handle
+	{ 4,27, 11,12, 4,20 ,4,20}, // l-handle
+	{ 36,27, 11,12, 36,20 ,36,20}, // r-handle
 
-	{ 1,1, 7,7, 10,11 }, // l-stick bk
+	{ 1,1, 7,7, 10,11 ,16,17}, // l-stick bk
 
-	{ 33,51, 7,7, 28,17 }, // r-stick bk
+	{ 33,51, 7,7, 28,17, 28,17 }, // r-stick bk
 
-	{ 26,28, 9,10, 15,16 }, // d-pad
-	{ 16,28, 9,10, 33,10 }, // abxy
-	{ 20,1, 11,6, 20,11 }, // qmg
+	{ 26,28, 9,10, 15,16 ,9,10}, // d-pad
+	{ 16,28, 9,10, 33,10 ,33,10}, // abxy
+
+
+	// { 20,1, 11,6, 20,11, 20,11 }, // EFG
+	{ 1,26, 3,4, 20,13, 16,9}, // E
+	{ 1,30, 3,4, 28,13, 32,9}, // F
+	{ 1,34, 3,4, 24,11, 24,18}, // G
 
 	// overlays
 	// ...
 
 	// movables
-	{ 2,9, 5,5, 11,12 }, // l-stick
-	{ 34,39, 5,5, 29,18 }, // r-stick
+	{ 2,9, 5,5, 11,12, 17,18}, // l-stick
+	{ 34,39, 5,5, 29,18, 29,18 }, // r-stick
 
 	// movable overlays
-	{ 2,15, 5,5, 11,12 }, // l-stick hilight
-	{ 34,45, 5,5, 29,18 }, // r-stick hilight
+	{ 2,15, 5,5, 11,12, 17,18 }, // l-stick hilight
+	{ 34,45, 5,5, 29,18, 29,18 }, // r-stick hilight
 
 	// move to overlays ...
-	{ 46,6, 4,4, 15,19 }, // DL	
-	{ 46,10, 4,4, 20,19}, // DR
-	{ 47,1, 3,4, 18,16}, // DU
-	{ 47,14, 3,5, 18,21}, // DD
+	{ 46,6, 4,4, 15,19, 9,13 }, // DL	
+	{ 46,10, 4,4, 20,19, 14,13}, // DR
+	{ 47,1, 3,4, 18,16, 12,10}, // DU
+	{ 47,14, 3,5, 18,21, 12,15}, // DD
 
-	{ 47,35, 3,4, 36,16 }, // A
-	{ 47,39, 3,4, 39,13 }, // B
-	{ 47,27, 3,4, 33,13 }, // X
-	{ 47,31, 3,4, 36,10 }, // Y
+	{ 47,35, 3,4, 36,16, 36,16 }, // A
+	{ 47,39, 3,4, 39,13, 39,13 }, // B
+	{ 47,27, 3,4, 33,13, 33,13 }, // X
+	{ 47,31, 3,4, 36,10, 36,10 }, // Y
 
-	{ 47,43, 3,4, 20,13 }, // Q
-	{ 47,47, 3,4, 28,13 }, // M
-	{ 47,51, 3,4, 24,11 }, // G
+	{ 47,43, 3,4, 20,13, 16,9 }, // E
+	{ 47,47, 3,4, 28,13, 32,9 }, // F
+	{ 47,51, 3,4, 24,11, 24,18 }, // G
 
 	// move to after stick bkgs
-	{ 12,1, 6,2, 12,7}, // Lt
-	{ 2,21, 6,2, 12,7}, // Lt hi
-	{ 33,1, 6,2, 33,7}, // Rt
-	{ 43,21, 6,2, 33,7}, // Rt hi
-	{ 11,3, 5,2, 11,8}, // Ls
-	{ 1,23, 5,2, 11,8}, // Ls hi
-	{ 35,3, 5,2, 35,8}, // Rs
-	{ 45,23, 5,2, 35,8}, // Rs hi
+	{ 12,1, 6,2, 12,7, 12,7}, // Lt
+	{ 2,21, 6,2, 12,7, 12,7}, // Lt hi
+	{ 33,1, 6,2, 33,7, 33,7}, // Rt
+	{ 43,21, 6,2, 33,7, 33,7}, // Rt hi
+	{ 11,3, 5,2, 11,8, 11,8}, // Ls
+	{ 1,23, 5,2, 11,8, 11,8}, // Ls hi
+	{ 35,3, 5,2, 35,8, 35,8}, // Rs
+	{ 45,23, 5,2, 35,8, 35,8}, // Rs hi
 
-	{ 0 }
+	{ 0 },
+
+	{ 18,1, 15,6, 18,1, 18,10} // ps5 touchpad
 };
+
+
+const static int16_t gamepad_swap_xy[2] = { 16, 17 };
+static uint64_t gamepad_swap_stamp = 0;
+
+static void Swap(uint64_t stamp)
+{
+	gamepad_assembly = gamepad_assembly^1;
+	if (gamepad_assembly==0)
+	{
+		gamepad_half_axis_xy = xbox_half_axis_xy;
+		gamepad_button_xy = xbox_button_xy;
+	}
+	else
+	{
+		gamepad_half_axis_xy = ps5_half_axis_xy;
+		gamepad_button_xy = ps5_button_xy;
+	}
+
+	gamepad_swap_stamp = stamp;
+}
 
 void LoadGamePad()
 {
@@ -252,7 +295,15 @@ static int UpdateAxisOutput(int a, uint32_t* out)
 				int in = d>>1;
 				if (in < gamepad_axes && gamepad_mapping[2*in] == gamepad_mapping[2*in+1])
 				{
-					accum += ((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2; // unsigned normal
+					if ((m&0x40)==0)
+					{
+						accum += ((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2;
+					}
+					else
+					{
+						// currently not possible to make such mapping
+						accum -= ((int)gamepad_input[2*in+1] - (int)gamepad_input[2*in] + 32768)/2;
+					}
 				}
 				else
 				{
@@ -302,7 +353,7 @@ static int UpdateAxisOutput(int a, uint32_t* out)
 		accum = -32767;
 	if (accum > +32767)
 		accum = +32767;
-	
+
 	if (accum != gamepad_axis_output[a]) 
 	{
 		gamepad_axis_output[a] = accum;
@@ -555,7 +606,7 @@ static void InvertMap(int mappings)
 					axis_len[2]++;
 					axis_len[3]++;
 					break;
-				case 3: // r-joy
+				case 3: // d-pad
 					button_len[11]++;
 					button_len[12]++;
 					button_len[13]++;
@@ -620,7 +671,7 @@ static void InvertMap(int mappings)
 					axis_mapping[2][axis_len[2]++] = i;
 					axis_mapping[3][axis_len[3]++] = i;
 					break;
-				case 3: // r-joy
+				case 3: // d-pad
 					button_mapping[11][button_len[11]++] = i;
 					button_mapping[12][button_len[12]++] = i;
 					button_mapping[13][button_len[13]++] = i;
@@ -657,13 +708,13 @@ void ConnectGamePad(const char* name, int axes, int buttons, const uint8_t mappi
 		memset(gamepad_mount_mapping, 0xFF, mappings);
 	}
 
-	InvertMap(mappings);
-
 	memset(gamepad_axis_output, 0, sizeof(int16_t)*6);
 	memset(gamepad_button_output, 0, sizeof(int16_t)*15);
 	memset(gamepad_input, 0, sizeof(int16_t)*(2*axes+buttons));
 	memset(gamepad_axis, 0, sizeof(int16_t)*axes);
 	memset(gamepad_button, 0, sizeof(int16_t)*buttons);
+
+	InvertMap(mappings);
 
 	gamepad_contact = -1;
 	gamepad_keyb_focus = 0xFF; // no focus (pressing any arrow will )
@@ -736,41 +787,39 @@ void PaintGamePad(AnsiCell* ptr, int width, int height, uint64_t stamp)
 	gamepad_layout_x = x;
 	gamepad_layout_y = y;
 
-	int elems = 31;
+	int elems = sizeof(gamepad_proto)/sizeof(SpriteElem) - 2; // -(separator+touchpad)
 	for (int e = 0; e < elems; e++)
 	{
-		//if (e==1 || e==2)
-		//	continue; // handles
 
 		// overlays
-		if (e == 10 && gamepad_button_output[7] <= 32767 / 2)
+		if (e == 10+2 && gamepad_button_output[7] <= 32767 / 2)
 			continue;
-		if (e == 11 && gamepad_button_output[8] <= 32767 / 2)
-			continue;
-
-		if (e == 12 && gamepad_button_output[13] <= 32767 / 2)
-			continue;
-		if (e == 13 && gamepad_button_output[14] <= 32767 / 2)
-			continue;
-		if (e == 14 && gamepad_button_output[11] <= 32767 / 2)
-			continue;
-		if (e == 15 && gamepad_button_output[12] <= 32767 / 2)
+		if (e == 11+2 && gamepad_button_output[8] <= 32767 / 2)
 			continue;
 
-		if (e == 16 && gamepad_button_output[0] <= 32767 / 2)
+		if (e == 12+2 && gamepad_button_output[13] <= 32767 / 2)
 			continue;
-		if (e == 17 && gamepad_button_output[1] <= 32767 / 2)
+		if (e == 13+2 && gamepad_button_output[14] <= 32767 / 2)
 			continue;
-		if (e == 18 && gamepad_button_output[2] <= 32767 / 2)
+		if (e == 14+2 && gamepad_button_output[11] <= 32767 / 2)
 			continue;
-		if (e == 19 && gamepad_button_output[3] <= 32767 / 2)
+		if (e == 15+2 && gamepad_button_output[12] <= 32767 / 2)
 			continue;
 
-		if (e == 20 && gamepad_button_output[4] <= 32767 / 2)
+		if (e == 16+2 && gamepad_button_output[0] <= 32767 / 2)
 			continue;
-		if (e == 21 && gamepad_button_output[6] <= 32767 / 2)
+		if (e == 17+2 && gamepad_button_output[1] <= 32767 / 2)
 			continue;
-		if (e == 22 && gamepad_button_output[5] <= 32767 / 2)
+		if (e == 18+2 && gamepad_button_output[2] <= 32767 / 2)
+			continue;
+		if (e == 19+2 && gamepad_button_output[3] <= 32767 / 2)
+			continue;
+
+		if (e == 20+2 && gamepad_button_output[4] <= 32767 / 2)
+			continue;
+		if (e == 21+2 && gamepad_button_output[6] <= 32767 / 2)
+			continue;
+		if (e == 22+2 && gamepad_button_output[5] <= 32767 / 2)
 			continue;
 		/*
 		if (e == 24 && gamepad_axis_output[4] <= 32767 / 2)
@@ -782,34 +831,68 @@ void PaintGamePad(AnsiCell* ptr, int width, int height, uint64_t stamp)
 		int clip_left = 0;
 		int clip_right = 0;
 
-		if (e == 24)
+		if (e == 24+2)
 			clip_right = (gamepad_proto[e].w-2) - gamepad_axis_output[4] * (gamepad_proto[e].w-2) / 32767;
 
-		if (e == 26)
+		if (e == 26+2)
 			clip_left = (gamepad_proto[e].w-2) - gamepad_axis_output[5] * (gamepad_proto[e].w-2) / 32767;
 
-		if (e == 28 && gamepad_button_output[9] <= 32767 / 2)
+		if (e == 28+2 && gamepad_button_output[9] <= 32767 / 2)
 			continue;
-		if (e == 30 && gamepad_button_output[10] <= 32767 / 2)
+		if (e == 30+2 && gamepad_button_output[10] <= 32767 / 2)
 			continue;
 
 		int dx, dy;
 		int clip[4];
 
-		dx = x + gamepad_proto[e].dst_x;
-		dy = y - (gamepad_proto[e].dst_y + gamepad_proto[e].h - 1);
+
+		int dx0,dy0;
+		if (gamepad_assembly == 0)
+		{
+			dx = x + gamepad_proto[e].dst_x;
+			dy = y - (gamepad_proto[e].dst_y + gamepad_proto[e].h - 1);
+			dx0 = x + gamepad_proto[e].dst_x2;
+			dy0 = y - (gamepad_proto[e].dst_y2 + gamepad_proto[e].h - 1);
+		}
+		else
+		{
+			dx = x + gamepad_proto[e].dst_x2;
+			dy = y - (gamepad_proto[e].dst_y2 + gamepad_proto[e].h - 1);
+			dx0 = x + gamepad_proto[e].dst_x;
+			dy0 = y - (gamepad_proto[e].dst_y + gamepad_proto[e].h - 1);
+		}
+
+		static const int swap_mask = 
+			(1<<7) | (1<<8) | (1<<9) |
+			(1<<3) | (1<<5) | (1<<(8+2)) | (1<<(10+2)) | (1<<(12+2)) | (1<<(13+2)) | (1<<(14+2)) | (1<<(15+2)) | 
+			(1<<(20+2)) | (1<<(21+2)) | (1<<(22+2));
+
+		if (gamepad_swap_stamp && (swap_mask & (1<<e)))
+		{
+
+			int weight = (int)((stamp - gamepad_swap_stamp) >> 14);
+			if (weight < 0)
+				weight = 0;
+			if (weight>=16)
+				gamepad_swap_stamp = 0;
+			else
+			{
+				dx = (dx * weight + dx0 * (16-weight)) / 16;
+				dy = (dy * weight + dy0 * (16-weight)) / 16;
+			}
+		}
 
 		//dx -= 3;
 		//dy += 5;
 
-		if (e == 8 || e == 10)
+		if (e == 8+2 || e == 10+2)
 		{
 			if (gamepad_axes > 0)
 				dx += gamepad_axis_output[0] * 2 / 22000;
 			if (gamepad_axes > 1)
 				dy -= gamepad_axis_output[1] * 2 / 22000;
 		}
-		if (e == 9 || e == 11)
+		if (e == 9+2 || e == 11+2)
 		{
 			if (gamepad_axes > 2)
 				dx += gamepad_axis_output[2] * 2 / 22000;
@@ -823,6 +906,57 @@ void PaintGamePad(AnsiCell* ptr, int width, int height, uint64_t stamp)
 		clip[3] = clip[1] + gamepad_proto[e].h;
 
 		BlitSprite(ptr, width, height, sf, dx + clip_left, dy, clip);
+
+		if (e==4)
+		{
+			// after all bk items draw touchpad
+			// clipped to top = 11
+
+			e = elems+1;
+
+			if (gamepad_assembly == 0)
+			{
+				dx = x + gamepad_proto[e].dst_x;
+				dy = y - (gamepad_proto[e].dst_y + gamepad_proto[e].h - 1);
+				dx0 = x + gamepad_proto[e].dst_x2;
+				dy0 = y - (gamepad_proto[e].dst_y2 + gamepad_proto[e].h - 1);
+			}
+			else
+			{
+				dx = x + gamepad_proto[e].dst_x2;
+				dy = y - (gamepad_proto[e].dst_y2 + gamepad_proto[e].h - 1);
+				dx0 = x + gamepad_proto[e].dst_x;
+				dy0 = y - (gamepad_proto[e].dst_y + gamepad_proto[e].h - 1);
+			}
+
+			if (gamepad_swap_stamp)
+			{
+
+				int weight = (int)((stamp - gamepad_swap_stamp) >> 14);
+				if (weight < 0)
+					weight = 0;
+				if (weight>=16)
+					gamepad_swap_stamp = 0;
+				else
+				{
+					dx = (dx * weight + dx0 * (16-weight)) / 16;
+					dy = (dy * weight + dy0 * (16-weight)) / 16;
+				}
+			}
+
+			int clip_top = dy - (y - (gamepad_proto[e].dst_y2 + gamepad_proto[e].h - 1));
+			if (clip_top>=0)
+			{
+				clip[0] = gamepad_proto[e].src_x;
+				clip[1] = h - 1 - (gamepad_proto[e].src_y + gamepad_proto[e].h - 1);
+				clip[2] = clip[0] + gamepad_proto[e].w;
+				clip[3] = clip[1] + gamepad_proto[e].h - clip_top;
+
+				BlitSprite(ptr, width, height, sf, dx, dy, clip);
+			}
+
+			e = 4;
+		}
 	}
 
 	int col_x[] = { 4,17,30, 45,58,71,84 };
@@ -1430,8 +1564,11 @@ void GamePadOpen( void (*close_cb)(void* g), void* g )
 	gamepad_keyb_focus = 0; // show focus as encouragement for using keyb
 }
 
-void GamePadContact(int id, int ev, int x, int y)
+void GamePadContact(int id, int ev, int x, int y, uint64_t stamp)
 {
+	if (gamepad_swap_stamp)
+		return;
+
 	if (gamepad_contact>=0)
 	{
 		if (ev != 0)
@@ -1498,6 +1635,16 @@ void GamePadContact(int id, int ev, int x, int y)
 							gamepad_contact = -1;
 							return;
 						}
+					}
+					else
+					if (gamepad_contact_pos[0] == gamepad_layout_x + gamepad_swap_xy[0] &&
+						gamepad_contact_pos[1] == gamepad_layout_y - gamepad_swap_xy[1] &&
+						gamepad_contact_pos[0] == gamepad_contact_from[0] &&
+						gamepad_contact_pos[1] == gamepad_contact_from[1])
+					{
+						Swap(stamp);
+						gamepad_contact = -1;
+						return;
 					}
 
 					// do this even if gamepad_contact_output == 0xFF
@@ -1672,10 +1819,17 @@ void GamePadContact(int id, int ev, int x, int y)
 	}
 }
 
-void GamePadKeyb(int key)
+void GamePadKeyb(int key, uint64_t stamp)
 {
-	if (gamepad_contact >= 0)
+	if (gamepad_contact >= 0 || gamepad_swap_stamp)
 		return;
+
+	if (key=='z' || key=='Z')
+	{
+		if (gamepad_keyb_edit==0xFF && gamepad_contact<0)
+			Swap(stamp);
+		return;
+	}
 
 	if (key==2 || key=='q' || key=='Q') // 'Q'UIT (right)
 	{
