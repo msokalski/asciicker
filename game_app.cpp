@@ -52,6 +52,10 @@
 #include "game.h"
 #include "enemygen.h"
 
+
+// FOR AUDIO
+#include "audio.h"
+
 int tty = -1;
 
 // configurable, or auto lookup?
@@ -420,6 +424,7 @@ void exit_handler(int signum)
 {
     running = false;
     SetScreen(false);
+    FreeAudio();
     if (tty>0)
     {
         // restore old font
@@ -1281,8 +1286,16 @@ bool read_js(int fd)
     return false;
 }
 
+
+void TestAudioCB(void* userdata, int16_t stereo_buffer[], int samples)
+{
+
+}
+
 int main(int argc, char* argv[])
 {
+    InitAudio(TestAudioCB, 0);
+
 	/*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
 	for (int i = 0; i < 16; i++)
@@ -1602,6 +1615,7 @@ int main(int argc, char* argv[])
 		if (!gs->Start())
 		{
 			TCP_CLEANUP();
+            FreeAudio();
 			return false;
 		}
 	}
@@ -1651,6 +1665,7 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 		_CrtDumpMemoryLeaks();
 #endif
+        FreeAudio();
         return 0;
     }
 
@@ -2706,5 +2721,6 @@ int main(int argc, char* argv[])
 	_CrtDumpMemoryLeaks();
 #endif
 
+    FreeAudio();
 	return 0;
 }
