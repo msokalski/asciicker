@@ -158,6 +158,20 @@
 
 
     <script>
+
+      var audio_ctx = null;
+      var audio_cb = null;
+      var audio_node = null;
+
+      function audioResume()
+      {
+        if (audio_ctx)
+        {
+          if (audio_ctx.state === 'suspended' || audio_ctx.state === 'interrupted')
+            audio_ctx.resume();
+        }
+      }
+
       var ak_connection = null;
       var Join = null;
       var Load = null;
@@ -483,6 +497,7 @@
         function(e)
         {
           e.preventDefault();
+          audioResume();
           var data = event.changedTouches;
           for (var i=0; i<data.length; i++)
           {
@@ -737,6 +752,8 @@
           //var str = "repeat=" + e.repeat + " | " + "code=" + e.code + " | " + "key=" + e.key;
           //console.log( str );
 
+          audioResume();
+
           if (e.key == "F11" || (e.key == "-" || e.key == "+" || e.key == "=" || e.key == "0") && e.ctrlKey)
             return; // do not process / prevent 
 
@@ -932,6 +949,7 @@
         window.addEventListener("gamepadconnected", 
           function(e) 
           {
+            audioResume();
             console.log("connected");
 
             if (gamepad<0)
@@ -1021,6 +1039,7 @@
         window.addEventListener("wheel", 
         function(e)
         {
+          audioResume();
           var x = e.pageX;
           var y = e.pageY;
           if (ak_ratio>1.0)
@@ -1040,6 +1059,7 @@
         window.addEventListener("mousedown", 
         function(e) 
         {
+          audioResume();
           var x = e.pageX;
           var y = e.pageY;
           if (ak_ratio>1.0)
@@ -1103,6 +1123,7 @@
         window.addEventListener("focus", 
         function(e)
         {
+          audioResume();
           Focus(1);
           e.preventDefault();
         }, { passive: false });

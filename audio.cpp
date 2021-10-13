@@ -1,6 +1,7 @@
 
 
 #include <stdio.h>
+#include <malloc.h>
 #include "fast_rand.h"
 #include "audio.h"
 
@@ -62,6 +63,9 @@ void FreeAudio()
 
 bool InitAudio(AudioCB cb, void* userdata) 
 {
+    audio_cb = cb;
+    audio_userdata = userdata;
+
     // Get a mainloop and its context
     mainloop = pa_threaded_mainloop_new();
     assert(mainloop);
@@ -151,22 +155,20 @@ void stream_write_cb(pa_stream *stream, size_t requested_bytes, void *userdata)
     int bytes_remaining = requested_bytes;
     while (bytes_remaining > 0) 
     {
-        uint8_t *buffer = NULL;
-        size_t bytes_to_fill = 44100;
-        size_t i;
-
-        if (bytes_to_fill > bytes_remaining) 
-            bytes_to_fill = bytes_remaining;
+        uint16_t *buffer = NULL;
+        size_t bytes_to_fill = (size_t)-1;
 
         pa_stream_begin_write(stream, (void**) &buffer, &bytes_to_fill);
 
-        #if REDY_TO_CALL
+        int samples = bytes_to_fill/4;
+
+        #if READY_TO_CALL
         audio_cb(audio_userdata, (int16_t*)buffer, bytes_to_fill/4);
         #else
-        for (i = 0; i < bytes_to_fill; i += 2) 
+        for (size_t i = 0; i < samples; i++) 
         {
-            buffer[i] = fast_rand()*2 - 32767;
-            buffer[i+1] = fast_rand()*2 - 32767;
+            buffer[2*i] = (fast_rand()*2 - 32767) >> 4;
+            buffer[2*i+1] = (fast_rand()*2 - 32767) >> 4;
         }
         #endif
 
@@ -181,14 +183,165 @@ void stream_success_cb(pa_stream *stream, int success, void *userdata)
     return;
 }
 
+#endif
 
-#else
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
 
-// SIMILAR USING WASAPI
-
-bool InitAudio()
+extern "C"
 {
+    const int16_t* Audio(int samples)
+    {
+        static int16_t* buffer = 0;
+        static int buflen = 0;
+
+        if (!buffer)
+        {
+            int alloc = 2*samples;
+            buffer = (int16_t*)malloc(4 * alloc);
+            buflen = alloc;
+        }
+        else
+        if(samples > buflen)
+        {
+            free(buffer);
+            int alloc = 2*samples;
+            buffer = (int16_t*)malloc(4 * alloc);
+            buflen = alloc;
+        }
+
+        #if READY_TO_CALL
+        audio_cb(audio_userdata, buffer, samples);
+        #else
+        for (size_t i = 0; i < samples; i++) 
+        {
+            buffer[2*i] = (fast_rand()*2 - 32767) >> 4;
+            buffer[2*i+1] = (fast_rand()*2 - 32767) >> 4;
+        }
+        #endif
+
+        return buffer;
+    }
+}
+
+int GetAudioLatency()
+{
+    return 0;
+}
+
+void FreeAudio()
+{
+    EM_ASM_INT(
+    {
+        audio_ctx.close();
+
+        audio_cb = null;
+        audio_ctx = null;
+        audio_node = null;
+    }    
+
+    audio_cb = 0;
+    audio_userdata = 0;
+}
+
+bool InitAudio(AudioCB cb, void* userdata) 
+{
+    audio_cb = cb;
+    audio_userdata = userdata;
+
+    EM_ASM_INT(
+    {
+        var audioContext = window.AudioContext || window.webkitAudioContext;
+
+        audio_cb = Module.cwrap("Audio", null, ["number"]);
+
+        if (!audioContext || !audio_cb)
+            return 0;
+        
+        audio_ctx = new audioContext({sampleRate: 44100, latencyHint: "interactive"});
+        if (!audio_ctx)
+            return 0;
+        
+        var bufsize = 512;
+        audio_node = audio_ctx.createScriptProcessor(bufsize, 0, 2);
+
+        audio_node.onaudioprocess = function(ev)
+        {
+            var samples = ev.outputBuffer.length;
+            
+            var audio_ptr = audio_cb(samples);
+
+            var idx = audio_ptr >> 1;
+            
+            var left = ev.outputBuffer.getChannelData(0);
+            var right = ev.outputBuffer.getChannelData(1);			
+                
+            for (var i=0; i<samples; i++)
+            {
+                left[i] = Module.HEAP16[idx + 2*i] >> 15;
+                right[i] = Module.HEAP16[idx + 2*i + 1] >> 15;
+            }
+        };
+
+        audio_node.connect(audio_ctx.destination);
+        audio_ctx.resume();
+
+        return audio_ctx.sampleRate | 0;
+    }, userdata);
+
     return false;
+}
+
+#endif
+
+#ifdef _WIN32
+
+#include <SDL2/SDL.h>
+
+int GetAudioLatency()
+{
+    return 0;
+}
+
+void FreeAudio()
+{
+    SDL_CloseAudio();
+}
+
+void SDLAudioCB(void* userdata, Uint8* stream, int len) 
+{
+    int samples = len/4;
+
+    int16_t* buffer = (int16_t*)stream;
+
+    // SDL_MixAudio ???
+
+    #if READY_TO_CALL
+    audio_cb(audio_userdata, (int16_t*)buffer, bytes_to_fill/4);
+    #else
+    for (size_t i = 0; i < samples; i++) 
+    {
+        buffer[2*i] = (fast_rand()*2 - 32767) >> 4;
+        buffer[2*i+1] = (fast_rand()*2 - 32767) >> 4;
+    }
+    #endif
+}
+
+bool InitAudio(AudioCB cb, void* userdata) 
+{
+    SDL_AudioSpec wanted;
+    wanted.freq = 44100;
+    wanted.format = AUDIO_S16;
+    wanted.channels = 2;
+    wanted.samples = 1024;
+    wanted.callback = SDLAudioCB;
+    wanted.userdata = NULL;
+
+    if (SDL_OpenAudio(&wanted,0) < 0)
+        return false;
+
+    SDL_PauseAudio(0);
+    return true;
 }
 
 #endif
