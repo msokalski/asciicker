@@ -497,10 +497,11 @@ bool InitAudio()
 #endif
 
 #ifndef HAS_AUDIO
-
+/*
 void CallAudio(const uint8_t* data, int size)
 {
 }
+*/
 
 void FreeAudio()
 {
