@@ -8241,6 +8241,12 @@ int FirstFree(int size, int* arr)
 
 void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 {
+	if (mouse==MOUSE_LEFT_BUT_DOWN)
+	{
+		int freq = 100 + fast_rand()%100;
+		CallAudio((uint8_t*)&freq,sizeof(freq));
+	}
+
 	// handle layers first ...
 	if (menu_depth>=0)
 	{
@@ -8460,6 +8466,13 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 {
 	if (id<1 || id>3)
 		return;
+
+	if (touch==TOUCH_BEGIN)
+	{
+		int freq = 100 + fast_rand()%100;
+		CallAudio((uint8_t*)&freq,sizeof(freq));
+	}
+
 
 	// handle layers first ...
 	if (menu_depth>=0)
