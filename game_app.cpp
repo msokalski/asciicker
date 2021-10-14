@@ -55,6 +55,7 @@
 
 // FOR AUDIO
 #include "audio.h"
+#include "fast_rand.h"
 
 int tty = -1;
 
@@ -1286,13 +1287,9 @@ bool read_js(int fd)
     return false;
 }
 
-void TestAudioCB(void* userdata, int16_t stereo_buffer[], int samples)
-{
-}
-
 int main(int argc, char* argv[])
 {
-	InitAudio(TestAudioCB, 0);
+	InitAudio();
 
 	/*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");

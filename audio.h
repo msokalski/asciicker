@@ -3,12 +3,10 @@
 
 #include <stdint.h>
 
-typedef void (*AudioCB)(void* userdata, int16_t stereo_buffer[], int samples);
-bool InitAudio(AudioCB cb, void* userdata);
+bool InitAudio();
 void FreeAudio();
 
-int GetAudioLatency();
-
+void CallAudio(const uint8_t* data, int size);
 
 // is this right direction?
 /*

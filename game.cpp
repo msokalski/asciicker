@@ -11,6 +11,7 @@
 
 #include "font1.h"
 #include "gamepad.h"
+#include "audio.h"
 
 uint8_t ConvertToCP437(uint32_t uc)
 {
@@ -6573,6 +6574,12 @@ void Game::OnSize(int w, int h, int fw, int fh)
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)
 {
+	if (keyb==KEYB_CHAR)
+	{
+		int freq = 100 + fast_rand()%100;
+		CallAudio((uint8_t*)&freq,sizeof(freq));
+	}
+
 	if (keyb == GAME_KEYB::KEYB_DOWN)	
 	{
 		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;

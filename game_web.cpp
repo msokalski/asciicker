@@ -10,6 +10,7 @@
 #include "render.h"
 
 #include "audio.h"
+#include "fast_rand.h"
 
 #include <time.h>
 
@@ -188,14 +189,9 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-
-void TestAudioCB(void* userdata, int16_t stereo_buffer[], int samples)
-{
-}
-
 int Main()
 {
-    InitAudio(TestAudioCB, 0);
+    InitAudio();
     // here we must already know if serer on not server
 
     float water = 55.0f;

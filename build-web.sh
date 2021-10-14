@@ -22,16 +22,48 @@ hash emcc 2>/dev/null || { pushd ~/emsdk; source ./emsdk_env.sh --build=Release;
 # now we can build, 
 # for the first time it will compile and cache libc
 
-rm .web/index.html
-rm .web/index.js
-rm .web/index.wasm
-rm .web/index.data
+echo "CLEARING previous build ..."
 
-cp asciicker.png .web/asciicker.png
-cp asciicker.json .web/asciicker.json
-cp asciicker.js .web/asciicker.js
+{
+    rm .web/index.html
+    rm .web/index.js
+    rm .web/index.wasm
+    rm .web/index.data
+    rm .web/audio.js
+} &> /dev/null
 
-emcc --emrun -O3 \
+# : << 'COMMENT'
+echo "MAKING audio worklet ..."
+
+emcc -O3 \
+    -DWORKLET \
+    -fno-exceptions \
+    -flto \
+    -o .web/audio.js \
+    -s BINARYEN_ASYNC_COMPILATION=0 \
+    -s SINGLE_FILE=1 \
+    --pre-js audio-pre.js \
+    --post-js audio-post.js \
+    --no-heap-copy \
+    -s FILESYSTEM=0 \
+    -s NO_EXIT_RUNTIME=1 \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
+    -s EXPORTED_FUNCTIONS='["_Init","_Proc","_Call"]' \
+    audio.cpp
+
+if [ $? -ne 0 ];
+then
+    exit $?
+fi
+
+# COMMENT
+
+echo "MAKING index(wasm + data + js + html) ..."
+
+emcc -O3 \
+    -fno-exceptions \
+    -flto \
     font1.cpp \
 	gamepad.cpp \
     game.cpp \
@@ -274,6 +306,15 @@ emcc --emrun -O3 \
     --preload-file meshes/brick-1.akm \
     --preload-file meshes/tree-3.akm
 
-# run in mini-server
+if [ $? -ne 0 ];
+then
+    exit $?
+fi
+
+echo "STAGING site (icon png, manifest json, service worker js)..."
+
+cp asciicker.png .web/asciicker.png
+cp asciicker.json .web/asciicker.json
+cp asciicker.js .web/asciicker.js
 
 emrun --no_browser --port 8888 .web/index.html
