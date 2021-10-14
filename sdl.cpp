@@ -33,11 +33,6 @@
 A3D_WND* wnd_head = 0;
 A3D_WND* wnd_tail = 0;
 
-void TestAudioCB(void* userdata, int16_t stereo_buffer[], int samples)
-{
-
-}
-
 struct GlobalSDL
 {
 	GlobalSDL()
@@ -46,18 +41,10 @@ struct GlobalSDL
 		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 		//SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC);
 		SDL_Init(SDL_INIT_EVERYTHING);
-
-		#ifdef _WIN32
-	    InitAudio(TestAudioCB, 0);
-		#endif
 	}
 
 	~GlobalSDL()
 	{
-		#ifdef _WIN32
-	    FreeAudio();
-		#endif
-
 		if (gamepad)
 		{
 			SDL_GameControllerClose(gamepad);

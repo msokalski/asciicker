@@ -111,6 +111,9 @@
     <ClInclude Include="gamepad.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="audio.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asciiid.cpp">
@@ -195,6 +198,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="gamepad.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="audio.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -183,6 +183,8 @@ void stream_success_cb(pa_stream *stream, int success, void *userdata)
     return;
 }
 
+#define HAS_AUDIO
+
 #endif
 
 #ifdef EMSCRIPTEN
@@ -292,11 +294,13 @@ bool InitAudio(AudioCB cb, void* userdata)
     return false;
 }
 
+#define HAS_AUDIO
+
 #endif
 
-#ifdef _WIN32
-
-#include <SDL2/SDL.h>
+#ifdef USE_SDL
+#ifndef HAS_AUDIO
+#include <SDL.h>
 
 int GetAudioLatency()
 {
@@ -342,6 +346,27 @@ bool InitAudio(AudioCB cb, void* userdata)
 
     SDL_PauseAudio(0);
     return true;
+}
+
+#define HAS_AUDIO
+
+#endif
+#endif
+
+#ifndef HAS_AUDIO
+
+int GetAudioLatency()
+{
+	return 0;
+}
+
+void FreeAudio()
+{
+}
+
+bool InitAudio(AudioCB cb, void* userdata)
+{
+	return false;
 }
 
 #endif

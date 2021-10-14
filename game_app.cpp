@@ -1286,15 +1286,13 @@ bool read_js(int fd)
     return false;
 }
 
-
 void TestAudioCB(void* userdata, int16_t stereo_buffer[], int samples)
 {
-
 }
 
 int main(int argc, char* argv[])
 {
-    InitAudio(TestAudioCB, 0);
+	InitAudio(TestAudioCB, 0);
 
 	/*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
