@@ -552,7 +552,7 @@ bool InitAudio()
         }
 
         buffer->mAudioDataByteSize = BUFFER_SIZE; // why?
-        coreaudio_cb(0, coreaudio_queue, buffers[i]);
+        coreaudio_cb(0, coreaudio_queue, buffer);
     }
 
     if (AudioQueueStart(coreaudio_queue, 0))
