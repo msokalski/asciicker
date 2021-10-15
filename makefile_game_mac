@@ -10,7 +10,7 @@ SRCS :=	gl.c \
 		gl45_emu.cpp \
 		x11.cpp \
 		sdl.cpp \
-        term.cpp \
+		term.cpp \
 		font1.cpp \
 		gamepad.cpp \
 		game.cpp \
@@ -26,6 +26,8 @@ SRCS :=	gl.c \
 		upng.c \
 		tinfl.c \
 		rgba8.cpp \
+		audio.cpp
+
 
 LDLIBS := -lutil -framework OpenGL -lSDL2-2.0.0
 

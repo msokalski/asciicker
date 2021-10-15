@@ -2,7 +2,7 @@
 
 
 #include <stdio.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define _USE_MATH_DEFINES
@@ -509,14 +509,17 @@ bool InitAudio()
 #ifdef __APPLE__
 #ifndef HAS_AUDIO
 
+
+//#include <thread>
+
 #include <AudioToolbox/AudioQueue.h>
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreFoundation/CFRunLoop.h>
 
-#define NUM_BUFFERS 3
-#define BUFFER_SIZE 4096 // min latency 1024 samples = 23ms
+#define NUM_BUFFERS 2
+#define BUFFER_SIZE (2048) // full latency 1024 samples
 static AudioQueueRef queue;
-static std::thread* thread = 0;
+//static std::thread* thread = 0;
 
 void coreaudio_cb(void *custom_data, AudioQueueRef queue, AudioQueueBufferRef buffer);
 
@@ -524,10 +527,10 @@ void FreeAudio()
 {
     AudioQueueStop(queue, false);
     AudioQueueDispose(queue, false);
-    CFRunLoopStop(CFRunLoopGetCurrent());
+    //CFRunLoopStop(CFRunLoopGetCurrent());
 
-    thread->join();
-    delete thread;
+    //thread->join();
+    //delete thread;
 }
 
 bool InitAudio()
@@ -545,31 +548,36 @@ bool InitAudio()
     format.mBytesPerPacket   = format.mBytesPerFrame * format.mFramesPerPacket;
     format.mReserved         = 0;
 
-    AudioQueueNewOutput(&format, coreaudio_cb, NULL, CFRunLoopGetCurrent(), kCFRunLoopCommonModes, 0, &queue);
+    AudioQueueNewOutput(&format, coreaudio_cb, NULL, NULL/*CFRunLoopGetCurrent()*/, kCFRunLoopCommonModes, 0, &queue);
 
-    for (i = 0; i < NUM_BUFFERS; i++)
+    for (int i = 0; i < NUM_BUFFERS; i++)
     {
         AudioQueueAllocateBuffer(queue, BUFFER_SIZE, &buffers[i]);
                 
         buffers[i]->mAudioDataByteSize = BUFFER_SIZE;
         
-        // prefill before starting queue
+        // prefill before starting queue, avoid noizz
         coreaudio_cb(0, queue, buffers[i]);
+
+        //AudioQueueEnqueueBuffer(queue, buffers[i], 0, NULL);
     }
 
-    AudioQueueStart(queue, NULL);
+    int ret = AudioQueueStart(queue, NULL);
+    printf("RET=%d\n",ret); 
 
+    /*
     // create thread for it
     // CFRunLoopRun(); 
 
     thread = new std::thread(CFRunLoopRun);
+    */
 
-	return false;
+    return true;
 }
 
 void coreaudio_cb(void *custom_data, AudioQueueRef queue, AudioQueueBufferRef buffer)
 {
-    int16_t* buf = buffer->mAudioData;
+    int16_t* buf = (int16_t*)buffer->mAudioData;
     int len = BUFFER_SIZE / (sizeof(int16_t)*2);
     
     CallQueue* qc = OnAudioCall();
@@ -583,7 +591,11 @@ void coreaudio_cb(void *custom_data, AudioQueueRef queue, AudioQueueBufferRef bu
     }
         
     TestAudioCB(0, buf, len);
+
+    AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
+
+#define HAS_AUDIO
 
 #endif
 #endif
