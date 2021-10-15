@@ -3,7 +3,7 @@ var audio_call = 0;
 
 var Init = Module.cwrap('Init', 'number', []);
 var Proc = Module.cwrap('Proc', 'number', []);
-var Call = Module.cwrap('Call', null, ['number']);
+var Call = Module.cwrap('Call', null, ['number','number']);
 
 
 class AsciickerAudio extends AudioWorkletProcessor 
@@ -16,8 +16,18 @@ class AsciickerAudio extends AudioWorkletProcessor
 
         this.port.onmessage = (e) => 
         {
-            HEAPU8.set(e.data, audio_call)
-            Call(e.data.length);
+            if (e.data.length <= 4096)
+            {
+                HEAPU8.set(e.data, audio_call)
+                Call(audio_call, e.data.length);
+            }
+            else
+            {
+                let addr = Module._malloc(e.data.length);
+                HEAPU8.set(e.data, addr)
+                Call(addr, e.data.length);
+                Module._free(addr);
+            }
         }
 
         audio_call = Init();

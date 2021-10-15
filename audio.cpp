@@ -324,7 +324,7 @@ bool InitAudio()
 #ifdef WORKLET
 
 static int16_t proc_buffer[2*128];
-static uint8_t call_buffer[1024];
+static uint8_t call_buffer[4096];
 
 extern "C"
 {
@@ -339,10 +339,9 @@ extern "C"
         return proc_buffer;
     }
 
-    void Call(int size)
+    void Call(uint8_t* data, int size)
     {
-        // all data are stored in call_buffer already
-        TestAudioCmd(0,call_buffer,size);
+        TestAudioCmd(0,data,size);
     }
 }
 
