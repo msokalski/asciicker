@@ -69,7 +69,7 @@ CPPFLAGS := -save-temps=obj -pthread -DGAME -DPURE_TERM -O3
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME -DPURE_TERM -fsanitize=address
 
 # linker flags
-LDFLAGS := -save-temps=obj -pthread -O3
+LDFLAGS := -save-temps=obj -pthread -O3 -framework Audiotoolbox -framework CoreAudio -framework CoreServices
 # LDFLAGS := -g -save-temps=obj -pthread -O3
 # LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address
 

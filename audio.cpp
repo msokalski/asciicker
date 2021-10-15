@@ -24,16 +24,28 @@ void TestAudioCmd(void* userdata, const uint8_t* data, int size)
 
 void TestAudioCB(void* userdata, int16_t buffer[], int samples)
 {
+    static const int tune = 64;
+    static const int norm = 1000000; 
     static int phase = 0;
+    static int cur_amp = test_amp;
     for (size_t i = 0; i < samples; i++) 
     {
-        int wave = (int)(32767 * sinf(phase*2*M_PI / test_frq));
-        phase++;
-        if (phase>=test_frq)
-            phase=0;
+        int wave = (int)(32767 * sinf(phase*2*M_PI/norm));
+        phase+=test_frq * tune;
+        if (phase>=norm)
+            phase-=norm;
 
-        buffer[2*i] = (wave * test_amp) >> (4+16);
-        buffer[2*i+1] = (wave * test_amp) >> (4+16);
+        buffer[2*i] = (wave * cur_amp) >> (4+16);
+        buffer[2*i+1] = (wave * cur_amp) >> (4+16);
+
+        if (cur_amp < test_amp)
+        {
+            cur_amp += 64;
+            if (cur_amp > test_amp)
+                cur_amp = test_amp;
+        }
+        else
+            cur_amp = test_amp;
 
         if (test_amp)
             test_amp--;
@@ -51,7 +63,6 @@ void TestAudioCB(void* userdata, int16_t buffer[], int samples)
 #include <mutex>
 
 static std::mutex call_mutex;
-
 struct CallQueue
 {
     CallQueue* next;
@@ -492,6 +503,88 @@ bool InitAudio()
 }
 
 #define HAS_AUDIO
+#endif
+#endif
+
+#ifdef __APPLE__
+#ifndef HAS_AUDIO
+
+#include <AudioToolbox/AudioQueue.h>
+#include <CoreAudio/CoreAudioTypes.h>
+#include <CoreFoundation/CFRunLoop.h>
+
+#define NUM_BUFFERS 3
+#define BUFFER_SIZE 4096 // min latency 1024 samples = 23ms
+static AudioQueueRef queue;
+static std::thread* thread = 0;
+
+void coreaudio_cb(void *custom_data, AudioQueueRef queue, AudioQueueBufferRef buffer);
+
+void FreeAudio()
+{
+    AudioQueueStop(queue, false);
+    AudioQueueDispose(queue, false);
+    CFRunLoopStop(CFRunLoopGetCurrent());
+
+    thread->join();
+    delete thread;
+}
+
+bool InitAudio()
+{
+    AudioStreamBasicDescription format;
+    AudioQueueBufferRef buffers[NUM_BUFFERS];
+
+    format.mSampleRate       = 44100;
+    format.mFormatID         = kAudioFormatLinearPCM;
+    format.mFormatFlags      = kLinearPCMFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    format.mBitsPerChannel   = 8 * sizeof(int16_t);
+    format.mChannelsPerFrame = 2;
+    format.mBytesPerFrame    = sizeof(int16_t) * 2;
+    format.mFramesPerPacket  = 1;
+    format.mBytesPerPacket   = format.mBytesPerFrame * format.mFramesPerPacket;
+    format.mReserved         = 0;
+
+    AudioQueueNewOutput(&format, coreaudio_cb, NULL, CFRunLoopGetCurrent(), kCFRunLoopCommonModes, 0, &queue);
+
+    for (i = 0; i < NUM_BUFFERS; i++)
+    {
+        AudioQueueAllocateBuffer(queue, BUFFER_SIZE, &buffers[i]);
+                
+        buffers[i]->mAudioDataByteSize = BUFFER_SIZE;
+        
+        // prefill before starting queue
+        coreaudio_cb(0, queue, buffers[i]);
+    }
+
+    AudioQueueStart(queue, NULL);
+
+    // create thread for it
+    // CFRunLoopRun(); 
+
+    thread = new std::thread(CFRunLoopRun);
+
+	return false;
+}
+
+void coreaudio_cb(void *custom_data, AudioQueueRef queue, AudioQueueBufferRef buffer)
+{
+    int16_t* buf = buffer->mAudioData;
+    int len = BUFFER_SIZE / (sizeof(int16_t)*2);
+    
+    CallQueue* qc = OnAudioCall();
+    while (qc)
+    {
+        TestAudioCmd(0,qc->data,qc->size);
+        // free it
+        CallQueue* n = qc->next;
+        free(qc);
+        qc = n;
+    }
+        
+    TestAudioCB(0, buf, len);
+}
+
 #endif
 #endif
 
