@@ -5,6 +5,7 @@
 #include <assert.h>
 #include "matrix.h"
 #include "physics.h"
+#include "audio.h"
 
 struct SoupItem
 {
@@ -747,7 +748,7 @@ struct Physics
 	}    
 };
 
-int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 {
 	float xy_speed = 0.13;
 	float radius_cells = mount ? 3 : 2; // in full x-cells
@@ -906,8 +907,14 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 				phys->vel[0] = 0;
 				phys->vel[1] = 0;
 
-				if (mount<2)
+				if (mount < 2)
+				{
 					phys->player_stp = -1;
+					/*
+					if (me)
+						AudioWalk(0);
+					*/
+				}
 			}
 			else
 			{
@@ -935,10 +942,29 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 
 				// so 8 frame walk anim divides stp / 1024 to get frame num
 
+				const int step_offs = 3048;
+				int prev_step = (phys->player_stp + step_offs) & 0x1FFF;
+
+				float xy_vel = sqrt(sqr_vel_xy);
+
 				if (mount>1) // slower for flying mounts
-					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * sqrt(sqr_vel_xy)));
+					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * xy_vel));
 				else
-					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * sqrt(sqr_vel_xy)));
+					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * xy_vel));
+
+				if (me && phys->accum_contact >= 0.8)
+				{
+					int volume = (int)(65535 * 1.5f*log10f(xy_vel + 1.0));
+					if (volume > 65535)
+						volume = 65535;
+					int next_step = (phys->player_stp + step_offs) & 0x1FFF;
+					if (prev_step < 2048 && next_step >= 2048)
+						AudioWalk(1, volume);
+					else
+					if (prev_step < 3 * 2048 && next_step >= 3 * 2048)
+						AudioWalk(2, volume);
+				}
+
 
 				float vel_damp = powf(0.9f, dt);
 				phys->vel[0] *= vel_damp;
@@ -991,6 +1017,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 		io->y_impulse *= 0.5;
 
 		// POS - troubles!
+		float prev_vel_z = phys->vel[2];
 		float contact_normal_z = 0;
 		{
 			////////////////////
@@ -1287,9 +1314,18 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 
 		// jump
 
+		float prev_contact = phys->accum_contact;
+
 		phys->accum_contact += fmaxf(0.0f,contact_normal_z);
 		if (phys->accum_contact > 5)
 			phys->accum_contact = 5;
+
+		if (me && prev_contact < 1.0 && phys->accum_contact >= 1.0)
+		//if (me && prev_vel_z < 0 && phys->vel[2] > prev_vel_z)
+		{
+			// how to find nice energy loss ?
+			AudioWalk(0, 65535);
+		}
 
 		// if (contact_normal_z > 0.0)
 		if (phys->accum_contact >= 1.0 || mount>1)

@@ -36,7 +36,7 @@ struct PhysicsIO
 
 struct Physics;
 
-int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount/*0-none, 1-ground, 2-fly*/); // return num of time steps handled
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount/*0-none, 1-ground, 2-fly*/, bool me); // return num of time steps handled
 
 Physics* CreatePhysics(Terrain* t, World* w, float pos[3], float dir, float yaw, uint64_t stamp);
 void DeletePhysics(Physics* phys);

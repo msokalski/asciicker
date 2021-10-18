@@ -15,11 +15,17 @@ static int test_amp = 0;
 static int test_frq = 100;
 void TestAudioCmd(void* userdata, const uint8_t* data, int size)
 {
-    if (size == 4)
+    if (size == 8)
     {
-        test_amp = 65536;
-        test_frq = *(const int*)data;
+		test_frq = *(const int*)data;
+		test_amp = *((const int*)data+1);
     }
+}
+
+void AudioWalk(int foot, int volume)
+{
+	int data[2] = { foot == 0 ? 100 : foot == 1 ? 150 : 160 , volume};
+	CallAudio((uint8_t*)data, 8);
 }
 
 void TestAudioCB(void* userdata, int16_t buffer[], int samples)
@@ -30,7 +36,7 @@ void TestAudioCB(void* userdata, int16_t buffer[], int samples)
     static int cur_amp = test_amp;
     for (size_t i = 0; i < samples; i++) 
     {
-        int wave = (int)(32767 * sinf(phase*2*M_PI/norm));
+        int wave = (int)(32767 * sinf(phase*2*(float)M_PI/norm));
         phase+=test_frq * tune;
         if (phase>=norm)
             phase-=norm;
@@ -47,8 +53,13 @@ void TestAudioCB(void* userdata, int16_t buffer[], int samples)
         else
             cur_amp = test_amp;
 
-        if (test_amp)
-            test_amp--;
+		if (test_amp)
+		{
+			test_amp -= 10;//test_amp--;
+			if (test_amp < 0)
+				test_amp = 0;
+		}
+
 
         //buffer[2*i] = (fast_rand()*2 - 32767) >> 4;
         //buffer[2*i+1] = (fast_rand()*2 - 32767) >> 4;

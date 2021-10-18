@@ -8,6 +8,8 @@ void FreeAudio();
 
 void CallAudio(const uint8_t* data, int size);
 
+void AudioWalk(int foot, int volume);
+
 // is this right direction?
 /*
 void SetAudioSteps(int num_steps, int contact);
