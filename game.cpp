@@ -4678,7 +4678,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	int steps = Animate(physics, _stamp, &io, player.req.mount, true);
+	int steps = Animate(physics, _stamp, &io, &player.req, true);
 
 	if (io.grounded && blood)
 		BloodLeak(&player, steps);
@@ -4951,7 +4951,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						pio.jump = false;
 					}
 
-					int s = Animate(p, _stamp, &pio, h->req.mount != 0, false);
+					int s = Animate(p, _stamp, &pio, &h->req, false);
 
 					if (pio.grounded && blood)
 						BloodLeak(h, s);
@@ -5026,7 +5026,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						pio.y_force = 0;
 						pio.jump = false;
 					}
-					int s = Animate(p, _stamp, &pio, h->req.mount != 0, false);
+					int s = Animate(p, _stamp, &pio, &h->req, false);
 
 					if (pio.grounded && blood)
 						BloodLeak(h, s);

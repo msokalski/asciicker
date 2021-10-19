@@ -6,6 +6,7 @@
 #include "matrix.h"
 #include "physics.h"
 #include "audio.h"
+#include "game.h" // SpriteReq for audio props
 
 struct SoupItem
 {
@@ -748,14 +749,14 @@ struct Physics
 	}    
 };
 
-int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, bool me)
 {
 	float xy_speed = 0.13;
-	float radius_cells = mount ? 3 : 2; // in full x-cells
+	float radius_cells = req->mount ? 3 : 2; // in full x-cells
 	float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
 	float world_patch = VISUAL_CELLS; // patch size in world coords
 	float world_radius = radius_cells / patch_cells * world_patch;
-	float height_cells = mount ? 9.0 : 7.0; // 7.5; decreased (hair are soft)
+	float height_cells = req->mount ? 9.0 : 7.0; // 7.5; decreased (hair are soft)
 
 	// 2/3 = 1/(zoom*sin30)
 	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
@@ -907,7 +908,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 				phys->vel[0] = 0;
 				phys->vel[1] = 0;
 
-				if (mount < 2)
+				if (req->mount < 2)
 				{
 					phys->player_stp = -1;
 					/*
@@ -942,12 +943,13 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 
 				// so 8 frame walk anim divides stp / 1024 to get frame num
 
-				const int step_offs = 3048;
-				int prev_step = (phys->player_stp + step_offs) & 0x1FFF;
+				const int step_offs = 3*1024;
+				const int step_mask = (8*1024-1);
+				int prev_step = (phys->player_stp + step_offs) & step_mask;
 
 				float xy_vel = sqrt(sqr_vel_xy);
 
-				if (mount>1) // slower for flying mounts
+				if (req->mount>1) // slower for flying mounts
 					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * xy_vel));
 				else
 					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * xy_vel));
@@ -957,12 +959,12 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 					int volume = (int)(65535 * 1.5f*log10f(xy_vel + 1.0));
 					if (volume > 65535)
 						volume = 65535;
-					int next_step = (phys->player_stp + step_offs) & 0x1FFF;
+					int next_step = (phys->player_stp + step_offs) & step_mask;
 					if (prev_step < 2048 && next_step >= 2048)
-						AudioWalk(1, volume);
+						AudioWalk(1, volume, req);
 					else
 					if (prev_step < 3 * 2048 && next_step >= 3 * 2048)
-						AudioWalk(2, volume);
+						AudioWalk(2, volume, req);
 				}
 
 
@@ -999,7 +1001,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 			float xy_res = powf(1.0 - 0.5 * res, dt);
 			float z_res = powf(1.0 - 0.1 * res, dt);
 
-			if (mount>1 && phys->vel[2] < 0)
+			if (req->mount>1 && phys->vel[2] < 0)
 				z_res = powf(1.0 - 0.1, dt);
 
 			phys->vel[0] *= xy_res;
@@ -1324,11 +1326,11 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 		//if (me && prev_vel_z < 0 && phys->vel[2] > prev_vel_z)
 		{
 			// how to find nice energy loss ?
-			AudioWalk(0, 65535);
+			AudioWalk(0, 65535, req);
 		}
 
 		// if (contact_normal_z > 0.0)
-		if (phys->accum_contact >= 1.0 || mount>1)
+		if (phys->accum_contact >= 1.0 || req->mount>1)
 		{
 			if (io->jump)
 			{
@@ -1336,7 +1338,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 				phys->accum_contact = 0;
 
 				// ensure for mount>1 current height is not > ground + max_fly_height
-				if (mount < 2 || phys->pos[2] < phys->max_height + 100)
+				if (req->mount < 2 || phys->pos[2] < phys->max_height + 100)
 				{
 
 					if (phys->vel[2] < 0)
@@ -1356,7 +1358,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount, bool me)
 		if (phys->vel[2] > 20)
 			phys->vel[2] = 20;
 
-		if (mount > 1)
+		if (req->mount > 1)
 		{
 			if (!io->grounded)
 			{

@@ -3,12 +3,14 @@
 
 #include <stdint.h>
 
+struct SpriteReq;
+
 bool InitAudio();
 void FreeAudio();
 
 void CallAudio(const uint8_t* data, int size);
 
-void AudioWalk(int foot, int volume);
+void AudioWalk(int foot, int volume, const SpriteReq* req);
 
 // is this right direction?
 /*

@@ -69,7 +69,7 @@
 
     </style>
 
-    <script>
+    <script type='text/javascript'>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker.register('asciicker.js').then(function (registration) {
@@ -157,7 +157,7 @@
     </script>
 
 
-    <script>
+    <script type='text/javascript'>
 
       var audio_ctx = null;
       var audio_cb = null;
@@ -217,11 +217,11 @@
 
 				if (location.protocol !== 'https:') 
 				{
-					connection = new WebSocket('ws://' + location.hostname + port_override + '/ws/y7/');
+					connection = new WebSocket('ws://' + location.hostname + port_override + '/ws/y8/');
 				}
 				else
 				{
-					connection = new WebSocket('wss://' + location.hostname + port_override + '/ws/y7/');
+					connection = new WebSocket('wss://' + location.hostname + port_override + '/ws/y8/');
         }
         
         connection.binaryType = "arraybuffer";
@@ -333,7 +333,7 @@
 			}
     </script>
 
-    <script>
+    <script type='text/javascript'>
 
       var Render = null;
       var Size = null;
@@ -1308,7 +1308,8 @@
 
         window.addEventListener("resize",Resize); 
 
-        Connect(); // window.requestAnimationFrame(AsciickerLoop);
+        // Y8 is NOT READY yet
+        Connect();
       }
     </script>
 
@@ -1386,6 +1387,7 @@
         };
       };
     </script>
+
     {{{ SCRIPT }}}
   </body>
 </html>

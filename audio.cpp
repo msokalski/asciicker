@@ -10,6 +10,20 @@
 
 #include "fast_rand.h"
 #include "audio.h"
+#include "game.h" // SpriteReq for audio props
+
+#define SEMI_TONE(x,y) x*pow(2.0,y/12.0)
+
+void AudioWalk(int foot, int volume, const SpriteReq* req)
+{
+    // remember previous foot timestamp
+    // so we can (ex/in)terpolate sub events for req resonanse
+    // add some rand delay to each sub event
+
+	int data[2] = { foot == 0 ? 140 : foot == 1 ? 156 : 150, volume};
+	CallAudio((uint8_t*)data, 8);
+}
+
 
 static int test_amp = 0;
 static int test_frq = 100;
@@ -20,12 +34,6 @@ void TestAudioCmd(void* userdata, const uint8_t* data, int size)
 		test_frq = *(const int*)data;
 		test_amp = *((const int*)data+1);
     }
-}
-
-void AudioWalk(int foot, int volume)
-{
-	int data[2] = { foot == 0 ? 100 : foot == 1 ? 150 : 160 , volume};
-	CallAudio((uint8_t*)data, 8);
 }
 
 void TestAudioCB(void* userdata, int16_t buffer[], int samples)
@@ -41,8 +49,8 @@ void TestAudioCB(void* userdata, int16_t buffer[], int samples)
         if (phase>=norm)
             phase-=norm;
 
-        buffer[2*i] = (wave * cur_amp) >> (4+16);
-        buffer[2*i+1] = (wave * cur_amp) >> (4+16);
+        buffer[2*i] = (wave * cur_amp) >> (0+16);
+        buffer[2*i+1] = (wave * cur_amp) >> (0+16);
 
         if (cur_amp < test_amp)
         {
@@ -65,6 +73,44 @@ void TestAudioCB(void* userdata, int16_t buffer[], int samples)
         //buffer[2*i+1] = (fast_rand()*2 - 32767) >> 4;
     }
 }
+
+
+// can we use r/o file api in worklets?
+// samples should be embedded into worklet and available to main module for download
+// so in case of:
+// worklet: only decode from embedded mem to heap mem on worklet startup
+// script:  download audio tar, split decode in mem files
+// native:  open files in loop then decode and close
+
+extern "C" void XOgg(int index, const uint8_t* data, int size)
+{
+    printf("decoding ID:%d (%d bytes)\n", index, size);
+    // stb_vorbis_open_memory();
+}
+
+#ifndef WORKLET
+
+// implement hashmap interface
+/*
+    int LoadAudioSample(const char* name)
+    {
+        // WEB
+        // in case of emscripten it should only lookup table we've sent to worklet
+        // or something similar in case of scriptnode
+
+        // NATIVE
+        // in case of native we attempt to load and decode ogg
+        // we can return existing id if already loaded
+    }
+
+    void PlayAudio(int id)
+    {
+        // ensure id is smaller than num of loaded samples
+        // add track for mixing, bind it to sample by id
+    }
+*/
+
+#endif
 
 /////////////////////////////////////
 
@@ -113,6 +159,88 @@ void CallAudio(const uint8_t* data, int size)
         call_tail = cq;
     }
 }
+#endif
+
+#ifdef __APPLE__
+#ifndef HAS_AUDIO
+
+#include <AudioToolbox/AudioQueue.h>
+#include <CoreAudio/CoreAudioTypes.h>
+
+#define NUM_BUFFERS 2
+#define BUFFER_SIZE (2048) // full latency 2x512 samples
+static AudioQueueRef coreaudio_queue = 0;
+
+void coreaudio_cb(void* userdata, AudioQueueRef queue, AudioQueueBufferRef buffer);
+
+void FreeAudio()
+{
+    AudioQueueStop(coreaudio_queue, false);
+    AudioQueueDispose(coreaudio_queue, false); // deletes its buffers as well
+    coreaudio_queue = 0;
+}
+
+bool InitAudio()
+{
+    AudioStreamBasicDescription format;
+
+    format.mSampleRate       = 44100;
+    format.mFormatID         = kAudioFormatLinearPCM;
+    format.mFormatFlags      = kLinearPCMFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    format.mBitsPerChannel   = 8 * sizeof(int16_t);
+    format.mChannelsPerFrame = 2;
+    format.mBytesPerFrame    = sizeof(int16_t) * 2;
+    format.mFramesPerPacket  = 1;
+    format.mBytesPerPacket   = format.mBytesPerFrame * format.mFramesPerPacket;
+    format.mReserved         = 0;
+
+    if (AudioQueueNewOutput(&format, coreaudio_cb, 0, 0, kCFRunLoopCommonModes, 0, &coreaudio_queue))
+        return false;
+
+    for (int i = 0; i < NUM_BUFFERS; i++)
+    {
+        AudioQueueBufferRef buffer;
+        if (AudioQueueAllocateBuffer(coreaudio_queue, BUFFER_SIZE, &buffer))
+        {
+            AudioQueueDispose(coreaudio_queue, true);
+            return false;
+        }
+
+        buffer->mAudioDataByteSize = BUFFER_SIZE; // why?
+        coreaudio_cb(0, coreaudio_queue, buffer);
+    }
+
+    if (AudioQueueStart(coreaudio_queue, 0))
+    {
+        AudioQueueDispose(coreaudio_queue, true);
+        return false;
+    }
+    return true;
+}
+
+void coreaudio_cb(void* userdata, AudioQueueRef queue, AudioQueueBufferRef buffer)
+{
+    int16_t* buf = (int16_t*)buffer->mAudioData;
+    int len = BUFFER_SIZE / (sizeof(int16_t)*2);
+    
+    CallQueue* qc = OnAudioCall();
+    while (qc)
+    {
+        TestAudioCmd(0,qc->data,qc->size);
+        // free it
+        CallQueue* n = qc->next;
+        free(qc);
+        qc = n;
+    }
+        
+    TestAudioCB(0, buf, len);
+
+    AudioQueueEnqueueBuffer(queue, buffer, 0, 0);
+}
+
+#define HAS_AUDIO
+
+#endif
 #endif
 
 #ifdef __linux__ 
@@ -350,8 +478,9 @@ static uint8_t call_buffer[4096];
 
 extern "C"
 {
-    uint8_t* Init()
+    uint8_t* Init(int num)
     {
+        // num is snumber of samples we will be feeded with to decode
         return call_buffer;
     }
 
@@ -417,8 +546,11 @@ void CallAudio(const uint8_t* data, int size)
         // send it to worklet's audio_port    
         EM_ASM(
         {
-            let view = new Uint8Array(Module.HEAPU8.buffer, Module.HEAPU8.byteOffset + $0, $1);
-            audio_port.postMessage(new Uint8Array(view));
+            if (audio_port)
+            {
+                let view = new Uint8Array(Module.HEAPU8.buffer, Module.HEAPU8.byteOffset + $0, $1);
+                audio_port.postMessage(new Uint8Array(view));
+            }
         },data,size);
     }
 }
@@ -450,16 +582,27 @@ bool InitAudio()
         if (!audio_ctx)
             return 0;
 
-        if (audio_ctx.audioWorklet) // DISABLED !!! 
+        if (audio_ctx.audioWorklet)
         {
             audio_ctx.audioWorklet.addModule('audio.js').then(
             function(e)
             {
+                let samples = [];
+                const enc = new TextEncoder();
+                const c = FS.root.contents["samples"].contents;
+                let i = 0;
+                for (const s in c)
+                {
+                    let n = enc.encode(s);
+                    samples[i++] = c[s].contents;
+                }
+
                 let cfg =
                 {
                     numberOfInputs:0,
                     numberOfOutputs:1,
                     outputChannelCount:[2],
+                    processorOptions : samples
                 };
 
                 audio_node = new AudioWorkletNode(audio_ctx, 'asciicker-audio',cfg);
@@ -504,6 +647,17 @@ bool InitAudio()
 
             audio_node.connect(audio_ctx.destination);
 
+            const c = FS.root.contents["samples"].contents;
+            for (const s in c)
+            {
+
+                // TODO:
+                // push samples directly for decoding
+                // ...
+
+                // XOgg()
+            }
+
             audio_ctx.resume();
             return audio_ctx.sampleRate | 0;
         }
@@ -514,88 +668,6 @@ bool InitAudio()
 }
 
 #define HAS_AUDIO
-#endif
-#endif
-
-#ifdef __APPLE__
-#ifndef HAS_AUDIO
-
-#include <AudioToolbox/AudioQueue.h>
-#include <CoreAudio/CoreAudioTypes.h>
-
-#define NUM_BUFFERS 2
-#define BUFFER_SIZE (2048) // full latency 2x512 samples
-static AudioQueueRef coreaudio_queue = 0;
-
-void coreaudio_cb(void* userdata, AudioQueueRef queue, AudioQueueBufferRef buffer);
-
-void FreeAudio()
-{
-    AudioQueueStop(coreaudio_queue, false);
-    AudioQueueDispose(coreaudio_queue, false); // deletes its buffers as well
-    coreaudio_queue = 0;
-}
-
-bool InitAudio()
-{
-    AudioStreamBasicDescription format;
-
-    format.mSampleRate       = 44100;
-    format.mFormatID         = kAudioFormatLinearPCM;
-    format.mFormatFlags      = kLinearPCMFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
-    format.mBitsPerChannel   = 8 * sizeof(int16_t);
-    format.mChannelsPerFrame = 2;
-    format.mBytesPerFrame    = sizeof(int16_t) * 2;
-    format.mFramesPerPacket  = 1;
-    format.mBytesPerPacket   = format.mBytesPerFrame * format.mFramesPerPacket;
-    format.mReserved         = 0;
-
-    if (AudioQueueNewOutput(&format, coreaudio_cb, 0, 0, kCFRunLoopCommonModes, 0, &coreaudio_queue))
-        return false;
-
-    for (int i = 0; i < NUM_BUFFERS; i++)
-    {
-        AudioQueueBufferRef buffer;
-        if (AudioQueueAllocateBuffer(coreaudio_queue, BUFFER_SIZE, &buffer))
-        {
-            AudioQueueDispose(coreaudio_queue, true);
-            return false;
-        }
-
-        buffer->mAudioDataByteSize = BUFFER_SIZE; // why?
-        coreaudio_cb(0, coreaudio_queue, buffer);
-    }
-
-    if (AudioQueueStart(coreaudio_queue, 0))
-    {
-        AudioQueueDispose(coreaudio_queue, true);
-        return false;
-    }
-    return true;
-}
-
-void coreaudio_cb(void* userdata, AudioQueueRef queue, AudioQueueBufferRef buffer)
-{
-    int16_t* buf = (int16_t*)buffer->mAudioData;
-    int len = BUFFER_SIZE / (sizeof(int16_t)*2);
-    
-    CallQueue* qc = OnAudioCall();
-    while (qc)
-    {
-        TestAudioCmd(0,qc->data,qc->size);
-        // free it
-        CallQueue* n = qc->next;
-        free(qc);
-        qc = n;
-    }
-        
-    TestAudioCB(0, buf, len);
-
-    AudioQueueEnqueueBuffer(queue, buffer, 0, 0);
-}
-
-#define HAS_AUDIO
-
 #endif
 #endif
 

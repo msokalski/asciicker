@@ -30,34 +30,40 @@ echo "CLEARING previous build ..."
     rm .web/index.wasm
     rm .web/index.data
     rm .web/audio.js
+    rm .web/samples.js
 } &> /dev/null
 
-# : << 'COMMENT'
+A3DMAPS=`ls a3d/game_map_y8.a3d`
+MESHES=`ls meshes/*.akm`
+SPRITES=`ls sprites/*.xp`
+SAMPLES=`ls samples/*.ogg`
+
+#requires bash or zsh
+ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"
+
 echo "MAKING audio worklet ..."
 
 emcc -O3 \
     -DWORKLET \
     -fno-exceptions \
     -flto \
+    audio.cpp \
     -o .web/audio.js \
     -s BINARYEN_ASYNC_COMPILATION=0 \
     -s SINGLE_FILE=1 \
     --pre-js audio-pre.js \
     --post-js audio-post.js \
     --no-heap-copy \
-    -s FILESYSTEM=0 \
+    -s FILESYSTEM=1 \
     -s NO_EXIT_RUNTIME=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
-    -s EXPORTED_FUNCTIONS='["_Init","_Proc","_Call"]' \
-    audio.cpp
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_Init","_Proc","_Call","_XOgg"]'
 
 if [ $? -ne 0 ];
 then
     exit $?
 fi
-
-# COMMENT
 
 echo "MAKING index(wasm + data + js + html) ..."
 
@@ -86,6 +92,26 @@ emcc -O3 \
     --no-heap-copy \
     -s NO_EXIT_RUNTIME=1 \
     -lidbfs.js \
+    `echo "$ASSETS" | awk '$0="--preload-file "$0' | xargs`
+
+if [ $? -ne 0 ];
+then
+    exit $?
+fi
+
+echo "STAGING site (icon png, manifest json, service worker js)..."
+
+cp favicon.ico .web/favicon.ico
+cp asciicker.png .web/asciicker.png
+cp asciicker.json .web/asciicker.json
+cp asciicker.js .web/asciicker.js
+
+
+emrun --no_browser --port 8888 .web/index.html
+
+
+exit $?
+
     --preload-file a3d/game_map_y8.a3d \
     --preload-file sprites/font-1.xp \
     --preload-file sprites/gamepad.xp \
@@ -304,17 +330,6 @@ emcc -O3 \
     --preload-file meshes/old-tree-1.akm \
     --preload-file meshes/old-tree-2.akm \
     --preload-file meshes/brick-1.akm \
-    --preload-file meshes/tree-3.akm
-
-if [ $? -ne 0 ];
-then
-    exit $?
-fi
-
-echo "STAGING site (icon png, manifest json, service worker js)..."
-
-cp asciicker.png .web/asciicker.png
-cp asciicker.json .web/asciicker.json
-cp asciicker.js .web/asciicker.js
-
-emrun --no_browser --port 8888 .web/index.html
+    --preload-file meshes/tree-3.akm \
+    --preload-file samples/131660__bertrof__game-sound-correct.ogg \
+    --preload-file samples/13290__schademans__pipe9.ogg
