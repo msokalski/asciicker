@@ -12,105 +12,387 @@
 #include "audio.h"
 #include "game.h" // SpriteReq for audio props
 
+#include "stb_vorbis.h"
+
 #define SEMI_TONE(x,y) x*pow(2.0,y/12.0)
 
-void AudioWalk(int foot, int volume, const SpriteReq* req)
+void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
 {
     // remember previous foot timestamp
     // so we can (ex/in)terpolate sub events for req resonanse
     // add some rand delay to each sub event
 
-	int data[2] = { foot == 0 ? 140 : foot == 1 ? 156 : 150, volume};
+    // get sample id for given: foot, req, material 
+    int sample = GetSampleID((AUDIO_FILE)foot); // temp!
+
+	int data[2] = { sample, volume };
 	CallAudio((uint8_t*)data, 8);
 }
 
+#define MAX_SAMPLES 1024
+static int16_t* sample_data[MAX_SAMPLES] = {0};
+static int sample_len[MAX_SAMPLES] = {0};
 
-static int test_amp = 0;
-static int test_frq = 100;
-void TestAudioCmd(void* userdata, const uint8_t* data, int size)
+extern "C" void XOgg(int index, const uint8_t* data, int ogg_size)
 {
-    if (size == 8)
+    if (index>=MAX_SAMPLES)
+        return;
+
+    int err = 0;
+    stb_vorbis* ogg = stb_vorbis_open_memory(data,ogg_size,&err,0);
+    if (!ogg)
     {
-		test_frq = *(const int*)data;
-		test_amp = *((const int*)data+1);
+        sample_data[index]=0;
+        sample_len[index]=0;
+        return;
     }
-}
 
-void TestAudioCB(void* userdata, int16_t buffer[], int samples)
-{
-    static const int tune = 64;
-    static const int norm = 1000000; 
-    static int phase = 0;
-    static int cur_amp = test_amp;
-    for (size_t i = 0; i < samples; i++) 
+    int size = stb_vorbis_stream_length_in_samples(ogg);
+
+    int offs = 0;
+
+    int16_t* dec = (int16_t*)malloc(size*4);
+    float** ptr=0;
+    int len;
+    int chn;
+
+    while ( ( len = stb_vorbis_get_frame_float(ogg, &chn, &ptr) ) )
     {
-        int wave = (int)(32767 * sinf(phase*2*(float)M_PI/norm));
-        phase+=test_frq * tune;
-        if (phase>=norm)
-            phase-=norm;
-
-        buffer[2*i] = (wave * cur_amp) >> (0+16);
-        buffer[2*i+1] = (wave * cur_amp) >> (0+16);
-
-        if (cur_amp < test_amp)
+        if (chn==1)
         {
-            cur_amp += 64;
-            if (cur_amp > test_amp)
-                cur_amp = test_amp;
+            // mono -> L=0, R=0
+            for (int i=0; i<len; i++)
+            {
+                if (offs>=2*size)
+                {
+                    // clip!
+                    i=len;
+                    break;
+                }
+
+                int m = (int)(ptr[0][i]*32767);
+                if (m<-32767)
+                    m=-32767;
+                else
+                if (m>+32767)
+                    m=+32767;
+
+                dec[offs++] = m;
+                dec[offs++] = m;
+            }
         }
         else
-            cur_amp = test_amp;
+        {
+            // stereo L=0, R=1
+            for (int i=0; i<len; i++)
+            {
+                if (offs>=2*size)
+                {
+                    // clip!
+                    i=len;
+                    break;
+                }
 
-		if (test_amp)
-		{
-			test_amp -= 10;//test_amp--;
-			if (test_amp < 0)
-				test_amp = 0;
-		}
+                int l = (int)(ptr[0][i]*32767);
+                if (l<-32767)
+                    l=-32767;
+                else
+                if (l>+32767)
+                    l=+32767;
 
+                int r = (int)(ptr[1][i]*32767);
+                if (r<-32767)
+                    r=-32767;
+                else
+                if (r>+32767)
+                    r=+32767;
 
-        //buffer[2*i] = (fast_rand()*2 - 32767) >> 4;
-        //buffer[2*i+1] = (fast_rand()*2 - 32767) >> 4;
+                dec[offs++] = l;
+                dec[offs++] = r;
+            }
+        }
     }
-}
 
+    stb_vorbis_close(ogg);
 
-// can we use r/o file api in worklets?
-// samples should be embedded into worklet and available to main module for download
-// so in case of:
-// worklet: only decode from embedded mem to heap mem on worklet startup
-// script:  download audio tar, split decode in mem files
-// native:  open files in loop then decode and close
+    sample_data[index] = dec;
+    sample_len[index] = offs>>1;
 
-extern "C" void XOgg(int index, const uint8_t* data, int size)
-{
-    printf("decoding ID:%d (%d bytes)\n", index, size);
-    // stb_vorbis_open_memory();
+    printf("decoded [%d] %d bytes to %d samples\n", index, ogg_size, size);
+
 }
 
 #ifndef WORKLET
+extern char base_path[];
 
-// implement hashmap interface
-/*
-    int LoadAudioSample(const char* name)
+struct SampleHash
+{
+    SampleHash* next;
+    uint32_t hash;
+    uint32_t id;
+    char name[1];
+};
+
+#define HASH_MAKS ((MAX_SAMPLES>>2)-1)
+static SampleHash* sample_hash[HASH_MAKS+1]={0};
+static int samples=0;
+
+static int FindSample(const char* name, uint32_t* h, int* l)
+{
+    if (!name)
+        return -1;
+
+    uint32_t hash = 5381;
+    const char* n = name;
+    while (unsigned int c = *n++)
+        hash = ((hash << 5) + hash) + c;
+
+    if (h)
+        *h = hash;
+    if (l)
+        *l = n-name;
+
+    SampleHash* buck = sample_hash[hash&HASH_MAKS];
+    while (buck)
     {
-        // WEB
-        // in case of emscripten it should only lookup table we've sent to worklet
-        // or something similar in case of scriptnode
-
-        // NATIVE
-        // in case of native we attempt to load and decode ogg
-        // we can return existing id if already loaded
+        if (buck->hash == hash && strcmp(name,buck->name)==0)
+            return buck->id;
+        buck = buck->next;
     }
 
-    void PlayAudio(int id)
-    {
-        // ensure id is smaller than num of loaded samples
-        // add track for mixing, bind it to sample by id
-    }
-*/
+    return -1;
+}
 
+#ifdef EMSCRIPTEN
+extern "C" void Sample(const char* name)
+{
+    uint32_t hash;
+    int len;
+    if (FindSample(name,&hash,&len)<0)
+    {
+        SampleHash* item = (SampleHash*)malloc(sizeof(SampleHash)+len);
+        SampleHash** base = sample_hash + (hash&HASH_MAKS);
+        item->next = *base;
+        *base = item;
+        item->hash = hash;
+        item->id = samples;
+        strcpy(item->name,name);        
+    }
+    else
+    {
+        // name collision!!! how?
+    }
+
+    samples++;
+}
 #endif
+
+static int LoadSample(const char* name)
+{
+    // if in hashmap, return its id
+    uint32_t hash;
+    int len;
+    int id = FindSample(name,&hash,&len);
+    if (id >= 0)
+        return id;
+
+    #ifdef EMSCRIPTEN
+    return -1; // if not found in hashmap
+    #else
+
+    // load & dec file from ./samples/<name>
+    char path[1024];
+    sprintf(path,"%ssamples/%s",base_path,name);
+    FILE* f = fopen(path,"rb");
+
+    if (!f) // if file not found return -1
+        return -1;
+
+    if (samples == MAX_SAMPLES)
+    {
+        fclose(f);
+        static bool once = true;
+        if (once)
+        {
+            once=false;
+            printf("Samples Quota Exceeded!\n");
+        }
+        return -1;
+    }
+
+    fseek(f,0,SEEK_END);
+    int size = (int)ftell(f);
+    fseek(f,0,SEEK_SET);
+
+    uint8_t* data = (uint8_t*)malloc(size);
+    fread(data,1,size,f);
+    fclose(f);
+
+    // decode ogg
+    // if fails it will store sample_data[samples]=0
+    XOgg(samples, data, size);
+
+    free(data);
+
+    // add to hashmap and return new id
+    SampleHash* item = (SampleHash*)malloc(sizeof(SampleHash)+len);
+    SampleHash** base = sample_hash + (hash&HASH_MAKS);
+    item->next = *base;
+    *base = item;
+    item->hash = hash;
+    item->id = samples++;
+    strcpy(item->name,name);
+
+    return samples;
+    #endif
+}
+
+static const char* sample_names[] = // IN ORDER OF enum AUDIO_FILE
+{
+    "131660__bertrof__game-sound-correct.ogg",
+    "13290__schademans__pipe9.ogg",
+    "13290__schademans__pipe10.ogg",
+    0
+};
+
+static int sample_ids[AUDIO_FILES] = {-1};
+
+static void LoadAllSamples()
+{
+    for (int i=0; sample_names[i]; i++)
+        sample_ids[i] = LoadSample(sample_names[i]);
+}
+
+int GetSampleID(AUDIO_FILE af)
+{
+    if (af<0 || af>=AUDIO_FILES)
+        return -1;
+    return sample_ids[af];
+}
+#endif // END OF NOT WORKLET
+
+static int sample_id = -1;
+static int sample_vol = 65535;
+static int sample_pos = 0;
+
+void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
+{
+    // testing samples on single track
+    // { sample_id, volume }
+
+    if (size==8)
+    {
+        const int* msg = (const int*)data;
+        sample_id = msg[0];
+        sample_vol = msg[1];
+        sample_pos = 0;
+
+        printf("Playing sample %d vol %d\n", sample_id, sample_vol);
+    }
+
+
+
+
+    /////////////////////////////////////
+    // animables:
+
+    // pan \
+    // rot  }-- 2x2 mix-matrix
+    // vol /
+    // frq
+
+    // replace track sample
+    // { 0, sample_id>=0, track_idx, play_from, play_to, loop_a, loop_b>=loop_a, loops, pan, rot, vol, frq, paused}
+
+    // replace transition on track
+    // { 1, track_idx, pan_to, rot_to, vol_to, frq_to, time_to }
+
+    // subtract num of remaining loops (clamp to 0)
+    // { 2, track_idx, sub_loops }
+
+    // pause track
+    // { 3, track_idx }
+
+    // resume track
+    // { 4, track_idx }
+
+    // clear track
+    // { 5, track_idx }
+
+    // set event to listen if track finishes
+    // { 6. track_idx, event_idx, add/remove/replace }
+
+    // set event to listen track's pos & loops
+    // { 7. track_idx, event_idx, pos, loops, add/remove/replace }
+
+    // clear all event listenings (on given track or all tracks)
+    // { 8. track_idx(-1==ALL), event_idx(-1==ALL) }
+
+    // set event script, script is able to access all internals like sample position, current vol/pan, etc ...
+    // { 9. event_idx, [script] (can be null to clear) } 
+
+    // manually trigger event
+    // {10. event_idx }
+
+    // pause renderer (ALIAS!)
+    // { 3, -1}
+
+    // resume renderer (ALIAS!)
+    // { 4, -1}
+
+    // set renderer transition  (ALIAS!)
+    // { 1, -1, pan_to, rot_to, vol_to, frq_to, time_to }
+
+
+    // SCRIPT 'ASSEMBLY'
+
+    // VAR i
+    // VAR i=1
+    // VAR i,j
+    // VAR i=1,j
+    // VAR i,j=2
+    // VAR i=1,j=2
+    // ...
+
+    // FOR(i in TR)
+    // FOR(i in EV)
+
+    // TR[i] : sample_id,pos,from,to,loop_a,loop_b,loops,vol,pan,rot,frq
+    // EV[i] : listens, listen[j]
+
+    // i=VAL
+
+}
+
+void DriverAudioCB(void* userdata, int16_t buffer[], int samples)
+{
+    if (sample_id>=0)
+    {
+        const int16_t* data = sample_data[sample_id];
+        int len = sample_len[sample_id];
+        int pos = sample_pos;
+        int vol = sample_vol;
+        for (int i = 0; i < samples; i++) 
+        {
+            if (pos==len)
+            {
+                sample_id=-1;
+                int rem = samples-pos;
+                if (rem)
+                    memset(buffer+2*pos,0,(samples-pos)*4);
+                break;
+            }
+
+            buffer[2*i] = (data[pos*2] * vol) / 65535;
+            buffer[2*i+1] = (data[pos*2+1] * vol) / 65535;
+            pos++;
+        }
+    }
+    else
+    {
+        memset(buffer,0,4*samples);
+    }
+}
 
 /////////////////////////////////////
 
@@ -182,6 +464,7 @@ void FreeAudio()
 
 bool InitAudio()
 {
+    LoadAllSamples();
     AudioStreamBasicDescription format;
 
     format.mSampleRate       = 44100;
@@ -226,14 +509,14 @@ void coreaudio_cb(void* userdata, AudioQueueRef queue, AudioQueueBufferRef buffe
     CallQueue* qc = OnAudioCall();
     while (qc)
     {
-        TestAudioCmd(0,qc->data,qc->size);
+        DriverAudioCmd(0,qc->data,qc->size);
         // free it
         CallQueue* n = qc->next;
         free(qc);
         qc = n;
     }
         
-    TestAudioCB(0, buf, len);
+    DriverAudioCB(0, buf, len);
 
     AudioQueueEnqueueBuffer(queue, buffer, 0, 0);
 }
@@ -290,6 +573,8 @@ void FreeAudio()
 
 bool InitAudio() 
 {
+    LoadAllSamples();
+
     // Get a mainloop and its context
     mainloop = pa_threaded_mainloop_new();
     assert(mainloop);
@@ -387,7 +672,7 @@ void stream_write_cb(pa_stream *stream, size_t requested_bytes, void *userdata)
         CallQueue* qc = OnAudioCall();
         while (qc)
         {
-            TestAudioCmd(0,qc->data,qc->size);
+            DriverAudioCmd(0,qc->data,qc->size);
             // free it
             CallQueue* n = qc->next;
             free(qc);
@@ -397,7 +682,7 @@ void stream_write_cb(pa_stream *stream, size_t requested_bytes, void *userdata)
         pa_stream_begin_write(stream, (void**) &buffer, &bytes_to_fill);
 
         int samples = bytes_to_fill/4;
-        TestAudioCB(0, (int16_t*)buffer, bytes_to_fill/4);
+        DriverAudioCB(0, (int16_t*)buffer, bytes_to_fill/4);
 
         pa_stream_write(stream, buffer, bytes_to_fill, NULL, 0LL, PA_SEEK_RELATIVE);
 
@@ -434,7 +719,7 @@ void SDLAudioCB(void* userdata, Uint8* stream, int len)
     CallQueue* qc = OnAudioCall();
     while (qc)
     {
-        TestAudioCmd(0,qc->data,qc->size);
+        DriverAudioCmd(0,qc->data,qc->size);
         // free it
         CallQueue* n = qc->next;
         free(qc);
@@ -443,11 +728,13 @@ void SDLAudioCB(void* userdata, Uint8* stream, int len)
 
     int samples = len/4;
     int16_t* buffer = (int16_t*)stream;
-    TestAudioCB(0, (int16_t*)buffer, samples);
+    DriverAudioCB(0, (int16_t*)buffer, samples);
 }
 
 bool InitAudio() 
 {
+    LoadAllSamples();
+
     SDL_AudioSpec wanted;
     wanted.freq = 44100;
     wanted.format = AUDIO_S16;
@@ -486,13 +773,13 @@ extern "C"
 
     int16_t* Proc()
     {
-        TestAudioCB(0, proc_buffer, 128);
+        DriverAudioCB(0, proc_buffer, 128);
         return proc_buffer;
     }
 
     void Call(uint8_t* data, int size)
     {
-        TestAudioCmd(0,data,size);
+        DriverAudioCmd(0,data,size);
     }
 }
 
@@ -522,7 +809,7 @@ extern "C"
             buflen = alloc;
         }
 
-        TestAudioCB(0, buffer, samples);
+        DriverAudioCB(0, buffer, samples);
 
         return buffer;
     }
@@ -537,7 +824,7 @@ void CallAudio(const uint8_t* data, int size)
     {
         // SCRIPTNODE
         // just exec it right now and here
-        TestAudioCmd(0, data, size);
+        DriverAudioCmd(0, data, size);
     }
     else
     {
@@ -571,6 +858,7 @@ bool InitAudio()
 {
     int ret = EM_ASM_INT(
     {
+        console.log("Initializing Audio ", performance.now());
         var audioContext = window.AudioContext || window.webkitAudioContext;
 
         audio_cb = Module.cwrap("Audio", null, ["number"]);
@@ -582,21 +870,26 @@ bool InitAudio()
         if (!audio_ctx)
             return 0;
 
+        let samples = [];
+        const enc = new TextEncoder();
+        const c = FS.root.contents["samples"].contents;
+
+        let Sample = Module.cwrap("Sample", null, ["string"]);
+        let i = 0;
+        let max_size = 0;
+        for (const s in c)
+        {
+            if (max_size < c[s].contents.length)
+                max_size = c[s].contents.length;
+            samples[i++] = c[s].contents;
+            Sample(s);
+        }
+
         if (audio_ctx.audioWorklet)
         {
             audio_ctx.audioWorklet.addModule('audio.js').then(
             function(e)
             {
-                let samples = [];
-                const enc = new TextEncoder();
-                const c = FS.root.contents["samples"].contents;
-                let i = 0;
-                for (const s in c)
-                {
-                    let n = enc.encode(s);
-                    samples[i++] = c[s].contents;
-                }
-
                 let cfg =
                 {
                     numberOfInputs:0,
@@ -611,6 +904,7 @@ bool InitAudio()
                 {
                     // process msg from worklet to app
                     // ...
+                    console.log(e.data, performance.now());
                 };
 
                 audio_node.connect(audio_ctx.destination);
@@ -647,22 +941,26 @@ bool InitAudio()
 
             audio_node.connect(audio_ctx.destination);
 
-            const c = FS.root.contents["samples"].contents;
+            let data = 0;
+            if (max_size)
+                data = Module._malloc(max_size);
+
             for (const s in c)
             {
-
-                // TODO:
-                // push samples directly for decoding
-                // ...
-
-                // XOgg()
+                if (c[s].contents.length)
+                    Module.HEAPU8.set(c[s].contents, data);
+                XOgg(s, data, c[s].contents.length);
             }
+
+            if (max_size)
+                Module._free(data);
 
             audio_ctx.resume();
             return audio_ctx.sampleRate | 0;
         }
     });
 
+    LoadAllSamples();
     audio_mode = ret;
     return ret!=0;
 }

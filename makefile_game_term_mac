@@ -20,7 +20,9 @@ SRCS :=	game.cpp \
 		upng.c \
 		tinfl.c \
 		rgba8.cpp \
-		audio.cpp
+		audio.cpp \
+		stb_vorbis.cpp
+
 
 LDLIBS := -lutil
 

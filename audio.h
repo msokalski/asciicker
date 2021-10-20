@@ -9,8 +9,23 @@ bool InitAudio();
 void FreeAudio();
 
 void CallAudio(const uint8_t* data, int size);
+void AudioWalk(int foot, int volume, const SpriteReq* req, int material);
 
-void AudioWalk(int foot, int volume, const SpriteReq* req);
+enum AUDIO_FILE
+{
+
+    // merge them all into single file, use in file markers
+    // prepare similar files for several armor levels
+
+    JUMP_LAND_DIRT,
+    WALK_LEFT_DIRT,
+    WALK_RIGHT_DIRT,
+
+    AUDIO_FILES
+};
+
+int GetSampleID(AUDIO_FILE af);
+
 
 // is this right direction?
 /*

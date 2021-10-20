@@ -14,7 +14,7 @@ class AsciickerAudio extends AudioWorkletProcessor
 
         audio_port = this.port;
 
-        this.port.onmessage = (e) => 
+        audio_port.onmessage = (e) => 
         {
             if (e.data.length <= 4096)
             {
@@ -30,32 +30,29 @@ class AsciickerAudio extends AudioWorkletProcessor
             }
         }
 
-        const c = args[0].processorOptions; // array of {data:Uint8Array, name:Uint8Array}
+        const c = args[0].processorOptions;
         let max_size = 0;
         let num = c.length;
         for (const s in c)
-            max_size = max_size < c[s].data.length ? c[s].data.length : max_size;
+            max_size = max_size < c[s].length ? c[s].length : max_size;
 
         audio_call = Init(num);
 
-        console.log("PLEASE");
+        let data = 0;
+        if (max_size)
+            data = Module._malloc(max_size);
 
-        if (max_size > 0)
+        for (const s in c)
         {
-            let data = Module._malloc(max_size);
-            for (const s in c)
-            {
-                Module.HEAPU8.set(c[s].name, audio_call);
-                Module.HEAPU8[audio_call+c[s].name.length]=0; // terminate name string
-
-                // fill data
-                Module.HEAPU8.set(c[s].data, data);
-
-                // call decompressor                
-                XOgg(audio_call, data, c[s].data.length);
-            }
-            Module._free(data);
+            if (c[s].length)
+                Module.HEAPU8.set(c[s], data);
+            XOgg(s, data, c[s].length);
         }
+
+        if (max_size)
+            Module._free(data);
+
+        audio_port.postMessage("Audio Initialized ");
     }
 
     process (inputs, outputs, parameters) 

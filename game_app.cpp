@@ -1289,8 +1289,6 @@ bool read_js(int fd)
 
 int main(int argc, char* argv[])
 {
-	InitAudio();
-
 	/*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
 	for (int i = 0; i < 16; i++)
@@ -1371,6 +1369,8 @@ int main(int argc, char* argv[])
 
     printf("exec path: %s\n", argv[0]);
     printf("BASE PATH: %s\n", base_path);
+
+	InitAudio();
 
     /*
     int c16 = 13;

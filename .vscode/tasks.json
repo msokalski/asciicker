@@ -38,6 +38,18 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "build-web",
+            "type": "shell",
+            "command": "./build-web.sh",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }        
     ]
 }

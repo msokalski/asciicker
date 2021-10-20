@@ -961,10 +961,10 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 						volume = 65535;
 					int next_step = (phys->player_stp + step_offs) & step_mask;
 					if (prev_step < 2048 && next_step >= 2048)
-						AudioWalk(1, volume, req);
+						AudioWalk(1, volume, req, 0);
 					else
 					if (prev_step < 3 * 2048 && next_step >= 3 * 2048)
-						AudioWalk(2, volume, req);
+						AudioWalk(2, volume, req, 0);
 				}
 
 
@@ -1326,7 +1326,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 		//if (me && prev_vel_z < 0 && phys->vel[2] > prev_vel_z)
 		{
 			// how to find nice energy loss ?
-			AudioWalk(0, 65535, req);
+			AudioWalk(0, 65535, req, 0);
 		}
 
 		// if (contact_normal_z > 0.0)

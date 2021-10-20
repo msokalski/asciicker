@@ -215,6 +215,13 @@
         var port_override = "";
         //var port_override = ":8080";
 
+
+        // Y8 is NOT READY yet
+        Load(player_name);
+        Resize(null);
+        window.requestAnimationFrame(AsciickerLoop);
+        return;
+
 				if (location.protocol !== 'https:') 
 				{
 					connection = new WebSocket('ws://' + location.hostname + port_override + '/ws/y8/');
@@ -1308,7 +1315,6 @@
 
         window.addEventListener("resize",Resize); 
 
-        // Y8 is NOT READY yet
         Connect();
       }
     </script>

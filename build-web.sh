@@ -22,6 +22,7 @@ hash emcc 2>/dev/null || { pushd ~/emsdk; source ./emsdk_env.sh --build=Release;
 # now we can build, 
 # for the first time it will compile and cache libc
 
+echo ""
 echo "CLEARING previous build ..."
 
 {
@@ -30,7 +31,6 @@ echo "CLEARING previous build ..."
     rm .web/index.wasm
     rm .web/index.data
     rm .web/audio.js
-    rm .web/samples.js
 } &> /dev/null
 
 A3DMAPS=`ls a3d/game_map_y8.a3d`
@@ -41,13 +41,16 @@ SAMPLES=`ls samples/*.ogg`
 #requires bash or zsh
 ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"
 
+echo ""
 echo "MAKING audio worklet ..."
 
-emcc -O3 \
+#SAFETY="-s SAFE_HEAP=2 -s ASSERTIONS=2"
+OPTIMIZE="-O3 -fno-exceptions -flto"
+
+emcc $SAFETY $OPTIMIZE \
     -DWORKLET \
-    -fno-exceptions \
-    -flto \
     audio.cpp \
+    stb_vorbis.cpp \
     -o .web/audio.js \
     -s BINARYEN_ASYNC_COMPILATION=0 \
     -s SINGLE_FILE=1 \
@@ -65,11 +68,10 @@ then
     exit $?
 fi
 
+echo ""
 echo "MAKING index(wasm + data + js + html) ..."
 
-emcc -O3 \
-    -fno-exceptions \
-    -flto \
+emcc $SAFETY $OPTIMIZE \
     font1.cpp \
 	gamepad.cpp \
     game.cpp \
@@ -86,7 +88,7 @@ emcc -O3 \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio"]' \
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample"]' \
     -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --no-heap-copy \
@@ -99,6 +101,7 @@ then
     exit $?
 fi
 
+echo ""
 echo "STAGING site (icon png, manifest json, service worker js)..."
 
 cp favicon.ico .web/favicon.ico
@@ -107,8 +110,8 @@ cp asciicker.json .web/asciicker.json
 cp asciicker.js .web/asciicker.js
 
 
+echo ""
 emrun --no_browser --port 8888 .web/index.html
-
 
 exit $?
 

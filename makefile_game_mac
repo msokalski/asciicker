@@ -26,7 +26,8 @@ SRCS :=	gl.c \
 		upng.c \
 		tinfl.c \
 		rgba8.cpp \
-		audio.cpp
+		audio.cpp \
+		stb_vorbis.cpp
 
 
 LDLIBS := -lutil -framework OpenGL -lSDL2-2.0.0

@@ -26,7 +26,9 @@ SRCS :=	gl.c \
 		upng.c \
 		tinfl.c \
 		rgba8.cpp \
-		audio.cpp
+		audio.cpp \
+		stb_vorbis.cpp
+
 
 LDLIBS := -lutil -lGL -lX11 -lXinerama -lSDL2 -lpulse
 
