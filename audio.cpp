@@ -33,6 +33,8 @@ void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
     if (track==PLY_TRACKS)
         track=0;
 
+    printf("MAT=%d\n",material);
+
 	CallAudio((uint8_t*)data, 12);
 }
 

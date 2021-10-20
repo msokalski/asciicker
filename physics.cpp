@@ -11,6 +11,7 @@
 struct SoupItem
 {
 	float tri[3][3];
+	int material; // for audio :)
 	float nrm[4]; // {nrm, w} is plane equ
 
 #if 0
@@ -477,6 +478,8 @@ struct Physics
 	float collect_mul_xy;
 	float collect_mul_z;
 
+	int mat;
+
 	float max_height;
 
     //bool collision_failure;
@@ -504,6 +507,77 @@ struct Physics
 
 		Physics* phys = (Physics*)cookie;
 		SoupItem* item = phys->soup + phys->soup_items;
+
+		// check face color
+		// greenish, greish, yellowish, redish
+
+		int rgb[3]= // 0..765
+		{
+			colors[0]+colors[4]+colors[8],
+			colors[1]+colors[5]+colors[9],
+			colors[2]+colors[6]+colors[10]
+		};
+
+		int sat=0,lum=0,mat=3;
+		if (rgb[1]>=rgb[2] && rgb[1]>=rgb[0])
+		{
+			// yellow - cyan
+			lum = rgb[1];
+			mat=3; // green
+			if (rgb[0]>rgb[2])
+			{
+				// yellow-green
+				sat = rgb[0]-rgb[2];
+			}
+			else
+			{
+				// green-cyan
+				sat = rgb[2]-rgb[0];
+			}
+		}
+		else
+		if (rgb[0]>=rgb[1] && rgb[0]>=rgb[2])
+		{
+			// magenta-yellow
+			lum = rgb[0];
+			mat=1; // wood
+
+			if (rgb[1]>rgb[2])
+			{
+				// red-yellow
+				sat = rgb[1]-rgb[2];
+			}
+			else
+			{
+				// magenta-red
+				sat = rgb[2]-rgb[1];
+			}
+		}
+		else
+		//if (rgb[2]>=rgb[0] && rgb[2]>=rgb[1])
+		{
+			// cyan-magenta
+			lum = rgb[2];
+			mat=1; // wood
+
+			if (rgb[0]>rgb[1])
+			{
+				// blue-magenta
+				sat = rgb[0]-rgb[1];
+			}
+			else
+			{
+				// cyan-blue
+				sat = rgb[1]-rgb[0];
+			}
+		}
+
+		if (sat*10<lum)
+		{
+			mat = 0; // rock
+		}
+
+		item->material = mat;
 
 		// multiply coords by collect_tm
 		// then multiply x & y by collect_mul_xy and z by collect_mul_z
@@ -538,6 +612,8 @@ struct Physics
 		item->tri[2][0] = tmv[0] * phys->collect_mul_xy;
 		item->tri[2][1] = tmv[1] * phys->collect_mul_xy;
 		item->tri[2][2] = tmv[2] * phys->collect_mul_z;
+
+
 
 		{
 			float* v[3] = { item->tri[0], item->tri[1], item->tri[2] };
@@ -649,6 +725,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
 
+						item->material = 3; // grass at the moment
 						item++;
 					}
 
@@ -678,6 +755,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
 
+						item->material = 3; // grass at the moment
 						item++;
 					}
 				}
@@ -709,6 +787,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
 
+						item->material = 3; // grass at the moment
 						item++;
 					}
 
@@ -738,6 +817,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
 
+						item->material = 3; // grass at the moment
 						item++;
 					}
 				}
@@ -956,17 +1036,16 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 				if (me && phys->accum_contact >= 0.8)
 				{
-					int volume = (int)(65535 * 1.5f*log10f(xy_vel + 1.0));
+					int volume = (int)(65535 * 1.0f*log10f(xy_vel + 1.0));
 					if (volume > 65535)
 						volume = 65535;
 					int next_step = (phys->player_stp + step_offs) & step_mask;
 					if (prev_step < 2048 && next_step >= 2048)
-						AudioWalk(1, volume, req, 0);
+						AudioWalk(1, volume, req, phys->mat);
 					else
 					if (prev_step < 3 * 2048 && next_step >= 3 * 2048)
-						AudioWalk(2, volume, req, 0);
+						AudioWalk(2, volume, req, phys->mat);
 				}
-
 
 				float vel_damp = powf(0.9f, dt);
 				phys->vel[0] *= vel_damp;
@@ -1017,6 +1096,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 		io->x_impulse *= 0.5;
 		io->y_impulse *= 0.5;
+
+		int material_votes[6] = {0}; /* rock, wood, dirt, grass, hi-grass, water */
 
 		// POS - troubles!
 		float prev_vel_z = phys->vel[2];
@@ -1149,6 +1230,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 					sphere_pos[1] + full_step[1] - collision_pos[1],
 					sphere_pos[2] + full_step[2] - collision_pos[2]
 				};
+
+				material_votes[collision_item->material]++;
 
 				float full_len = sqrt(full_step[0] * full_step[0] + full_step[1] * full_step[1] + full_step[2] * full_step[2]);
 				float ratio = 0.0;
@@ -1314,6 +1397,21 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 			}
 		}
 
+		// votes given, choose new winner
+		{
+			int mat = 3; // default to grass
+			int votes = 0;
+			for (int m=0; m<6; m++)
+			{
+				if (material_votes[m]>votes)
+				{
+					votes = material_votes[m];
+					mat = m;			
+				}
+			}
+			phys->mat = mat;
+		}
+
 		// jump
 
 		float prev_contact = phys->accum_contact;
@@ -1326,7 +1424,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 		//if (me && prev_vel_z < 0 && phys->vel[2] > prev_vel_z)
 		{
 			// how to find nice energy loss ?
-			AudioWalk(0, 65535, req, 0);
+			AudioWalk(0, 65535, req, phys->mat);
 		}
 
 		// if (contact_normal_z > 0.0)
@@ -1482,6 +1580,8 @@ Physics* CreatePhysics(Terrain* t, World* w, float pos[3], float dir, float yaw,
     Physics* phys = (Physics*)malloc(sizeof(Physics));
 
 	phys->stamp = stamp;
+
+	phys->mat = 3; // default to grass
 
     phys->terrain = t;
     phys->world = w;
