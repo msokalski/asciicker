@@ -249,7 +249,7 @@ static void Swap(uint64_t stamp)
 
 void LoadGamePad()
 {
-	char path[1024];
+	char path[1024+20];
 	const char* name = "gamepad.xp";
 	sprintf(path, "%ssprites/%s", base_path, name);
 	gamepad_sprite = LoadSprite(path, name);

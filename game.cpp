@@ -377,8 +377,8 @@ void ReadConf(Game* g)
 		//printf("ReadConf ok\n");
 		int r = fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 
-		fread(&g->perspective, 1, 1, f);
-		fread(&g->blood, 1, 1, f);
+		r = fread(&g->perspective, 1, 1, f);
+		r = fread(&g->blood, 1, 1, f);
 
 		fclose(f);
 	}
@@ -468,7 +468,7 @@ struct HPBar
 
 		int x_thresh = pos[0] + dx * (1 + (int)(val * (size - 2) + 0.5f));
 		int perc = (int)(val * 100 + 0.5f);
-		char str[]="           ";
+		char str[]="           xxxx"; // shut wrngz up
 
 		if (perc<100)
 			sprintf(str+1,"%d%%",perc);

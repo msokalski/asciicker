@@ -44,10 +44,13 @@ ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"
 echo ""
 echo "MAKING audio worklet ..."
 
-#SAFETY="-s SAFE_HEAP=2 -s ASSERTIONS=2"
-OPTIMIZE="-O3 -fno-exceptions -flto"
+#WORKLET_SAFETY=""
+#WORKLET_OPTIMIZE="-O3 -fno-exceptions -flto"
 
-emcc $SAFETY $OPTIMIZE \
+WORKLET_SAFETY="-s SAFE_HEAP=1 -s ASSERTIONS=2"
+WORKLET_OPTIMIZE="-g"
+
+emcc $WORKLET_OPTIMIZE $WORKLET_SAFETY \
     -DWORKLET \
     audio.cpp \
     stb_vorbis.cpp \
@@ -71,7 +74,13 @@ fi
 echo ""
 echo "MAKING index(wasm + data + js + html) ..."
 
-emcc $SAFETY $OPTIMIZE \
+INDEX_SAFETY=""
+INDEX_OPTIMIZE="-O3 -fno-exceptions -flto"
+
+#INDEX_SAFETY="-s SAFE_HEAP=1 -s ASSERTIONS=2"
+#INDEX_OPTIMIZE="-g"
+
+emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
     font1.cpp \
 	gamepad.cpp \
     game.cpp \

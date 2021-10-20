@@ -3963,7 +3963,7 @@ void New()
 		};
 	};
 
-	char newmap_path[1024];
+	char newmap_path[1024+20];
 	sprintf(newmap_path, "%smaps/new.png", base_path);
 	a3dLoadImage(newmap_path, 0, MAP::cb);
 }
@@ -7841,12 +7841,12 @@ void my_init(A3D_WND* wnd)
 
 	world = CreateWorld();
 
-	char mesh_dirname[1024];
+	char mesh_dirname[1024+20];
 	sprintf(mesh_dirname, "%smeshes", base_path);
 	a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
 	active_mesh = GetFirstMesh(world);
 
-	char sprite_dirname[1024];
+	char sprite_dirname[1024+20];
 	sprintf(sprite_dirname, "%ssprites", base_path);
 	a3dListDir(sprite_dirname, SpriteScan, sprite_dirname);
 	active_sprite = GetFirstSprite(/*world*/);
@@ -7864,13 +7864,13 @@ void my_init(A3D_WND* wnd)
 
 	MyMaterial::Init();
 
-	char font_dirname[1024];
+	char font_dirname[1024+20];
 	sprintf(font_dirname,"%sfonts",base_path);
 	fonts_loaded = 0;
 	a3dListDir(font_dirname, MyFont::Scan, font_dirname);
 
 	MyPalette::Init();
-	char pal_dirname[1024];
+	char pal_dirname[1024+20];
 	sprintf(pal_dirname,"%spalettes",base_path);
 	palettes_loaded = 0;
 	a3dListDir(pal_dirname, MyPalette::Scan, pal_dirname);
@@ -7926,7 +7926,7 @@ void my_init(A3D_WND* wnd)
 	ImGui_ImplOpenGL3_Init("#version 330");
 
 	ImWchar range[]={0x0020, 0x03FF, 0};
-	char ui_font_path[1024];
+	char ui_font_path[1024+30];
 	sprintf(ui_font_path,"%sfonts/Roboto-Medium.ttf",base_path);
 	pFont = io.Fonts->AddFontFromFileTTF(ui_font_path, 16, NULL, range);	
 	io.Fonts->Build();
@@ -7966,7 +7966,7 @@ void my_init(A3D_WND* wnd)
 
 	a3dSetTitle(wnd,utf8/*"ASCIIID"*/);
 
-	char icon_path[1024];
+	char icon_path[1024+20];
 	sprintf(icon_path,"%sicons/app.png",base_path);
 	a3dSetIcon(wnd,icon_path);
 	a3dSetVisible(wnd,true);
@@ -8141,7 +8141,7 @@ int main(int argc, char *argv[])
 #endif
 	LoadSprites();
 
-	char enemygen_path[1024];
+	char enemygen_path[1024+20];
 	sprintf(enemygen_path, "%ssprites/enemygen.xp", base_path);
 	enemygen_sprite = LoadSprite(enemygen_path, "enemygen.xp", 0, false);
 

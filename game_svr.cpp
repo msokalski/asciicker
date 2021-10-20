@@ -1016,7 +1016,7 @@ int main(int argc, char* argv[])
 	
 	LoadSprites();
 
-	char a3d_path[1024];
+	char a3d_path[1024+20];
 	sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
 	FILE* f = fopen(a3d_path, "rb");
 

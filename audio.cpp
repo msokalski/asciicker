@@ -16,6 +16,8 @@
 
 #define SEMI_TONE(x,y) x*pow(2.0,y/12.0)
 
+#define PLY_TRACKS 2
+
 void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
 {
     // remember previous foot timestamp
@@ -23,15 +25,20 @@ void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
     // add some rand delay to each sub event
 
     // get sample id for given: foot, req, material 
-    int sample = GetSampleID((AUDIO_FILE)foot); // temp!
 
-	int data[2] = { sample, volume };
-	CallAudio((uint8_t*)data, 8);
+    int sample = GetSampleID((AUDIO_FILE)foot); // temp!
+    static int track = 0;
+	int data[3] = { track, sample, volume };
+    track++;
+    if (track==PLY_TRACKS)
+        track=0;
+
+	CallAudio((uint8_t*)data, 12);
 }
 
 #define MAX_SAMPLES 1024
-static int16_t* sample_data[MAX_SAMPLES] = {0};
-static int sample_len[MAX_SAMPLES] = {0};
+static int16_t* lib_sample_data[MAX_SAMPLES] = {0};
+static int lib_sample_len[MAX_SAMPLES] = {0};
 
 extern "C" void XOgg(int index, const uint8_t* data, int ogg_size)
 {
@@ -42,8 +49,8 @@ extern "C" void XOgg(int index, const uint8_t* data, int ogg_size)
     stb_vorbis* ogg = stb_vorbis_open_memory(data,ogg_size,&err,0);
     if (!ogg)
     {
-        sample_data[index]=0;
-        sample_len[index]=0;
+        lib_sample_data[index]=0;
+        lib_sample_len[index]=0;
         return;
     }
 
@@ -115,11 +122,8 @@ extern "C" void XOgg(int index, const uint8_t* data, int ogg_size)
 
     stb_vorbis_close(ogg);
 
-    sample_data[index] = dec;
-    sample_len[index] = offs>>1;
-
-    printf("decoded [%d] %d bytes to %d samples\n", index, ogg_size, size);
-
+    lib_sample_data[index] = dec;
+    lib_sample_len[index] = offs>>1;
 }
 
 #ifndef WORKLET
@@ -211,12 +215,6 @@ static int LoadSample(const char* name)
     if (samples == MAX_SAMPLES)
     {
         fclose(f);
-        static bool once = true;
-        if (once)
-        {
-            once=false;
-            printf("Samples Quota Exceeded!\n");
-        }
         return -1;
     }
 
@@ -225,14 +223,16 @@ static int LoadSample(const char* name)
     fseek(f,0,SEEK_SET);
 
     uint8_t* data = (uint8_t*)malloc(size);
-    fread(data,1,size,f);
+    int r = fread(data,1,size,f);
     fclose(f);
 
     // decode ogg
-    // if fails it will store sample_data[samples]=0
+    // if fails it will store lib_sample_data[samples]=0
     XOgg(samples, data, size);
 
     free(data);
+
+    id = samples++;
 
     // add to hashmap and return new id
     SampleHash* item = (SampleHash*)malloc(sizeof(SampleHash)+len);
@@ -240,10 +240,10 @@ static int LoadSample(const char* name)
     item->next = *base;
     *base = item;
     item->hash = hash;
-    item->id = samples++;
+    item->id = id;
     strcpy(item->name,name);
 
-    return samples;
+    return id;
     #endif
 }
 
@@ -271,27 +271,31 @@ int GetSampleID(AUDIO_FILE af)
 }
 #endif // END OF NOT WORKLET
 
-static int sample_id = -1;
-static int sample_vol = 65535;
-static int sample_pos = 0;
+struct PlyTrack
+{
+    int sample_id;
+    int sample_vol;
+    int sample_pos;
+};
+
+static PlyTrack ply_track[PLY_TRACKS] = {-1};
 
 void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
 {
     // testing samples on single track
     // { sample_id, volume }
 
-    if (size==8)
+    if (size==12)
     {
         const int* msg = (const int*)data;
-        sample_id = msg[0];
-        sample_vol = msg[1];
-        sample_pos = 0;
-
-        printf("Playing sample %d vol %d\n", sample_id, sample_vol);
+        if (msg[0]>=0 && msg[0]<PLY_TRACKS)
+        {
+            PlyTrack* tr = ply_track + msg[0];
+            tr->sample_id = msg[1];
+            tr->sample_vol = msg[2];
+            tr->sample_pos = 0;
+        }
     }
-
-
-
 
     /////////////////////////////////////
     // animables:
@@ -364,33 +368,45 @@ void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
 
 }
 
-void DriverAudioCB(void* userdata, int16_t buffer[], int samples)
+void DriverAudioCB(void* userdata, int16_t buffer[], int frames)
 {
-    if (sample_id>=0)
+    memset(buffer,0,4*frames);
+ 
+    for (int t=0; t<PLY_TRACKS; t++)
     {
-        const int16_t* data = sample_data[sample_id];
-        int len = sample_len[sample_id];
-        int pos = sample_pos;
-        int vol = sample_vol;
-        for (int i = 0; i < samples; i++) 
+        PlyTrack* tr = ply_track + t;
+        if (tr->sample_id < 0)
+            continue;
+        const int16_t* data = lib_sample_data[tr->sample_id];
+        int len = lib_sample_len[tr->sample_id];
+        int pos = tr->sample_pos;
+        int vol = tr->sample_vol;
+        for (int i = 0; i < frames; i++) 
         {
             if (pos==len)
             {
-                sample_id=-1;
-                int rem = samples-pos;
-                if (rem)
-                    memset(buffer+2*pos,0,(samples-pos)*4);
+                tr->sample_id=-1;
                 break;
             }
 
-            buffer[2*i] = (data[pos*2] * vol) / 65535;
-            buffer[2*i+1] = (data[pos*2+1] * vol) / 65535;
+            int L = buffer[2*i] + (data[pos*2] * vol) / 65535;
+            int R = buffer[2*i+1] + (data[pos*2+1] * vol) / 65535;
+
+            if (L<-32767)
+                L=-32767;
+            if (L>+32767)
+                L=+32767;
+
+            if (R<-32767)
+                R=-32767;
+            if (R>+32767)
+                R=+32767;
+
+            buffer[2*i] = L;
+            buffer[2*i+1] = R;
             pos++;
         }
-    }
-    else
-    {
-        memset(buffer,0,4*samples);
+        tr->sample_pos = pos;
     }
 }
 
@@ -681,8 +697,8 @@ void stream_write_cb(pa_stream *stream, size_t requested_bytes, void *userdata)
 
         pa_stream_begin_write(stream, (void**) &buffer, &bytes_to_fill);
 
-        int samples = bytes_to_fill/4;
-        DriverAudioCB(0, (int16_t*)buffer, bytes_to_fill/4);
+        int frames = bytes_to_fill/4;
+        DriverAudioCB(0, (int16_t*)buffer, frames);
 
         pa_stream_write(stream, buffer, bytes_to_fill, NULL, 0LL, PA_SEEK_RELATIVE);
 
@@ -726,9 +742,9 @@ void SDLAudioCB(void* userdata, Uint8* stream, int len)
         qc = n;
     }
 
-    int samples = len/4;
+    int frames = len/4;
     int16_t* buffer = (int16_t*)stream;
-    DriverAudioCB(0, (int16_t*)buffer, samples);
+    DriverAudioCB(0, (int16_t*)buffer, frames);
 }
 
 bool InitAudio() 
@@ -789,27 +805,27 @@ static int audio_mode = 0;
 
 extern "C"
 {
-    const int16_t* Audio(int samples)
+    const int16_t* Audio(int frames)
     {
         static int16_t* buffer = 0;
         static int buflen = 0;
 
         if (!buffer)
         {
-            int alloc = 2*samples;
+            int alloc = 2*frames;
             buffer = (int16_t*)malloc(4 * alloc);
             buflen = alloc;
         }
         else
-        if(samples > buflen)
+        if(frames > buflen)
         {
             free(buffer);
-            int alloc = 2*samples;
+            int alloc = 2*frames;
             buffer = (int16_t*)malloc(4 * alloc);
             buflen = alloc;
         }
 
-        DriverAudioCB(0, buffer, samples);
+        DriverAudioCB(0, buffer, frames);
 
         return buffer;
     }

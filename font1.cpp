@@ -35,7 +35,7 @@ static uint8_t font1_cmap[] =
 
 void LoadFont1()
 {
-	char path[1024];
+	char path[1024+20];
 	const char* name = "font-1.xp";
 	sprintf(path, "%ssprites/%s", base_path, name);
 	font1_sprite[0] = LoadSprite(path, name);
