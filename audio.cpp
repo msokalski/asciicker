@@ -33,20 +33,24 @@ void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
         foot = land;
     }
 
-    int sample = GetSampleID((AUDIO_FILE)(2*material+(foot&1))); // temp!
+    // int sample = GetSampleID((AUDIO_FILE)(2*material+(foot&1))); // temp!
+    int sample = GetSampleID(FOOTSTEPS);
+    int sample_chunk = 2*material+(foot&1);
+
     static int track = 0;
-	int data[3] = { track, sample, volume };
+	int32_t data[] = { track, sample, volume, sample_chunk };
     track++;
     if (track==PLY_TRACKS)
         track=0;
 
-    printf("MAT=%d\n",material);
+    //printf("MAT=%d\n",material);
 
-	CallAudio((uint8_t*)data, 12);
+	CallAudio((uint8_t*)data, sizeof(data));
 }
 
 #define MAX_SAMPLES 1024
-static int16_t* lib_sample_data[MAX_SAMPLES] = {0};
+// each sample data is prolonged with int32 array containing markers (first value is num of markers)
+static int16_t* lib_sample_data[MAX_SAMPLES] = {0}; 
 static int lib_sample_len[MAX_SAMPLES] = {0};
 
 extern "C" void XOgg(int index, const uint8_t* data, int ogg_size)
@@ -64,10 +68,49 @@ extern "C" void XOgg(int index, const uint8_t* data, int ogg_size)
     }
 
     int size = stb_vorbis_stream_length_in_samples(ogg);
-
     int offs = 0;
 
-    int16_t* dec = (int16_t*)malloc(size*4);
+    stb_vorbis_info nfo = stb_vorbis_get_info(ogg);
+    int freq = (int)nfo.sample_rate;
+    const char* markers = stb_vorbis_get_markers(ogg);
+    int num_markers = 0;
+    if (markers)
+    {
+        const char* ptr = markers;
+        while (1)
+        {
+            if (*ptr>32)
+                num_markers++;
+            ptr = strchr(ptr,'\n');
+            if (!ptr)
+                break;
+            ptr++;
+        }
+    }
+
+    int16_t* dec = (int16_t*)malloc(sizeof(int16_t)*2*size + sizeof(int32_t)*(num_markers*2+1));
+    int32_t* mrk = (int32_t*)(dec + 2*size) + 1;
+
+    mrk[-1] = num_markers;
+
+    if (markers)
+    {
+        const char* ptr = markers;
+        for (int i=0; i<num_markers; i++)
+        {
+            float a=0,b=0;
+            sscanf(ptr,"%f\t%f", &a,&b);
+            {
+                ptr = strchr(ptr,'\n');
+                ptr++;
+            }
+            
+            mrk[2*i+0] = (int)floor(a*freq+0.5);
+            mrk[2*i+1] = (int)floor(b*freq+0.5);
+            printf("%d..%d\n",mrk[2*i+0],mrk[2*i+1]);
+        }
+    }
+
     float** ptr=0;
     int len;
     int chn;
@@ -258,6 +301,9 @@ static int LoadSample(const char* name)
 
 static const char* sample_names[] = // IN ORDER OF enum AUDIO_FILE
 {
+    "footsteps.ogg",
+
+    /*
     "footstep-rock-L.ogg",
     "footstep-rock-R.ogg",
     "footstep-wood-L.ogg",
@@ -272,6 +318,8 @@ static const char* sample_names[] = // IN ORDER OF enum AUDIO_FILE
     "footstep-blood-R.ogg",
     "footstep-water-L.ogg",
     "footstep-water-R.ogg",
+    */
+
     0
 };
 
@@ -296,6 +344,7 @@ struct PlyTrack
     int sample_id;
     int sample_vol;
     int sample_pos;
+    int sample_end;
 };
 
 static PlyTrack ply_track[PLY_TRACKS] = {-1};
@@ -305,7 +354,7 @@ void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
     // testing samples on single track
     // { sample_id, volume }
 
-    if (size==12)
+    if (size>=12) // track, sample, vol
     {
         const int* msg = (const int*)data;
         if (msg[0]>=0 && msg[0]<PLY_TRACKS)
@@ -314,6 +363,26 @@ void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
             tr->sample_id = msg[1];
             tr->sample_vol = msg[2];
             tr->sample_pos = 0;
+            tr->sample_end = 0;
+            
+            if (tr->sample_id>=0 && tr->sample_id<MAX_SAMPLES)
+                tr->sample_end = lib_sample_len[tr->sample_id];
+            else
+                tr->sample_id = -1;
+
+            if (tr->sample_id >= 0)
+            {
+                if (size>=16 && msg[3]>=0)
+                {
+                    int32_t* marker = (int32_t*)(lib_sample_data[tr->sample_id] + 2*tr->sample_end);
+                    if (*marker > msg[3])
+                    {
+                        marker = marker + 1 + 2 * msg[3];
+                        tr->sample_pos = marker[0];
+                        tr->sample_end = marker[1];
+                    }
+                }
+            }
         }
     }
 
@@ -398,7 +467,7 @@ void DriverAudioCB(void* userdata, int16_t buffer[], int frames)
         if (tr->sample_id < 0)
             continue;
         const int16_t* data = lib_sample_data[tr->sample_id];
-        int len = lib_sample_len[tr->sample_id];
+        int len = tr->sample_end; //lib_sample_len[tr->sample_id];
         int pos = tr->sample_pos;
         int vol = tr->sample_vol;
         for (int i = 0; i < frames; i++) 

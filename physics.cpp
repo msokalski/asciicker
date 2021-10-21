@@ -1424,7 +1424,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 			phys->mat = mat;
 
 			// override if legs are in water
-			if (in_water>0)
+			if (in_water>0.1)
 				phys->mat = 6; // voting veto!
 		}
 
@@ -1443,7 +1443,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 			AudioWalk(0, 65535, req, phys->mat);
 		}
 		else
-		if (me && (in_water>0 || phys->accum_contact >= 1.0) && phys->player_stp>=0)
+		if (me && (in_water>0.5 || phys->accum_contact >= 1.0) && phys->player_stp>=0)
 		{
 			int volume = (int)(65535 * 1.0f*log10f(xy_vel + 1.0));
 			if (volume > 65535)

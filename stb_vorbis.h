@@ -32,7 +32,7 @@ typedef struct
 
 extern stb_vorbis_info stb_vorbis_get_info(stb_vorbis *f);
 
-// returns num of markers, buf can be null or must be at least 6 * num of markers
-extern const int stb_vorbis_get_markers(stb_vorbis *f, int* buf);
+extern const char* stb_vorbis_get_markers(stb_vorbis *f);
+extern char* stb_vorbis_extract_markers(stb_vorbis *f);
 
 #endif

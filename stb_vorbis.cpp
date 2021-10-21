@@ -760,8 +760,9 @@ struct stb_vorbis
    unsigned int temp_memory_required;
    unsigned int setup_temp_memory_required;
 
-   int markers; // max 32
-   int markbuf[6*32];
+   //int markers; // max 32
+   //int markbuf[6*32];
+   char* markbuf;
 
   // input config
 #ifndef STB_VORBIS_NO_STDIO
@@ -3581,12 +3582,19 @@ struct comment
    int length;
 };
 
-extern const int stb_vorbis_get_markers(stb_vorbis *f, int* buf)
+extern const char* stb_vorbis_get_markers(stb_vorbis *f)
 {
-   if (buf)
-      memcpy(buf, f->markbuf, sizeof(int)*6*f->markers);
-   return f->markers;
+   return f->markbuf;
 }
+
+extern char* stb_vorbis_extract_markers(stb_vorbis *f)
+{
+   // caller is responsible for freeing it !!!
+   char* markbuf = f->markbuf;
+   f->markbuf = 0;
+   return markbuf;
+}
+
 
 static void parse_comment(vorb *f, comment* com, const char* buf, int len)
 {
@@ -3685,6 +3693,11 @@ static void parse_comment(vorb *f, comment* com, const char* buf, int len)
                com->buf[com->length] = 0;
 
                const char* parse = com->buf;
+               int len = strlen(parse);
+
+               f->markbuf = strdup(parse);
+
+               /*
                while (1)
                {
                   int p,d[6];
@@ -3715,6 +3728,8 @@ static void parse_comment(vorb *f, comment* com, const char* buf, int len)
                   while (*parse==' ')
                      parse++;
                }
+               */
+               
 
                com->state=0;
                com->siz = 0;
@@ -4370,6 +4385,13 @@ static int start_decoder(vorb *f)
 static void vorbis_deinit(stb_vorbis *p)
 {
    int i,j;
+
+   if (p->markbuf)
+   {
+      free(p->markbuf);
+      p->markbuf = 0;
+   }
+
    if (p->residue_config) {
       for (i=0; i < p->residue_count; ++i) {
          Residue *r = p->residue_config+i;
@@ -4443,7 +4465,7 @@ static void vorbis_init(stb_vorbis *p, const stb_vorbis_alloc *z)
    p->stream = NULL;
    p->codebooks = NULL;
    p->page_crc_tests = -1;
-   p->markers = 0;
+   p->markbuf = 0;
    #ifndef STB_VORBIS_NO_STDIO
    p->close_on_free = FALSE;
    p->f = NULL;

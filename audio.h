@@ -16,6 +16,9 @@ enum AUDIO_FILE
     // merge them all into single file, use in file markers
     // prepare similar files for several armor levels
 
+    FOOTSTEPS,
+    
+    /*
     WALK_ROCK_L,
     WALK_ROCK_R,
     WALK_WOOD_L,
@@ -30,6 +33,7 @@ enum AUDIO_FILE
     WALK_BLOOD_R,
     WALK_WATER_L,
     WALK_WATER_R,
+    */
 
     AUDIO_FILES
 };
