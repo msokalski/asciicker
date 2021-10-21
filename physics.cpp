@@ -670,6 +670,8 @@ struct Physics
 		uint16_t diag = GetTerrainDiag(p);
 		uint16_t* hmap = GetTerrainHeightMap(p);
 
+		uint16_t* vmap = GetTerrainVisualMap(p);
+
 		static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
 		bool hit = false;
 
@@ -682,6 +684,20 @@ struct Physics
 		{
 			for (int hx = 0; hx < HEIGHT_CELLS; hx++)
 			{
+				uint16_t vis = *vmap;
+				int elv = vis>>15;
+				int mat = vis&0x3F;
+				vmap+=2; // 2x visual cells / height cell
+
+				if (mat == 4)
+					mat = 0; // rock
+				else
+				if (mat == 5)
+					mat = 5; // blood
+				else
+				if (mat != 2) // else 2->2 (dirt)
+					mat = 3+elv; // [hi]grass
+
 				float x0 = (x + hx * sxy) * phys->collect_mul_xy, x1 = x0 + sxy * phys->collect_mul_xy;
 				float y0 = (y + hy * sxy) * phys->collect_mul_xy, y1 = y0 + sxy * phys->collect_mul_xy;
 
@@ -725,7 +741,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
 
-						item->material = 3; // grass at the moment
+						item->material = mat;
 						item++;
 					}
 
@@ -755,7 +771,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
 
-						item->material = 3; // grass at the moment
+						item->material = mat;
 						item++;
 					}
 				}
@@ -787,7 +803,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
 
-						item->material = 3; // grass at the moment
+						item->material = mat;
 						item++;
 					}
 
@@ -817,13 +833,15 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
 
-						item->material = 3; // grass at the moment
+						item->material = mat; 
 						item++;
 					}
 				}
 
 				rot >>= 1;
 			}
+
+			vmap+=VISUAL_CELLS; // 2x visual cells / height cell
 		}
 		phys->soup_items += faces;
 	}    
@@ -862,6 +880,13 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 			elaps = interval;
 		phys->stamp += elaps;
 		float dt = elaps * (60.0f / 1000000.0f); 
+
+
+		const int step_offs = 3*1024;
+		const int step_mask = (8*1024-1);
+		int prev_step;
+		float xy_vel;
+		float in_water;
 
 		// by having old and new water level we can (in future) keep player floating on top of waves 
 		phys->water = io->water;
@@ -1023,29 +1048,14 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 				// so 8 frame walk anim divides stp / 1024 to get frame num
 
-				const int step_offs = 3*1024;
-				const int step_mask = (8*1024-1);
-				int prev_step = (phys->player_stp + step_offs) & step_mask;
+				prev_step = (phys->player_stp + step_offs) & step_mask;
 
-				float xy_vel = sqrt(sqr_vel_xy);
+				xy_vel = sqrt(sqr_vel_xy);
 
 				if (req->mount>1) // slower for flying mounts
 					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * xy_vel));
 				else
 					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * xy_vel));
-
-				if (me && phys->accum_contact >= 0.8)
-				{
-					int volume = (int)(65535 * 1.0f*log10f(xy_vel + 1.0));
-					if (volume > 65535)
-						volume = 65535;
-					int next_step = (phys->player_stp + step_offs) & step_mask;
-					if (prev_step < 2048 && next_step >= 2048)
-						AudioWalk(1, volume, req, phys->mat);
-					else
-					if (prev_step < 3 * 2048 && next_step >= 3 * 2048)
-						AudioWalk(2, volume, req, phys->mat);
-				}
 
 				float vel_damp = powf(0.9f, dt);
 				phys->vel[0] *= vel_damp;
@@ -1070,12 +1080,14 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 			//		if (phys->vel[2] < -1)
 			//			phys->vel[2] = -1;
 
-					// water resistance
+			// water resistance
 			float res = (phys->water - phys->pos[2]) / world_height;
 			if (res < 0)
 				res = 0;
 			if (res > 1)
 				res = 1;
+
+			in_water = res;
 
 			float xy_res = powf(1.0 - 0.5 * res, dt);
 			float z_res = powf(1.0 - 0.1 * res, dt);
@@ -1097,7 +1109,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 		io->x_impulse *= 0.5;
 		io->y_impulse *= 0.5;
 
-		int material_votes[6] = {0}; /* rock, wood, dirt, grass, hi-grass, water */
+		int material_votes[6] = {0}; /* rock:0, wood:1, dirt:2, grass:3, hi-grass:4, blood:5, water:6 */
 
 		// POS - troubles!
 		float prev_vel_z = phys->vel[2];
@@ -1399,7 +1411,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 		// votes given, choose new winner
 		{
-			int mat = 3; // default to grass
+			int mat = phys->mat; // default to prev winner (was grass)
 			int votes = 0;
 			for (int m=0; m<6; m++)
 			{
@@ -1410,6 +1422,10 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 				}
 			}
 			phys->mat = mat;
+
+			// override if legs are in water
+			if (in_water>0)
+				phys->mat = 6; // voting veto!
 		}
 
 		// jump
@@ -1426,6 +1442,20 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 			// how to find nice energy loss ?
 			AudioWalk(0, 65535, req, phys->mat);
 		}
+		else
+		if (me && (in_water>0 || phys->accum_contact >= 1.0) && phys->player_stp>=0)
+		{
+			int volume = (int)(65535 * 1.0f*log10f(xy_vel + 1.0));
+			if (volume > 65535)
+				volume = 65535;
+			int next_step = (phys->player_stp + step_offs) & step_mask;
+			if (prev_step < 2048 && next_step >= 2048)
+				AudioWalk(1, volume, req, phys->mat);
+			else
+			if (prev_step < 3 * 2048 && next_step >= 3 * 2048)
+				AudioWalk(2, volume, req, phys->mat);
+		}
+
 
 		// if (contact_normal_z > 0.0)
 		if (phys->accum_contact >= 1.0 || req->mount>1)
@@ -1470,6 +1500,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 			}
 		}
 
+		/*
+		// what was this for?
 		for (int h = 63; h > 0; h--)
 		{
 			io->xyz[h][0] = io->xyz[h - 1][0];
@@ -1480,6 +1512,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 		io->xyz[0][0] = phys->pos[0];
 		io->xyz[0][1] = phys->pos[1];
 		io->xyz[0][2] = phys->pos[2];
+		*/
 	}
 
 	io->pos[0] = phys->pos[0];

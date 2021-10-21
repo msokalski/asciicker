@@ -33,7 +33,8 @@ struct PhysicsIO
 
 	bool grounded;
 
-	float xyz[64][3];
+    // what was this for?
+	//float xyz[64][3];
 };
 
 struct Physics;

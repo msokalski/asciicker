@@ -16,7 +16,7 @@
 
 #define SEMI_TONE(x,y) x*pow(2.0,y/12.0)
 
-#define PLY_TRACKS 2
+#define PLY_TRACKS 16
 
 void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
 {
@@ -26,7 +26,14 @@ void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
 
     // get sample id for given: foot, req, material 
 
-    int sample = GetSampleID((AUDIO_FILE)foot); // temp!
+    static int land = 0;
+    if (foot==0)
+    {
+        land ^= 1;
+        foot = land;
+    }
+
+    int sample = GetSampleID((AUDIO_FILE)(2*material+(foot&1))); // temp!
     static int track = 0;
 	int data[3] = { track, sample, volume };
     track++;
@@ -251,9 +258,20 @@ static int LoadSample(const char* name)
 
 static const char* sample_names[] = // IN ORDER OF enum AUDIO_FILE
 {
-    "131660__bertrof__game-sound-correct.ogg",
-    "13290__schademans__pipe9.ogg",
-    "13290__schademans__pipe10.ogg",
+    "footstep-rock-L.ogg",
+    "footstep-rock-R.ogg",
+    "footstep-wood-L.ogg",
+    "footstep-wood-R.ogg",
+    "footstep-dirt-L.ogg",
+    "footstep-dirt-R.ogg",
+    "footstep-grass-L.ogg",
+    "footstep-grass-R.ogg",
+    "footstep-bush-L.ogg",
+    "footstep-bush-R.ogg",
+    "footstep-blood-L.ogg",
+    "footstep-blood-R.ogg",
+    "footstep-water-L.ogg",
+    "footstep-water-R.ogg",
     0
 };
 

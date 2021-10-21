@@ -13,13 +13,23 @@ void AudioWalk(int foot, int volume, const SpriteReq* req, int material);
 
 enum AUDIO_FILE
 {
-
     // merge them all into single file, use in file markers
     // prepare similar files for several armor levels
 
-    JUMP_LAND_DIRT,
-    WALK_LEFT_DIRT,
-    WALK_RIGHT_DIRT,
+    WALK_ROCK_L,
+    WALK_ROCK_R,
+    WALK_WOOD_L,
+    WALK_WOOD_R,
+    WALK_DIRT_L,
+    WALK_DIRT_R,
+    WALK_GRASS_L,
+    WALK_GRASS_R,
+    WALK_BUSH_L,
+    WALK_BUSH_R,
+    WALK_BLOOD_L,
+    WALK_BLOOD_R,
+    WALK_WATER_L,
+    WALK_WATER_R,
 
     AUDIO_FILES
 };
