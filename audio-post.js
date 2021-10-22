@@ -52,7 +52,7 @@ class AsciickerAudio extends AudioWorkletProcessor
         if (max_size)
             Module._free(data);
 
-        audio_port.postMessage("Audio Initialized ");
+        //audio_port.postMessage("Audio Initialized ");
     }
 
     process (inputs, outputs, parameters) 

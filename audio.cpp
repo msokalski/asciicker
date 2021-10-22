@@ -43,12 +43,10 @@ void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
     if (track==PLY_TRACKS)
         track=0;
 
-    //printf("MAT=%d\n",material);
-
 	CallAudio((uint8_t*)data, sizeof(data));
 }
 
-#define MAX_SAMPLES 1024
+#define MAX_SAMPLES 64
 // each sample data is prolonged with int32 array containing markers (first value is num of markers)
 static int16_t* lib_sample_data[MAX_SAMPLES] = {0}; 
 static int lib_sample_len[MAX_SAMPLES] = {0};
@@ -107,7 +105,6 @@ extern "C" void XOgg(int index, const uint8_t* data, int ogg_size)
             
             mrk[2*i+0] = (int)floor(a*freq+0.5);
             mrk[2*i+1] = (int)floor(b*freq+0.5);
-            printf("%d..%d\n",mrk[2*i+0],mrk[2*i+1]);
         }
     }
 
@@ -189,7 +186,7 @@ struct SampleHash
     char name[1];
 };
 
-#define HASH_MAKS ((MAX_SAMPLES>>2)-1)
+#define HASH_MAKS (MAX_SAMPLES-1)
 static SampleHash* sample_hash[HASH_MAKS+1]={0};
 static int samples=0;
 
@@ -301,25 +298,8 @@ static int LoadSample(const char* name)
 
 static const char* sample_names[] = // IN ORDER OF enum AUDIO_FILE
 {
+    "forest.ogg",
     "footsteps.ogg",
-
-    /*
-    "footstep-rock-L.ogg",
-    "footstep-rock-R.ogg",
-    "footstep-wood-L.ogg",
-    "footstep-wood-R.ogg",
-    "footstep-dirt-L.ogg",
-    "footstep-dirt-R.ogg",
-    "footstep-grass-L.ogg",
-    "footstep-grass-R.ogg",
-    "footstep-bush-L.ogg",
-    "footstep-bush-R.ogg",
-    "footstep-blood-L.ogg",
-    "footstep-blood-R.ogg",
-    "footstep-water-L.ogg",
-    "footstep-water-R.ogg",
-    */
-
     0
 };
 
@@ -329,6 +309,9 @@ static void LoadAllSamples()
 {
     for (int i=0; sample_names[i]; i++)
         sample_ids[i] = LoadSample(sample_names[i]);
+
+    int forest_id = GetSampleID(FOREST);
+    CallAudio((uint8_t*)&forest_id,4);
 }
 
 int GetSampleID(AUDIO_FILE af)
@@ -349,10 +332,19 @@ struct PlyTrack
 
 static PlyTrack ply_track[PLY_TRACKS] = {-1};
 
+static int ply_forest_id = -1;
+
 void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
 {
     // testing samples on single track
     // { sample_id, volume }
+
+    if (size==4)
+    {
+        // very first command
+        ply_forest_id = *(int32_t*)data;
+        return;
+    }
 
     if (size>=12) // track, sample, vol
     {
@@ -460,6 +452,24 @@ void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
 void DriverAudioCB(void* userdata, int16_t buffer[], int frames)
 {
     memset(buffer,0,4*frames);
+
+    if (ply_forest_id>=0)
+    {
+        static int forest_pos = 0;
+        int16_t* data = lib_sample_data[ply_forest_id];
+        int pos = forest_pos;
+        int end = lib_sample_len[ply_forest_id];
+        for (int i = 0; i < frames; i++) 
+        {
+            buffer[2*i] = data[pos*2];
+            buffer[2*i+1] = data[pos*2+1];
+
+            pos++;
+            if (pos == end)
+                pos=0;
+        }
+        forest_pos = pos;
+    }
  
     for (int t=0; t<PLY_TRACKS; t++)
     {
@@ -943,6 +953,16 @@ void CallAudio(const uint8_t* data, int size)
                 let view = new Uint8Array(Module.HEAPU8.buffer, Module.HEAPU8.byteOffset + $0, $1);
                 audio_port.postMessage(new Uint8Array(view));
             }
+            else
+            {
+                // very first audio call is essencial
+                // cache it
+                if (!audio_call_cache)
+                {
+                    let view = new Uint8Array(Module.HEAPU8.buffer, Module.HEAPU8.byteOffset + $0, $1);
+                    audio_call_cache = new Uint8Array(view);
+                }
+            }
         },data,size);
     }
 }
@@ -963,7 +983,7 @@ bool InitAudio()
 {
     int ret = EM_ASM_INT(
     {
-        console.log("Initializing Audio ", performance.now());
+        //console.log("Initializing Audio ", performance.now());
         var audioContext = window.AudioContext || window.webkitAudioContext;
 
         audio_cb = Module.cwrap("Audio", null, ["number"]);
@@ -1015,6 +1035,12 @@ bool InitAudio()
                 audio_node.connect(audio_ctx.destination);
 
                 audio_ctx.resume();
+
+                if (audio_call_cache)
+                {
+                    audio_port.postMessage(audio_call_cache);
+                    audio_call_cache = null;
+                }                
             });
 
             return ~(audio_ctx.sampleRate | 0);
@@ -1065,8 +1091,8 @@ bool InitAudio()
         }
     });
 
-    LoadAllSamples();
     audio_mode = ret;
+    LoadAllSamples();
     return ret!=0;
 }
 
