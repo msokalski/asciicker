@@ -10,8 +10,7 @@ Firstly, you need to choose build type:
 
 For windows it's recommended to use Visual Studio build system:
 1) Install [Visual Studio](https://visualstudio.microsoft.com/)
-2) ![Download repository](misc/github.png) and unzip it, the folder should be named `asciicker-master`
-- this is the repository.
+2) ![Download repository](misc/github.png) and unzip it, the repository folder should be named `asciicker-master`.
 3) Open VisualStudio and click `Import project`, then navigate to the folder where you stored `asciicker-master` and select it 
 4) Retarget solutions (this step may not be needed in some cases)
 ![Retarget](misc/VS_Retarget.png)
