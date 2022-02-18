@@ -1,5 +1,5 @@
 .cache/
-build/
+build/**
 imgui.ini
 *.bdf
 *.psf

@@ -72,23 +72,23 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -192,28 +192,26 @@
     <ClInclude Include="..\src\world.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\enemygen.cpp" />
-    <ClCompile Include="..\src\game.cpp" />
-    <ClCompile Include="..\src\gl45_emu.cpp" />
-    <ClCompile Include="..\src\inventory.cpp" />
-    <ClCompile Include="..\src\network.cpp" />
-    <ClCompile Include="..\src\render.cpp" />
-    <ClCompile Include="..\src\screen.cpp" />
-    <ClCompile Include="..\src\sdl.cpp" />
-    <ClCompile Include="..\src\term.cpp" />
-    <ClCompile Include="..\src\mswin.cpp" />
-    <ClCompile Include="..\src\tinfl.c" />
-    <ClCompile Include="..\src\world.cpp" />
-    <ClCompile Include="..\src\x11.cpp" />
-    <ClCompile Include="..\src\game_app.cpp" />
-    <ClCompile Include="..\src\gl.c" />
-    <ClCompile Include="..\src\input.cpp" />
-    <ClCompile Include="..\src\physics.cpp" />
-    <ClCompile Include="..\src\rgba8.cpp" />
-    <ClCompile Include="..\src\sprite.cpp" />
-    <ClCompile Include="..\src\terrain.cpp" />
-    <ClCompile Include="..\src\upng.c" />
-    <ClCompile Include="..\src\water.cpp" />
+    <ClCompile Include="src/gl.c" />
+    <ClCompile Include="src/gl45_emu.cpp" />
+    <ClCompile Include="src/x11.cpp" />
+    <ClCompile Include="src/sdl.cpp" />
+    <ClCompile Include="src/term.cpp" />
+    <ClCompile Include="src/game.cpp" />
+    <ClCompile Include="src/enemygen.cpp" />
+    <ClCompile Include="src/game_app.cpp" />
+    <ClCompile Include="src/network.cpp" />
+    <ClCompile Include="src/render.cpp" />
+    <ClCompile Include="src/terrain.cpp" />
+    <ClCompile Include="src/world.cpp" />
+    <ClCompile Include="src/inventory.cpp" />
+    <ClCompile Include="src/physics.cpp" />
+    <ClCompile Include="src/sprite.cpp" />
+    <ClCompile Include="src/upng.c" />
+    <ClCompile Include="src/tinfl.c" />
+    <ClCompile Include="src/rgba8.cpp" />
+    <ClCompile Include="src/gamepad.cpp" />
+    <ClCompile Include="src/font1.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="build-web.sh" />

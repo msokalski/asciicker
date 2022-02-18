@@ -72,23 +72,23 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)build\</OutDir>
-    <IntDir>.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\.tmp_$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -170,32 +170,31 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\src\enemygen.h" />
-    <ClInclude Include="..\src\game.h" />
-    <ClInclude Include="..\src\gl45_emu.h" />
-    <ClInclude Include="..\src\inventory.h" />
-    <ClInclude Include="..\src\platform.h" />
-    <ClInclude Include="..\src\render.h" />
-    <ClInclude Include="..\src\term.h" />
-    <ClInclude Include="..\src\urdo.h" />
-    <ClInclude Include="..\src\fast_rand.h" />
-    <ClInclude Include="..\src\gl.h" />
-    <ClInclude Include="..\src\imgui\imconfig.h" />
-    <ClInclude Include="..\src\imgui\imgui.h" />
-    <ClInclude Include="..\src\imgui\imgui_internal.h" />
-    <ClInclude Include="..\src\imgui\imstb_rectpack.h" />
-    <ClInclude Include="..\src\imgui\imstb_textedit.h" />
-    <ClInclude Include="..\src\imgui\imstb_truetype.h" />
-    <ClInclude Include="..\src\imgui_impl_opengl3.h" />
-    <ClInclude Include="..\src\matrix.h" />
-    <ClInclude Include="..\src\world.h" />
-    <ClInclude Include="..\src\rgba8.h" />
-    <ClInclude Include="..\src\sprite.h" />
-    <ClInclude Include="..\src\stdafx.h" />
-    <ClInclude Include="..\src\targetver.h" />
-    <ClInclude Include="..\src\terrain.h" />
-    <ClInclude Include="..\src\texheap.h" />
-    <ClInclude Include="..\src\upng.h" />
+    <ClCompile Include="..\src\term.h" />
+    <ClCompile Include="..\src\x11.h" />
+    <ClCompile Include="..\src\sdl.h" />
+    <ClCompile Include="..\src\urdo.h" />
+    <ClCompile Include="..\src\game.h" />
+    <ClCompile Include="..\src\enemygen.h" />
+    <ClCompile Include="..\src\render.h" />
+    <ClCompile Include="..\src\terrain.h" />
+    <ClCompile Include="..\src\world.h" />
+    <ClCompile Include="..\src\inventory.h" />
+    <ClCompile Include="..\src\physics.h" />
+    <ClCompile Include="..\src\sprite.h" />
+    <ClCompile Include="..\src\texheap.h" />
+    <ClCompile Include="..\src\rgba8.h" />
+    <ClCompile Include="..\src\upng.h" />
+    <ClCompile Include="..\src\tinfl.h" />
+    <ClCompile Include="..\src\gl.h" />
+    <ClCompile Include="..\src\gl45_emu.h" />
+    <ClCompile Include="..\src\imgui_impl_opengl3.h" />
+    <ClCompile Include="..\src\imgui/imgui.h" />
+    <ClCompile Include="..\src\imgui/imgui_demo.h" />
+    <ClCompile Include="..\src\imgui/imgui_draw.h" />
+    <ClCompile Include="..\src\imgui/imgui_widgets.h" />
+    <ClCompile Include="..\src\font1.h" />
+    <ClCompile Include="..\src\gamepad.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\asciiid.cpp">
@@ -204,31 +203,31 @@
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <ClCompile Include="..\src\enemygen.cpp" />
-    <ClCompile Include="..\src\game.cpp" />
-    <ClCompile Include="..\src\gl45_emu.cpp" />
-    <ClCompile Include="..\src\inventory.cpp" />
-    <ClCompile Include="..\src\mswin.cpp" />
-    <ClCompile Include="..\src\render.cpp" />
-    <ClCompile Include="..\src\sdl.cpp" />
     <ClCompile Include="..\src\term.cpp" />
-    <ClCompile Include="..\src\tinfl.c" />
-    <ClCompile Include="..\src\urdo.cpp" />
-    <ClCompile Include="..\src\gl.c" />
-    <ClCompile Include="..\src\world.cpp" />
-    <ClCompile Include="..\src\physics.cpp" />
-    <ClCompile Include="..\src\rgba8.cpp" />
-    <ClCompile Include="..\src\imgui\imgui.cpp" />
-    <ClCompile Include="..\src\imgui\imgui_demo.cpp" />
-    <ClCompile Include="..\src\imgui\imgui_draw.cpp" />
-    <ClCompile Include="..\src\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="..\src\imgui_impl_opengl3.cpp" />
-    <ClCompile Include="..\src\sprite.cpp" />
-    <ClCompile Include="..\src\terrain.cpp" />
-    <ClCompile Include="..\src\texheap.cpp" />
-    <ClCompile Include="..\src\upng.c" />
-    <ClCompile Include="..\src\water.cpp" />
     <ClCompile Include="..\src\x11.cpp" />
+    <ClCompile Include="..\src\sdl.cpp" />
+    <ClCompile Include="..\src\urdo.cpp" />
+    <ClCompile Include="..\src\game.cpp" />
+    <ClCompile Include="..\src\enemygen.cpp" />
+    <ClCompile Include="..\src\render.cpp" />
+    <ClCompile Include="..\src\terrain.cpp" />
+    <ClCompile Include="..\src\world.cpp" />
+    <ClCompile Include="..\src\inventory.cpp" />
+    <ClCompile Include="..\src\physics.cpp" />
+    <ClCompile Include="..\src\sprite.cpp" />
+    <ClCompile Include="..\src\texheap.cpp" />
+    <ClCompile Include="..\src\rgba8.cpp" />
+    <ClCompile Include="..\src\upng.c" />
+    <ClCompile Include="..\src\tinfl.c" />
+    <ClCompile Include="..\src\gl.c" />
+    <ClCompile Include="..\src\gl45_emu.cpp" />
+    <ClCompile Include="..\src\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="..\src\imgui/imgui.cpp" />
+    <ClCompile Include="..\src\imgui/imgui_demo.cpp" />
+    <ClCompile Include="..\src\imgui/imgui_draw.cpp" />
+    <ClCompile Include="..\src\imgui/imgui_widgets.cpp" />
+    <ClCompile Include="..\src\font1.cpp" />
+    <ClCompile Include="..\src\gamepad.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
