@@ -21,8 +21,10 @@ set(GAME_SOURCE
 	"src/upng.c"
 	"src/tinfl.c"
 	"src/rgba8.cpp"
+	"src/gamepad.cpp"
+	"src/font1.cpp"
 )
 
-add_executable("asciicker_sdl" ${GAME_SOURCE})
+add_executable("asciicker" ${GAME_SOURCE})
 
-set_target_properties("asciicker_sdl" PROPERTIES COMPILE_FLAGS "-DGAME")
+set_target_properties("asciicker" PROPERTIES COMPILE_FLAGS "-DGAME")

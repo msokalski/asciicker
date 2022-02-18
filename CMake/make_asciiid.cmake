@@ -27,6 +27,8 @@ set(ASCIID_SOURCE
 	"src/imgui/imgui_demo.cpp"
 	"src/imgui/imgui_draw.cpp"
 	"src/imgui/imgui_widgets.cpp"
+	"src/font1.cpp"
+	"src/gamepad.cpp"
 )
 
 add_executable("asciiid" ${ASCIID_SOURCE})

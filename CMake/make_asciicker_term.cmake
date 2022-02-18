@@ -16,6 +16,8 @@ set(GAME_TERM_SOURCE
 	"src/upng.c"
 	"src/tinfl.c"
 	"src/rgba8.cpp"
+	"src/gamepad.cpp"
+	"src/font1.cpp"
 )
 
 add_executable("asciicker_term" ${GAME_TERM_SOURCE})
