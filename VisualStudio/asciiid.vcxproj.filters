@@ -105,10 +105,10 @@
     <ClInclude Include="..\src\gl45_emu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="font1.h">
+    <ClInclude Include="..\src\font1.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="gamepad.h">
+    <ClInclude Include="..\src\gamepad.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -191,10 +191,10 @@
     <ClCompile Include="..\src\gl45_emu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="font1.cpp">
+    <ClCompile Include="..\src\font1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="gamepad.cpp">
+    <ClCompile Include="..\src\gamepad.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

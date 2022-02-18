@@ -39,9 +39,9 @@
     <ClInclude Include="..\src\network.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\enemygen.h" />
     <ClInclude Include="..\src\font1.h" />
     <ClInclude Include="..\src\gamepad.h" />
-    <ClInclude Include="..\src\enemygen.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\world.cpp">
