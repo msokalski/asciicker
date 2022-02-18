@@ -4,6 +4,7 @@
 # output binary
 BIN := ../build/asciicker_server
 
+# source files
 SRCS :=	game_svr.cpp \
 		network.cpp \
 		sha1.c \
@@ -18,7 +19,8 @@ SRCS :=	game_svr.cpp \
 		physics.cpp \
 		sprite.cpp \
 		tinfl.c \
-		
+
+# source directory
 SRCDIR := ../src
 
 LDLIBS := -lutil -pthread

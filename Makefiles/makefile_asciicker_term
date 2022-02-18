@@ -21,6 +21,7 @@ SRCS :=	game.cpp \
 		tinfl.c \
 		rgba8.cpp \
 
+# source directory
 SRCDIR := ../src
 
 LDLIBS := -lutil -lgpm

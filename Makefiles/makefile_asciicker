@@ -2,26 +2,12 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := ../build/asciicker_sdl
+BIN := ../build/asciicker
 
-# source files
-# SRCS :=	game_app.cpp \
-#		game.cpp \
-#		enemygen.cpp \
-# 		render.cpp \
-# 		terrain.cpp \
-#		world.cpp \
-#		inventory.cpp \
-# 		physics.cpp \
-# 		sprite.cpp \
-# 		upng.c \
-#		tinfl.c \
-# 		rgba8.cpp \
-
+# source directory
 SRCDIR := ../src
 
-# LDLIBS := -lutil
-
+# source files
 SRCS :=	gl.c \
 		gl45_emu.cpp \
 		x11.cpp \
@@ -40,6 +26,8 @@ SRCS :=	gl.c \
 		upng.c \
 		tinfl.c \
 		rgba8.cpp \
+		font1.cpp \
+		gamepad.cpp \
 
 LDLIBS := -lutil -lGL -lX11 -lXinerama -lgpm -lSDL2
 

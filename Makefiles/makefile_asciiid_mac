@@ -32,6 +32,7 @@ SRCS :=	asciiid.cpp \
 		imgui/imgui_draw.cpp \
 		imgui/imgui_widgets.cpp 
 
+# source directory
 SRCDIR := ../src
 
 LDLIBS := -lutil -framework OpenGL -lSDL2-2.0.0
