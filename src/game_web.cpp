@@ -13,6 +13,28 @@
 
 char base_path[1024] = "./"; // (const)
 
+
+void Buzz()
+{
+    EM_ASM(
+    {
+        if (gamepad>=0 && "getGamePads" in navigator)
+        {
+            let gm = navigator.getGamepads()[gamepad];
+            let va = gm.vibrationActuator;
+            if (va)
+            {
+                va.playEffect(va.type, {startDelay: 0,  duration: 50,  weakMagnitude: 1,  strongMagnitude: 1});
+            }
+        }
+        else
+        if ("vibrate" in navigator) 
+        {
+            navigator.vibrate(50);
+        }
+    });
+}
+
 uint64_t GetTime()
 {
 	static timespec ts;
@@ -74,6 +96,90 @@ void* GetMaterialArr()
 {
     return mat;
 }
+
+int user_zoom = 0;
+bool PrevGLFont()
+{
+    user_zoom--;
+    if (user_zoom<-8)
+        user_zoom=-8;
+
+    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
+    return true;
+}
+
+bool NextGLFont()
+{
+    user_zoom++;
+    if (user_zoom>8)
+        user_zoom=8;
+
+    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
+    return true;
+}
+
+void exit_handler(int signum)
+{
+    EM_ASM(
+    {
+        try 
+        { 
+            if (window.history.length<=1)
+                window.close();
+            else
+            if (history.state && history.state.inline == 1)
+            {
+                // we can't close, we cant go back
+                // should we really go forward?
+
+                // history.forward(); 
+            }
+            else
+                history.back();
+        }
+        catch(e) {}
+    });
+}
+
+void ToggleFullscreen(Game* g)
+{
+    EM_ASM(
+    {
+        let elem = document.body;
+
+        if (!document.fullscreenElement) 
+        {
+            if ("requestFullscreen" in elem)
+                elem.requestFullscreen().catch(err => { });
+        } 
+        else 
+        {
+            if ("exitFullscreen" in document)
+                document.exitFullscreen();
+        }
+    });
+}
+
+bool IsFullscreen(Game* g)
+{
+    int fs = 
+    EM_ASM_INT(
+    {
+        let elem = document.body;
+
+        if (!document.fullscreenElement) 
+        {
+            return 0;
+        } 
+        else 
+        {
+            return 1;
+        }
+    });
+
+    return fs!=0;
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -191,8 +297,14 @@ int Main()
 
 extern "C"
 {
-    void Load()
+    void Load(const char* name)
     {
+        if (name)
+        {
+            strcpy(player_name,name);
+            ConvertToCP437(player_name_cp437,player_name);
+        }
+
         Main();
     }
 
@@ -231,6 +343,65 @@ extern "C"
             game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
     }
 
+    void GamePad(int ev, int idx, float val)
+    {
+        static int gamepad_axes = 0;
+        static int gamepad_buttons = 0;
+        static uint8_t gamepad_mapping[256];
+
+        switch (ev)
+        {
+            case 0:
+            {
+                if (!idx)
+                    GamePadUnmount();
+                else
+                    GamePadMount("fixme",gamepad_axes,gamepad_buttons,gamepad_mapping);
+                break;
+            }
+            case 1:
+            {
+                int16_t v = (int16_t)(val*32767);
+                GamePadButton(idx,v);
+                break;
+            }
+            case 2:
+            {
+                // works on chrome
+                // int16_t v = val>1.0 ? (int16_t)-32768 : (int16_t)(val*32767);
+
+                // maybe firefox too:
+                int16_t v = val>1.0 || val<-1.0 ? (int16_t)-32768 : (int16_t)(val*32767);
+
+                GamePadAxis(idx,v);
+                break;
+            }
+            case 3:
+            {
+                // mapping size loword buttons, hiword axes
+                gamepad_buttons = idx & 0xFFFF;
+                gamepad_axes = (idx>>16) & 0xFFFF;
+                break;
+            }
+            case 4:
+            {
+                // map button, byte0 val, byte1 button idx
+                int map_idx = ((idx>>8) & 0xFF) + 2 * gamepad_axes; 
+                gamepad_mapping[map_idx] = idx&0xFF;
+                break;
+            }
+            case 5:
+            {
+                // map axis, byte0 neg, byte1 pos, byte2 axis idx
+                int map_neg = 2*((idx>>16) & 0xFF); 
+                int map_pos = map_neg+1;
+                gamepad_mapping[map_neg] = idx&0xFF;
+                gamepad_mapping[map_pos] = (idx>>8)&0xFF;
+                break;
+            }
+        }
+    }
+
     void Focus(int set)
     {
         if (game)
@@ -249,7 +420,12 @@ extern "C"
             }
                return 0;
         }
-        strcpy(player_name,name);
+
+        if (name)
+        {
+            strcpy(player_name,name);
+            ConvertToCP437(player_name_cp437,player_name);
+        }
         // alloc server, prepare for Packet()s
         GameServer* gs = (GameServer*)malloc(sizeof(GameServer));
         memset(gs,0,sizeof(GameServer));

@@ -858,7 +858,30 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 				if (xy_len > 1)
 					xy_len = 1;
 
-				phys->player_dir = atan2(dy, dx) * 180 / M_PI + phys->yaw + 90;
+
+
+				// normalize current angle to +/-180
+				float cur_ang = phys->player_dir*M_PI/180;
+				float tmp_dx = cosf(cur_ang);
+				float tmp_dy = sinf(cur_ang);
+				cur_ang = atan2(tmp_dy,tmp_dx) * 180 / M_PI;
+
+				// calc new angle normalized to +/-180
+				float new_ang = (atan2(dy, dx) * 180 / M_PI + phys->yaw + 90) * M_PI / 180;
+				tmp_dx = cosf(new_ang);
+				tmp_dy = sinf(new_ang);
+				new_ang = atan2(tmp_dy,tmp_dx) * 180 / M_PI;				
+
+				// now we can interpolate in shorter direction
+				float delta = new_ang - cur_ang; // +/-360
+
+				// shorter dir
+				if (delta < -180)
+					delta += 360;
+				if (delta > 180)
+					delta -= 360;
+
+				phys->player_dir = phys->player_dir + delta * 0.1f;
 			}
 
 			/*

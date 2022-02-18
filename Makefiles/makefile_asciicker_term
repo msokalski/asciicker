@@ -6,6 +6,8 @@ BIN := ../build/asciicker_term
 
 # source files
 SRCS :=	game.cpp \
+		gamepad.cpp \
+		font1.cpp \
 		enemygen.cpp \
 		game_app.cpp \
 		network.cpp \
@@ -55,18 +57,11 @@ CXX := g++
 LD := g++
 
 # tar
-TAR := tar
+TAR := tar		font1.cpp \
 
-# C flags
-CFLAGS := 
-
-# C++ flags
-CXXFLAGS := 
-
-# C/C++ flags
-CPPFLAGS := -save-temps=obj -pthread -DGAME -DPURE_TERM -O3
-# CPPFLAGS := -g -save-temps=obj -pthread -DGAME -DPURE_TERM -O3
-# CPPFLAGS := -g -save-temps=obj -pthread -DGAME -DPURE_TERM -fsanitize=address
+CPPFLAGS := -save-temps=obj -pthread -DGAME -DPURE_TERM -DUSE_GPM -O3
+# CPPFLAGS := -g -save-temps=obj -pthread -DGAME -DPURE_TERM -DUSE_GPM -O3
+# CPPFLAGS := -g -save-temps=obj -pthread -DGAME -DPURE_TERM -DUSE_GPM -fsanitize=address
 
 # linker flags
 LDFLAGS := -save-temps=obj -pthread -O3

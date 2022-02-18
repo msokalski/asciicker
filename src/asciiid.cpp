@@ -55,6 +55,10 @@
 char base_path[1024] = "./";
 Sprite* enemygen_sprite = 0;
 
+void Buzz()
+{
+}
+
 void SyncConf()
 {
 }

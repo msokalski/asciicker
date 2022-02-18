@@ -8,8 +8,11 @@
 #if defined(__linux__) || defined(__APPLE__)
 #include <sys/ioctl.h>
 #include <sys/poll.h>
+#include <fcntl.h>
 #ifdef __linux__
 # include <linux/limits.h>
+#include <linux/input.h>
+#include <linux/joystick.h>
 #else
 # include <limits.h>
 #endif
@@ -49,15 +52,50 @@
 #include "game.h"
 #include "enemygen.h"
 
+int tty = -1;
+
+// configurable, or auto lookup?
+
+void Buzz()
+{
+}
+
 char base_path[1024] = "./";
 
 void SyncConf()
 {
 }
 
+char conf_path[1024]="";
 const char* GetConfPath()
 {
-    return "asciicker.cfg";
+	if (conf_path[0] == 0)
+	{
+		#if defined(__linux__) || defined(__APPLE__)
+        const char* user_dir = getenv("SNAP_USER_DATA");
+        if (!user_dir || user_dir[0]==0)
+        {
+            user_dir = getenv("HOME");
+            if (!user_dir || user_dir[0]==0)
+                sprintf(conf_path,"%sasciicker.cfg",base_path);
+            else
+                sprintf(conf_path,"%s/asciicker.cfg",user_dir);
+        }
+        else
+            sprintf(conf_path,"%s/asciicker.cfg",user_dir);
+
+ 		#elif defined(_WIN32)
+		
+		const char* user_dir = getenv("APPDATA");
+		if (!user_dir || user_dir[0] == 0)
+			sprintf(conf_path, "%sasciicker.cfg", base_path);
+		else
+			sprintf(conf_path, "%s\\asciicker.cfg", user_dir);
+		
+		#endif
+	}
+
+	return conf_path;
 }
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -129,7 +167,6 @@ bool xterm_kitty = false;
 int mouse_x = -1;
 int mouse_y = -1;
 int mouse_down = 0;
-int tty = -1;
 int gpm = -1;
 
 bool GetWH(int wh[2])
@@ -378,12 +415,23 @@ void Print(AnsiCell* buf, int w, int h, const char utf[256][4])
     FLUSH();
 }
 
-
 bool running = false;
 void exit_handler(int signum)
 {
     running = false;
     SetScreen(false);
+    if (tty>0)
+    {
+        // restore old font
+        const char* temp_dir = getenv("SNAP_USER_DATA");
+        if (!temp_dir || !temp_dir[0])
+            temp_dir = "/tmp";
+        
+        char cmd[2048];
+        sprintf(cmd,"setfont %s/asciicker.%d.psf; rm %s/asciicker.%d.psf; clear;", temp_dir, tty, temp_dir, tty);
+        system(cmd);
+    }
+
     exit(0);
 }
 
@@ -574,9 +622,57 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 	return f->tex;
 }
 
+static int tty_font = 4;
+static const int tty_fonts[] = {6,8,10,12,14,16,18,20,24,28,32,-1};
+
+// TODO WEB ZOOMING & FULLSCREENING!
+// ...
+
+#ifdef PURE_TERM
+static bool xterm_fullscreen = false;
+void ToggleFullscreen(Game* g)
+{
+    const char* term_env = getenv("TERM");
+    if (!term_env)
+        term_env = "";
+    if (strcmp( term_env, "linux" ) != 0)
+    {
+        xterm_fullscreen = !xterm_fullscreen;
+        if (xterm_fullscreen)
+            int w = write(STDOUT_FILENO, "\033[9;1t",6);
+        else
+            int w = write(STDOUT_FILENO, "\033[9;0t",6);
+    }
+}
+
+bool IsFullscreen(Game* g)
+{
+    return xterm_fullscreen;
+}
+#endif
+
 bool PrevGLFont()
 {
-    #ifndef PURE_TERM
+    #ifdef PURE_TERM
+    if (tty>0)
+    {
+        tty_font--;
+        if (tty_font<0)
+            tty_font=0;
+        char cmd[1024];
+        sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
+        system(cmd);
+    }
+    else
+    {
+        // this will work only if xterm has enabled font ops
+        int w = write(STDOUT_FILENO, "\033]50;#-1\a",9);
+        if (xterm_fullscreen)
+            int w = write(STDOUT_FILENO, "\033[9;1t",6);
+        else
+            int w = write(STDOUT_FILENO, "\033[9;0t",6);
+    }
+    #else
 	font_zoom--;
 	if (font_zoom < -fonts_loaded / 2)
 	{
@@ -590,7 +686,26 @@ bool PrevGLFont()
 
 bool NextGLFont()
 {
-    #ifndef PURE_TERM
+    #ifdef PURE_TERM
+    if (tty>0)
+    {
+        tty_font++;
+        if (tty_fonts[tty_font]<0)
+            tty_font--;
+        char cmd[1024];
+        sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
+        system(cmd);
+    }
+    else
+    {
+        // this will work only if xterm has enabled font ops
+        int w = write(STDOUT_FILENO, "\033]50;#+1\a",9);
+        if (xterm_fullscreen)
+            int w = write(STDOUT_FILENO, "\033[9;1t",6);
+        else
+            int w = write(STDOUT_FILENO, "\033[9;0t",6);
+    }
+    #else
 	font_zoom++;
 	if (font_zoom > fonts_loaded/2)
 	{
@@ -740,7 +855,7 @@ void Server::Proc()
 
 void Server::Log(const char* str)
 {
-    printf("%s",str);
+    //printf("%s",str);
 }
 
 GameServer* Connect(const char* addr, const char* port, const char* path, const char* user)
@@ -955,6 +1070,217 @@ static int find_tty()
 }
 #endif
 
+#ifdef __linux__
+
+#define KEY_MAX_LARGE 0x2FF
+//#define KEY_MAX_SMALL 0x1FF
+#define AXMAP_SIZE (ABS_MAX + 1)
+#define BTNMAP_SIZE (KEY_MAX_LARGE - BTN_MISC + 1)
+
+static uint16_t js_btnmap[BTNMAP_SIZE];
+static uint8_t  js_axmap[AXMAP_SIZE];
+
+static const int js_btnmap_sdl[]=
+{
+    0, 1, -1,    // A,B
+    2, 3, -1,    // X,Y
+    9,10, -1,-1, // L,R SHOULDERS
+    4,6,5,       // BACK, START, GUIDE
+    7,8, -1,     // L,R STICK
+    -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1    
+};
+
+static const int js_axmap_sdl[]=
+{
+    0,1,4, // LEFT X,Y,TRIG
+    2,3,5, // RIGHT X,Y,TRIG
+
+    -1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1,
+
+    0xFE,0xFF, // X,Y AXIS FOR DIRPAD (left:13, right:14, up:11, down:12) !!!
+    -1,-1, -1,-1,-1,-1, 
+    -1,-1,-1,-1, -1,-1,-1,-1
+};
+#endif
+
+
+int scan_js(char* gamepad_name, int* gamepad_axes, int* gamepad_buttons, uint8_t* gamepad_mapping)
+{
+    #ifdef __linux__
+    static int index = 0;
+    static int skip = 0;
+
+    if (skip>0)
+    {
+        skip--;
+        return -1;
+    }
+
+    char js_term_dev[32];
+    sprintf(js_term_dev,"/dev/input/js%d",index);
+
+    int fd = -1;
+    if ((fd = open(js_term_dev, O_RDONLY)) < 0) 
+    {
+        // printf("can't open %s\n", js_term_dev);
+        index = (index+1) & 0xF;
+        skip = 10;
+		fd = -1;
+	}
+    else
+    {
+        #define NAME_LENGTH 128
+        unsigned char axes = 2;
+        unsigned char buttons = 2;
+        int version = 0x000800;
+        char name[NAME_LENGTH] = "Unknown";
+
+        ioctl(fd, JSIOCGVERSION, &version);
+        ioctl(fd, JSIOCGAXES, &axes);
+        ioctl(fd, JSIOCGBUTTONS, &buttons);
+        ioctl(fd, JSIOCGNAME(NAME_LENGTH), name);
+
+        strcpy(gamepad_name,name);
+        *gamepad_axes = axes;
+        *gamepad_buttons = buttons;
+
+        // fetch button map
+        memset(js_btnmap,-1,sizeof(js_btnmap));
+        int btnmap_res = ioctl(fd, JSIOCGBTNMAP, js_btnmap);
+
+        // fetch axis map
+        memset(js_axmap,-1,sizeof(js_axmap));
+        int axmap_res = ioctl(fd, JSIOCGAXMAP, js_axmap);
+
+
+        // construct mapping
+        uint8_t* m = gamepad_mapping;
+        for (int i=0; i<buttons; i++)
+        {
+            int abs = 2*axes + i;
+            switch(js_btnmap[i])
+            {
+                case BTN_A: m[abs] = (1<<7) | (0<<6) | 0x00; break;
+                case BTN_B: m[abs] = (1<<7) | (0<<6) | 0x01; break;
+                case BTN_X: m[abs] = (1<<7) | (0<<6) | 0x02; break;
+                case BTN_Y: m[abs] = (1<<7) | (0<<6) | 0x03; break;
+
+                case BTN_SELECT: m[abs] = (1<<7) | (0<<6) | 0x04/*back_button*/; break;
+                case BTN_MODE:   m[abs] = (1<<7) | (0<<6) | 0x05/*guide_button*/; break;
+                case BTN_START:  m[abs] = (1<<7) | (0<<6) | 0x06/*start_button*/; break;
+
+                case BTN_THUMBL: m[abs] = (1<<7) | (0<<6) | 0x07/*left_stick_button*/; break;
+                case BTN_THUMBR: m[abs] = (1<<7) | (0<<6) | 0x08/*right_stick_button*/; break;
+
+                case BTN_TL: m[abs] = (1<<7) | (0<<6) | 0x09/*left_shoulder_button*/; break;
+                case BTN_TR: m[abs] = (1<<7) | (0<<6) | 0x0A/*right_shoulder_button*/; break;
+
+                case BTN_TL2: m[abs] = (0<<7) | (0<<6) | 0x02/*left_trigger_axis*/; break;
+                case BTN_TR2: m[abs] = (0<<7) | (0<<6) | 0x05/*right_trigger_axis*/; break;
+
+                default: 
+                    m[i] = 0xFF;
+            }
+        }
+
+        for (int i=0; i<axes; i++)
+        {
+            int neg = 2*i;
+            int pos = 2*i+1;
+            switch(js_axmap[i])
+            {
+                case 0: //left-x
+                    m[neg] = (0<<7) | (1<<6) | 0x00; 
+                    m[pos] = (0<<7) | (0<<6) | 0x00; 
+                    break;
+
+                case 1: //left-y
+                    m[neg] = (0<<7) | (1<<6) | 0x01; 
+                    m[pos] = (0<<7) | (0<<6) | 0x01; 
+                    break;
+
+                case 2: // left-z (compressed, 0x04 output is unsigned )
+                    m[neg] = (0<<7) | (0<<6) | 0x04;
+                    m[pos] = (0<<7) | (0<<6) | 0x04; 
+                    break;
+
+                case 3: //right-x
+                    m[neg] = (0<<7) | (1<<6) | 0x02; 
+                    m[pos] = (0<<7) | (0<<6) | 0x02; 
+                    break;
+
+                case 4: //right-y
+                    m[neg] = (0<<7) | (1<<6) | 0x03; 
+                    m[pos] = (0<<7) | (0<<6) | 0x03; 
+                    break;
+
+                case 5: //right-z (compressed, 0x05 output is unsigned )
+                    m[neg] = (0<<7) | (0<<6) | 0x05; 
+                    m[pos] = (0<<7) | (0<<6) | 0x05; 
+                    break;
+
+                case 16: // dirpad-x
+                    m[neg] = (1<<7) | (0<<6) | 0x0D; 
+                    m[pos] = (1<<7) | (0<<6) | 0x0E; 
+                    break;
+
+                case 17: // dirpad-y
+                    m[neg] = (1<<7) | (0<<6) | 0x0B; 
+                    m[pos] = (1<<7) | (0<<6) | 0x0C; 
+                    break;
+
+                default: 
+                    m[i] = 0xFF;
+            }
+        }
+    }
+
+    return fd;
+    #endif        
+
+    return -1;    
+}
+
+
+bool read_js(int fd)
+{
+    #ifdef __linux__
+        #define MAX_JS_READ 64
+        js_event js_arr[MAX_JS_READ];
+        int size = read(fd, js_arr, sizeof(js_event)*MAX_JS_READ);
+        if (size<=0 || size % sizeof(js_event))
+            return false;
+
+        /*
+        static int dirpad_x = 0;
+        static int dirpad_y = 0;
+        */
+
+        int n = size / sizeof(js_event);
+        for (int i=0; i<n; i++)
+        {
+            js_event* js = js_arr+i;
+
+            // process
+            switch(js->type & ~JS_EVENT_INIT) 
+            {
+                case JS_EVENT_BUTTON:
+                    GamePadButton(js->number,js->value ? 32767 : 0);
+                    break;
+                case JS_EVENT_AXIS:
+                    GamePadAxis(js->number,js->value == -32768 ? -32767 : js->value);
+                    break;
+            }
+        }
+
+        return true;
+    #endif
+
+    return false;
+}
+
 int main(int argc, char* argv[])
 {
 	/*
@@ -1143,8 +1469,6 @@ int main(int argc, char* argv[])
 	// if url is given try to open connection
 	GameServer* gs = 0;
 
-	// Y7+ are not multiplayer
-	/*
 	if (url)
 	{
 		// [user@]server_address/path[:port]
@@ -1190,15 +1514,16 @@ int main(int argc, char* argv[])
         }
 
 		strcpy(player_name, user);
+        ConvertToCP437(player_name_cp437, player_name);
 
 		// here we should know if server is present or not
 		// so we can creare game or term with or without server
 		// ...
 	}
     else
-	*/
     {
         strcpy(player_name, "player");
+        ConvertToCP437(player_name_cp437, player_name);
     }
     
 
@@ -1317,7 +1642,9 @@ int main(int argc, char* argv[])
             sprintf(font_dirname, "%sfonts", base_path); // = "./fonts";
             fonts_loaded = 0;
             a3dListDir(font_dirname, MyFont::Scan, font_dirname);
-            a3dLoop();
+
+			LoopInterface li = { GamePadMount, GamePadUnmount, GamePadButton, GamePadAxis };
+            a3dLoop(&li);
         }
 
 		// NET_TODO:
@@ -1360,6 +1687,18 @@ int main(int argc, char* argv[])
 
     if (tty > 0)
     {
+        // store current font
+        char cmd[1024];
+        const char* temp_dir = getenv("SNAP_USER_DATA");
+        if (!temp_dir || !temp_dir[0])
+            temp_dir = "/tmp";
+        sprintf(cmd,"setfont -O %s/asciicker.%d.psf;", temp_dir,tty);
+        system(cmd);
+
+        // setup default font
+        sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
+        system(cmd);
+
 #ifdef USE_GPM
         Gpm_Connect conn;
         conn.eventMask  = ~0;   /* Want to know about all the events */
@@ -1382,7 +1721,7 @@ int main(int argc, char* argv[])
         else
         {
             printf("failed to connect to gpm\n");
-            exit(0);
+            // exit(0);
         }
 #endif // USE_GPM
     }
@@ -1409,6 +1748,12 @@ int main(int argc, char* argv[])
                     -xrm "xterm*font4: -gumix-*-*-*-*-*-16-*-*-*-*-*-*" \
                     -xrm "xterm*font5: -gumix-*-*-*-*-*-18-*-*-*-*-*-*" \
                     -xrm "xterm*font6: -gumix-*-*-*-*-*-20-*-*-*-*-*-*"
+
+                    -xrm "xterm*allowWindowOps: true"
+                    -xrm "xterm*allowFontOps: true"
+
+                    // color and mouse ops are enabled by default
+                    // title and TCap Ops are not neccessary 
 
                     user can switch between fonts using SHIFT+NUMPAD(+/-)
 
@@ -1440,6 +1785,13 @@ int main(int argc, char* argv[])
     else {
         printf("UNKNOWN TERMINAL\n");
     }
+
+    // try opening js device
+    int gamepad_axes = 0;
+    int gamepad_buttons = 0;
+    char gamepad_name[256] = {0};
+    uint8_t gamepad_mapping[256] = {0};
+    int jsfd = scan_js(gamepad_name,&gamepad_axes,&gamepad_buttons,gamepad_mapping);
 
     SetScreen(true);
 
@@ -1537,10 +1889,23 @@ int main(int argc, char* argv[])
     stamp = begin;
 
     game = CreateGame(water,pos,yaw,dir,stamp);
+    
+    if (jsfd>=0)
+    {
+        // report mount
+        GamePadMount(gamepad_name,gamepad_axes,gamepad_buttons,gamepad_mapping);
+    }
 
     while(running)
     {
-      
+        if (jsfd<0)
+        {
+            // report mount
+            jsfd = scan_js(gamepad_name,&gamepad_axes,&gamepad_buttons,gamepad_mapping);
+            if (jsfd >= 0)
+                GamePadMount(gamepad_name,gamepad_axes,gamepad_buttons,gamepad_mapping);
+        }        
+     
         bool mouse_j = false;
 
         // get time stamp
@@ -1558,7 +1923,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        struct pollfd pfds[2]={0};
+        struct pollfd pfds[3]={0};
         if (gpm>=0)
         {
             pfds[0].fd = STDIN_FILENO;
@@ -1569,7 +1934,32 @@ int main(int argc, char* argv[])
             pfds[1].events = POLLIN; 
             pfds[1].revents = 0;
 
-            poll(pfds, 2, 0); // 0 no timeout, -1 block
+            if (jsfd>=0)
+            {
+                pfds[2].fd = jsfd;
+                pfds[2].events = POLLIN|POLL_HUP|POLL_ERR; 
+                pfds[2].revents = 0;
+                poll(pfds, 3, 0); // 0 no timeout, -1 block
+
+                if (pfds[2].revents & (POLLHUP|POLLERR))
+                {
+                    GamePadUnmount();
+                    close(jsfd);
+                    jsfd=-1;                    
+                }
+                else
+                if (pfds[2].revents & POLLIN) 
+                {
+                    if (!read_js(jsfd))
+                    {
+                        GamePadUnmount();
+                        close(jsfd);
+                        jsfd=-1;
+                    }
+                }
+            }
+            else
+                poll(pfds, 2, 0); // 0 no timeout, -1 block
 
 #ifdef USE_GPM
             if (pfds[1].revents & POLLIN)
@@ -1682,7 +2072,32 @@ int main(int argc, char* argv[])
             pfds[0].events = POLLIN; 
             pfds[0].revents = 0;
 
-            poll(pfds, 1, 0); // 0 no timeout, -1 block
+            if (jsfd>=0)
+            {
+                pfds[1].fd = jsfd;
+                pfds[1].events = POLLIN|POLLHUP|POLLERR; 
+                pfds[1].revents = 0;
+                poll(pfds, 2, 0); // 0 no timeout, -1 block
+
+                if (pfds[1].revents & (POLLHUP|POLLERR))
+                {
+                    GamePadUnmount();
+                    close(jsfd);
+                    jsfd=-1;                    
+                }
+                else
+                if (pfds[1].revents & POLLIN) 
+                {
+                    if (!read_js(jsfd))
+                    {
+                        GamePadUnmount();
+                        close(jsfd);
+                        jsfd=-1;
+                    }
+                }
+            }
+            else
+                poll(pfds, 1, 0); // 0 no timeout, -1 block
         }
 
         if (pfds[0].revents & POLLIN) 
@@ -1696,6 +2111,14 @@ int main(int argc, char* argv[])
             memcpy(stream + stream_bytes, fresh, fresh_bytes);
 
             int bytes = stream_bytes + fresh_bytes;
+
+            /*
+            FILE* kl = fopen("keylog.txt","a");
+            for (int i=0; i<bytes; i++)
+                fprintf(kl,"0x%02X, ",stream[i]);
+            fprintf(kl,"\n");
+            fclose(kl);
+            */
 
             int i = 0;
             while (i<bytes)
@@ -2239,6 +2662,13 @@ int main(int argc, char* argv[])
         }
 
         frames++;
+    }
+
+    if (jsfd>=0)
+    {
+        GamePadUnmount();
+        close(jsfd);
+        jsfd = -1;
     }
 
 	// NET_TODO:

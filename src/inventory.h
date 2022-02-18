@@ -44,7 +44,7 @@ struct Inventory
 	int my_items;
 	MyItem my_item[max_items];
 
-	void UpdateLayout(int width, int height, int scene_shift);
+	void UpdateLayout(int width, int height, int scene_shift, int bars_pos);
 
 	bool InsertItem(Item* item, int xy[2]); 
 	bool RemoveItem(int index, float pos[3], float yaw);

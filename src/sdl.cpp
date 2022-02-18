@@ -1,3 +1,4 @@
+
 #ifdef USE_SDL
 
 #include <sys/stat.h>
@@ -35,13 +36,23 @@ struct GlobalSDL
 {
 	GlobalSDL()
 	{
+		gamepad = 0;
+		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+		//SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC);
 		SDL_Init(SDL_INIT_EVERYTHING);
 	}
 
 	~GlobalSDL()
 	{
+		if (gamepad)
+		{
+			SDL_GameControllerClose(gamepad);
+			gamepad = 0;
+		}
 		SDL_Quit();
 	}
+
+	SDL_GameController* gamepad;
 };
 
 static GlobalSDL sdl;
@@ -96,6 +107,18 @@ A3D_WND* a3dOpen(const PlatformInterface* pi, const GraphicsDesc* gd, A3D_WND* s
 	wnd->platform_api = *pi;
 	wnd->cookie = 0;
 	wnd->mapped = false;
+
+	/*
+		Buzz:
+		SDL_Joystick* joy = SDL_JoystickOpen(joy_idx);		
+		SDL_Haptic* haptic = SDL_HapticOpenFromJoystick(joy);
+		if (SDL_HapticRumbleSupported(haptic))
+		{
+			SDL_HapticRumbleInit(haptic);
+			SDL_HapticRumblePlay(haptic, 1.0, 3000);
+			// SDL_HapticRumbleStop(haptic);
+		}
+	*/
 
 	if (share)
 	{
@@ -552,8 +575,9 @@ KeyInfo SDL2A3D[/*128*/] =
 	A3D_NONE
 };
 
-void a3dLoop()
+void a3dLoop(const LoopInterface* li)
 {
+	SDL_GameControllerEventState(SDL_ENABLE);
 	// for all created wnds, force size notifications
 	A3D_WND* wnd = wnd_head;
 	while (wnd)
@@ -574,9 +598,148 @@ void a3dLoop()
 		SDL_Event Event;
 		while (SDL_PollEvent(&Event))
 		{
+			const char* ev_name = 0;
+			#define CASE(t) case t: ev_name = ev_name ? ev_name : #t;
+
 			switch (Event.type)
 			{
 				case SDL_QUIT: Running = 0; break;
+
+				CASE(SDL_CONTROLLERDEVICEADDED)
+				{
+					SDL_ControllerDeviceEvent* ev = &Event.cdevice;
+					//printf("%s %d\n", ev_name, ev->which);
+					if (!sdl.gamepad)
+						sdl.gamepad = SDL_GameControllerOpen(ev->which);
+					if (sdl.gamepad && li && li->gpad_mount)
+					{
+						int axes = SDL_CONTROLLER_AXIS_MAX;
+						int buttons = SDL_CONTROLLER_BUTTON_MAX;
+						uint8_t mapping[2*SDL_CONTROLLER_AXIS_MAX + SDL_CONTROLLER_BUTTON_MAX];
+						int imap = 0;
+						for (int i=0; i<axes; i++)
+						{
+							uint8_t m = i<6 ? (0<<7 /*to axis*/) | (0<<6 /*no flip*/) | i : 0xFF;
+
+							if (i==4 || i==5)
+								mapping[imap++] = 0xFF; // clear negs, sdl knows it is unsigned
+							else
+								mapping[imap++] = m | (1<<6); // neg in
+							mapping[imap++] = m; // pos in
+						}
+						for (int i=0; i<buttons; i++)
+						{
+							if (i>=15)
+								mapping[imap++] = 0xFF;
+							else
+								mapping[imap++] = (1<<7 /*to button*/) | (0<<6 /*no flip*/) | i; 
+						}
+
+						li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons, mapping);
+					}
+					break;
+				}
+				
+				CASE(SDL_CONTROLLERDEVICEREMAPPED)
+				{
+					SDL_ControllerDeviceEvent* ev = &Event.cdevice;
+					//printf("%s %d\n", ev_name, ev->which);
+					break;
+				}
+				
+				CASE(SDL_CONTROLLERDEVICEREMOVED) 
+				{
+					SDL_ControllerDeviceEvent* ev = &Event.cdevice;
+					//printf("%s %d\n", ev_name, ev->which);
+					SDL_GameController* gc = SDL_GameControllerFromInstanceID(ev->which);
+					if (gc && gc == sdl.gamepad)
+					{
+						if (li && li->gpad_unmount)
+							li->gpad_unmount();
+						SDL_GameControllerClose(sdl.gamepad);
+						sdl.gamepad = 0;
+
+						// try reconnecting to something else
+						int n = SDL_NumJoysticks();
+						for (int i = 0; i < n; i++)
+						{
+							if (SDL_IsGameController(i))
+							{
+								sdl.gamepad = SDL_GameControllerOpen(i);
+								if (sdl.gamepad)
+								{
+									if (li && li->gpad_mount)
+									{
+										int axes = SDL_CONTROLLER_AXIS_MAX;
+										int buttons = SDL_CONTROLLER_BUTTON_MAX;
+										uint8_t mapping[2*SDL_CONTROLLER_AXIS_MAX + SDL_CONTROLLER_BUTTON_MAX];
+										int imap = 0;
+										for (int i=0; i<axes; i++)
+										{
+											uint8_t m = i<6 ? (0<<7 /*to axis*/) | (0<<6 /*no flip*/) | i : 0xFF;
+
+											if (i==4 || i==5)
+												mapping[imap++] = 0xFF; // clear negs, sdl knows it is unsigned
+											else
+												mapping[imap++] = m | (1<<6); // neg in
+											mapping[imap++] = m; // pos in
+										}
+										for (int i=0; i<buttons; i++)
+										{
+											if (i>=15)
+												mapping[imap++] = 0xFF;
+											else
+												mapping[imap++] = (1<<7 /*to button*/) | (0<<6 /*no flip*/) | i; 
+										}
+
+										li->gpad_mount(SDL_GameControllerName(sdl.gamepad), axes, buttons, mapping);
+									}
+									break;
+								}
+							}
+						}
+					}
+					break;
+				}
+
+				CASE(SDL_CONTROLLERAXISMOTION)
+				{
+					SDL_ControllerAxisEvent* ev = &Event.caxis;
+					const char* aname = SDL_GameControllerGetStringForAxis((SDL_GameControllerAxis)ev->axis);
+					//printf("%s %d %d = %f (%s)\n", ev_name, ev->which, ev->axis, ev->value/32767.0f, aname);
+					SDL_GameController* gc = SDL_GameControllerFromInstanceID(ev->which);
+					if (gc && gc == sdl.gamepad)
+					{
+						if (li && li->gpad_axis)
+							li->gpad_axis(ev->axis, ev->value == -32768 ? -32767 : ev->value);
+					}
+					break;
+				}
+
+				CASE(SDL_CONTROLLERBUTTONDOWN)
+				CASE(SDL_CONTROLLERBUTTONUP)
+				{
+					SDL_ControllerButtonEvent* ev = &Event.cbutton;
+					const char* bname = SDL_GameControllerGetStringForButton((SDL_GameControllerButton)ev->button);
+					//printf("%s %d %d = %d (%s)\n", ev_name, ev->which, ev->button, ev->state, bname);
+					SDL_GameController* gc = SDL_GameControllerFromInstanceID(ev->which);
+					if (gc && gc == sdl.gamepad)
+					{
+						if (li && li->gpad_button)
+							li->gpad_button(ev->button, ev->state ? 32767 : 0);
+					}
+					break;
+				}
+
+				/* PS only?
+				case SDL_CONTROLLERTOUCHPADDOWN:  
+				case SDL_CONTROLLERTOUCHPADMOTION:
+				case SDL_CONTROLLERTOUCHPADUP:
+				*/
+
+				/* WII only?
+				case SDL_CONTROLLERSENSORUPDATE:  
+				*/
 
 				case SDL_TEXTINPUT:
 				{

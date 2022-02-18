@@ -238,7 +238,19 @@ void a3dClose(A3D_WND* wnd); // if PlatformInterface::close==null it is called a
 void a3dSetCookie(A3D_WND* wnd, void* cookie);
 void* a3dGetCookie(A3D_WND* wnd);
 
-void a3dLoop();
+struct LoopInterface
+{
+	void(*gpad_mount)(const char* name, int axes, int buttons, const uint8_t mapping[]);
+	void(*gpad_unmount)();
+	void(*gpad_button)(int b, int16_t pos);
+	void(*gpad_axis)(int a, int16_t pos);
+};
+
+bool a3dGetGamePad();
+bool a3dGetGamePadButton(int b);
+int16_t a3dGetGamePadAxis(int a);
+
+void a3dLoop(const LoopInterface* li=0);
 
 //void a3dSwapBuffers();
 uint64_t a3dGetTime(); // in microsecs, wraps every 584542 years

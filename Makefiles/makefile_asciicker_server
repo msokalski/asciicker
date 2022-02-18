@@ -7,6 +7,8 @@ BIN := ../build/asciicker_server
 SRCS :=	game_svr.cpp \
 		network.cpp \
 		sha1.c \
+		font1.cpp \
+		gamepad.cpp \
 		game.cpp \
 		enemygen.cpp \
 		render.cpp \

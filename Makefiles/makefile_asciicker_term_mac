@@ -6,6 +6,8 @@ BIN := ../build/asciicker_term
 
 # source files
 SRCS :=	game.cpp \
+		gamepad.cpp \
+		font1.cpp \
 		enemygen.cpp \
 		game_app.cpp \
 		network.cpp \

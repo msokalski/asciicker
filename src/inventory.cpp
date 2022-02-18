@@ -20,12 +20,15 @@ void DestroyItem(Item* item)
 	free(item);
 }
 
-void Inventory::UpdateLayout(int render_width, int render_height, int scene_shift)
+void Inventory::UpdateLayout(int render_width, int render_height, int scene_shift, int bars_pos)
 {
+	int descent = bars_pos - 5;
+	if (descent < 0)
+		descent = 0;
 	Sprite::Frame* sf = inventory_sprite->atlas;
 	layout_width = 39;
 	layout_max_height = 7 + 4*height+1 + 5;
-	layout_height = render_height - 6;
+	layout_height = render_height - 4 - descent;
 	if (layout_height > layout_max_height)
 		layout_height = layout_max_height;
 	if (layout_height < sf->height)
@@ -46,7 +49,7 @@ void Inventory::UpdateLayout(int render_width, int render_height, int scene_shif
 	layout_max_scroll = layout_max_height - layout_height;
 
 	layout_x = scene_shift - layout_width;
-	layout_y = (render_height - 6 - layout_height) / 2;
+	layout_y = (render_height - 4 - descent - layout_height) / 2;
 
 	layout_frame[0] = layout_x + 3;
 	layout_frame[1] = layout_y + 7;

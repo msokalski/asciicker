@@ -9,8 +9,13 @@
 #include "inventory.h"
 #include "network.h"
 
-extern char player_name[];
 
+void Buzz();
+
+void ConvertToCP437(char* cp437, const char* utf8);
+
+extern char player_name[];
+extern char player_name_cp437[];
 
 struct ACTION { enum
 {
@@ -145,7 +150,8 @@ Sprite* GetSprite(const SpriteReq* req, int clr = 0);
 
 struct Human : Character
 {
-	char name[32];
+	char name[32*4];
+	char name_cp437[32];
 
 	int level;
 
@@ -247,10 +253,13 @@ struct Game
 	int render_size[2];
 
 	bool perspective;
+	bool blood;
 
 	//bool player_hit; // helper for detecting clicks on the player sprite
 	bool show_keyb; // activated together with talk_box by clicking on character
 	int keyb_hide;  // show / hide animator (vertical position)
+
+	bool show_gamepad;
 
 	bool show_inventory;
 	int scene_shift;
@@ -325,6 +334,14 @@ struct Game
 		int last_hit_char;
 		uint8_t key[32]; // keyb state
 
+		// pad state
+		int pad_item; // item index to pick + 1
+		bool pad_connected;
+		int pad_autorep; // button+1
+		uint64_t pad_stamp;
+		uint32_t pad_button;
+		int16_t pad_axis[32];
+
 		// we split touch input to multiple separate mice with left button only
 		struct Contact
 		{
@@ -358,7 +375,7 @@ struct Game
 			int scroll;
 		};
 
-		Contact contact[4]; // 0:mouse, 1:primary_touch 2:secondary_touch 3:unused
+		Contact contact[4]; // 0:mouse, 1:primary_touch 2:secondary_touch ( 3:unused -> GAMEPAD/KEYB )
 
 		uint8_t but; // real mouse buttons currently down
 		int wheel;   // relative mouse wheel (only from real mouse)
@@ -420,9 +437,41 @@ struct Game
 	void OnSize(int w, int h, int fw, int fh);
 	void OnMessage(const uint8_t* msg, int len);
 
+	void OnPadMount(bool connect);
+	void OnPadButton(int b, bool down);
+	void OnPadAxis(int a, int16_t pos);
+
 	// update physics with accumulated input then render state to output
 	void Render(uint64_t _stamp, AnsiCell* ptr, int width, int height);
 	void ScreenToCell(int p[2]) const;
+
+
+
+	void MenuKeyb(GAME_KEYB keyb, int key);
+	void MenuMouse(GAME_MOUSE mouse, int x, int y);
+	void MenuTouch(GAME_TOUCH touch, int id, int x, int y);
+	void MenuPadMount(bool connected);
+	void MenuPadButton(int b, bool down);
+	void MenuPadAxis(int a, int16_t pos);
+
+	void OpenMenu(int method);
+	void CloseMenu();
+	void ToggleMenu(int method);
+	void PaintMenu(AnsiCell* ptr, int width, int height);
+	int  HitMenu(int hx, int hy);
+
+	// menu context
+	int menu_stack[4]; // menu_stack[menu_depth] contains current item (hilight)
+	int menu_depth; // -1 when closed, 0 just after OpenMenu
+
+	// menu mouse / touch state
+	int menu_down; // 0: released, 1:mouse_captured, 2:touch_captured
+	int menu_down_x;
+	int menu_down_y;
+
+	// when mouse/touch is taking over, store current hilight here
+	// so we can revert hilight when pad/keyb is back
+	int menu_temp; 
 };
 
 Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp);
@@ -433,3 +482,9 @@ void FreeSprites();
 
 void PaintTerrain(float* xy, float r, int matid);
 void BloodLeak(Character* c, int steps);
+
+
+void GamePadMount(const char* name, int axes, int buttons, const uint8_t map[]);
+void GamePadUnmount();
+void GamePadButton(int b, int16_t pos);
+void GamePadAxis(int a, int16_t pos);

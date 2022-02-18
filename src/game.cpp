@@ -9,6 +9,236 @@
 #include "matrix.h"
 #include "fast_rand.h"
 
+#include "font1.h"
+#include "gamepad.h"
+
+uint8_t ConvertToCP437(uint32_t uc)
+{
+	static const uint8_t tab00A1[95]=
+	{
+		0xAD,0x9B,0x9C,0x00,0x9D,0x00,0x15,0x00,0x00,0xA6,0xAE,0xAA,0x00,0x00,0x00,0xF8,
+		0xF1,0xFD,0x00,0x00,0xE6,0x14,0xFA,0x00,0x00,0xA7,0xAF,0xAC,0xAB,0x00,0xA8,0x00,
+		0x00,0x00,0x00,0x8E,0x8F,0x92,0x80,0x00,0x90,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0xA5,0x00,0x00,0x00,0x00,0x99,0x00,0x00,0x00,0x00,0x00,0x9A,0x00,0x00,0xE1,0x85,
+		0xA0,0x83,0x00,0x84,0x86,0x91,0x87,0x8A,0x82,0x88,0x89,0x8D,0xA1,0x8C,0x8B,0x00,
+		0xA4,0x95,0xA2,0x93,0x00,0x94,0xF6,0x00,0x97,0xA3,0x96,0x81,0x00,0x00,0x98
+	};
+
+	/*
+	static const uint8_t tab0192[1]=
+	{
+		0x9F
+	};
+	*/
+
+	static const uint8_t tab0393[52]=
+	{
+		0xE2,0x00,0x00,0x00,0x00,0xE9,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0xE4,0x00,0x00,0xE8,0x00,0x00,0xEA,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xE0,0x00,
+		0x00,0xEB,0xEE,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xE3,0x00,0x00,
+		0xE5,0xE7,0x00,0xED
+	};
+
+	static const uint8_t tab2022[134]=
+	{
+		0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x13,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFC,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x9E
+	};
+
+	static const uint8_t tab2190[25]=
+	{
+		0x1B,0x18,0x1A,0x19,0x1D,0x12,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x17
+	};
+
+	static const uint8_t tab2219[77]=
+	{
+		0xF9,0xFB,0x00,0x00,0x00,0xEC,0x1C,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0xEF,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xF7,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xF0,0x00,0x00,0xF3,0xF2
+	};
+
+	static const uint8_t tab2302[32]=
+	{
+		0x7F,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xA9,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xF4,0xF5
+	};
+
+	static const uint8_t tab2500[218]=
+	{
+		0xC4,0x00,0xB3,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xDA,0x00,0x00,0x00,
+		0xBF,0x00,0x00,0x00,0xC0,0x00,0x00,0x00,0xD9,0x00,0x00,0x00,0xC3,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0xB4,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xC2,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0xC1,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xC5,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0xCD,0xBA,0xD5,0xD6,0xC9,0xB8,0xB7,0xBB,0xD4,0xD3,0xC8,0xBE,0xBD,0xBC,0xC6,0xC7,
+		0xCC,0xB5,0xB6,0xB9,0xD1,0xD2,0xCB,0xCF,0xD0,0xCA,0xD8,0xD7,0xCE,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0xDF,0x00,0x00,0x00,0xDC,0x00,0x00,0x00,0xDB,0x00,0x00,0x00,0xDD,0x00,0x00,0x00,
+		0xDE,0xB0,0xB1,0xB2,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0xFE,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x16,0x00,0x00,0x00,
+		0x00,0x00,0x1E,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,0x1F,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x11,0x00,0x00,0x00,0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x0A
+	};
+
+	static const uint8_t tab263A[50]=
+	{
+		0x01,0x02,0x0F,0x00,0x00,0x00,0x0C,0x00,0x0B,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x00,0x00,0x00,0x00,0x00,0x00,0x06,0x00,0x00,0x05,0x00,0x03,0x04,0x00,0x00,0x00,
+		0x0D,0x0E
+	};
+
+	uint8_t cp = 0x20;
+
+	if (uc >= 0x2219)
+	{
+		if (uc < 0x2219 + sizeof(tab2219))
+			cp = tab2219[uc - 0x2219];
+		else
+		if (uc >= 0x2302)
+		{
+			if (uc < 0x2302 + sizeof(tab2302))
+				cp = tab2302[uc - 0x2302];
+			if (uc >= 0x2500)
+			{
+				if (uc < 0x2500 + sizeof(tab2500))
+					cp = tab2500[uc - 0x2500];
+				else
+				if (uc >= 0x263A)
+				{
+					if (uc < 0x263A + sizeof(tab263A))
+						cp = tab263A[uc - 0x263A];
+				}
+			}
+		}
+	}
+	else
+	if (uc >= 0x0020)
+	{
+		if (uc < 0x7F)
+			cp = (char)uc;
+		else
+		if (uc >= 0x00A1)
+		{
+			if (uc < 0x00A1 + sizeof(tab00A1))
+				cp = tab00A1[uc - 0x00A1];
+			else
+			if (uc == 0x0192) // tab0192
+				cp = 0x9F;
+			else
+			if (uc >= 0x0393)
+			{
+				if (uc < 0x0393 + sizeof(tab0393))
+					cp = tab0393[uc - 0x0393];
+				else
+				if (uc >= 0x2022)
+				{
+					if (uc < 0x2022 + sizeof(tab2022))
+						cp = tab2022[uc - 0x2022];
+					else
+					if (uc >= 0x2190)
+					{
+						if (uc < 0x2190 + sizeof(tab2190))
+							cp = tab2190[uc - 0x2190];
+					}
+				}
+			}
+		}
+	}
+
+	return cp;
+}
+
+void ConvertToCP437(char* cp437, const char* _utf8)
+{
+	const uint8_t* utf8 = (const uint8_t*)_utf8;
+
+	int i=0,j=0;
+	while (1)
+	{
+		uint32_t uc;
+
+		// unify, eat upto 4 bytes
+		if (utf8[i]<128) // 01111111 (7bits)
+		{
+			uc = utf8[i];
+			i++;
+		}
+		else
+		if (utf8[i]<128+64) // 10xxxxxx (err)
+		{
+			// err
+			i++;
+			continue;
+		}
+		else
+		if (utf8[i]<128+64+32) // 110xxxxx 10xxxxxx (11bits)
+		{
+			if ((utf8[i+1]>>6) != 2)
+			{
+				// err
+				i++;
+				continue;
+			}
+
+			uc = ((utf8[i]&0x3F)<<6) | (utf8[i+1]&0x3F);
+			i+=2;
+		}
+		else
+		if (utf8[i]<128+64+32+16) // 1110xxxx 10xxxxxx 10xxxxxx (16bits)
+		{
+			if ((utf8[i+1]>>6) != 2 || (utf8[i+2]>>6) != 2)
+			{
+				// err
+				i++;
+				continue;
+			}
+
+			uc = ((utf8[i]&0xF)<<12) | ((utf8[i+1]&0x3F)<<6) | (utf8[i+2]&0x3F);
+			i+=3;
+		}
+		else
+		if (utf8[i]<128+64+32+16+8) // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx (21bits)
+		{
+			if ((utf8[i+1]>>6) != 2 || (utf8[i+2]>>6) != 2 || (utf8[i+3]>>6) != 2)
+			{
+				// err
+				i++;
+				continue;
+			}
+
+			uc = ((utf8[i]&0x7)<<18) | ((utf8[i+1]&0x3F)<<12) | ((utf8[i+2]&0x3F)<<6) | (utf8[i+3]&0x3F);
+			i+=4;
+		}
+		else // 11111xxx (err)
+		{
+			// err
+			i++;
+			continue;
+		}
+
+		if (uc==0)
+		{
+			cp437[j++] = 0;
+			break;
+		}
+
+		uint8_t cp = ConvertToCP437(uc);
+		cp437[j++] = (char)cp;
+	}
+}
+
 extern char base_path[];
 
 static const int stand_us_per_frame = 30000;
@@ -32,18 +262,20 @@ static const uint8_t dk_green = 16 + 0 * 1 + 3 * 6 + 0 * 36;
 extern Terrain* terrain;
 extern World* world;
 
+Game* prime_game = 0;
+
 // asciiid pseudo-multiplayer
 // or game npcs?
 Character* player_head = 0;
 Character* player_tail = 0;
 
-char player_name[32] = "player";
+char player_name[32*4] = "player";
+char player_name_cp437[32] = "player";
 
 void ChatLog(const char* fmt, ...)
 {
 	// move it to game_app/web/srv and asciid
 	// we dont want to printf in -term mode!
-	
 	va_list args;
 	va_start(args,fmt);
 	vprintf(fmt,args);
@@ -53,6 +285,89 @@ void ChatLog(const char* fmt, ...)
 void SyncConf();
 const char* GetConfPath();
 
+bool GetGamePadConfPath(char* path, const char* name, int axes, int buttons)
+{
+	const char* cfg = GetConfPath();
+	const char* filepart1 = strrchr(cfg,'/');
+	const char* filepart2 = strrchr(cfg,'\\');
+
+	if (!filepart1 && !filepart2)
+		return false;
+
+	if (!filepart2)
+		filepart2 = filepart1;
+	if (!filepart1)
+		filepart1 = filepart2;
+
+	int pos1 = filepart1 - cfg;
+	int pos2 = filepart2 - cfg;
+	int pos = pos1>pos2 ? pos1 : pos2;
+
+	memcpy(path,cfg,pos+1);
+	sprintf(path+pos+1,"asciicker_(%s)_A%d_B%d.cfg",name,axes,buttons);
+
+	for (int i=pos+1; path[i]; i++)
+	{
+		// fix characters not valid for path
+		if (path[i]<=32 || path[i]>=127)
+			path[i]='_';
+		else
+		if (path[i]=='<')
+			path[i]='[';
+		else
+		if (path[i]=='>')
+			path[i]=']';
+		else
+		if (path[i]=='/' || path[i]=='\\' || path[i]=='|' || path[i]=='?' || path[i]=='*')
+			path[i]='.';
+		else
+		if (path[i]=='\"')
+			path[i]='\'';
+		else
+		if (path[i]==':')
+			path[i]=';';
+	}
+
+	return true;
+}
+
+bool ReadGamePadConf(uint8_t map[256], const char* name, int axes, int buttons)
+{
+	char path[1024];
+	if (!GetGamePadConfPath(path,name,axes,buttons))
+		return false;
+
+	FILE* f = fopen(path,"rb");
+	if (!f)
+		return false;
+
+	int n = 2*axes+buttons;
+	int r = fread(map,1,n,f);
+	fclose(f);
+
+	return n==r;
+}
+
+bool WriteGamePadConf(const uint8_t* map, const char* name, int axes, int buttons)
+{
+	char path[1024];
+	if (!GetGamePadConfPath(path,name,axes,buttons))
+		return false;
+
+	FILE* f = fopen(path,"wb");
+	if (!f)
+		return false;
+
+	int n = 2*axes+buttons;
+	int w = fwrite(map,1,n,f);
+	fclose(f);
+
+	SyncConf();
+
+	return n==w;
+}
+
+
 void ReadConf(Game* g)
 {
 	FILE* f = fopen(GetConfPath(), "rb");
@@ -60,6 +375,10 @@ void ReadConf(Game* g)
 	{
 		//printf("ReadConf ok\n");
 		int r = fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+
+		fread(&g->perspective, 1, 1, f);
+		fread(&g->blood, 1, 1, f);
+
 		fclose(f);
 	}
 	else
@@ -76,6 +395,10 @@ void WriteConf(Game* g)
 	{
 		//printf("WriteConf ok\n");
 		fwrite(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+
+		fwrite(&g->perspective, 1, 1, f);
+		fwrite(&g->blood, 1, 1, f);
+
 		fclose(f);
 	}
 	else
@@ -1087,6 +1410,8 @@ bool Server::Proc(const uint8_t* ptr, int size)
 			memset(h, 0, sizeof(Human));
 
 			strcpy(h->name, join->name);
+			ConvertToCP437(h->name_cp437,h->name);
+
 			h->prev = 0;
 			h->next = head;
 			if (head)
@@ -1260,7 +1585,7 @@ bool Server::Proc(const uint8_t* ptr, int size)
 	return true;
 }
 
-
+#if 0
 struct KeyCap
 {
 	// key_width  = border(1) + bevels(2) + size(min 2) + WIDTH_DELTA*current_size_multiplier(0-9)
@@ -1486,6 +1811,7 @@ struct Keyb
 	int mul_size;
 	KeyRow rows[5];
 
+public:
 	static const int hide = 1 + 5 * 5 + 1; // 1 cell above bottom + 5 rows x 5 cells + 1 border
 
 	int GetCap(int dx, int dy, int width_mul, char* ch, bool shift_on) const
@@ -1785,6 +2111,610 @@ static const Keyb keyb =
 	}
 };
 
+#endif
+
+Sprite* keyb_sprite[5] = { 0,0,0,0,0 };
+Sprite* caps_sprite[3] = { 0,0,0 };
+
+enum
+{
+	// private virtual keys
+	KBD_COMMA = A3D_MAPEND, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL,
+	KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND,
+	KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE,
+	KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE
+};
+
+static const int caps_plane[3][3][10] =
+{
+	{
+		{ A3D_Q, A3D_W, A3D_E, A3D_R, A3D_T, A3D_Y, A3D_U, A3D_I, A3D_O, A3D_P },
+		{ A3D_A, A3D_S, A3D_D, A3D_F, A3D_G, A3D_H, A3D_J, A3D_K, A3D_L, A3D_ENTER },
+		{ A3D_LSHIFT, A3D_Z, A3D_X, A3D_C, A3D_V, A3D_B, A3D_N, A3D_M, A3D_SPACE, A3D_RSHIFT },
+	},
+	{
+		{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
+		{ KBD_COMMA, KBD_PERIOD, KBD_QUESTION, KBD_PLUS, KBD_MINUS, KBD_MULTIPLY, KBD_SLASH, KBD_UNDERLINE, KBD_EQUAL, A3D_ENTER},
+		{ A3D_LSHIFT, KBD_BACKSLASH, KBD_COLON, KBD_SEMICOLON, KBD_APOSTROPHE, KBD_QUOTATION, KBD_BACKQUOTE, KBD_PIPE, A3D_SPACE, A3D_RSHIFT}
+	},
+	{
+		{ A3D_0, A3D_1, A3D_2, A3D_3, A3D_4, A3D_5, A3D_6, A3D_7, A3D_8, A3D_9 },
+		{ KBD_OPEN, KBD_CLOSE, KBD_CURLYOPEN, KBD_CURLYCLOSE, KBD_BRACKETOPEN, KBD_BRACKETCLOSE, KBD_SMALLER, KBD_GREATER, KBD_TILDE, A3D_ENTER},
+		{ A3D_LSHIFT, KBD_EXCLAMATION, KBD_MONKEY, KBD_HASH, KBD_DOLLAR, KBD_PERCENT, KBD_DASH, KBD_AMPERSAND, A3D_SPACE, A3D_RSHIFT}
+	},
+};
+
+static const char char_plane[3][3][10] =
+{
+	{
+		{ 'q','w','e','r','t','y','u','i','o','p' },
+		{ 'a','s','d','f','g','h','j','k','l', '\n' },
+		{  1 ,'z','x','c','v','b','n','m',' ', 2  },
+	},
+	{
+		{ '0','1','2','3','4','5','6','7','8','9' },
+		{ ',','.','?','+','-','*','/','_','=', '\n'  },
+		{  1,'\\',':',';','\'','"','`','|',' ', 2  },
+	},
+	{
+		{ '0','1','2','3','4','5','6','7','8','9' },
+		{ '(',')','{','}','[',']','<','>','~', '\n'  },
+		{  1 ,'!','@','#','$','%','^','&',' ', 2  },
+	}
+};
+
+struct Keyb
+{
+	int plane = 0;
+	int sect = 0;
+	int dir = 11; // 11: sector mode, 0-10: direction mode
+	bool pad_plane = false;
+
+	int GetPadCap(char* ch, bool shift_on)
+	{
+		if (dir == 11)
+		{
+			if (ch)
+				*ch = 0;
+			return 0;
+		}
+
+
+		int i = 0;
+		int j = 0;
+		switch (dir) 
+		{
+			case 0: i = 1; j = 1; break;
+			case 1: i = 2; j = 2; break;
+			case 2: i = 3; j = 2; break;
+			case 3: i = 2; j = 1; break;
+			case 4: i = 3; j = 0; break;
+			case 5: i = 2; j = 0; break;
+			case 6: i = 1; j = 0; break;
+			case 7: i = 0; j = 0; break;
+			case 8: i = 0; j = 1; break;
+			case 9: i = 0; j = 2; break;
+			case 10: i = 1; j = 2; break;
+		}
+
+		i += sect * 3;
+
+		char cc = char_plane[plane][2-j][i];
+		if (shift_on)
+		{
+			if (cc >= 'a' && cc <= 'z')
+				cc += 'A' - 'a';
+			if (cc == ' ')
+				cc = 8; // shift + space = backspace !!!
+		}
+
+		if (ch)
+			*ch = cc;
+
+		return caps_plane[plane][2-j][i];
+	}
+
+	int GetCap(int dx, int dy, int width, int height, char* ch, bool shift_on) const
+	{
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		int center_x = (width - keyb_w) / 2;
+
+
+		static int press_j = -1;
+		static int press_i = -1;
+
+		static int clicker = 0;
+		clicker++;
+		if (clicker == 10)
+		{
+			press_j = fast_rand() % 3;
+			press_i = fast_rand() % 10;
+		}
+		if (clicker == 15)
+		{
+			clicker = 0;
+			press_j = -1;
+			press_i = -1;
+		}
+
+		int hide = 0;
+
+		for (int j = 0; j < 3; j++)
+		{
+			for (int i = 0; i < 10; i++)
+			{
+				int x = center_x + i * (sprite_w - 1) + (j & 1) * delta_x;
+				int y = j * delta_y - hide;
+
+				Sprite::Frame* sf = keyb_sprite[sprite_i]->atlas;
+
+				int cx = dx - x;
+				int cy = dy - y;
+				if (cx >= 0 && cy >= 0 && cx < sprite_w && cy < sprite_h)
+				{
+					AnsiCell* ac = sf->cell + cy * sf->width + cx;
+
+					// opaqueness test
+					if (ac->bk != 255 && ac->gl != 32 && ac->gl != 0 || ac->fg != 255 && ac->gl != 219)
+					{
+						if (ch)
+						{
+							char cc = char_plane[plane][2 - j][i];
+							if (shift_on)
+							{
+								if (cc >= 'a' && cc <= 'z')
+									cc += 'A' - 'a';
+								if (cc == ' ')
+									cc = 8; // shift + space = backspace !!!
+							}
+							*ch = cc;
+						}
+
+						return caps_plane[plane][2 - j][i];
+					}
+				}
+			}
+		}
+
+		if (ch)
+			*ch = 0;
+		return -1; // return 0 if it was very close to keyb
+	}
+
+	int Width(int width, int height) const
+	{
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		return keyb_w;
+	}
+
+	int Height(int width, int height) const
+	{
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		return keyb_h;
+	}
+
+	void Paint(AnsiCell* ptr, int width, int height, int hide, const uint8_t key[32], bool gamepad) const
+	{
+		// hide should be netween 0 and Height()
+
+		// shift modifies appeariance of space->BS and enter->LF, (possibly caps az->AZ)
+		bool shift_on = key[A3D_LSHIFT >> 3] & (1 << (A3D_LSHIFT & 7));
+		shift_on |= key[A3D_RSHIFT >> 3] & (1 << (A3D_RSHIFT & 7));
+
+
+		int sprite_w = 2 * (width - 1) / 21 + 1;
+		int sprite_h = 0;
+		int sprite_i = 0;
+		int delta_x = 0;
+		int delta_y = 0;
+		int delta_d = 0;
+		int caps_dy = 0;
+
+		if (sprite_w < 9)
+		{
+			sprite_w = 7;
+			sprite_h = 8;
+			delta_x = 3;
+			delta_y = 5;
+			delta_d = 0;
+			caps_dy = 0;
+			sprite_i = 0;
+		}
+		else
+		if (sprite_w < 11)
+		{
+			sprite_w = 9;
+			sprite_h = 8;
+			delta_x = 4;
+			delta_y = 5;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 1;
+		}
+		else
+		if (sprite_w < 13)
+		{
+			sprite_w = 11;
+			sprite_h = 10;
+			delta_x = 5;
+			delta_y = 6;
+			delta_d = 1;
+			caps_dy = 0;
+			sprite_i = 2;
+		}
+		else
+		if (sprite_w < 15)
+		{
+			sprite_w = 13;
+			sprite_h = 13;
+			delta_x = 6;
+			delta_y = 8;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 3;
+		}
+		else
+		{
+			sprite_w = 15;
+			sprite_h = 15;
+			delta_x = 7;
+			delta_y = 9;
+			delta_d = 1;
+			caps_dy = 1;
+			sprite_i = 4;
+		}
+
+		int keyb_w = 21 * (sprite_w - 1) / 2 + 1;
+		int keyb_h = 2 * delta_y + sprite_h;
+
+		int center_x = (width - keyb_w) / 2;
+
+
+		/*
+		static int press_j = -1;
+		static int press_i = -1;
+
+		static int clicker = 0;
+		clicker++;
+		if (clicker == 10)
+		{
+			press_j = fast_rand() % 3;
+			press_i = fast_rand() % 10;
+		}
+		if (clicker == 15)
+		{
+			clicker = 0;
+			press_j = -1;
+			press_i = -1;
+		}
+		*/
+
+		for (int j = 2; j >= 0; j--)
+		{
+			for (int i = 9; i >= 0; i--)
+			{
+				int x = center_x + i * (sprite_w - 1) + (j & 1) * delta_x;
+				int y = j * delta_y - hide;
+
+				Sprite::Frame* sf = keyb_sprite[sprite_i]->atlas;
+
+				bool press = false;
+
+				int clip[] = { 0,0,sprite_w,sprite_h };
+				if (gamepad)
+				{
+					if (j == 2)  // 4
+					{
+						if (sect == 0 && i < 4 ||
+							sect == 1 && i >= 3 && i < 7 ||
+							sect == 2 && i >= 6 && i < 10)
+						{
+							bool hi = false;
+							int k = i - 3 * sect;
+							switch (dir)
+							{
+								case 9: hi = k == 0; break; // leftmost
+								case 10: hi = k == 1; break; // left
+								case 1: hi = k == 2; break; // right
+								case 2: hi = k == 3; break; // rightmost
+							}
+
+							if (hi)
+							{
+								clip[0] = 2 * sprite_w;
+								clip[2] = 3 * sprite_w;
+								if (!press)
+									y -= delta_d;
+								press = true;
+							}
+							else
+							{
+								clip[0] = sprite_w;
+								clip[2] = 2 * sprite_w;
+							}
+						}
+					}
+					else
+					if (j == 1) // 3
+					{
+						if (sect == 0 && i < 3 ||
+							sect == 1 && i >= 3 && i < 6 ||
+							sect == 2 && i >= 6 && i < 9)
+						{
+							bool hi = false;
+							int k = i - 3 * sect;
+							switch (dir)
+							{
+								case 8: hi = k == 0; break; // left
+								case 0: hi = k == 1; break; // center
+								case 3: hi = k == 2; break; // right
+							}
+
+							if (hi)
+							{
+								clip[0] = 2 * sprite_w;
+								clip[2] = 3 * sprite_w;
+								if (!press)
+									y -= delta_d;
+								press = true;
+							}
+							else
+							{
+								clip[0] = sprite_w;
+								clip[2] = 2 * sprite_w;
+							}
+						}
+					}
+					else 
+					if (j == 0) // 4
+					{
+						if (sect == 0 && i < 4 ||
+							sect == 1 && i >= 3 && i < 7 ||
+							sect == 2 && i >= 6 && i < 10)
+						{
+							bool hi = false;
+							int k = i - 3 * sect;
+							switch (dir)
+							{
+								case 7: hi = k == 0; break; // leftmost
+								case 6: hi = k == 1; break; // left
+								case 5: hi = k == 2; break; // right
+								case 4: hi = k == 3; break; // rightmost
+							}
+
+							if (hi)
+							{
+								clip[0] = 2 * sprite_w;
+								clip[2] = 3 * sprite_w;
+								if (!press)
+									y -= delta_d;
+								press = true;
+							}
+							else
+							{
+								clip[0] = sprite_w;
+								clip[2] = 2 * sprite_w;
+							}
+						}
+					}
+				}
+
+				int cap = caps_plane[plane][2-j][i];
+
+				if (key[cap>>3] & (1<<(cap&7)))
+				{
+					if (!press)
+						y -= delta_d;
+					clip[0] = 2 * sprite_w;
+					clip[2] = 3 * sprite_w;
+				}
+
+				BlitSprite(ptr, width, height, sf, x, y, clip);
+
+				int caps_clip[] = {i*5, j*5, (i+1) * 5, (j+1) * 5 };
+
+				Sprite::Frame* caps_sf = caps_sprite[plane]->atlas;
+				BlitSprite(ptr, width, height, caps_sf, x + sprite_w/2 - 2, y + sprite_h/2 - 2 + caps_dy, caps_clip);
+			}
+		}
+
+	}
+};
+
+Keyb keyb;
+
 ////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1843,9 +2773,23 @@ void LoadSprites()
 	_set_printf_count_output(1);
 #endif
 
+	// load other sprtes...
+	LoadFont1();
+	LoadGamePad();
+
 	// main buts
 	character_button = LoadSpriteBP("character.xp", 0, false);
 	inventory_sprite = LoadSpriteBP("inventory.xp", 0, false);
+
+	keyb_sprite[0] = LoadSpriteBP("keyb-07.xp", 0, false);
+	keyb_sprite[1] = LoadSpriteBP("keyb-09.xp", 0, false);
+	keyb_sprite[2] = LoadSpriteBP("keyb-11.xp", 0, false);
+	keyb_sprite[3] = LoadSpriteBP("keyb-13.xp", 0, false);
+	keyb_sprite[4] = LoadSpriteBP("keyb-15.xp", 0, false);
+
+	caps_sprite[0] = LoadSpriteBP("keyb-caps-a.xp", 0, false);
+	caps_sprite[1] = LoadSpriteBP("keyb-caps-b.xp", 0, false);
+	caps_sprite[2] = LoadSpriteBP("keyb-caps-c.xp", 0, false);
 
 	fire_sprite = LoadSpriteBP("fire.xp", 0, false);
 
@@ -2186,6 +3130,9 @@ Sprite* GetSprite(const SpriteReq* req, int clr)
 
 void FreeSprites()
 {
+	FreeFont1();
+	FreeGamePad();
+
 	// handles double refs but not sprite prefs!
 	while (Sprite* s = GetFirstSprite())
 		FreeSprite(s);
@@ -2197,7 +3144,10 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
 
+	g->menu_depth = -1;
+
 	g->perspective = true;
+	g->blood = true;
 
 	fast_srand(stamp);
 
@@ -2603,6 +3553,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	#endif
 
 	strcpy(g->player.name, player_name);
+	strcpy(g->player.name_cp437, player_name_cp437);
 
 	if (server)
 	{
@@ -2626,7 +3577,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->show_buts = true;
 	g->bars_pos = 7;
 
-	g->keyb_hide = keyb.hide;
+	int width = 112, height = 63;
+	g->keyb_hide = 1000;// keyb.Height(width, height);
 
 	g->renderer = CreateRenderer(stamp);
 	g->physics = CreatePhysics(terrain, world, pos, dir, yaw, stamp);
@@ -2669,6 +3621,8 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->player_inst = CreateInst(world, g->player.sprite, flags, pos, yaw, g->player.anim, g->player.frame, reps, 0, -1/*not in story*/);
 	SetInstSpriteData(g->player_inst, &g->player);
 
+	if (!prime_game)
+		prime_game = g;
 	return g;
 }
 
@@ -2676,6 +3630,9 @@ void DeleteGame(Game* g)
 {
 	if (g)
 	{
+		if (g == prime_game)
+			prime_game = 0;
+
 		DeleteInst(g->player_inst);
 
 		for (int i = 0; i < g->inventory.my_items; i++)
@@ -3502,6 +4459,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (_stamp-stamp > 500000) // treat lags longer than 0.5s as stall
 		stamp = _stamp;
 
+	// handle dirpad autorep
+	if (input.pad_connected && input.pad_autorep>0)
+	{
+		if (stamp - input.pad_stamp > 500000)
+		{
+			input.pad_stamp = stamp - 500000 + 50000; // 20Hz
+			OnPadButton(input.pad_autorep-1, true);
+		}
+	}
+
 	if (PressKey && _stamp - PressStamp > 50000 /*500000*/)
 	{
 		// in render(): 
@@ -3528,6 +4495,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 		// revert it (OnKeyb nulls it)
 		KeybAutoRepChar = ch;
+	}
+
+	if (render_size[0] != width || render_size[1] != height)
+	{
+		int kh = keyb.Height(width, height);
+		if (!show_keyb || keyb_hide > kh)
+			keyb_hide = kh;
 	}
 
 	render_size[0] = width;
@@ -3646,6 +4620,15 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			io.y_force *= speed;
 		}
 
+		if (menu_depth<0)
+		{
+			if (input.contact[3].action == Input::Contact::NONE)
+			{
+				io.x_force += input.pad_axis[0] / 1024 / 32.0f;
+				io.y_force -= input.pad_axis[1] / 1024 / 32.0f;
+			}
+		}
+
 		if (!torque_handled)
 		{
 			io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
@@ -3655,6 +4638,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			//io.y_force = 1;
 		}
 	}
+
+	if (menu_depth<0)
+		io.torque += (input.pad_axis[4] - input.pad_axis[5]) / 1024 / 32.0f;
 
 	io.jump = input.jump;
 
@@ -3693,7 +4679,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int steps = Animate(physics, _stamp, &io, player.req.mount);
 
-	if (io.grounded)
+	if (io.grounded && blood)
 		BloodLeak(&player, steps);
 
 	prev_grounded = io.grounded;
@@ -3966,7 +4952,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 
-					if (pio.grounded)
+					if (pio.grounded && blood)
 						BloodLeak(h, s);
 
 					if (h->target)
@@ -4041,7 +5027,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					}
 					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
 
-					if (pio.grounded)
+					if (pio.grounded && blood)
 						BloodLeak(h, s);
 				}
 
@@ -4090,7 +5076,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 												float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
 												float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
 												float xy[2] = { h->target->pos[0] + dr * cosf(dt), h->target->pos[0] + dr * sinf(dt) };
-												PaintTerrain(xy, r, 5/*blood*/);
+												if (blood)
+													PaintTerrain(xy, r, 5/*blood*/);
 											}
 
 											float d = 15.0f / sqrtf(dx*dx + dy * dy);
@@ -4319,7 +5306,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									float dr = dR * sqrtf((fast_rand() & 0xfff) / (float)0xfff);
 									float dt = (fast_rand() & 0xfff) * (float)(2.0 * M_PI) / (float)0xfff;
 									float xy[2] = { h->target->pos[0] + dr * cosf(dt), h->target->pos[0] + dr * sinf(dt) };
-									PaintTerrain(xy, r, 5/*blood*/);
+									if (blood)
+										PaintTerrain(xy, r, 5/*blood*/);
 								}
 
 								float d = 15.0f / sqrtf(dx*dx + dy * dy);
@@ -4461,7 +5449,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss, perspective);
 
-	if (input.shoot /*&& !player.shooting*/ && player.req.weapon == WEAPON::REGULAR_CROSSBOW)
+	if (input.shoot /*&& !player.shooting*/ && 
+		player.req.weapon == WEAPON::REGULAR_CROSSBOW &&
+		stamp - player.shoot_stamp > 1000000) // 1s cooldown (would be nice to animate xbow reload)
 	{
 		// this should be done inside SetActionAttack() if weapon is crossbow
 
@@ -4619,7 +5609,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				else
 					player.shoot_target = 0;
 
-				printf(hit ? "HIT!\n" : "MISS\n");
+				//printf(hit ? "HIT!\n" : "MISS\n");
 			}
 		}
 
@@ -4657,7 +5647,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			if (UnprojectCoords2D(renderer, input.shoot_xy, player.shoot_to))
 			{
-				printf("shot_to.z = %f\n", player.shoot_to[2]);
+				//printf("shot_to.z = %f\n", player.shoot_to[2]);
 				//player.shoot_to[0] /= HEIGHT_CELLS;
 				//player.shoot_to[1] /= HEIGHT_CELLS;
 
@@ -4819,7 +5809,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				{
 					int view[3];
 					ProjectCoords(renderer, human->talk[i].pos, view);
-					human->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false, human->name);
+					human->talk[i].box->Paint(ptr, width, height, view[0], view[1] + 8 + dy, false, human->name_cp437);
 				}
 				else
 				if (h == &player || server)
@@ -4843,7 +5833,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	int contact_items = 0;
 	int contact_item[4] = { -1,-1,-1,-1 };
 
-	inventory.UpdateLayout(width,height,scene_shift);
+	inventory.UpdateLayout(width,height,scene_shift,bars_pos);
 
 	if (scene_shift > 0)
 	{
@@ -5128,6 +6118,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		items_count = items;
 		items_inrange = inrange;
 
+		// crop pad_item index (note: it is in range (0..items_count, where 0 means no selection)
+		input.pad_item = input.pad_item < items_count ? input.pad_item : items_count;
 
 		int clip_width = width - scene_shift/2;
 
@@ -5170,6 +6162,26 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			items_xarr[i] = items_x-1;
 
 			Sprite::Frame* frame = inrange[i]->proto->sprite_2d->atlas;
+
+			if (i+1 == input.pad_item)
+			{
+				int x0 = items_x;
+				int x1 = items_x + frame->width - 1;
+				int y0 = items_y - max_height;
+				int y1 = items_y - 1;
+
+				AnsiCell* ac;
+				for (int y=y0; y<=y1; y++)
+				{
+					for (int x=x0; x<=x1; x++)
+					{
+						ac = ptr + x + y * width;
+						ac->bk = brown;
+						ac->fg = black;
+						ac->gl = 32;
+					}
+				}
+			}			
 
 			// check if in contact
 			int in_contact = -1;
@@ -5279,6 +6291,57 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		items_xarr[items] = items_x - 1;
 		items_ylo = items_y - max_height - 1;
 		items_yhi = items_y;
+
+		if (input.pad_item)
+		{
+			// redraw frame hilight
+			int x0 = items_xarr[input.pad_item-1];
+			int x1 = items_xarr[input.pad_item];
+			int y0 = items_ylo;
+			int y1 = items_yhi;
+
+			int xc = (x0+x1)/2;
+
+			AnsiCell* ac;
+
+			ac = ptr + x0 + y0 * width;
+			ac->fg = yellow;
+			ac->gl = 192; // ll
+
+			ac = ptr + x1 + y0 * width;
+			ac->fg = yellow;
+			ac->gl = 217; // lr
+
+			ac = ptr + x0 + y1 * width;
+			ac->fg = yellow;
+			ac->gl = 218; // ul
+
+			ac = ptr + x1 + y1 * width;
+			ac->fg = yellow;
+			ac->gl = 191; // ur
+
+			for (int x=x0+1; x< x1; x++)
+			{
+				ac = ptr + x + y0 * width;
+				ac->fg = yellow;
+				if (x != xc)
+					ac->gl = 196; // hor
+
+				ac = ptr + x + y1 * width;
+				ac->fg = yellow;
+				ac->gl = 196; // hor
+			}
+			for (int y=y0+1; y< y1; y++)
+			{
+				ac = ptr + x0 + y * width;
+				ac->fg = yellow;
+				ac->gl = 179; // ver
+
+				ac = ptr + x1 + y * width;
+				ac->fg = yellow;
+				ac->gl = 179; // ver
+			}
+		}
 	}
 	else
 	{
@@ -5345,8 +6408,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (!show_buts && bars_pos > 0)
 		bars_pos--;
 
-	if (show_keyb || keyb_hide < 1 + 5 * 5 + 1)
+	int kh = keyb.Height(width, height);
+
+	if (show_keyb || keyb_hide < kh)
 	{
+		#if 0
 		int mul, keyb_width;
 		for (int mode = 1; mode <= 16; mode++)
 		{
@@ -5368,10 +6434,26 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		for (int i = 0; i < 32; i++)
 			key[i] = keyb_key[i] | input.key[i];
 		keyb.Paint(ptr, keyb_pos[0], keyb_pos[1], width, height, keyb_mul, key);
+		#endif
+
+		// w = (sprite_w-1) * 10.5 + 1
+
+		// (sprite_w-1) * 10.5 = w-1
+		// sprite_w-1 = (w-1)/10.5
+		// sprite_w = (w-1)/10.5 + 1
+
+
+		uint8_t key[32];
+		for (int i = 0; i < 32; i++)
+			key[i] = keyb_key[i] | input.key[i];
+		keyb.Paint(ptr, width, height, keyb_hide, key, input.pad_connected);
 	}
 	
 	if (show_keyb)
 	{
+		if (keyb_hide > kh)
+			keyb_hide = kh;
+
 		if (keyb_hide > 0)
 		{
 			keyb_hide -= f120;
@@ -5381,48 +6463,11 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	}
 	else
 	{
-		if (keyb_hide < keyb.hide)
+		if (keyb_hide < kh)
 		{
 			keyb_hide += f120;
-			if (keyb_hide > keyb.hide)
-				keyb_hide = keyb.hide;
-		}
-	}
-
-	if (input.shot)
-	{
-		input.shot = false;
-		FILE* f = fopen("./shot.xp", "wb");
-		if (f)
-		{
-			uint32_t hdr[4] = { (uint32_t)-1, (uint32_t)1, (uint32_t)width, (uint32_t)height };
-			fwrite(hdr, sizeof(uint32_t), 4, f);
-			for (int x = 0; x < width; x++)
-			{
-				for (int y = height - 1; y >= 0; y--)
-				{
-					AnsiCell* c = ptr + y * width + x;
-					int fg = c->fg - 16;
-					int f_r = (fg % 6) * 51; fg /= 6;
-					int f_g = (fg % 6) * 51; fg /= 6;
-					int f_b = (fg % 6) * 51; fg /= 6;
-
-					int bk = c->bk - 16;
-					int b_r = (bk % 6) * 51; bk /= 6;
-					int b_g = (bk % 6) * 51; bk /= 6;
-					int b_b = (bk % 6) * 51; bk /= 6;
-
-					uint8_t f_rgb[3] = { (uint8_t)f_b,(uint8_t)f_g,(uint8_t)f_r };
-					uint8_t b_rgb[3] = { (uint8_t)b_b,(uint8_t)b_g,(uint8_t)b_r };
-					uint32_t chr = c->gl;
-
-					fwrite(&chr, sizeof(uint32_t), 1, f);
-					fwrite(f_rgb, 1, 3, f);
-					fwrite(b_rgb, 1, 3, f);
-				}
-			}
-
-			fclose(f);
+			if (keyb_hide > kh)
+				keyb_hide = kh;
 		}
 	}
 
@@ -5467,11 +6512,59 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			server->Send((const uint8_t*)&req_pose, sizeof(STRUCT_REQ_POSE));
 		}
 	}
+
+	if (show_gamepad)
+		PaintGamePad(ptr, width, height, stamp);
+		
+	PaintMenu(ptr, width, height);
+	/*
+	Font1Paint(ptr, width, height, 10, 22, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 0);
+	Font1Paint(ptr, width, height, 10, 10, "0.123456789\nZOMBEK DOMBEK\nZIBALABULGAMUF?", 1);
+	*/
+
+	if (input.shot)
+	{
+		input.shot = false;
+		FILE* f = fopen("./shot.xp", "wb");
+		if (f)
+		{
+			uint32_t hdr[4] = { (uint32_t)-1, (uint32_t)1, (uint32_t)width, (uint32_t)height };
+			fwrite(hdr, sizeof(uint32_t), 4, f);
+			for (int x = 0; x < width; x++)
+			{
+				for (int y = height - 1; y >= 0; y--)
+				{
+					AnsiCell* c = ptr + y * width + x;
+					int fg = c->fg - 16;
+					int f_r = (fg % 6) * 51; fg /= 6;
+					int f_g = (fg % 6) * 51; fg /= 6;
+					int f_b = (fg % 6) * 51; fg /= 6;
+
+					int bk = c->bk - 16;
+					int b_r = (bk % 6) * 51; bk /= 6;
+					int b_g = (bk % 6) * 51; bk /= 6;
+					int b_b = (bk % 6) * 51; bk /= 6;
+
+					uint8_t f_rgb[3] = { (uint8_t)f_b,(uint8_t)f_g,(uint8_t)f_r };
+					uint8_t b_rgb[3] = { (uint8_t)b_b,(uint8_t)b_g,(uint8_t)b_r };
+					uint32_t chr = c->gl;
+
+					fwrite(&chr, sizeof(uint32_t), 1, f);
+					fwrite(f_rgb, 1, 3, f);
+					fwrite(b_rgb, 1, 3, f);
+				}
+			}
+
+			fclose(f);
+		}
+	}
 }
 
 void Game::OnSize(int w, int h, int fw, int fh)
 {
+	bool pad = input.pad_connected;
 	memset(&input, 0, sizeof(Input));
+	input.pad_connected = pad;
 	input.size[0] = w;
 	input.size[1] = h;
 	font_size[0] = fw;
@@ -5480,7 +6573,69 @@ void Game::OnSize(int w, int h, int fw, int fh)
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)
 {
+	if (keyb == GAME_KEYB::KEYB_DOWN)	
+	{
+		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
+		int shot_key = key & ~A3D_AUTO_REPEAT;
+
+		if (shot_key == A3D_F10 && !auto_rep)
+			input.shot = true;
+	}
+
 	// handle layers first ...
+	if (menu_depth>=0)
+	{
+		MenuKeyb(keyb,key);
+		return;
+	}
+
+	if (show_gamepad)
+	{
+		int k = -1;
+		switch (keyb)
+		{
+			case GAME_KEYB::KEYB_CHAR:
+			{
+				switch (key)
+				{
+					case ' ': k = 0; break;
+					case '\n': k = 1; break;
+					case 8:
+					case '\\':
+					case 27: k = 2; break;
+
+					default:
+						if (key>32 && key<127)
+							k = key;
+				}
+				break;
+			}
+
+			case GAME_KEYB::KEYB_PRESS:
+			case GAME_KEYB::KEYB_DOWN:
+			{
+				switch (key)
+				{
+					case A3D_ENTER: k = 1; break;
+					case A3D_ESCAPE: k = 2; break;
+					case A3D_UP: k = 3; break;
+					case A3D_DOWN: k = 4; break;
+					case A3D_LEFT: k = 5; break;
+					case A3D_RIGHT: k = 6; break;
+				}
+				break;
+			}
+
+			default:
+				break;
+		}
+
+		if (k>=0)
+			GamePadKeyb(k, stamp);
+
+		return;
+	}
+	
 
 	// if nothing focused 
 
@@ -5505,7 +6660,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 		if ((key == A3D_TAB || key == A3D_ESCAPE) && !auto_rep)
 		{
-			if (!player.talk_box && key == A3D_TAB && show_buts)
+			if (!player.talk_box && key == A3D_TAB/* && show_buts*/)
 			{
 				CancelItemContacts();
 				//show_buts = false;
@@ -5594,9 +6749,6 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				show_inventory = false;
 			}
 		}
-
-		if (key == A3D_F10 && !auto_rep)
-			input.shot = true;
 
 		if (!player.talk_box && !auto_rep)
 		{
@@ -5725,20 +6877,41 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (show_inventory)
 			{
-				switch (key)
+				if (input.contact[3].action == Input::Contact::ITEM_GRID_DRAG)
 				{
-					case A3D_UP:
-						inventory.FocusNext(0, 1);
-						break;
-					case A3D_DOWN:
-						inventory.FocusNext(0, -1);
-						break;
-					case A3D_LEFT:
-						inventory.FocusNext(-1, 0);
-						break;
-					case A3D_RIGHT:
-						inventory.FocusNext(1, 0);
-						break;
+					switch (key)
+					{
+						case A3D_UP:
+							input.contact[3].pos[1]-=font_size[1];
+							break;
+						case A3D_DOWN:
+							input.contact[3].pos[1]+=font_size[1];
+							break;
+						case A3D_LEFT:
+							input.contact[3].pos[0]-=font_size[0];
+							break;
+						case A3D_RIGHT:
+							input.contact[3].pos[0]+=font_size[0];
+							break;
+					}
+				}
+				else
+				{
+					switch (key)
+					{
+						case A3D_UP:
+							inventory.FocusNext(0, 1);
+							break;
+						case A3D_DOWN:
+							inventory.FocusNext(0, -1);
+							break;
+						case A3D_LEFT:
+							inventory.FocusNext(-1, 0);
+							break;
+						case A3D_RIGHT:
+							inventory.FocusNext(1, 0);
+							break;
+					}
 				}
 			}
 		}
@@ -5763,7 +6936,10 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			}
 
 			if (key == '\\' || key == '|')
-				perspective = !perspective;
+			{
+				// perspective = !perspective;
+				ToggleMenu(0);
+			}
 
 			if (key == '0')
 			{
@@ -5775,6 +6951,72 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 						// only if not in use
 						if (!inventory.my_item[inventory.focus].in_use)
 							DropItem(inventory.focus);
+					}
+				}
+			}
+
+			if (key=='y' || key=='Y')
+			{
+				if (show_inventory)
+				{
+					Input::Contact* con = input.contact+3;
+					if (con->action == Input::Contact::NONE && inventory.focus>=0)
+					{
+						// cancel all contacts
+						// ... or prevent entering 'y' state if already there is item contact
+						CancelItemContacts();
+
+						// get xy from focused item
+						int* xy = inventory.my_item[inventory.focus].xy;
+
+						// keyb_y = 0
+						// gamepad_x = 1
+						// gamepad_y = 2
+
+						int but = 0; // keyb_y
+						// StartContact(3/*KEYB/PAD*/, xy[0],xy[1], but);
+
+						// synthetize contact
+						
+						con->action = Input::Contact::ITEM_GRID_DRAG;
+						con->item = inventory.my_item[inventory.focus].item;
+
+
+						con->my_item = inventory.focus; // ?
+
+						// calc synthetized scrren position for contact
+
+						int ix = inventory.layout_x + xy[0]*4 + 4;
+						int iy = inventory.layout_y + xy[1]*4 + 
+								 inventory.layout_height - 6 - (inventory.height*4-1) + 
+								 inventory.scroll;
+
+						// centered on item
+						ix += con->item->proto->sprite_2d->atlas->width/2;
+						iy += con->item->proto->sprite_2d->atlas->height/2;	
+
+						// shift slightly UP (so user can see we're in moving state)
+						iy++;
+
+						// flip y axis (sceen coords are top to bottom)
+						iy = render_size[1] - 1 - iy;	
+
+						con->drag = 0; // button
+						con->pos[0] = ix*font_size[0] + font_size[0]/2;
+						con->pos[1] = iy*font_size[1] + font_size[1]/2;
+						con->drag_from[0] = con->pos[0];
+						con->drag_from[1] = con->pos[1];
+
+						con->keyb_cap = -1;
+						con->margin = 0;
+						con->player_hit = false;
+						con->start_yaw = 0;
+					}
+					else
+					if (con->action == Input::Contact::ITEM_GRID_DRAG)
+					{
+						// try to emplace item
+						EndContact(3,con->pos[0],con->pos[1]);
 					}
 				}
 			}
@@ -5975,7 +7217,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 		if (key == A3D_TAB)
 		{
 			// HANDLED BY EMULATION!
-			if (!player.talk_box && show_buts)
+			if (!player.talk_box/* && show_buts*/)
 			{
 				CancelItemContacts();
 				//show_buts = false;
@@ -6071,7 +7313,7 @@ void Game::StartContact(int id, int x, int y, int b)
 	float yaw = 0;
 	Item* item = 0;
 
-	if (show_buts && cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0] >= render_size[0] - bars_pos) && b == 1)
+	if (/*show_buts &&*/ cp[1] >= render_size[1] - 6 && (cp[0] < bars_pos || cp[0] >= render_size[0] - bars_pos) && b == 1)
 	{
 		// main but
 		// perform action immediately
@@ -6080,7 +7322,11 @@ void Game::StartContact(int id, int x, int y, int b)
 		if (cp[0] >= render_size[0] - bars_pos)
 		{
 			// temporarily switch ortho/perspective
-			perspective = !perspective;
+			//perspective = !perspective;
+			if (id==0)
+				ToggleMenu(1);
+			else
+				ToggleMenu(2);
 
 			// temporarily drop item
 			/*
@@ -6367,12 +7613,35 @@ void Game::StartContact(int id, int x, int y, int b)
 	{
 		if (show_keyb)
 		{
-			bool shift_on = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+			bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+			bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
+			bool shift_on = left_shift || right_shift;
+			
 			char ch=0;
+			
+			#if 0
 			cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, &ch, shift_on);
+			#endif
+			cap = keyb.GetCap(cp[0], cp[1], render_size[0], render_size[1], &ch, shift_on);
+
+			if (left_shift && cap == A3D_RSHIFT)
+			{
+				keyb.plane = (keyb.plane + 1) % 3; // cycle++
+				keyb.pad_plane = false; // prevent resetting by pad
+			}
+			else
+			if (right_shift && cap == A3D_LSHIFT)
+			{
+				keyb.plane = (keyb.plane + 2) % 3; // cycle--
+				keyb.pad_plane = false; // prevent resetting by pad
+			}
+			
 
 			if (b!=1 && cap > 0)
 				cap = 0;
+
+			if (ch>=32 && ch<127 || ch==8 || ch=='\n')
+				Buzz();
 
 			if (cap>0)
 			{
@@ -6390,7 +7659,10 @@ void Game::StartContact(int id, int x, int y, int b)
 			{
 				if (cap == A3D_LSHIFT)
 				{
-					keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
+					if (id==0)
+						keyb_key[cap >> 3] ^= 1 << (cap & 7);  // toggle shift
+					else
+						keyb_key[cap >> 3] |= 1 << (cap & 7);
 				}
 				else
 				{
@@ -6709,13 +7981,17 @@ void Game::MoveContact(int id, int x, int y)
 		{			
 			int cp[2] = { x,y };
 			ScreenToCell(cp);
+			#if 0 
 			int cap = keyb.GetCap(cp[0] - keyb_pos[0], cp[1] - keyb_pos[1], keyb_mul, 0,false);
+			#endif
+			int cap = keyb.GetCap(cp[0], cp[1], render_size[0], render_size[1], 0, false);
+
 			if (cap != con->keyb_cap)
 			{
 				con->action = Input::Contact::NONE;
 				
 				int uncap = con->keyb_cap;
-				if (uncap != A3D_LSHIFT)
+				if (uncap != A3D_LSHIFT || id!=0)
 					keyb_key[uncap >> 3] &= ~(1 << (uncap & 7));  // un-hilight keycap
 
 				if (uncap == KeybAutoRepCap)
@@ -6852,7 +8128,7 @@ void Game::EndContact(int id, int x, int y)
 		case Input::Contact::KEYBCAP:
 		{
 			// maybe we should clear it also when another cap is pressed?
-			if (con->keyb_cap!=A3D_LSHIFT)
+			if (con->keyb_cap!=A3D_LSHIFT || id!=0)
 				keyb_key[con->keyb_cap >> 3] &= ~(1 << (con->keyb_cap & 7));  // un-hilight keycap
 
 			if (KeybAutoRepCap == con->keyb_cap)
@@ -6896,7 +8172,7 @@ void Game::EndContact(int id, int x, int y)
 					}
 				}
 				else
-				if (show_buts)
+				//if (show_buts)
 				{
 					CancelItemContacts();
 					//show_buts = false;
@@ -6958,6 +8234,36 @@ int FirstFree(int size, int* arr)
 
 void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 {
+	// handle layers first ...
+	if (menu_depth>=0)
+	{
+		MenuMouse(mouse,x,y);
+		return;
+	}
+
+	if (show_gamepad)
+	{
+		int ev = -1;
+		switch (mouse)
+		{
+			case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: ev = 0; break;
+			case GAME_MOUSE::MOUSE_MOVE: ev = 1; break;
+			case GAME_MOUSE::MOUSE_LEFT_BUT_UP: ev = 2; break;
+
+			default:
+				break;
+		}
+
+		if (ev>=0)
+		{
+			int p[2] = {x,y};
+			ScreenToCell(p);
+			GamePadContact(0,ev,p[0],p[1], stamp);
+		}
+
+		return;
+	}
+
 	#ifdef TOUCH_EMU
 	static int buts_id[3] = {-1,-1,-1}; // L,R,M
 	// emulate touches for easier testing
@@ -7148,6 +8454,35 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 	if (id<1 || id>3)
 		return;
 
+	// handle layers first ...
+	if (menu_depth>=0)
+	{
+		MenuTouch(touch,id,x,y);
+		return;
+	}
+
+
+	if (show_gamepad)
+	{
+		int ev = -1;
+		switch (touch)
+		{
+			case GAME_TOUCH::TOUCH_BEGIN: ev = 0; break;
+			case GAME_TOUCH::TOUCH_MOVE: ev = 1; break;
+			case GAME_TOUCH::TOUCH_END: ev = 2; break;
+			case GAME_TOUCH::TOUCH_CANCEL: ev = 3; break;
+		}
+
+		if (ev>=0)
+		{
+			int p[2] = {x,y};
+			ScreenToCell(p);
+			GamePadContact(id,ev,p[0],p[1], stamp);
+		}
+
+		return;
+	}
+
 	switch (touch)
 	{
 		case TOUCH_BEGIN:
@@ -7166,7 +8501,8 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 		case TOUCH_CANCEL:
 			if (input.contact[id].action == Input::Contact::KEYBCAP)
 			{
-				if (input.contact[id].keyb_cap!=A3D_LSHIFT)
+				// this should be always true
+				if (input.contact[id].keyb_cap!=A3D_LSHIFT || id!=0)
 					keyb_key[input.contact[id].keyb_cap >> 3] &= ~(1 << (input.contact[id].keyb_cap & 7));  // un-hilight keycap
 			 
 				if (input.contact[id].keyb_cap == KeybAutoRepCap)
@@ -7195,7 +8531,9 @@ void Game::OnFocus(bool set)
 		}
 
 		int w = input.size[0], h = input.size[1];
+		bool pad = input.pad_connected;
 		memset(&input, 0, sizeof(Input));
+		input.pad_connected = pad;
 		input.size[0] = w;
 		input.size[1] = h;
 	}
@@ -7207,7 +8545,572 @@ void Game::OnMessage(const uint8_t* msg, int len)
 	// this is called by JS or game_app (already on game's thread)
 }
 
+void Game::OnPadMount(bool connect)
+{
+	input.pad_connected = connect;
+	input.pad_button = 0;
+	input.pad_autorep = 0;
+	input.pad_item = 0;
+	input.pad_stamp = stamp;
+	memset(input.pad_axis, 0, sizeof(int16_t) * 32);
+	if (connect)
+		OnPadAxis(-1, 0);
 
+	if (menu_depth>=0)
+	{
+		MenuPadMount(connect);
+	}
+}
+
+void Game::OnPadButton(int b, bool down)
+{
+	if (show_gamepad)
+	{
+		return;
+	}		
+
+	if (input.pad_autorep == 2+1 && !player.talk_box)
+	{
+		// clear and or ignore delete autorep if not in chat_box
+		input.pad_autorep = 0;
+		if (b==2 && !down)
+			return;
+	}
+
+	if (b >= 0 && b < 32)
+	{
+		if (down)
+		{
+			if (b>=11 && b <=14 || b==2 && player.talk_box) // autorep dirpad and delete char in talk_box
+			{
+				if (input.pad_autorep != b+1)
+				{
+					input.pad_autorep = b+1; // +1 so mem-setting to 0 is fine
+					input.pad_stamp = stamp;
+				}
+			}
+			input.pad_button |= 1 << b;
+		}
+		else
+		{
+			input.pad_autorep = 0;
+			input.pad_button &= ~(1 << b);
+		}
+
+		if (menu_depth>=0)
+		{
+			// handle menu navi
+			MenuPadButton(b,down);
+			return;
+		}
+
+		if (down)
+		{
+			if (!player.talk_box)
+			{
+				switch (b)
+				{
+					case 0:
+					{
+						input.shoot = true;
+						input.shoot_xy[0] = -1;
+						input.shoot_xy[1] = -1;
+						player.SetActionAttack(stamp);
+						break;
+					}
+
+					case 1: 
+					{
+						input.jump = true;
+						break;
+					}
+
+					case 2:
+					{
+						// item_grid (inventory ops)
+						if (show_inventory)
+						{
+							Input::Contact* con = input.contact+3;
+							if (con->action == Input::Contact::NONE && inventory.focus>=0)
+							{
+								// cancel all contacts
+								// ... or prevent entering 'y' state if already there is item contact
+								CancelItemContacts();
+
+								// get xy from focused item
+								int* xy = inventory.my_item[inventory.focus].xy;
+
+								// keyb_y = 0
+								// gamepad_x = 1
+								// gamepad_y = 2
+
+								int but = 0; // keyb_y
+								// StartContact(3/*KEYB/PAD*/, xy[0],xy[1], but);
+
+								// synthetize contact
+								
+								// note: until dirpad we're in CLICK state (not DRAG)
+								con->action = Input::Contact::ITEM_GRID_CLICK;
+
+								con->item = inventory.my_item[inventory.focus].item;
+
+
+								con->my_item = inventory.focus; // ?
+
+								// calc synthetized scrren position for contact
+
+								int ix = inventory.layout_x + xy[0]*4 + 4;
+								int iy = inventory.layout_y + xy[1]*4 + 
+										inventory.layout_height - 6 - (inventory.height*4-1) + 
+										inventory.scroll;
+
+								// centered on item
+								ix += con->item->proto->sprite_2d->atlas->width/2;
+								iy += con->item->proto->sprite_2d->atlas->height/2;	
+
+								// note: until dirpad we're in CLICK state (not DRAG)
+								// shift slightly UP (so user can see we're in moving state)
+								// iy++;
+
+								// flip y axis (sceen coords are top to bottom)
+								iy = render_size[1] - 1 - iy;	
+
+								con->drag = 0; // button
+								con->pos[0] = ix*font_size[0] + font_size[0]/2;
+								con->pos[1] = iy*font_size[1] + font_size[1]/2;
+								con->drag_from[0] = con->pos[0];
+								con->drag_from[1] = con->pos[1];
+
+								con->keyb_cap = -1;
+								con->margin = 0;
+								con->player_hit = false;
+								con->start_yaw = 0;
+							}
+						}
+						break;
+					}
+
+					case 3:
+					{
+						// item_list (pickup popup)
+						Input::Contact* con = input.contact+3;
+						if (con->action == Input::Contact::NONE && !player.talk_box && items_count)
+						{
+							// hilight first
+							input.pad_item = 0+1;
+						}
+						break;
+					}
+
+					case 5:
+					{
+						if (show_inventory)
+						{
+							// show gampad help for inventory operations
+							// and item pick up
+						}
+						else
+						{
+							// show gamepad help for run, jump, attack
+							// camera rot, open inventory, open chat
+							// and item pick up
+						}
+						// lock processing any input until any key is pressed
+						// then close this vidget
+						break;
+					}
+
+					case 6:
+					{
+						// mini-menu
+						//perspective = !perspective;
+						//show_buts = !show_buts; // just test
+						ToggleMenu(3);
+						break;
+					}
+
+					case 9:
+					{
+						CancelItemContacts();
+						show_inventory = !show_inventory;
+						break;
+					}
+
+					case 10:
+					{
+						//if (show_buts)
+						{
+							CancelItemContacts();
+							//show_buts = false;
+							// open talk_box (and keyb if not open)
+							TalkBox_blink = 32;
+							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+							memset(player.talk_box, 0, sizeof(TalkBox));
+							player.talk_box->max_width = 33;
+							player.talk_box->max_height = 7; // 0: off
+							int s[2],p[2];
+							player.talk_box->Reflow(s,p);
+							player.talk_box->size[0] = s[0];
+							player.talk_box->size[1] = s[1];
+							player.talk_box->cursor_xy[0] = p[0];
+							player.talk_box->cursor_xy[1] = p[1];
+				
+							show_keyb = true;
+						}
+
+						break;
+					}
+
+					case 11:
+					{
+						if (show_inventory)
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(0, 1);
+							else
+							{
+								input.contact[3].pos[1]-=font_size[1];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
+						break;
+					}
+					case 12:
+					{
+						if (show_inventory)
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(0, -1);
+							else
+							{
+								input.contact[3].pos[1]+=font_size[1];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
+
+						break;
+					}
+					case 13:
+					{
+						if (input.pad_item>1)
+						{
+							input.pad_item--;
+						}
+						else
+						if (show_inventory)
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(-1, 0);
+							else
+							{
+								input.contact[3].pos[0]-=font_size[0];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
+						break;
+					}
+					case 14:
+					{
+						if (input.pad_item && input.pad_item<items_count)
+						{
+							input.pad_item++;
+						}
+						else
+						if (show_inventory)
+						{
+							if (input.contact[3].action == Input::Contact::NONE)
+								inventory.FocusNext(1, 0);
+							else
+							{
+								input.contact[3].pos[0]+=font_size[0];
+								if (input.contact[3].action == Input::Contact::ITEM_GRID_CLICK)
+									input.contact[3].action = Input::Contact::ITEM_GRID_DRAG;
+							}
+						}
+						break;
+					}
+				}
+			}
+			else
+			{
+				switch (b)
+				{
+					case 5: // guide / logo
+					{
+						// show gampad help for typing
+						// lock processing any input until any key is pressed
+						// then close this vidget
+						break;
+					}
+
+					case 6: // start
+					{
+						// mini-menu
+						//perspective = !perspective;
+						//show_buts = !show_buts; // just test
+						ToggleMenu(3);
+						break;
+					}
+
+					case 9:
+					{
+						show_inventory = !show_inventory;
+						break;
+					}
+
+					case 10:
+					{
+						// start showing main buts
+						//show_buts = true;
+
+						// close talk_box (and keyb if also open)
+						free(player.talk_box);
+						player.talk_box = 0;
+						if (show_keyb)
+							memset(keyb_key, 0, 32);
+						show_keyb = false;
+						KeybAutoRepChar = 0;
+						KeybAutoRepCap = 0;
+						for (int i = 0; i < 4; i++)
+						{
+							if (input.contact[i].action == Input::Contact::KEYBCAP)
+								input.contact[i].action = Input::Contact::NONE;
+						}
+						break;
+					}
+
+					case 11:
+						player.talk_box->MoveCursorY(-1);
+						break;
+					case 12:
+						player.talk_box->MoveCursorY(+1);
+						break;
+					case 13:
+						player.talk_box->MoveCursorX(-1);
+						break;
+					case 14:
+						player.talk_box->MoveCursorX(+1);
+						break;
+
+					case 2: // backspace
+						player.talk_box->Input(8);
+						break;
+					case 3: // SEND
+					{
+						Buzz();
+						if (player.talk_box->len > 0)
+						{
+							if (player.talks == 3)
+							{
+								free(player.talk[0].box);
+								player.talks--;
+								for (int i = 0; i < player.talks; i++)
+									player.talk[i] = player.talk[i + 1];
+							}
+
+							int idx = player.talks;
+							player.talk[idx].box = player.talk_box;
+							player.talk[idx].pos[0] = player.pos[0];
+							player.talk[idx].pos[1] = player.pos[1];
+							player.talk[idx].pos[2] = player.pos[2];
+							player.talk[idx].stamp = stamp;
+
+							if (server)
+							{
+								STRUCT_REQ_TALK req_talk = { 0 };
+								req_talk.token = 'T';
+								req_talk.len = player.talk[idx].box->len;
+								memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+								server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+							}
+
+							ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+							player.talks++;
+
+							// alloc new
+							player.talk_box = 0;
+
+							TalkBox_blink = 32;
+							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+							memset(player.talk_box, 0, sizeof(TalkBox));
+							player.talk_box->max_width = 33;
+							player.talk_box->max_height = 7; // 0: off
+							int s[2], p[2];
+							player.talk_box->Reflow(s, p);
+							player.talk_box->size[0] = s[0];
+							player.talk_box->size[1] = s[1];
+							player.talk_box->cursor_xy[0] = p[0];
+							player.talk_box->cursor_xy[1] = p[1];
+						}
+						break;
+					}	
+				}
+			}
+		}
+		else
+		{
+			// up!
+			// todo: check if this button release should generate keyb char!
+			// ...
+
+			if (b==2)
+			{
+				if (input.contact[3].action!=Input::Contact::NONE)
+				{
+					if (input.contact[3].action==Input::Contact::ITEM_GRID_CLICK)
+						ExecuteItem(inventory.focus);
+					EndContact(3,input.contact[3].pos[0],input.contact[3].pos[1]);
+				}
+			}
+
+			if (b==3)
+			{
+				if (input.pad_item>0 && input.pad_item<=items_count)
+					PickItem(items_inrange[input.pad_item-1]);
+
+				// reset item pickup hilight 
+				input.pad_item = 0;
+			}
+
+			if (show_keyb)
+			{
+				if (b == 0 || b == 1)
+				{
+					bool shift_on = b == 1;
+					char ch = 0;
+					int key = keyb.GetPadCap(&ch,shift_on);
+					if (ch)
+					{
+						Buzz();
+						TalkBox_blink = 0;
+						if (player.talk_box)
+							player.talk_box->Input(ch);
+					}
+				}
+			}
+		}
+	}
+
+	// just update states
+	OnPadAxis(-1, 0);
+}
+
+void Game::OnPadAxis(int a, int16_t pos)
+{
+	if (show_gamepad)
+	{
+		return;
+	}		
+
+	if (a>=0 && a<32)
+		input.pad_axis[a] = pos;
+
+	if (menu_depth>=0)
+	{
+		// handle menu navi
+		MenuPadAxis(a,pos);
+		return;
+	}
+
+	//if (show_keyb)
+	{
+		if (show_keyb && (input.pad_button & 3))
+		{
+			// locked plane and sect, change dir
+			if (a == 0 || a == 1 || a == -1)
+			{
+				int dir = 11, ang;
+				if (input.pad_axis[0] >= -20000 && input.pad_axis[0] <= +20000 &&
+					input.pad_axis[1] >= -20000 && input.pad_axis[1] <= +20000)
+				{
+					dir = 0;
+				}
+				else
+				{
+					if (input.pad_axis[0] < 0) // left
+					{
+						ang = (int)(atan2(-input.pad_axis[1], -input.pad_axis[0]) / M_PI * 180);
+						if (ang < -54)
+							dir = 6;
+						else
+						if (ang < -18)
+							dir = 7;
+						else
+						if (ang < +18)
+							dir = 8;
+						else
+						if (ang < +54)
+							dir = 9;
+						else
+							dir = 10;
+					}
+					else // right
+					{
+						ang = (int)(atan2(input.pad_axis[1], input.pad_axis[0]) / M_PI * 180);
+						if (ang < -54)
+							dir = 1;
+						else
+						if (ang < -18)
+							dir = 2;
+						else
+						if (ang < +18)
+							dir = 3;
+						else
+						if (ang < +54)
+							dir = 4;
+						else
+							dir = 5;
+					}
+				}
+
+				keyb.dir = dir;
+				//printf("ang=%d, dir=%d\n", ang,dir);
+			}
+		}
+		else
+		{
+			// change sect, undefine dir
+			if (a == 0 || a == -1)
+			{
+				keyb.dir = 11;
+				if (input.pad_axis[0] < -10000)
+					keyb.sect = 0;
+				else
+				if (input.pad_axis[0] > +10000)
+					keyb.sect = 2;
+				else
+					keyb.sect = 1;
+			}
+			else
+			if (a == 1 || a == -1)
+			{
+				keyb.dir = 11;
+				if (input.pad_axis[1] < -10000)
+				{
+					keyb.plane = 1;
+					keyb.pad_plane = true; // indicate we can reset plane by stick
+				}
+				else
+				if (input.pad_axis[1] > +10000)
+				{
+					keyb.plane = 2;
+					keyb.pad_plane = true; // indicate we can reset plane by stick
+				}
+				else
+				{
+					// prevent resetting plane to 0
+					// if user set it with mouse or touch
+					// to something else
+					if (keyb.pad_plane)
+						keyb.plane = 0;
+				}
+			}
+		}
+	}
+}
 
 struct MatIDStamp
 {
@@ -7283,4 +9186,814 @@ void BloodLeak(Character* c, int steps)
 
 		c->leak--;
 	}
+}
+
+// they are global (not related to game / player or anything)
+// but if something calls them, we can be certainly sure we have exactly 1 game object
+// so let's use prime_game blindly
+
+void GamePadMount(const char* name, int axes, int buttons, const uint8_t mapping[])
+{
+	ConnectGamePad(name, axes, buttons, mapping);
+
+	uint8_t map[256];
+	if (ReadGamePadConf(map,name,axes,buttons))
+		SetGamePadMapping(map);
+
+	// do specialized readconf with {name,axes,buttons} query
+	// if found, replace current mapping: GamePadLoad(map);
+
+	if (prime_game)
+		prime_game->OnPadMount(true);
+}
+
+void GamePadUnmount()
+{
+	DisconnectGamePad();
+
+	if (prime_game)
+		prime_game->OnPadMount(false);
+}
+
+void GamePadButton(int b, int16_t pos)
+{
+	uint32_t out[1];
+	int outs = UpdateGamePadButton(b, pos < 0 ? 0 : pos, out);
+
+	if (prime_game)
+	{
+		for (int o=0; o<outs; o++)
+		{
+			uint32_t map = out[o];
+			switch ((map >> 16) & 0xFF)
+			{
+				case 0:
+					prime_game->OnPadAxis(map>>24, (int16_t)(map&0xFFFF));
+					break;
+				case 1:
+					prime_game->OnPadButton(map>>24, (int16_t)(map&0xFFFF) >= 16384);
+					break;
+			}
+		}
+	}
+}
+
+void GamePadAxis(int a, int16_t pos)
+{
+	uint32_t out[4];
+	int outs = UpdateGamePadAxis(a, pos, out);
+
+	// 0 if unmapped
+	// 1 button/axis
+	// 2 buttons/axes
+	// 2 axes (when mapped on L/R-Joy)
+	// 4 buttons (when mapped on D-Pad)
+
+	if (prime_game)
+	{
+		for (int o=0; o<outs; o++)
+		{
+			uint32_t map = out[o];
+			switch ((map >> 16) & 0xFF)
+			{
+				case 0:
+					prime_game->OnPadAxis(map>>24, (int16_t)(map&0xFFFF));
+					break;
+				case 1:
+					prime_game->OnPadButton(map>>24, (int16_t)(map&0xFFFF) >= 16384);
+					break;
+			}
+		}
+	}
+}
+
+////////////////////////////////////////////////////////
+
+struct Menu
+{
+	const char* str; // if 0 this is terminator
+	const Menu* sub; // for terminator this is back menu
+	void (*action)(Game* g);
+	bool (*getter)(Game* g);
+};
+
+void menu_perspective(Game* g)
+{
+	g->perspective = !g->perspective;
+	WriteConf(g);
+}
+
+bool menu_perspective_getter(Game* g)
+{
+	return g->perspective;
+}
+
+void menu_blood(Game* g)
+{
+	g->blood = !g->blood;
+	WriteConf(g);
+}
+
+bool menu_blood_getter(Game* g)
+{
+	return g->blood;
+}
+
+void exit_handler(int signum);
+void menu_yes_exit(Game* g)
+{
+	#ifdef USE_SDL
+	exit(0);
+	#else
+	exit_handler(0);
+	#endif
+}
+
+void menu_no_exit(Game* g)
+{
+	g->menu_depth--;
+	g->menu_temp = g->menu_stack[g->menu_depth];
+}
+
+// TODO:
+// - MAKE SIMILAR HACK FOR WEB !
+// - ON TTY: system("setfont ./fonts/font-%d.psf"); ?
+#ifndef SERVER
+bool NextGLFont();
+bool PrevGLFont();
+void ToggleFullscreen(Game* g);
+bool IsFullscreen(Game* g);
+#endif
+
+void menu_fullscreen(Game* g)
+{
+	#ifndef SERVER
+	ToggleFullscreen(g);
+	#endif
+}
+
+bool menu_fullscreen_getter(Game* g)
+{
+	#ifndef SERVER
+	return IsFullscreen(g);
+	#endif
+	return false;
+}
+
+void menu_zoomin(Game* g)
+{
+	#ifndef SERVER
+	NextGLFont();
+	#endif
+}
+
+void menu_zoomout(Game* g)
+{
+	#ifndef SERVER
+	PrevGLFont();
+	#endif
+}
+
+void gamepad_close(void* _g)
+{
+	Game* g = (Game*)_g;
+	if (g)
+	{
+		g->show_gamepad = false;
+		g->show_buts = true;
+
+		const uint8_t* map = GetGamePadMapping();
+		int axes, buttons;
+		const char* name = GetGamePad(&axes, &buttons);
+		if (map && name)
+			WriteGamePadConf(map,name,axes,buttons);
+	}
+}
+
+void menu_gamepad(Game* g)
+{
+	g->CloseMenu();
+	g->show_gamepad = true;
+	g->show_buts = false;
+	GamePadOpen(gamepad_close,(void*)g);
+}
+
+static const Menu settings_menu[]=
+{
+	{"ZOOM IN", 0, menu_zoomin, 0},
+	{"ZOOM OUT", 0, menu_zoomout, 0},
+	{"FULL SCREEN", 0, menu_fullscreen, menu_fullscreen_getter},
+	{"PERSPECTIVE", 0, menu_perspective, menu_perspective_getter},
+	{"SHOW BLOOD", 0, menu_blood, menu_blood_getter},
+	{0}
+};
+
+static const Menu controls_menu[]=
+{
+	{"KEYBOARD", 0, 0, 0},
+	{"MOUSE", 0, 0, 0},
+	{"TOUCH", 0, 0, 0},
+	{"GAMEPAD", 0, menu_gamepad, 0},
+	{0}
+};
+
+static const Menu exit_menu[]=
+{
+	{"NO", 0, menu_no_exit, 0},
+	{"YES", 0, menu_yes_exit, 0},
+	{0}
+};
+
+
+static const Menu game_menu[]=
+{
+	{"SETTINGS", settings_menu, 0, 0},
+	{"CONTROLS", controls_menu, 0, 0},
+	{"EXIT?", exit_menu, 0, 0},
+	{0}
+};
+
+
+void Game::OpenMenu(int method)
+{
+	if (menu_depth>=0)
+		return;
+
+	menu_temp = 0;
+	menu_down = 0;
+	menu_down_x = 0;
+	menu_down_y = 0;
+
+	show_gamepad = false;
+	// will be cleared by menu
+	// show_buts = true; 
+
+
+	if (player.talk_box)
+	{
+		free(player.talk_box);
+		player.talk_box = 0;
+	}
+
+	if (show_keyb)
+		memset(keyb_key, 0, 32);
+	show_keyb = false;
+	KeybAutoRepChar = 0;
+	KeybAutoRepCap = 0;
+	for (int i=0; i<4; i++)
+	{
+		if (input.contact[i].action == Input::Contact::KEYBCAP)
+			input.contact[i].action = Input::Contact::NONE;
+	}
+
+	CancelItemContacts();
+	show_inventory = false;	
+
+	show_buts = false;
+	menu_depth = 0;
+
+	menu_stack[menu_depth] = method != 1 && method != 2 ? 0 : -1;
+}
+
+void Game::CloseMenu()
+{
+	if (menu_depth<0)
+		return;
+	show_buts = true;
+	menu_depth = -1;
+
+	// clear input
+	input.but = 0;
+}
+
+void Game::ToggleMenu(int method)
+{
+	if (menu_depth>=0)
+		CloseMenu();
+	else
+		OpenMenu(method);
+}
+
+int Game::HitMenu(int hx, int hy)
+{
+	if (menu_depth<0)
+		return -3;
+
+	int cp[2] = { hx, hy };
+	ScreenToCell(cp);
+	hx=cp[0];
+	hy=cp[1];
+
+	const Menu* m = game_menu;
+	const char* title = "MENU";
+	for (int d=0; d<menu_depth; d++)
+	{
+		title = m[ menu_stack[d] ].str;
+		m = m[ menu_stack[d] ].sub;
+	}
+
+	// right align
+	int x = render_size[0]-5;
+	int y = render_size[1]-10;
+
+	// title test
+	{
+		int w = 0, h = 0;
+		Font1Size(title,&w,&h);
+
+		if (hx >= 3+x-w /*&& hx<3+x*/ && hy >=y && hy<y+h)
+		{
+			// title hit
+			return -1;
+		}
+
+		y -= h+2;
+	}
+
+	int i=0;
+	while(m[i].str)
+	{
+		int w = 0, h = 0;
+		Font1Size(m[i].str,&w,&h);
+
+		if (hx >= x-w /*&& hx < x*/ && hy>=y && hy<y+h)
+		{
+			// item hit
+			return i;
+		}
+
+		y -= h+1;
+		i++;
+	}
+
+	return -2;
+}
+
+void Game::PaintMenu(AnsiCell* ptr, int width, int height)
+{
+	if (menu_depth<0)
+		return;
+
+	const Menu* m = game_menu;
+	const char* title = "MENU";
+	for (int d=0; d<menu_depth; d++)
+	{
+		title = m[ menu_stack[d] ].str;
+		m = m[ menu_stack[d] ].sub;
+	}
+
+	// right align
+	int x = width-5;
+	int y = height-10;
+
+	// paint title
+	{
+		int w = 0, h = 0;
+		Font1Size(title,&w,&h);
+		Font1Paint(ptr,width,height,3+x-w,y,title,FONT1_PINK_SKIN);
+		y -= h+2;
+	}
+
+
+	int i=0;
+	while(m[i].str)
+	{
+		int w = 0, h = 0;
+		Font1Size(m[i].str,&w,&h);
+
+		int skin = i == menu_stack[menu_depth] ? FONT1_GOLD_SKIN : FONT1_GREY_SKIN;
+		Font1Paint(ptr,width,height,x-w,y,m[i].str,skin);
+
+		const char* str = 0;
+		if (m[i].sub)
+			str = "\x03";
+		else
+		if (m[i].getter)
+			str = m[i].getter(this) ? "\x02" : "\x01";
+
+		if (str)
+			Font1Paint(ptr,width,height,x,y,str,FONT1_PINK_SKIN);
+
+		y -= h+1;
+		i++;
+	}
+	
+}
+
+void Game::MenuKeyb(GAME_KEYB keyb, int key)
+{
+	if (menu_down)
+		return; // captured by mouse/touch
+
+	if (keyb==KEYB_DOWN && (key==A3D_ENTER || key==A3D_NUMPAD_ENTER))
+	{
+		// handle only char->press!
+		return;
+	}
+
+	if (keyb==KEYB_CHAR && (key=='\\' || key=='|') ||
+		keyb==KEYB_DOWN && key==A3D_ESCAPE)
+	{
+		CloseMenu();
+		return;
+	}
+
+	if (keyb==KEYB_CHAR && key==8)
+	{
+		keyb=KEYB_PRESS;
+		key=A3D_BACKSPACE;
+	}
+
+	if (keyb==KEYB_CHAR && (key=='\n' || key=='\r'))
+	{
+		keyb=KEYB_PRESS;
+		key=A3D_ENTER;
+	}
+
+	if (keyb==KEYB_DOWN || keyb==KEYB_PRESS)
+	{
+		const Menu* m = game_menu;
+		for (int d=0; d<menu_depth; d++)
+			m = m[ menu_stack[d] ].sub;
+
+		if (menu_stack[menu_depth]>=0)
+		{
+			if (key==A3D_RIGHT && m[ menu_stack[menu_depth] ].sub || key==A3D_ENTER)
+			{
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+				if (m[ menu_stack[menu_depth] ].action)
+				{
+					m[ menu_stack[menu_depth] ].action(this);
+				}
+				return;
+			}
+		}
+		else
+		if (key==A3D_RIGHT || key==A3D_ENTER)
+		{
+			menu_stack[menu_depth]=menu_temp;
+		}
+
+		if (key==A3D_LEFT || keyb==KEYB_PRESS && key==A3D_BACKSPACE)
+		{
+			if (menu_depth==0)
+			{
+				CloseMenu();
+				return;
+			}
+			menu_depth--;
+			menu_temp = menu_stack[menu_depth];
+			return;
+		}
+
+		if (key==A3D_DOWN)
+		{
+			if (menu_stack[menu_depth] < 0)
+				menu_stack[menu_depth] = menu_temp;
+			else
+			if (m[menu_stack[menu_depth]+1].str)
+			{
+				menu_stack[menu_depth]++;
+				menu_temp = menu_stack[menu_depth];
+			}
+			return;
+		}
+
+		if (key==A3D_UP)
+		{
+			if (menu_stack[menu_depth] < 0)
+				menu_stack[menu_depth] = menu_temp;
+			else
+			if (menu_stack[menu_depth]>0)
+			{
+				menu_stack[menu_depth]--;
+				menu_temp = menu_stack[menu_depth];
+			}
+			return;
+		}
+	}
+}
+
+
+void Game::MenuMouse(GAME_MOUSE mouse, int x, int y)
+{
+	if (menu_down==2)
+		return; // captured by touch
+
+	if (mouse == GAME_MOUSE::MOUSE_MOVE)
+	{
+		if (menu_down)
+		{
+			// retest
+			int hit = HitMenu(x,y);
+			if (hit != menu_stack[menu_depth])
+				menu_stack[menu_depth] = -1;
+		}
+	}
+
+	if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_DOWN)
+	{
+		menu_down = 1;
+
+		int hit = HitMenu(x,y);
+		if (hit<-1)
+		{
+			CloseMenu();
+			return;						
+		}
+
+		if (hit>=0)
+		{
+			menu_stack[menu_depth]=hit;
+			menu_temp = menu_stack[menu_depth];
+		}
+		else
+			menu_stack[menu_depth]=-1;
+
+		return;
+	}
+
+	if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_UP)
+	{
+		if (menu_down)
+		{
+			// retest
+			int hit = HitMenu(x,y);
+			if (hit == menu_stack[menu_depth])
+			{
+				if (hit==-1)
+				{
+					// go back
+					if (menu_depth==0)
+					{
+						CloseMenu();
+						return;						
+					}
+					else
+					{
+						menu_depth--;
+						menu_temp = menu_stack[menu_depth];
+					}
+				}
+				else
+				if (hit>=0)
+				{
+					const Menu* m = game_menu;
+					for (int d=0; d<menu_depth; d++)
+						m = m[ menu_stack[d] ].sub;		
+
+					// action!
+					if (m[ menu_stack[menu_depth] ].sub)
+					{
+						menu_depth++;
+						menu_stack[menu_depth]=-1; // clear next hilight
+						menu_temp = 0;
+					}
+					else
+					if (m[ menu_stack[menu_depth] ].action)
+					{
+						m[ menu_stack[menu_depth] ].action(this);
+					}
+				}
+			}
+		}
+
+		menu_down = 0;
+		menu_stack[menu_depth]=-1;
+	}
+}
+
+void Game::MenuTouch(GAME_TOUCH touch, int id, int x, int y)
+{
+	if (menu_down==1)
+		return; // captured by mouse
+
+	if (id==1)
+	{
+		switch(touch)
+		{
+			case GAME_TOUCH::TOUCH_BEGIN:
+			{
+				menu_down = 2;
+				int hit = HitMenu(x,y);
+				if (hit<-1)
+				{
+					CloseMenu();
+					return;						
+				}
+
+				if (hit>=0)
+				{
+					menu_stack[menu_depth]=hit;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+					menu_stack[menu_depth]=-1;
+
+				break;
+			}
+
+			case GAME_TOUCH::TOUCH_MOVE:
+				if (menu_down)
+				{
+					// retest
+					int hit = HitMenu(x,y);
+					if (hit != menu_stack[menu_depth])
+						menu_stack[menu_depth] = -1;
+				}
+				break;
+
+			case GAME_TOUCH::TOUCH_END:
+			{
+				if (menu_down)
+				{
+					// retest
+					int hit = HitMenu(x,y);
+					if (hit == menu_stack[menu_depth])
+					{
+						if (hit==-1)
+						{
+							// go back
+							if (menu_depth==0)
+							{
+								CloseMenu();
+								return;						
+							}
+							else
+							{
+								menu_depth--;
+								menu_temp = menu_stack[menu_depth];
+							}
+						}
+						else
+						if (hit>=0)
+						{
+							const Menu* m = game_menu;
+							for (int d=0; d<menu_depth; d++)
+								m = m[ menu_stack[d] ].sub;		
+
+							// action!
+							if (m[ menu_stack[menu_depth] ].sub)
+							{
+								menu_depth++;
+								menu_stack[menu_depth]=-1; // clear next hilight
+								menu_temp = 0;
+							}
+							else
+							if (m[ menu_stack[menu_depth] ].action)
+							{
+								m[ menu_stack[menu_depth] ].action(this);
+							}
+						}
+					}
+				}
+
+				menu_down = 0;
+				menu_stack[menu_depth]=-1;				
+				break;
+			}
+
+			case GAME_TOUCH::TOUCH_CANCEL:
+				menu_down = 0;
+				menu_stack[menu_depth]=-1;
+				break;
+		}
+	}
+}
+
+void Game::MenuPadMount(bool connected)
+{
+}
+
+void Game::MenuPadButton(int b, bool down)
+{
+	if (menu_down)
+		return; // captured by mouse/touch
+
+	if (!down)
+		return;
+
+	const Menu* m = game_menu;
+	for (int d=0; d<menu_depth; d++)
+		m = m[ menu_stack[d] ].sub;		
+
+	switch (b)
+	{
+		case 0:
+		{
+			if (menu_stack[menu_depth]>=0)
+			{
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+				if (m[ menu_stack[menu_depth] ].action)
+				{
+					m[ menu_stack[menu_depth] ].action(this);
+				}
+			}
+			else
+				menu_stack[menu_depth]=menu_temp;
+			break;
+		}
+
+		case 1: 
+		{
+			// jump
+			break;
+		}
+
+		case 5:
+		{
+			break;
+		}
+
+		case 6:
+		{
+			CloseMenu();
+			break;
+		}
+
+		case 9:
+		{
+			// left shoulder
+			break;
+		}
+
+		case 10:
+		{
+			// right shoulder
+			break;
+		}
+
+		case 11:
+		{
+			// dir up
+			if (menu_stack[menu_depth]<0)
+				menu_stack[menu_depth]=menu_temp;
+			else
+			if (menu_stack[menu_depth]>0)
+			{
+				menu_stack[menu_depth]--;			
+				menu_temp = menu_stack[menu_depth];
+			}
+			break;
+		}
+		case 12:
+		{
+			// dir down
+			if (menu_stack[menu_depth]<0)
+				menu_stack[menu_depth]=menu_temp;
+			else
+			if (m[menu_stack[menu_depth]+1].str)
+			{
+				menu_stack[menu_depth]++;			
+				menu_temp = menu_stack[menu_depth];
+			}
+			break;
+		}
+		case 13:
+		{
+			// dir left
+			if (menu_depth==0)
+			{
+				CloseMenu();
+				return;
+			}
+			menu_depth--;
+			menu_temp = menu_stack[menu_depth];
+			break;
+		}
+		case 14:
+		{
+			if (menu_stack[menu_depth]>=0)
+			{
+				// dir right
+				// only sub, with dir_right
+				// action requires main button
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+			}
+			else
+				menu_stack[menu_depth]=menu_temp;
+			break;
+		}
+	}
+}
+
+void Game::MenuPadAxis(int a, int16_t pos)
+{
 }

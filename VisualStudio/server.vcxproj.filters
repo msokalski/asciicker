@@ -39,6 +39,8 @@
     <ClInclude Include="..\src\network.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\font1.h" />
+    <ClInclude Include="..\src\gamepad.h" />
     <ClInclude Include="..\src\enemygen.h" />
   </ItemGroup>
   <ItemGroup>
@@ -76,5 +78,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\enemygen.cpp" />
+    <ClCompile Include="..\src\font1.cpp" />
+    <ClCompile Include="..\src\gamepad.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

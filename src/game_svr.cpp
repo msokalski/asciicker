@@ -30,6 +30,14 @@ char base_path[1024] = "./";
 #define MAX_CLIENTS 50
 Server* server = 0; // this is to fullfil game.cpp externs!
 
+void exit_handler(int)
+{
+}
+
+void Buzz()
+{
+}
+
 void SyncConf()
 {
 }
@@ -204,7 +212,7 @@ struct PlayerCon
 						return -3;
 					h->parsed |= mask;
 
-					const char* match = "GET /ws/y7/ HTTP/1.1";
+					const char* match = "GET /ws/y8/ HTTP/1.1";
 
 					if (strcmp(value, match) != 0)
 						return -3;
@@ -1009,7 +1017,7 @@ int main(int argc, char* argv[])
 	LoadSprites();
 
 	char a3d_path[1024];
-	sprintf(a3d_path,"%sa3d/game_map_y7.a3d", base_path);
+	sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
 	FILE* f = fopen(a3d_path, "rb");
 
 	if (f)

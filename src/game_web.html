@@ -80,6 +80,9 @@
             console.log('ServiceWorker registration failed: ', err);
           });
         });
+
+        if (history.state === null)
+          history.replaceState({inline:history.length},document.title,location.href);
       }
     </script>
 
@@ -249,7 +252,7 @@
           if (!ak_joined)
           {
             console.log("ws error (onerror), starting solo ...");
-            Load();
+            Load(player_name);
             Resize(null);
             window.requestAnimationFrame(AsciickerLoop);
           }
@@ -292,13 +295,13 @@
                   ak_packet = new Uint8Array(Module.HEAP8.buffer,mem,257);
                 }
 
-                Load();
+                Load(player_name);
                 Resize(null);
                 window.requestAnimationFrame(AsciickerLoop);
               }
               else
               {
-                Load();
+                Load(player_name);
                 Resize(null);
                 window.requestAnimationFrame(AsciickerLoop);
               }
@@ -323,6 +326,10 @@
       var Mouse = null;
       var Touch = null;
       var Focus = null;
+      
+      var PollGamePad = null; // js handler
+      var GamePad = null; // wasm handler
+      var gamepad = -1;   // gamepad in use, index into navigator.getGamepads();
 
       var ak_canvas;
       var ak_ctx;
@@ -330,6 +337,7 @@
       var ak_prg;
       var ak_tex;
 
+      var user_zoom = 0;
       var ak_fonts;
       var ak_font;
 
@@ -380,14 +388,21 @@
 				var rw = ak_ctx.canvas.width*0.001;
 				var rh = ak_ctx.canvas.height*0.001;
 				var rs = 7.5*Math.sqrt(rw*rw+rh*rh) * ak_ratio;
-				for (var i=0; i<ak_fonts.length; i++)
+
+        ak_font = 0;
+				for (var i=1; i<ak_fonts.length; i++)
 				{
-					if (Math.abs(ak_fonts[ak_font].size - rs) >
-					    Math.abs(ak_fonts[i].size - rs))
+					if (Math.abs(ak_fonts[ak_font].size - rs) > Math.abs(ak_fonts[i].size - rs))
 					{
             ak_font = i;
 					}
         }
+
+        ak_font += user_zoom;
+        if (ak_font < 0)
+          ak_font = 0;
+        if (ak_font >= ak_fonts.length)
+          ak_font = ak_fonts.length-1;
 
         console.log("FONT="+ak_font);
 
@@ -418,6 +433,9 @@
 
         var display_x = (ak_ctx.drawingBufferWidth - display_w) >> 1;
         var display_y = (ak_ctx.drawingBufferHeight - display_h) >> 1;          
+
+        if (gamepad>=0 && GamePad)
+          PollGamePad();
 
         var mem = Render(render_w,render_h);
         if (mem != ak_prev_mem || Module.HEAP8 != ak_prev_arr || render_w != ak_width || render_h != ak_height)
@@ -706,7 +724,7 @@
           "Minus"        : 109,
           "Period"       : 110,
           "Slash"        : 111,
-          "BackQuote"    : 112,
+          "Backquote"    : 112,
           "BracketLeft"  : 113,
           "BracketRight" : 114,
           "Backslash"    : 115,
@@ -772,6 +790,215 @@
 
           e.preventDefault();
         },{ passive: false });
+      }
+
+      function setGamePadHandlers()
+      {
+        var axes = null;
+        var buts = null;
+
+        function GamePadMap(gp)
+        {
+          GamePad(3,gp.buttons.length | (gp.axes.length<<16),0);
+          if (gp.mapping=='standard')
+          {
+            for (var a=0; a<gp.axes.length; a++)
+            {
+              var m = 0xFFFF;
+              if (a<4)
+              {
+                m = (a | (1<<6)) | (a<<8);
+              }
+              GamePad(5,(a<<16) | m,0);
+            }
+            for (var b=0; b<gp.buttons.length; b++)
+            {
+              var m = 0xFF;
+              if (b<17)
+              {
+                switch (b)
+                {
+                  case 0: m=0 | (1<<7); break;
+                  case 1: m=1 | (1<<7); break;
+                  case 2: m=2 | (1<<7); break;
+                  case 3: m=3 | (1<<7); break;
+
+                  // shoulders
+                  case 4: m=9 | (1<<7); break;
+                  case 5: m=10 | (1<<7); break;
+
+                  // triggers
+                  case 6: m=4; break;
+                  case 7: m=5; break;
+
+                  case 8: m=4 | (1<<7); break; // back
+                  case 9: m=6 | (1<<7); break; // start
+
+                  // thumbs
+                  case 10: m=7 | (1<<7); break;
+                  case 11: m=8 | (1<<7); break;
+
+                  // dpad
+                  case 12: m=11 | (1<<7); break;
+                  case 13: m=12 | (1<<7); break;
+                  case 14: m=13 | (1<<7); break;
+                  case 15: m=14 | (1<<7); break;
+
+                  // guide
+                  case 16: m=5 | (1<<7); break;                  
+                }
+              }
+
+              GamePad(4,(b<<8) | m,0);
+            }
+          }
+          else
+          {
+            // generic x-box pad
+            for (var b=0; b<gp.buttons.length; b++)
+            {
+              var m = 0xFF;
+              switch (b)
+              {
+                case 0x00: m = (1<<7) | 0x00; break;
+                case 0x01: m = (1<<7) | 0x01; break;
+                case 0x02: m = (1<<7) | 0x02; break;
+                case 0x03: m = (1<<7) | 0x03; break;
+
+                case 0x06: m = (1<<7) | 0x04; break;
+                case 0x08: m = (1<<7) | 0x05; break;
+                case 0x07: m = (1<<7) | 0x06; break;
+
+                case 0x09: m = (1<<7) | 0x07; break;
+                case 0x0A: m = (1<<7) | 0x08; break;
+
+                case 0x04: m = (1<<7) | 0x09; break;
+                case 0x05: m = (1<<7) | 0x0A; break;
+              }
+              GamePad(4,(b<<8) | m,0);
+            }
+            for (var a=0; a<gp.axes.length; a++)
+            {
+              var m = 0xFFFF;
+              switch (a)
+              {
+                case 0: m = ((0<<7) | (1<<6) | 0x00) | ((0<<7) | (0<<6) | 0x00)<<8; break;
+                case 1: m = ((0<<7) | (1<<6) | 0x01) | ((0<<7) | (0<<6) | 0x01)<<8; break;
+                case 2: m = ((0<<7) | (0<<6) | 0x04) | ((0<<7) | (0<<6) | 0x04)<<8; break;
+                case 3: m = ((0<<7) | (1<<6) | 0x02) | ((0<<7) | (0<<6) | 0x02)<<8; break;
+                case 4: m = ((0<<7) | (1<<6) | 0x03) | ((0<<7) | (0<<6) | 0x03)<<8; break;
+                case 5: m = ((0<<7) | (0<<6) | 0x05) | ((0<<7) | (0<<6) | 0x05)<<8; break;
+
+                case 6: m = ((1<<7) | (0<<6) | 0x0D) | ((1<<7) | (0<<6) | 0x0E)<<8; break;
+                case 7: m = ((1<<7) | (0<<6) | 0x0B) | ((1<<7) | (0<<6) | 0x0C)<<8; break;
+              }
+              GamePad(5,(a<<16) | m,0);
+            }
+          }            
+        }
+
+        function poll_handler()
+        {
+          var gm = navigator.getGamepads()[gamepad];
+          if (GamePad && gm)
+          {
+            var nb = gm.buttons.length;
+
+            for (var i=0; i<nb; i++)
+            {
+              if (buts[i] != gm.buttons[i].value)
+              {
+                GamePad(1,i,gm.buttons[i].value);
+                buts[i] = gm.buttons[i].value;
+              }
+            }
+
+            var na = gm.axes.length;
+
+            for (var i=0; i<na; i++)
+            {
+              if (axes[i] != gm.axes[i])
+              {
+                GamePad(2,i,gm.axes[i]);
+                axes[i] = gm.axes[i];
+              }
+            }
+          }
+        }
+
+        PollGamePad = poll_handler;
+
+        console.log("setting handlers...");
+        window.addEventListener("gamepadconnected", 
+          function(e) 
+          {
+            console.log("connected");
+
+            if (gamepad<0)
+            {
+              axes = new Float32Array(e.gamepad.axes.length);
+              buts = new Float32Array(e.gamepad.buttons.length);              
+              gamepad = e.gamepad.index;
+
+              if (GamePad)
+              {
+                GamePadMap(e.gamepad);
+                GamePad(0,1,0);
+              }
+            }
+          }, false);
+        
+        window.addEventListener("gamepaddisconnected", 
+          function(e) 
+          { 
+            console.log("disconnected");
+
+            if (gamepad==e.gamepad.index)
+            {
+              if (GamePad)
+                GamePad(0,0,0);
+              gamepad = -1;
+
+              var arr = navigator.getGamepads();
+              for (var i=0; i<arr.length; i++)
+              {
+                if (arr[i] && arr[i].connected)
+                {
+                  console.log("re-scanned index "+i+" -> " + arr[i].index);
+                  axes.fill(0);
+                  buts.fill(0);
+                  gamepad = arr[i].index;
+                  if (GamePad)
+                  {
+                    GamePadMap(arr[i]);
+                    GamePad(0,1,0);
+                  }
+                  break;
+                }
+              }
+            }
+          }, false);
+
+        // do initial scan
+        if (gamepad<0)
+        {
+          var arr = navigator.getGamepads();
+          for (var i=0; i<arr.length; i++)
+          {
+            if (arr[i] && arr[i].connected)
+            {
+              console.log("inital scanned index "+i+" -> " + arr[i].index);
+              axes = new Float32Array(e.gamepad.axes.length);
+              buts = new Float32Array(e.gamepad.buttons.length);              
+              gamepad = arr[i].index;
+              if (GamePad)
+              {
+                GamePadMap(arr[i]);
+                GamePad(0,1,0);
+              }
+            }
+          }
+        }          
       }
 
       function setMouseHandlers()
@@ -894,7 +1121,7 @@
 				var failed = 0;
 				
 				// start with default size
-				var fonts = [10, 6,8,12,16,14,18,20];
+				var fonts = [10, 6,8,12,16,14,18,20,24,28,32,36,40];
 				
 				var required = fonts.length;
 				
@@ -935,11 +1162,12 @@
       {
         console.log('Loaded '+fonts.length+' fonts'); 
 
-        Load = Module.cwrap('Load', null, []);
+        Load = Module.cwrap('Load', null, ['string']);
         Render = Module.cwrap('Render', 'number', ['number','number']);
         Size = Module.cwrap('Size', null, ['number','number','number','number']);
         Keyb = Module.cwrap('Keyb', null, ['number','number']);
         Mouse = Module.cwrap('Mouse', null, ['number','number','number']);
+        GamePad = Module.cwrap('GamePad', null, ['number','number','number']);
         Touch = Module.cwrap('Touch', null, ['number','number','number','number']);
         Focus = Module.cwrap('Focus', null, ['number']);
         Join = Module.cwrap('Join', 'number', ['string','number','number']);
@@ -1052,6 +1280,9 @@
         setKeybHandlers();
         setTouchHandlers();
         setFocusHandlers();
+
+        if ('getGamepads' in navigator)
+          setGamePadHandlers();
 
         window.addEventListener("resize",Resize); 
 

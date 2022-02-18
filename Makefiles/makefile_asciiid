@@ -10,6 +10,8 @@ SRCS :=	asciiid.cpp \
 		x11.cpp \
 		sdl.cpp \
 		urdo.cpp \
+		font1.cpp \
+		gamepad.cpp \
 		game.cpp \
 		enemygen.cpp \
 		render.cpp \
