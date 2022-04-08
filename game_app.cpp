@@ -820,7 +820,7 @@ struct GameServer : Server
 bool Server::Send(const uint8_t* data, int size)
 {
 	GameServer* gs = (GameServer*)this;
-	int w = WS_WRITE(gs->server_socket, (const uint8_t*)data, size, 0, true);
+	int w = WS_WRITE(gs->server_socket, (const uint8_t*)data, size, 0, 0x2);
 	if (w <= 0)
 	{
         gs->Stop();
@@ -1002,7 +1002,7 @@ GameServer* Connect(const char* addr, const char* port, const char* path, const 
 	STRUCT_REQ_JOIN req_join = { 0 };
 	req_join.token = 'J';
 	strncpy(req_join.name, user, 30);
-	int ws = WS_WRITE(server_socket, (uint8_t*)&req_join, sizeof(STRUCT_REQ_JOIN), 0, true);
+	int ws = WS_WRITE(server_socket, (uint8_t*)&req_join, sizeof(STRUCT_REQ_JOIN), 0, 0x2);
 	if (ws <= 0)
 	{
 		TCP_CLOSE(server_socket);
