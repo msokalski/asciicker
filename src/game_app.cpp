@@ -116,14 +116,14 @@ template <uint16_t C> static int UTF8(char* buf)
 
     if (C<0x0800)
     {
-        buf[0] = (char)0xC0 | ( ( C >> 6 ) & 0x1F ); 
-        buf[1] = (char)0x80 | ( C & 0x3F );
+        buf[0] = 0xC0 | ( ( C >> 6 ) & 0x1F ); 
+        buf[1] = 0x80 | ( C & 0x3F );
         return 2;
     }
 
-    buf[0] = (char)0xE0 | ( ( C >> 12 ) & 0x0F );
-    buf[1] = (char)0x80 | ( ( C >> 6 ) & 0x3F );
-    buf[2] = (char)0x80 | ( C & 0x3F );        
+    buf[0] = 0xE0 | ( ( C >> 12 ) & 0x0F );
+    buf[1] = 0x80 | ( ( C >> 6 ) & 0x3F );
+    buf[2] = 0x80 | ( C & 0x3F );        
     return 3;
 }
 
@@ -1437,9 +1437,10 @@ int main(int argc, char* argv[])
     bool term = false;
     for (int p=1; p<argc; p++)
     {
-        if (strcmp(argv[p],"-term")==0) {
+        if (strcmp(argv[p],"-term")==0)
             term = true;
-        } else if (p+1<argc)
+		else
+		if (p+1<argc)
 		{
 			if (strcmp(argv[p], "-url") == 0)
 			{
@@ -1601,7 +1602,7 @@ int main(int argc, char* argv[])
 		if (!gs->Start())
 		{
 			TCP_CLEANUP();
-			return 1;
+			return false;
 		}
 	}
 
@@ -1709,7 +1710,9 @@ int main(int argc, char* argv[])
         }
 #endif // USE_GPM
     }
-    else if (strncmp(term_env,"xterm",5)==0) {
+    else
+    if (strncmp(term_env,"xterm",5)==0)
+    {
         printf("VIRTUAL TERMINAL EMULGLATOR\n");
 
         /*
@@ -1766,9 +1769,8 @@ int main(int argc, char* argv[])
         }
         printf("\n");
     }
-    else {
+    else
         printf("UNKNOWN TERMINAL\n");
-    }
 
     // try opening js device
     int gamepad_axes = 0;
@@ -1982,7 +1984,9 @@ int main(int argc, char* argv[])
                         xy_processed = true;
                         game->OnMouse(Game::MOUSE_WHEEL_UP, mouse_x, mouse_y);
                     }
-                    else if (event->wdy<0) {
+                    else
+                    if (event->wdy<0)
+                    {
                         xy_processed = true;
                         game->OnMouse(Game::MOUSE_WHEEL_DOWN, mouse_x, mouse_y);
                     }
@@ -2120,9 +2124,11 @@ int main(int argc, char* argv[])
                         game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, ' ');
                         game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_SPACE);
                     }
-                    else if (stream[i] == '\t')
+                    else
+                    if (stream[i] == '\t')
                         game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_TAB);
-                    else if (stream[i] == 127) // backspace (8) is encoded as del (127)
+                    else
+                    if (stream[i] == 127) // backspace (8) is encoded as del (127)
                         game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, 8);
                     else
                         game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, stream[i]);
@@ -2396,7 +2402,8 @@ int main(int argc, char* argv[])
                     int codelen = 0;
                     if (stream[i+6]==0x1B && stream[i+7]=='\\')
                         codelen=1;
-                    else if (stream[i+7]==0x1B && stream[i+8]=='\\')
+                    else
+                    if (stream[i+7]==0x1B && stream[i+8]=='\\')
                         codelen=2;
 
                     if ((mods & 4) && stream[i+5]=='U' && codelen==1) // CTRL+C
