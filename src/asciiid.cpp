@@ -8103,56 +8103,38 @@ int main(int argc, char *argv[])
 		memcpy(base_path, abs_path, len);
 		base_path[len] = 0;
 
-		int max_attempts{15};
-		int attempts{0};
-		int new_len{0};
-
-		printf("WARN: Folder with all asciiid resources should be named 'asciiid'.\n");
-
-		printf("INFO: Asciiid will now preform recursive search for this directory with %d max attempts...\n", max_attempts);
-
-#if defined(__linux__) || defined(__APPLE__)
-		while (strcmp(strrchr(base_path, '/'), "/asciiid") != 0) {
-			printf("INFO: Current directory: %s, searching for 'asciiid/', full path: %s\n", strrchr(base_path, '/'), base_path);
-			new_len = strlen(base_path) - strlen(strrchr(base_path, '/'));
-			if (new_len == 0) {
-				printf("ERR: Recursive search reached root.\n");
-				exit(1);
-			}
-			base_path[new_len] = 0;
-			if (max_attempts == attempts) {
-				printf("ERR: Recursive search exceeded maximum attempts.\n");
-				exit(1);
-			}
-			attempts++;
-		}
-#elif defined(_WIN32)
-		while (strcmp(strrchr(base_path, '\\'), "\\asciiid") != 0) {
-			printf("INFO: Current directory: %s, searching for 'asciiid\\', full path: %s\n", strrchr(base_path, '\\'), base_path);
-			new_len = strlen(base_path) - strlen(strrchr(base_path, '\\'));
-			if (new_len == 0) {
-				printf("ERR: Recursive search reached root.\n");
-				exit(1);
-			}
-			base_path[new_len] = 0;
-			if (max_attempts == attempts) {
-				printf("ERR: Recursive search exceeded maximum attempts.\n");
-				exit(1);
-			}
-			attempts++;
-		}
+		if (len > 4)
+		{
+			char* dotrun[4] =
+			{
+				strstr(base_path, "/.run/"),
+#ifdef _WIN32
+				strstr(base_path, "\\.run\\"),
+				strstr(base_path, "\\.run/"),
+				strstr(base_path, "/.run\\"),
+#else
+				0,0,0
 #endif
-		size_t length = strlen(base_path);
-#if defined(__linux__) || defined(__APPLE__)
-		base_path[length] = '/';
-#elif _WIN32
-		base_path[length] = '\\';
-#endif
-		base_path[length + 1] = 0;
+			};
+
+			int dotpos = -1;
+			for (int i = 0; i < 4; i++)
+			{
+				if (dotrun[i])
+				{
+					int pos = dotrun[i] - base_path;
+					if (dotpos < 0 || pos < dotpos)
+						dotpos = pos;
+				}
+			}
+
+			if (dotpos >= 0)
+				base_path[dotpos+1] = 0;
+		}
     }
 
-    printf("INFO: Execution path: %s\n", argv[0]);
-    printf("INFO: Resources folder path: %s\n", base_path);
+    printf("exec path: %s\n", argv[0]);
+    printf("BASE PATH: %s\n", base_path);
 
 #ifdef _WIN32
 	//_CrtSetBreakAlloc(11952);
