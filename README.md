@@ -38,6 +38,11 @@ and unzip it, the repository folder should be named `asciicker-master`.
 5) Copy `include` and `lib` directories from the SDL2 package you have downloaded 
 into `SDL\` directory in the root of the repository
 6) Build `asciicker`
+
+
+![Build](misc/VS_Build.png)
+
+
 7) Copy `lib\(your_architecture_here)\SDL2.dll` into `build` directory
 8) Run `asciicker`!
 
