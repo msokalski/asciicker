@@ -12,13 +12,19 @@ For Windows it's recommended to use Visual Studio build system:
 1) Install [Visual Studio](https://visualstudio.microsoft.com/)
 2) Download zip archive of the repository:
 
+
 ![Download](misc/github.png) 
 
 
 and unzip it, the repository folder should be named `asciicker-master`.
-3) Open VisualStudio and click `Import project`, then navigate to the folder where you stored `asciicker-master` and select it 
+
+3) Open VisualStudio and click `Import project`, then navigate to the folder where you stored `asciicker-master` and select it
 4) Retarget solutions (this step may not be needed in some cases)
+
+
 ![Retarget](misc/VS_Retarget.png)
+
+
 5) Install [SDL2](https://www.libsdl.org/download-2.0.php) 
 (You need the `devel`opment package as shown in screenshot below)
 
