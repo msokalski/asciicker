@@ -1,5 +1,5 @@
 #-----------
-# SERVER
+# SERVER_0x
 #-----------
 
 set(TARGET "asciicker_server")
