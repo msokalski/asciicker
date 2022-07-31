@@ -60,8 +60,11 @@ Makefiles:
 1) Install [git](https://git-scm.com/downloads)
 2) Install [Make](https://www.gnu.org/software/make/)
 3) Open terminal and enter: `git clone https://github.com/Niki4tap/asciicker.git && cd asciicker && mkdir build && cd Makefiles`
-4) Linux: `make -f makefile_asciiid && make -f makefile_asciicker && make -f makefile_asciicker_term && make -f makefile_asciicker_server && cd ../build`
-   MacOS: `make -f makefile_asciiid_mac && make -f makefile_asciicker_mac && make -f makefile_asciicker_term_mac && make -f makefile_asciicker_server && cd ../build`
+4) Build:
+```
+Linux: make -f makefile_asciiid && make -f makefile_asciicker && make -f makefile_asciicker_term && make -f makefile_asciicker_server && cd ../build
+MacOS: make -f makefile_asciiid_mac && make -f makefile_asciicker_mac && make -f makefile_asciicker_term_mac && make -f makefile_asciicker_server && cd ../build
+```
 5) Run `asciicker`!
 
 When building for web it's recommended to use linux or macOS:
