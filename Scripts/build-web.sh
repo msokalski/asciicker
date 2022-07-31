@@ -36,7 +36,7 @@ cp -r web_fonts build/web/fonts
 
 emcc --emrun -O3 \
     src/font1.cpp \
-	  src/gamepad.cpp \
+	src/gamepad.cpp \
     src/game.cpp \
     src/game_web.cpp \
     src/enemygen.cpp \

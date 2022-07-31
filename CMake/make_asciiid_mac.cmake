@@ -1,10 +1,10 @@
 #-----------
-# ASCIIID
+# ASCIIID_MAC
 #-----------
 
 set(TARGET "asciiid")
 
-set(ASCIIID_SOURCE
+set(ASCIIID_MAC_SOURCE
 	"src/asciiid.cpp"
 	"src/term.cpp"
 	"src/x11.cpp"
@@ -33,18 +33,18 @@ set(ASCIIID_SOURCE
 	"src/gamepad.cpp"
 )
 
-set(ASCIIID_CXX_FLAGS	)
-set(ASCIIID_CPP_FLAGS	-g -save-temps=obj -pthread)
-set(ASCIIID_C_FLAGS		)
-set(ASCIIID_LD_FLAGS	-save-temps=obj -pthread -lGL -lX11 -lXinerama -lutil -lSDL2)
+set(ASCIIID_MAC_CXX_FLAGS	-std=c++17 -g)
+set(ASCIIID_MAC_CPP_FLAGS	-save-temps=obj -pthread)
+set(ASCIIID_MAC_C_FLAGS		)
+set(ASCIIID_MAC_LD_FLAGS	-save-temps=obj -pthread -lutil -framework OpenGL -lSDL2-2.0.0)
 
-add_executable(${TARGET} ${ASCIIID_SOURCE})
+add_executable(${TARGET} ${ASCIIID_MAC_SOURCE})
 
 target_compile_options(
 	${TARGET} PRIVATE
-	$<$<COMPILE_LANGUAGE:CXX>:${ASCIIID_CXX_FLAGS}>
-	$<$<COMPILE_LANGUAGE:C,CXX>:${ASCIIID_CPP_FLAGS}>
-	$<$<COMPILE_LANGUAGE:C>:${ASCIIID_C_FLAGS}>
+	$<$<COMPILE_LANGUAGE:CXX>:${ASCIIID_MAC_CXX_FLAGS}>
+	$<$<COMPILE_LANGUAGE:C,CXX>:${ASCIIID_MAC_CPP_FLAGS}>
+	$<$<COMPILE_LANGUAGE:C>:${ASCIIID_MAC_C_FLAGS}>
 )
 
 target_compile_definitions(
@@ -52,5 +52,5 @@ target_compile_definitions(
 )
 
 target_link_options(
-	${TARGET} PRIVATE ${ASCIIID_LD_FLAGS}
+	${TARGET} PRIVATE ${ASCIIID_MAC_LD_FLAGS}
 )

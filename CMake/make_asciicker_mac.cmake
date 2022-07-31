@@ -1,10 +1,10 @@
 #-----------
-# ASCIICKER
+# ASCIICKER_MAC
 #-----------
 
 set(TARGET "asciicker")
 
-set(ASCIICKER_SOURCE
+set(ASCIICKER_MAC_SOURCE
 	"src/gl.c"
 	"src/gl45_emu.cpp"
 	"src/x11.cpp"
@@ -27,18 +27,18 @@ set(ASCIICKER_SOURCE
 	"src/font1.cpp"
 )
 
-set(ASCIICKER_CXX_FLAGS	)
-set(ASCIICKER_CPP_FLAGS	-g -save-temps=obj -pthread)
-set(ASCIICKER_C_FLAGS	)
-set(ASCIICKER_LD_FLAGS	-save-temps=obj -pthread -lutil -lGL -lX11 -lXinerama -lgpm -lSDL2)
+set(ASCIICKER_MAC_CXX_FLAGS	-std=c++17)
+set(ASCIICKER_MAC_CPP_FLAGS	-g -save-temps=obj -pthread)
+set(ASCIICKER_MAC_C_FLAGS	)
+set(ASCIICKER_MAC_LD_FLAGS	-save-temps=obj -pthread -lutil -framework OpenGL -lXinerama -lSDL2-2.0.0)
 
-add_executable(${TARGET} ${ASCIICKER_SOURCE})
+add_executable(${TARGET} ${ASCIICKER_MAC_SOURCE})
 
 target_compile_options(
 	${TARGET} PRIVATE
-	$<$<COMPILE_LANGUAGE:CXX>:${ASCIICKER_CXX_FLAGS}>
-	$<$<COMPILE_LANGUAGE:C,CXX>:${ASCIICKER_CPP_FLAGS}>
-	$<$<COMPILE_LANGUAGE:C>:${ASCIICKER_C_FLAGS}>
+	$<$<COMPILE_LANGUAGE:CXX>:${ASCIICKER_MAC_CXX_FLAGS}>
+	$<$<COMPILE_LANGUAGE:C,CXX>:${ASCIICKER_MAC_CPP_FLAGS}>
+	$<$<COMPILE_LANGUAGE:C>:${ASCIICKER_MAC_C_FLAGS}>
 )
 
 target_compile_definitions(
@@ -46,5 +46,5 @@ target_compile_definitions(
 )
 
 target_link_options(
-	${TARGET} PRIVATE ${ASCIICKER_LD_FLAGS}
+	${TARGET} PRIVATE ${ASCIICKER_MAC_LD_FLAGS}
 )

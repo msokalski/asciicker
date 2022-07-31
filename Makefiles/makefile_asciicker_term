@@ -2,7 +2,7 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := ../build/asciicker_term
+BIN := build/asciicker_term
 
 # source files
 SRCS :=	game.cpp \
@@ -22,7 +22,7 @@ SRCS :=	game.cpp \
 		rgba8.cpp \
 
 # source directory
-SRCDIR := ../src
+SRCDIR := src
 
 LDLIBS := -lutil -lgpm
 
@@ -33,10 +33,10 @@ DISTFILES := $(BIN)
 DISTOUTPUT := $(BIN).tar.gz
 
 # intermediate directory for generated object files
-OBJDIR := ../build/asciicer_term_make_o_cache
+OBJDIR := build/.cache/asciicker_term_make_o_cache
 
 # intermediate directory for generated dependency files
-DEPDIR := ../build/asciicer_term_make_d_cache
+DEPDIR := build/.cache/asciicker_term_make_d_cache
 
 # object files, auto generated from sourcce files
 OBJS := $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))

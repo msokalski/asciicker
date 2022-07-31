@@ -8107,11 +8107,11 @@ int main(int argc, char *argv[])
 		{
 			char* dotrun[4] =
 			{
-				strstr(base_path, "/.run/"),
+				strstr(base_path, "/build/"),
 #ifdef _WIN32
-				strstr(base_path, "\\.run\\"),
-				strstr(base_path, "\\.run/"),
-				strstr(base_path, "/.run\\"),
+				strstr(base_path, "\\build\\"),
+				strstr(base_path, "\\build/"),
+				strstr(base_path, "/build\\"),
 #else
 				0,0,0
 #endif

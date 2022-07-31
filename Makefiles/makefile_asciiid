@@ -2,7 +2,7 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := ../build/asciiid
+BIN := build/asciiid
 
 # source files
 SRCS :=	asciiid.cpp \
@@ -33,7 +33,7 @@ SRCS :=	asciiid.cpp \
 		imgui/imgui_widgets.cpp 
 
 # source directory
-SRCDIR := ../src
+SRCDIR := src
 
 LDLIBS := -lGL -lX11 -lXinerama -lutil -lSDL2
 
@@ -44,10 +44,10 @@ DISTFILES := $(BIN)
 DISTOUTPUT := $(BIN).tar.gz
 
 # intermediate directory for generated object files
-OBJDIR := ../build/asciiid_make_o_cache
+OBJDIR := build/.cache/asciiid_make_o_cache
 
 # intermediate directory for generated dependency files
-DEPDIR := ../build/asciiid_make_d_cache
+DEPDIR := build/.cache/asciiid_make_d_cache
 
 # object files, auto generated from source files
 OBJS := $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))

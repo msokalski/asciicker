@@ -14,7 +14,7 @@ xterm \
     -xrm "xterm*font6: -gumix-*-*-*-*-*-20-*-*-*-*-*-*" \
     -xrm "xterm*allowWindowOps: true" \
     -xrm "xterm*allowFontOps: true" \
-    -e .run/game_term
+    -e build/game_term
 
 #cleanup
 xset fp- $PWD/fonts

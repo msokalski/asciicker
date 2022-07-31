@@ -2,13 +2,16 @@
 
 ![GIF](misc/asciicker.gif)
 
+### Important note about scripts and makefiles:
+Scripts and makefiles must be ran from the root of the repository.
+
 ## Installation
 Firstly, you need to choose build type:
 - Cmake (Every OS)
 - MSBuild, aka Visual Studio (Windows only)
 - Make (Every OS)
 
-For Windows it's recommended to use Visual Studio build system:
+### For Windows it's recommended to use Visual Studio build system:
 1) Install [Visual Studio](https://visualstudio.microsoft.com/)
 2) Download zip archive of the repository:
 
@@ -56,18 +59,19 @@ MSYS:   cmake -G "MSYS Makefiles" .. && make
 ```
 6) Run `asciicker`!
 
-Makefiles:
+### Makefiles:
 1) Install [git](https://git-scm.com/downloads)
 2) Install [Make](https://www.gnu.org/software/make/)
-3) Open terminal and enter: `git clone https://github.com/Niki4tap/asciicker.git && cd asciicker && mkdir build && cd Makefiles`
+3) Open terminal and enter: `git clone https://github.com/Niki4tap/asciicker.git && cd asciicker && mkdir build`
 4) Build:
 ```
-Linux: make -f makefile_asciiid && make -f makefile_asciicker && make -f makefile_asciicker_term && make -f makefile_asciicker_server && cd ../build
-MacOS: make -f makefile_asciiid_mac && make -f makefile_asciicker_mac && make -f makefile_asciicker_term_mac && make -f makefile_asciicker_server && cd ../build
+Linux: make -f makefile_asciiid && make -f makefile_asciicker && make -f makefile_asciicker_term && make -f makefile_asciicker_server && cd build
+MacOS: make -f makefile_asciiid_mac && make -f makefile_asciicker_mac && make -f makefile_asciicker_term_mac && make -f makefile_asciicker_server && cd build
 ```
 5) Run `asciicker`!
 
-When building for web it's recommended to use linux or macOS:
+### Web:
+0) When building for web it's recommended to use linux or macOS.
 1) Install [emsdk](https://github.com/emscripten-core/emsdk)
 2) Install [git](https://git-scm.com/downloads)
 3) Open terminal and enter: `git clone https://github.com/Niki4tap/asciicker.git && cd asciicker && mkdir build && Scripts/build-web.sh`

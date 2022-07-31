@@ -2,7 +2,7 @@
 # VAR = expands when referenced
 
 # output binary
-BIN := ../build/asciicker
+BIN := build/asciicker
 
 # source files
 SRCS :=	gl.c \
@@ -27,7 +27,7 @@ SRCS :=	gl.c \
 		font1.cpp \
 
 # source directory
-SRCDIR := ../src
+SRCDIR := src
 
 LDLIBS := -lutil -framework OpenGL -lXinerama -lSDL2-2.0.0
 
@@ -38,10 +38,10 @@ DISTFILES := $(BIN)
 DISTOUTPUT := $(BIN).tar.gz
 
 # intermediate directory for generated object files
-OBJDIR := ../build/game_make_mac_o_cache
+OBJDIR := build/.cache/game_make_mac_o_cache
 
 # intermediate directory for generated dependency files
-DEPDIR := ../build/game_make_mac_d_cache
+DEPDIR := build/.cache/game_make_mac_d_cache
 
 # object files, auto generated from sourcce files
 OBJS := $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))
