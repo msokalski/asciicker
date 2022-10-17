@@ -63,7 +63,7 @@ emcc $WORKLET_OPTIMIZE $WORKLET_SAFETY \
     -s FILESYSTEM=1 \
     -s NO_EXIT_RUNTIME=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
-    -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
+    -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s EXPORTED_FUNCTIONS='["_malloc","_free","_Init","_Proc","_Call","_XOgg"]'
 
 if [ $? -ne 0 ];
@@ -81,8 +81,9 @@ INDEX_OPTIMIZE="-O3 -fno-exceptions -flto"
 #INDEX_OPTIMIZE="-g"
 
 emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
+    stb_vorbis.cpp \
     font1.cpp \
-	gamepad.cpp \
+    gamepad.cpp \
     game.cpp \
     game_web.cpp \
     enemygen.cpp \
@@ -97,13 +98,16 @@ emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample"]' \
-    -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample","_XOgg"]' \
+    -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --no-heap-copy \
     -s NO_EXIT_RUNTIME=1 \
     -lidbfs.js \
     `echo "$ASSETS" | awk '$0="--preload-file "$0' | xargs`
+
+# SAFARI!
+#    -msimd128
 
 if [ $? -ne 0 ];
 then

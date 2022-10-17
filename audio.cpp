@@ -1076,11 +1076,16 @@ bool InitAudio()
             if (max_size)
                 data = Module._malloc(max_size);
 
+	    let XOgg = Module.cwrap('XOgg', null, ['number','number','number']);
+	    console.log("WAHT ?????" + XOgg);
+        let s_idx = 0;
             for (const s in c)
             {
+                console.log(s);
                 if (c[s].contents.length)
                     Module.HEAPU8.set(c[s].contents, data);
-                XOgg(s, data, c[s].contents.length);
+                XOgg(s_idx, data, c[s].contents.length);
+                s_idx++;
             }
 
             if (max_size)
