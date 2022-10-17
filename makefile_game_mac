@@ -10,7 +10,7 @@ SRCS :=	gl.c \
 		gl45_emu.cpp \
 		x11.cpp \
 		sdl.cpp \
-        term.cpp \
+		term.cpp \
 		font1.cpp \
 		gamepad.cpp \
 		game.cpp \
@@ -26,6 +26,10 @@ SRCS :=	gl.c \
 		upng.c \
 		tinfl.c \
 		rgba8.cpp \
+		audio.cpp \
+		stb_vorbis.cpp
+
+
 
 LDLIBS := -lutil -framework OpenGL -lSDL2-2.0.0
 
@@ -76,7 +80,7 @@ CPPFLAGS := -save-temps=obj -pthread -DGAME -O3 -DUSE_SDL
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME -fsanitize=address
 
 # linker flags
-LDFLAGS := -save-temps=obj -pthread -O3
+LDFLAGS := -save-temps=obj -pthread -O3 -framework Audiotoolbox -framework CoreAudio -framework CoreServices
 # LDFLAGS := -g -save-temps=obj -pthread -O3
 # LDFLAGS := -g -save-temps=obj -pthread
 # LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address

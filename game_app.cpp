@@ -52,6 +52,11 @@
 #include "game.h"
 #include "enemygen.h"
 
+
+// FOR AUDIO
+#include "audio.h"
+#include "fast_rand.h"
+
 int tty = -1;
 
 // configurable, or auto lookup?
@@ -66,7 +71,7 @@ void SyncConf()
 {
 }
 
-char conf_path[1024]="";
+char conf_path[1024+20]="";
 const char* GetConfPath()
 {
 	if (conf_path[0] == 0)
@@ -420,6 +425,7 @@ void exit_handler(int signum)
 {
     running = false;
     SetScreen(false);
+    FreeAudio();
     if (tty>0)
     {
         // restore old font
@@ -429,7 +435,7 @@ void exit_handler(int signum)
         
         char cmd[2048];
         sprintf(cmd,"setfont %s/asciicker.%d.psf; rm %s/asciicker.%d.psf; clear;", temp_dir, tty, temp_dir, tty);
-        system(cmd);
+        int errlvl = system(cmd);
     }
 
     exit(0);
@@ -656,12 +662,13 @@ bool PrevGLFont()
     #ifdef PURE_TERM
     if (tty>0)
     {
+        int errlvl;
         tty_font--;
         if (tty_font<0)
             tty_font=0;
-        char cmd[1024];
+        char cmd[1024+50];
         sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
-        system(cmd);
+        errlvl = system(cmd);
     }
     else
     {
@@ -689,12 +696,13 @@ bool NextGLFont()
     #ifdef PURE_TERM
     if (tty>0)
     {
+        int errlvl;
         tty_font++;
         if (tty_fonts[tty_font]<0)
             tty_font--;
-        char cmd[1024];
+        char cmd[1024+50];
         sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
-        system(cmd);
+        errlvl = system(cmd);
     }
     else
     {
@@ -1364,6 +1372,8 @@ int main(int argc, char* argv[])
     printf("exec path: %s\n", argv[0]);
     printf("BASE PATH: %s\n", base_path);
 
+	InitAudio();
+
     /*
     int c16 = 13;
     printf("\x1B[%d;%dm%s",(c16&7)+40,c16<8?25:5,"\n");
@@ -1524,7 +1534,7 @@ int main(int argc, char* argv[])
 	LoadSprites();
 
 	{
-        char a3d_path[1024];
+        char a3d_path[1024 + 20];
         sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
 		FILE* f = fopen(a3d_path, "rb");
 
@@ -1602,6 +1612,7 @@ int main(int argc, char* argv[])
 		if (!gs->Start())
 		{
 			TCP_CLEANUP();
+            FreeAudio();
 			return false;
 		}
 	}
@@ -1623,7 +1634,7 @@ int main(int argc, char* argv[])
 
         if (TermOpen(0, yaw, pos, MyFont::Free))
         {
-            char font_dirname[1024];
+            char font_dirname[1024+10];
             sprintf(font_dirname, "%sfonts", base_path); // = "./fonts";
             fonts_loaded = 0;
             a3dListDir(font_dirname, MyFont::Scan, font_dirname);
@@ -1651,6 +1662,7 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 		_CrtDumpMemoryLeaks();
 #endif
+        FreeAudio();
         return 0;
     }
 
@@ -1673,16 +1685,17 @@ int main(int argc, char* argv[])
     if (tty > 0)
     {
         // store current font
-        char cmd[1024];
+        int errlvl;
+        char cmd[1024 + 40];
         const char* temp_dir = getenv("SNAP_USER_DATA");
         if (!temp_dir || !temp_dir[0])
             temp_dir = "/tmp";
         sprintf(cmd,"setfont -O %s/asciicker.%d.psf;", temp_dir,tty);
-        system(cmd);
+        errlvl = system(cmd);
 
         // setup default font
         sprintf(cmd,"setfont %sfonts/cp437_%dx%d.png.psf", base_path, tty_fonts[tty_font], tty_fonts[tty_font]);
-        system(cmd);
+        errlvl = system(cmd);
 
 #ifdef USE_GPM
         Gpm_Connect conn;
@@ -2706,5 +2719,6 @@ int main(int argc, char* argv[])
 	_CrtDumpMemoryLeaks();
 #endif
 
+    FreeAudio();
 	return 0;
 }

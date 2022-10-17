@@ -4,6 +4,8 @@
 #include "terrain.h"
 #include "world.h"
 
+struct SpriteReq;
+
 struct PhysicsIO
 {
     // INPUT:
@@ -31,12 +33,13 @@ struct PhysicsIO
 
 	bool grounded;
 
-	float xyz[64][3];
+    // what was this for?
+	//float xyz[64][3];
 };
 
 struct Physics;
 
-int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount/*0-none, 1-ground, 2-fly*/); // return num of time steps handled
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, bool me); // return num of time steps handled
 
 Physics* CreatePhysics(Terrain* t, World* w, float pos[3], float dir, float yaw, uint64_t stamp);
 void DeletePhysics(Physics* phys);

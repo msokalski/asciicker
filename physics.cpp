@@ -5,10 +5,13 @@
 #include <assert.h>
 #include "matrix.h"
 #include "physics.h"
+#include "audio.h"
+#include "game.h" // SpriteReq for audio props
 
 struct SoupItem
 {
 	float tri[3][3];
+	int material; // for audio :)
 	float nrm[4]; // {nrm, w} is plane equ
 
 #if 0
@@ -475,6 +478,8 @@ struct Physics
 	float collect_mul_xy;
 	float collect_mul_z;
 
+	int mat;
+
 	float max_height;
 
     //bool collision_failure;
@@ -502,6 +507,77 @@ struct Physics
 
 		Physics* phys = (Physics*)cookie;
 		SoupItem* item = phys->soup + phys->soup_items;
+
+		// check face color
+		// greenish, greish, yellowish, redish
+
+		int rgb[3]= // 0..765
+		{
+			colors[0]+colors[4]+colors[8],
+			colors[1]+colors[5]+colors[9],
+			colors[2]+colors[6]+colors[10]
+		};
+
+		int sat=0,lum=0,mat=3;
+		if (rgb[1]>=rgb[2] && rgb[1]>=rgb[0])
+		{
+			// yellow - cyan
+			lum = rgb[1];
+			mat=3; // green
+			if (rgb[0]>rgb[2])
+			{
+				// yellow-green
+				sat = rgb[0]-rgb[2];
+			}
+			else
+			{
+				// green-cyan
+				sat = rgb[2]-rgb[0];
+			}
+		}
+		else
+		if (rgb[0]>=rgb[1] && rgb[0]>=rgb[2])
+		{
+			// magenta-yellow
+			lum = rgb[0];
+			mat=1; // wood
+
+			if (rgb[1]>rgb[2])
+			{
+				// red-yellow
+				sat = rgb[1]-rgb[2];
+			}
+			else
+			{
+				// magenta-red
+				sat = rgb[2]-rgb[1];
+			}
+		}
+		else
+		//if (rgb[2]>=rgb[0] && rgb[2]>=rgb[1])
+		{
+			// cyan-magenta
+			lum = rgb[2];
+			mat=1; // wood
+
+			if (rgb[0]>rgb[1])
+			{
+				// blue-magenta
+				sat = rgb[0]-rgb[1];
+			}
+			else
+			{
+				// cyan-blue
+				sat = rgb[1]-rgb[0];
+			}
+		}
+
+		if (sat*10<lum)
+		{
+			mat = 0; // rock
+		}
+
+		item->material = mat;
 
 		// multiply coords by collect_tm
 		// then multiply x & y by collect_mul_xy and z by collect_mul_z
@@ -536,6 +612,8 @@ struct Physics
 		item->tri[2][0] = tmv[0] * phys->collect_mul_xy;
 		item->tri[2][1] = tmv[1] * phys->collect_mul_xy;
 		item->tri[2][2] = tmv[2] * phys->collect_mul_z;
+
+
 
 		{
 			float* v[3] = { item->tri[0], item->tri[1], item->tri[2] };
@@ -592,6 +670,8 @@ struct Physics
 		uint16_t diag = GetTerrainDiag(p);
 		uint16_t* hmap = GetTerrainHeightMap(p);
 
+		uint16_t* vmap = GetTerrainVisualMap(p);
+
 		static const double sxy = (double)VISUAL_CELLS / (double)HEIGHT_CELLS;
 		bool hit = false;
 
@@ -604,6 +684,20 @@ struct Physics
 		{
 			for (int hx = 0; hx < HEIGHT_CELLS; hx++)
 			{
+				uint16_t vis = *vmap;
+				int elv = vis>>15;
+				int mat = vis&0x3F;
+				vmap+=2; // 2x visual cells / height cell
+
+				if (mat == 4)
+					mat = 0; // rock
+				else
+				if (mat == 5)
+					mat = 5; // blood
+				else
+				if (mat != 2) // else 2->2 (dirt)
+					mat = 3+elv; // [hi]grass
+
 				float x0 = (x + hx * sxy) * phys->collect_mul_xy, x1 = x0 + sxy * phys->collect_mul_xy;
 				float y0 = (y + hy * sxy) * phys->collect_mul_xy, y1 = y0 + sxy * phys->collect_mul_xy;
 
@@ -647,6 +741,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
 
+						item->material = mat;
 						item++;
 					}
 
@@ -676,6 +771,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[2][0] * item->nrm[0] + v[2][1] * item->nrm[1] + v[2][2] * item->nrm[2]);
 
+						item->material = mat;
 						item++;
 					}
 				}
@@ -707,6 +803,7 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
 
+						item->material = mat;
 						item++;
 					}
 
@@ -736,25 +833,28 @@ struct Physics
 						item->nrm[2] *= nrm;
 						item->nrm[3] = -(v[0][0] * item->nrm[0] + v[0][1] * item->nrm[1] + v[0][2] * item->nrm[2]);
 
+						item->material = mat; 
 						item++;
 					}
 				}
 
 				rot >>= 1;
 			}
+
+			vmap+=VISUAL_CELLS; // 2x visual cells / height cell
 		}
 		phys->soup_items += faces;
 	}    
 };
 
-int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
+int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, bool me)
 {
 	float xy_speed = 0.13;
-	float radius_cells = mount ? 3 : 2; // in full x-cells
+	float radius_cells = req->mount ? 3 : 2; // in full x-cells
 	float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
 	float world_patch = VISUAL_CELLS; // patch size in world coords
 	float world_radius = radius_cells / patch_cells * world_patch;
-	float height_cells = mount ? 9.0 : 7.0; // 7.5; decreased (hair are soft)
+	float height_cells = req->mount ? 9.0 : 7.0; // 7.5; decreased (hair are soft)
 
 	// 2/3 = 1/(zoom*sin30)
 	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
@@ -780,6 +880,13 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 			elaps = interval;
 		phys->stamp += elaps;
 		float dt = elaps * (60.0f / 1000000.0f); 
+
+
+		const int step_offs = 3*1024;
+		const int step_mask = (8*1024-1);
+		int prev_step;
+		float xy_vel;
+		float in_water;
 
 		// by having old and new water level we can (in future) keep player floating on top of waves 
 		phys->water = io->water;
@@ -906,8 +1013,14 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 				phys->vel[0] = 0;
 				phys->vel[1] = 0;
 
-				if (mount<2)
+				if (req->mount < 2)
+				{
 					phys->player_stp = -1;
+					/*
+					if (me)
+						AudioWalk(0);
+					*/
+				}
 			}
 			else
 			{
@@ -935,10 +1048,14 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 
 				// so 8 frame walk anim divides stp / 1024 to get frame num
 
-				if (mount>1) // slower for flying mounts
-					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * sqrt(sqr_vel_xy)));
+				prev_step = (phys->player_stp + step_offs) & step_mask;
+
+				xy_vel = sqrt(sqr_vel_xy);
+
+				if (req->mount>1) // slower for flying mounts
+					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * xy_vel));
 				else
-					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * sqrt(sqr_vel_xy)));
+					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(64 * xy_vel));
 
 				float vel_damp = powf(0.9f, dt);
 				phys->vel[0] *= vel_damp;
@@ -963,17 +1080,19 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 			//		if (phys->vel[2] < -1)
 			//			phys->vel[2] = -1;
 
-					// water resistance
+			// water resistance
 			float res = (phys->water - phys->pos[2]) / world_height;
 			if (res < 0)
 				res = 0;
 			if (res > 1)
 				res = 1;
 
+			in_water = res;
+
 			float xy_res = powf(1.0 - 0.5 * res, dt);
 			float z_res = powf(1.0 - 0.1 * res, dt);
 
-			if (mount>1 && phys->vel[2] < 0)
+			if (req->mount>1 && phys->vel[2] < 0)
 				z_res = powf(1.0 - 0.1, dt);
 
 			phys->vel[0] *= xy_res;
@@ -990,7 +1109,10 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 		io->x_impulse *= 0.5;
 		io->y_impulse *= 0.5;
 
+		int material_votes[6] = {0}; /* rock:0, wood:1, dirt:2, grass:3, hi-grass:4, blood:5, water:6 */
+
 		// POS - troubles!
+		float prev_vel_z = phys->vel[2];
 		float contact_normal_z = 0;
 		{
 			////////////////////
@@ -1120,6 +1242,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 					sphere_pos[1] + full_step[1] - collision_pos[1],
 					sphere_pos[2] + full_step[2] - collision_pos[2]
 				};
+
+				material_votes[collision_item->material]++;
 
 				float full_len = sqrt(full_step[0] * full_step[0] + full_step[1] * full_step[1] + full_step[2] * full_step[2]);
 				float ratio = 0.0;
@@ -1285,14 +1409,56 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 			}
 		}
 
+		// votes given, choose new winner
+		{
+			int mat = phys->mat; // default to prev winner (was grass)
+			int votes = 0;
+			for (int m=0; m<6; m++)
+			{
+				if (material_votes[m]>votes)
+				{
+					votes = material_votes[m];
+					mat = m;			
+				}
+			}
+			phys->mat = mat;
+
+			// override if legs are in water
+			if (in_water>0.1)
+				phys->mat = 6; // voting veto!
+		}
+
 		// jump
+
+		float prev_contact = phys->accum_contact;
 
 		phys->accum_contact += fmaxf(0.0f,contact_normal_z);
 		if (phys->accum_contact > 5)
 			phys->accum_contact = 5;
 
+		if (me && prev_contact < 1.0 && phys->accum_contact >= 1.0)
+		//if (me && prev_vel_z < 0 && phys->vel[2] > prev_vel_z)
+		{
+			// how to find nice energy loss ?
+			AudioWalk(0, 65535, req, phys->mat);
+		}
+		else
+		if (me && (in_water>0.5 || phys->accum_contact >= 1.0) && phys->player_stp>=0)
+		{
+			int volume = (int)(65535 * 1.0f*log10f(xy_vel + 1.0));
+			if (volume > 65535)
+				volume = 65535;
+			int next_step = (phys->player_stp + step_offs) & step_mask;
+			if (prev_step < 2048 && next_step >= 2048)
+				AudioWalk(1, volume, req, phys->mat);
+			else
+			if (prev_step < 3 * 2048 && next_step >= 3 * 2048)
+				AudioWalk(2, volume, req, phys->mat);
+		}
+
+
 		// if (contact_normal_z > 0.0)
-		if (phys->accum_contact >= 1.0 || mount>1)
+		if (phys->accum_contact >= 1.0 || req->mount>1)
 		{
 			if (io->jump)
 			{
@@ -1300,7 +1466,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 				phys->accum_contact = 0;
 
 				// ensure for mount>1 current height is not > ground + max_fly_height
-				if (mount < 2 || phys->pos[2] < phys->max_height + 100)
+				if (req->mount < 2 || phys->pos[2] < phys->max_height + 100)
 				{
 
 					if (phys->vel[2] < 0)
@@ -1320,7 +1486,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 		if (phys->vel[2] > 20)
 			phys->vel[2] = 20;
 
-		if (mount > 1)
+		if (req->mount > 1)
 		{
 			if (!io->grounded)
 			{
@@ -1334,6 +1500,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 			}
 		}
 
+		/*
+		// what was this for?
 		for (int h = 63; h > 0; h--)
 		{
 			io->xyz[h][0] = io->xyz[h - 1][0];
@@ -1344,6 +1512,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, int mount)
 		io->xyz[0][0] = phys->pos[0];
 		io->xyz[0][1] = phys->pos[1];
 		io->xyz[0][2] = phys->pos[2];
+		*/
 	}
 
 	io->pos[0] = phys->pos[0];
@@ -1444,6 +1613,8 @@ Physics* CreatePhysics(Terrain* t, World* w, float pos[3], float dir, float yaw,
     Physics* phys = (Physics*)malloc(sizeof(Physics));
 
 	phys->stamp = stamp;
+
+	phys->mat = 3; // default to grass
 
     phys->terrain = t;
     phys->world = w;

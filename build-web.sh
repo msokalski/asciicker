@@ -22,18 +22,68 @@ hash emcc 2>/dev/null || { pushd ~/emsdk; source ./emsdk_env.sh --build=Release;
 # now we can build, 
 # for the first time it will compile and cache libc
 
-rm .web/index.html
-rm .web/index.js
-rm .web/index.wasm
-rm .web/index.data
+echo ""
+echo "CLEARING previous build ..."
 
-cp asciicker.png .web/asciicker.png
-cp asciicker.json .web/asciicker.json
-cp asciicker.js .web/asciicker.js
+{
+    rm .web/index.html
+    rm .web/index.js
+    rm .web/index.wasm
+    rm .web/index.data
+    rm .web/audio.js
+} &> /dev/null
 
-emcc --emrun -O3 \
+A3DMAPS=`ls a3d/game_map_y8.a3d`
+MESHES=`ls meshes/*.akm`
+SPRITES=`ls sprites/*.xp`
+SAMPLES=`ls samples/*.ogg`
+
+#requires bash or zsh
+ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"
+
+echo ""
+echo "MAKING audio worklet ..."
+
+WORKLET_SAFETY=""
+WORKLET_OPTIMIZE="-O3 -fno-exceptions -flto"
+
+#WORKLET_SAFETY="-s SAFE_HEAP=1 -s ASSERTIONS=2"
+#WORKLET_OPTIMIZE="-g"
+
+emcc $WORKLET_OPTIMIZE $WORKLET_SAFETY \
+    -DWORKLET \
+    audio.cpp \
+    stb_vorbis.cpp \
+    -o .web/audio.js \
+    -s BINARYEN_ASYNC_COMPILATION=0 \
+    -s SINGLE_FILE=1 \
+    --pre-js audio-pre.js \
+    --post-js audio-post.js \
+    --no-heap-copy \
+    -s FILESYSTEM=1 \
+    -s NO_EXIT_RUNTIME=1 \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_Init","_Proc","_Call","_XOgg"]'
+
+if [ $? -ne 0 ];
+then
+    exit $?
+fi
+
+echo ""
+echo "MAKING index(wasm + data + js + html) ..."
+
+INDEX_SAFETY=""
+INDEX_OPTIMIZE="-O3 -fno-exceptions -flto"
+
+#INDEX_SAFETY="-s SAFE_HEAP=1 -s ASSERTIONS=2"
+#INDEX_OPTIMIZE="-g"
+
+emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
+    stb_vorbis.cpp \
     font1.cpp \
-	gamepad.cpp \
+    gamepad.cpp \
     game.cpp \
     game_web.cpp \
     enemygen.cpp \
@@ -43,16 +93,41 @@ emcc --emrun -O3 \
     sprite.cpp \
     physics.cpp \
     render.cpp \
+    audio.cpp \
     upng.c \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet"]' \
-    -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample","_XOgg"]' \
+    -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --no-heap-copy \
     -s NO_EXIT_RUNTIME=1 \
     -lidbfs.js \
+    `echo "$ASSETS" | awk '$0="--preload-file "$0' | xargs`
+
+# SAFARI!
+#    -msimd128
+
+if [ $? -ne 0 ];
+then
+    exit $?
+fi
+
+echo ""
+echo "STAGING site (icon png, manifest json, service worker js)..."
+
+cp favicon.ico .web/favicon.ico
+cp asciicker.png .web/asciicker.png
+cp asciicker.json .web/asciicker.json
+cp asciicker.js .web/asciicker.js
+
+
+echo ""
+emrun --no_browser --port 8888 .web/index.html
+
+exit $?
+
     --preload-file a3d/game_map_y8.a3d \
     --preload-file sprites/font-1.xp \
     --preload-file sprites/gamepad.xp \
@@ -271,8 +346,6 @@ emcc --emrun -O3 \
     --preload-file meshes/old-tree-1.akm \
     --preload-file meshes/old-tree-2.akm \
     --preload-file meshes/brick-1.akm \
-    --preload-file meshes/tree-3.akm
-
-# run in mini-server
-
-emrun --no_browser --port 8888 .web/index.html
+    --preload-file meshes/tree-3.akm \
+    --preload-file samples/131660__bertrof__game-sound-correct.ogg \
+    --preload-file samples/13290__schademans__pipe9.ogg

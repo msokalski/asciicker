@@ -170,6 +170,7 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="audio.h" />
     <ClInclude Include="enemygen.h" />
     <ClInclude Include="font1.h" />
     <ClInclude Include="game.h" />
@@ -206,6 +207,7 @@
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">USE_SDL;EDITOR;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <ClCompile Include="audio.cpp" />
     <ClCompile Include="enemygen.cpp" />
     <ClCompile Include="font1.cpp" />
     <ClCompile Include="game.cpp" />

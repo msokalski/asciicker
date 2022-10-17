@@ -185,6 +185,7 @@ parts:
       - meshes/
       - sprites/
       - palettes/
+      - samples/
 
   launcher:
     plugin: dump

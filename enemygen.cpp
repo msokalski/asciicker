@@ -31,16 +31,18 @@ void LoadEnemyGens(FILE* f)
 	for (int i = 0; i < num; i++)
 	{
 		EnemyGen* eg = (EnemyGen*)malloc(sizeof(EnemyGen));
-		fread(eg->pos, sizeof(float), 3, f);
 
-		fread(&eg->alive_max, sizeof(int), 1, f);
-		fread(&eg->revive_min, sizeof(int), 1, f);
-		fread(&eg->revive_max, sizeof(int), 1, f);
-		fread(&eg->armor, sizeof(int), 1, f);
-		fread(&eg->helmet, sizeof(int), 1, f);
-		fread(&eg->shield, sizeof(int), 1, f);
-		fread(&eg->sword, sizeof(int), 1, f);
-		fread(&eg->crossbow, sizeof(int), 1, f);
+		int r;
+		r = fread(eg->pos, sizeof(float), 3, f);
+
+		r = fread(&eg->alive_max, sizeof(int), 1, f);
+		r = fread(&eg->revive_min, sizeof(int), 1, f);
+		r = fread(&eg->revive_max, sizeof(int), 1, f);
+		r = fread(&eg->armor, sizeof(int), 1, f);
+		r = fread(&eg->helmet, sizeof(int), 1, f);
+		r = fread(&eg->shield, sizeof(int), 1, f);
+		r = fread(&eg->sword, sizeof(int), 1, f);
+		r = fread(&eg->crossbow, sizeof(int), 1, f);
 
 		eg->prev = 0;
 		eg->next = enemygen_head;

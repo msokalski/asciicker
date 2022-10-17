@@ -11,6 +11,7 @@
 
 #include "font1.h"
 #include "gamepad.h"
+#include "audio.h"
 
 uint8_t ConvertToCP437(uint32_t uc)
 {
@@ -376,8 +377,8 @@ void ReadConf(Game* g)
 		//printf("ReadConf ok\n");
 		int r = fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 
-		fread(&g->perspective, 1, 1, f);
-		fread(&g->blood, 1, 1, f);
+		r = fread(&g->perspective, 1, 1, f);
+		r = fread(&g->blood, 1, 1, f);
 
 		fclose(f);
 	}
@@ -467,7 +468,7 @@ struct HPBar
 
 		int x_thresh = pos[0] + dx * (1 + (int)(val * (size - 2) + 0.5f));
 		int perc = (int)(val * 100 + 0.5f);
-		char str[]="           ";
+		char str[]="           xxxx"; // shut wrngz up
 
 		if (perc<100)
 			sprintf(str+1,"%d%%",perc);
@@ -4677,7 +4678,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	int steps = Animate(physics, _stamp, &io, player.req.mount);
+	int steps = Animate(physics, _stamp, &io, &player.req, true);
 
 	if (io.grounded && blood)
 		BloodLeak(&player, steps);
@@ -4950,7 +4951,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						pio.jump = false;
 					}
 
-					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
+					int s = Animate(p, _stamp, &pio, &h->req, false);
 
 					if (pio.grounded && blood)
 						BloodLeak(h, s);
@@ -5025,7 +5026,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 						pio.y_force = 0;
 						pio.jump = false;
 					}
-					int s = Animate(p, _stamp, &pio, h->req.mount != 0);
+					int s = Animate(p, _stamp, &pio, &h->req, false);
 
 					if (pio.grounded && blood)
 						BloodLeak(h, s);
@@ -6573,6 +6574,14 @@ void Game::OnSize(int w, int h, int fw, int fh)
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)
 {
+	/*
+	if (keyb==KEYB_CHAR)
+	{
+		int freq = 100 + fast_rand()%100;
+		CallAudio((uint8_t*)&freq,sizeof(freq));
+	}
+	*/
+
 	if (keyb == GAME_KEYB::KEYB_DOWN)	
 	{
 		bool auto_rep = (key & A3D_AUTO_REPEAT) != 0;
@@ -8234,6 +8243,14 @@ int FirstFree(int size, int* arr)
 
 void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 {
+	/*
+	if (mouse==MOUSE_LEFT_BUT_DOWN)
+	{
+		int freq = 100 + fast_rand()%100;
+		CallAudio((uint8_t*)&freq,sizeof(freq));
+	}
+	*/
+
 	// handle layers first ...
 	if (menu_depth>=0)
 	{
@@ -8453,6 +8470,14 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 {
 	if (id<1 || id>3)
 		return;
+	/*
+	if (touch==TOUCH_BEGIN)
+	{
+		int freq = 100 + fast_rand()%100;
+		CallAudio((uint8_t*)&freq,sizeof(freq));
+	}
+	*/
+
 
 	// handle layers first ...
 	if (menu_depth>=0)
