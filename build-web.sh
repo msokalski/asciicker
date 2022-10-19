@@ -346,6 +346,4 @@ exit $?
     --preload-file meshes/old-tree-1.akm \
     --preload-file meshes/old-tree-2.akm \
     --preload-file meshes/brick-1.akm \
-    --preload-file meshes/tree-3.akm \
-    --preload-file samples/131660__bertrof__game-sound-correct.ogg \
-    --preload-file samples/13290__schademans__pipe9.ogg
+    --preload-file meshes/tree-3.akm
