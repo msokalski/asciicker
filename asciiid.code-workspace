@@ -24,7 +24,8 @@
 			"initializer_list": "cpp",
 			"utility": "cpp",
 			"typeinfo": "cpp",
-			"map": "cpp"
+			"map": "cpp",
+			"__config": "cpp"
 		}
 	}
 }

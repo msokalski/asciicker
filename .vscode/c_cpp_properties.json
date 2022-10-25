@@ -3,6 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
+                "${workspaceFolder}/v8/v8/include",
                 "${workspaceFolder}/**"
             ],
             "defines": ["USE_SDL","USE_GPM"],

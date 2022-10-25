@@ -24,6 +24,193 @@
 # include <gpm.h>
 #endif
 
+#define USE_V8
+
+#ifndef PURE_TERM // temporarily until makefile_game_term is fixed
+
+#ifdef USE_V8
+
+#define V8_COMPRESS_POINTERS 1
+#define V8_ENABLE_SANDBOX 1
+#include <libplatform/libplatform.h>
+#include <v8.h>
+
+v8::Isolate* isolate = 0;
+//v8::Persistent<v8::Context>* persistent_context = 0;
+std::unique_ptr<v8::Platform> platform = 0;
+v8::ArrayBuffer::Allocator* array_buffer_allocator = 0;
+int32_t ak_x = 111;
+
+// Extracts a C string from a V8 Utf8Value.
+const char* ToCString(const v8::String::Utf8Value& value) {
+  return *value ? *value : "<string conversion failed>";
+}
+
+void XPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  bool first = true;
+  for (int i = 0; i < args.Length(); i++) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+    if (first) {
+      first = false;
+    } else {
+      printf(" ");
+    }
+    v8::String::Utf8Value str(args.GetIsolate(), args[i]);
+    const char* cstr = ToCString(str);
+    printf("%s", cstr);
+  }
+  printf("\n");
+  fflush(stdout);
+}
+
+void XGetter(v8::Local<v8::String> property,
+              const v8::PropertyCallbackInfo<v8::Value>& info) {
+
+    printf("Get\n");
+
+  info.GetReturnValue().Set(ak_x);
+}
+
+void XSetter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
+             const v8::PropertyCallbackInfo<void>& info) {
+
+    printf("Set\n");
+                
+  if (!value->IsNumber())
+    return; // ignore stupid things
+
+  // which is faster? 
+  ak_x = (value->Int32Value(info.GetIsolate()->GetCurrentContext())).ToChecked();
+  // ak_x = (int32_t) value->NumberValue(isolate->GetCurrentContext()).ToChecked();
+}
+
+void XIndexedGetter(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    // lat x = obj.prop[index];
+    printf("Get[%d]\n",index);
+}
+
+void XIndexedSetter(uint32_t index, v8::Local< v8::Value > value, const v8::PropertyCallbackInfo< v8::Value > &info)
+{
+    // obj.prop[index] = x;
+    printf("Set[%d]\n",index);
+}
+
+void XIndexedQuery(uint32_t index, const v8::PropertyCallbackInfo< v8::Integer > &info)
+{
+    printf("Query[%d]\n",index);
+}
+
+void XIndexedDeleter(uint32_t index, const v8::PropertyCallbackInfo< v8::Boolean > &info)
+{
+    printf("Delete[%d]\n",index);
+}
+
+void XIndexedEnumerator(const v8::PropertyCallbackInfo< v8::Array > &info)
+{
+    printf("Enum\n");
+}
+
+
+void free_v8()
+{
+    {
+        v8::HandleScope handle_scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        context->Exit();
+    }
+
+    isolate->Exit();
+
+    // Dispose the isolate and tear down V8.
+    isolate->Dispose();
+    v8::V8::Dispose();
+
+    v8::V8::DisposePlatform();
+
+    if (array_buffer_allocator)
+        delete array_buffer_allocator;
+    array_buffer_allocator = 0;
+
+    printf("V8 DISPOSED.\n");    
+}
+
+void init_v8()
+{
+
+    #ifdef V8_INTL_SUPPORT
+    assert(!"V8_INTL_SUPPORT")
+    #endif
+
+    #ifdef V8_USE_EXTERNAL_STARTUP_DATA
+    assert(!"V8_USE_EXTERNAL_STARTUP_DATA")
+    #endif
+
+    // our own v8_monolith build should be compiled 
+    // w/o i18n and esd
+    // v8::V8::InitializeICUDefaultLocation(argv[0]);
+    // v8::V8::InitializeExternalStartupData(argv[0]);
+
+    platform = v8::platform::NewDefaultPlatform();
+    v8::V8::InitializePlatform(platform.get());
+    v8::V8::Initialize();
+
+    printf("INITIALIZED V8 %s\n",v8::V8::GetVersion());
+
+    // Create a new Isolate and make it the current one.
+    array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+    v8::Isolate::CreateParams create_params;
+    create_params.array_buffer_allocator = array_buffer_allocator;
+
+    isolate = v8::Isolate::New(create_params);
+    isolate->Enter(); // v8::Isolate::Scope isolate_scope(isolate);
+    
+    v8::HandleScope handle_scope(isolate);
+
+    // YGetter/YSetter are so similar they are omitted for brevity
+    v8::Local<v8::ObjectTemplate> global_templ = v8::ObjectTemplate::New(isolate);
+    global_templ->SetAccessor(v8::String::NewFromUtf8(isolate, "ak_x").ToLocalChecked(), XGetter, XSetter);
+
+    global_templ->SetIndexedPropertyHandler(XIndexedGetter,XIndexedSetter,XIndexedQuery,XIndexedDeleter,XIndexedEnumerator);
+
+    global_templ->Set(isolate, "ak_print", v8::FunctionTemplate::New(isolate, XPrint));
+
+    v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global_templ);
+    context->Enter(); // v8::Context::Scope context_scope(context);
+}
+
+void exec_v8(const char* str)
+{
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();    
+
+    // Create a string containing the JavaScript source code.
+    v8::MaybeLocal<v8::String> source = v8::String::NewFromUtf8(isolate, str);
+
+    // Compile the source code.
+    v8::MaybeLocal<v8::Script> script = v8::Script::Compile(context, source.ToLocalChecked());
+
+    if (!script.IsEmpty())
+    {
+        // Run the script to get the result.
+        v8::MaybeLocal<v8::Value> result = script.ToLocalChecked()->Run(context);
+
+        if (!result.IsEmpty())
+        {
+            v8::String::Utf8Value utf8(isolate, result.ToLocalChecked()->ToString(context).ToLocalChecked());
+            printf("string %s\n", *utf8);
+        }
+    }
+    else
+    {
+        printf("can't compile\n");
+    }
+}
+
+#endif
+#endif
+
+
 // work around including <netinet/tcp.h>
 // which also defines TCP_CLOSE
 #ifndef TCP_DELAY
@@ -1291,6 +1478,70 @@ bool read_js(int fd)
 
 int main(int argc, char* argv[])
 {
+    
+    
+    /*
+        AnsiCell* buf / render_buf;   // AnsiCell = {uint8_t fg, bk, gl, spare}
+        int buf_width, buf_height;
+
+        World* LoadWorld(FILE* f, bool editor); // ???
+
+        Inst* World::FindInstance(story_id);
+        void ShowInst(Inst* i);
+        void HideInst(Inst* i);
+
+        //
+        int GetInstStoryID(Inst* i);
+
+        // is instance an item ???
+        Item* GetInstItem(Inst* i, float pos[3], float* yaw);
+
+        // is instance a sprite ???
+        Sprite* GetInstSprite(Inst* i, float pos[3], float* yaw);
+
+        // is instance a mesh ???
+        Mesh* GetInstMesh(Inst* i);
+
+        Terrain* terrain;
+        // editing via Patches may be hard!
+
+
+        Game* game;
+            bool perspective;
+            bool blood;
+            bool show_keyb;
+            bool show_inventory
+
+            int water;
+
+            Item** items_inrange;
+            int items_count;
+
+            Human player;
+            
+            Inventory inventory;
+        
+            bool DropItem(int index);
+            bool PickItem(Item* item);
+
+
+        void BloodLeak(Character* c, int steps);
+
+
+
+        Material mat[256];
+        
+    
+    */
+    
+    #ifndef PURE_TERM
+    #ifdef USE_V8
+    init_v8();
+    exec_v8(R"( ak_x[2]=10; this[1]; this[2]=3; delete this[4]; ak_print("ads"); "ooo" )");
+    free_v8();
+    #endif
+    #endif
+
 	/*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
 	for (int i = 0; i < 16; i++)
