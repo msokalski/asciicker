@@ -5,6 +5,7 @@
 struct Sprite
 {
 	int refs;
+	bool recolored;
 
 	struct Frame
 	{
@@ -39,9 +40,9 @@ struct Sprite
 };
 
 Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl = true,*/ const uint8_t* recolor = 0, bool detached = false);
-Sprite* GetFirstSprite();
-Sprite* GetPrevSprite(Sprite* s);
-Sprite* GetNextSprite(Sprite* s);
+Sprite* GetFirstSprite(bool all=true);
+Sprite* GetPrevSprite(Sprite* s, bool all=true);
+Sprite* GetNextSprite(Sprite* s, bool all=true);
 int GetSpriteName(Sprite* s, char* buf, int size);
 
 void SetSpriteCookie(Sprite* s, void* cookie);

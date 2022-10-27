@@ -25,7 +25,8 @@
 			"utility": "cpp",
 			"typeinfo": "cpp",
 			"map": "cpp",
-			"__config": "cpp"
+			"__config": "cpp",
+			"typeindex": "cpp"
 		}
 	}
 }

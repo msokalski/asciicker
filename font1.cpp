@@ -49,6 +49,7 @@ void FreeFont1()
 {
 	FreeSprite(font1_sprite[0]);
 	FreeSprite(font1_sprite[1]);
+	FreeSprite(font1_sprite[2]);
 }
 
 void Font1Size(const char* str, int* w, int* h)

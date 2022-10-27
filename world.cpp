@@ -4785,6 +4785,13 @@ int GetInstStoryID(Inst* i)
 	return i->story_id;
 }
 
+// for GAMEPLOT/EDITOR
+void SetInstStoryID(Inst* i, int id) 
+{
+	if (i)
+		i->story_id = id;
+}
+
 bool GetInstTM(Inst* i, double tm[16])
 {
 	if (i->inst_type == Inst::INST_TYPE::MESH)

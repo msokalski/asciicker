@@ -107,23 +107,38 @@ void FreeSprite(Sprite* spr)
 	free(spr);
 }
 
-Sprite* GetFirstSprite()
+Sprite* GetFirstSprite(bool all)
 {
-	return sprite_head;
+	Sprite* s = sprite_head;
+	if (all)
+		return s;
+	while (s && s->recolored)
+		s=s->next;
+	return s;
 }
 
-Sprite* GetPrevSprite(Sprite* s)
+Sprite* GetPrevSprite(Sprite* s, bool all)
 {
 	if (!s)
 		return 0;
-	return s->prev;
+	s=s->prev;
+	if (all)
+		return s;
+	while (s && s->recolored)
+		s=s->prev;
+	return s;
 }
 
-Sprite* GetNextSprite(Sprite* s)
+Sprite* GetNextSprite(Sprite* s, bool all)
 {
 	if (!s)
 		return 0;
-	return s->next;
+	s=s->next;
+	if (all)
+		return s;
+	while (s && s->recolored)
+		s=s->next;
+	return s;
 }
 
 int GetSpriteName(Sprite* s, char* buf, int size)
@@ -793,6 +808,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	Sprite* sprite = (Sprite*)malloc(sizeof(Sprite) + sizeof(Sprite::Anim));
 
 	sprite->refs = 1;
+	sprite->recolored = recolor != 0; // so editor can skip'em
 	sprite->cookie = 0;
 	sprite->projs = projs;
 	sprite->angles = angles;

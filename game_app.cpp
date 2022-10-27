@@ -26,10 +26,7 @@
 
 #define USE_V8
 
-#ifndef PURE_TERM // temporarily until makefile_game_term is fixed
-
 #ifdef USE_V8
-
 #define V8_COMPRESS_POINTERS 1
 #define V8_ENABLE_SANDBOX 1
 #include <libplatform/libplatform.h>
@@ -208,8 +205,6 @@ void exec_v8(const char* str)
 }
 
 #endif
-#endif
-
 
 // work around including <netinet/tcp.h>
 // which also defines TCP_CLOSE
@@ -1534,12 +1529,10 @@ int main(int argc, char* argv[])
     
     */
     
-    #ifndef PURE_TERM
     #ifdef USE_V8
     init_v8();
     exec_v8(R"( ak_x[2]=10; this[1]; this[2]=3; delete this[4]; ak_print("ads"); "ooo" )");
     free_v8();
-    #endif
     #endif
 
 	/*

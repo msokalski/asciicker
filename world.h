@@ -36,6 +36,9 @@ Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int an
 Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name, int story_id);
 void DeleteInst(Inst* i);
 
+// for GAMEPLOT/EDITOR
+void SetInstStoryID(Inst* i, int id);
+
 World* GetInstWorld(Inst* i);
 
 Mesh* GetInstMesh(Inst* i);
