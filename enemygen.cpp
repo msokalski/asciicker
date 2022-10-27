@@ -5,6 +5,18 @@
 EnemyGen* enemygen_head = 0;
 EnemyGen* enemygen_tail = 0;
 
+#ifdef EDITOR
+EnemyGen* HitEnemyGen(double* p, const double* v)
+{
+	// for every gen in the list,
+	// calc gen distance from p->v axis
+	// if within threshold, 
+	// and distance between p and gen is smaller than current_best
+	// replace current_best with gen
+	return 0;
+}
+#endif
+
 void FreeEnemyGens()
 {
 	EnemyGen* eg = enemygen_head;

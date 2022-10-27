@@ -5716,6 +5716,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	Item** inrange = GetNearbyItems(renderer);
 
+	// TODO: 
+	// add GetNearbyStoryThings (that are not items and have story_id>=0)
+	// for every story thing in range, ask story teller for interact sprite
+	// being displayed in the pick-up list (if returned not null)
+	// if selected, notify story teller about it!
+
 	{
 		AnsiCell status;
 		char status_text[80];

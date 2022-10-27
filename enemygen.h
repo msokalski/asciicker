@@ -23,3 +23,6 @@ extern EnemyGen* enemygen_tail;
 void FreeEnemyGens();
 void LoadEnemyGens(FILE* f);
 void SaveEnemyGens(FILE* f);
+
+// for editor
+EnemyGen* HitEnemyGen(double* p, const double* v);
