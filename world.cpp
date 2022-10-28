@@ -359,6 +359,23 @@ struct SpriteInst : Inst
 	}
 };
 
+#ifdef EDITOR
+bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float yaw, double p[3], double v[3], double ret[3], bool positive_only)
+{
+	double ray[10] = 
+	{
+		p[1] * v[2] - p[2] * v[1],
+		p[2] * v[0] - p[0] * v[2],
+		p[0] * v[1] - p[1] * v[0],
+		v[0], v[1], v[2],
+		p[0], p[1], p[2],
+		FLT_MAX
+	};
+
+	return HitSprite(sprite, anim, frame, pos, yaw, ray, ret, positive_only);
+}
+#endif
+
 struct ItemInst : Inst
 {
 	World* w;

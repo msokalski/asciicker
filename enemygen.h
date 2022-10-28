@@ -24,5 +24,7 @@ void FreeEnemyGens();
 void LoadEnemyGens(FILE* f);
 void SaveEnemyGens(FILE* f);
 
-// for editor
-EnemyGen* HitEnemyGen(double* p, const double* v);
+#ifdef EDITOR
+EnemyGen* HitEnemyGen(double* p, double* v);
+void DeleteEnemyGen(EnemyGen* eg);
+#endif

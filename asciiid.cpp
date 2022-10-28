@@ -6560,6 +6560,7 @@ void my_render(A3D_WND* wnd)
 	double inst_tm[16];
 	Mesh* inst_preview = 0;
 	Inst* hover_inst = 0;
+	EnemyGen* hover_eg = 0;
 
 	bool sprite_preview = false;
 	float sprite_preview_pos[3] = { 0,0,0 };
@@ -7430,21 +7431,29 @@ void my_render(A3D_WND* wnd)
 					{
 						// hit test against all enemygens
 						// pick closest one
-						/*
-						HitEnemyGen(ray_p, ray_v, hit);
 
-						if (io.MouseDown[0])
+						EnemyGen* eg = HitEnemyGen(ray_p, ray_v);
+
+						if (io.MouseDown[0] && !inst_added)
 						{
 							// delete it
+							hover_eg = 0;
+
+							if (eg)
+							{
+								inst_added = true;
+								DeleteEnemyGen(eg);
+							}
 						}
 						else
 						{
 							// hilight it
+							hover_eg = eg;
 						}
-						*/
 					}
 					else
 					{
+						hover_eg = 0;
 						if (!inst_added && io.MouseDown[0])
 						{
 							int flags = INST_USE_TREE | INST_VISIBLE;
@@ -7695,7 +7704,7 @@ void my_render(A3D_WND* wnd)
 		while (eg)
 		{
 			// draw something
-			RenderContext::RenderSprite(0, enemygen_sprite, eg->pos, 0, -1, Item::EDIT, 0, rc);
+			RenderContext::RenderSprite(0, enemygen_sprite, eg->pos, 0, 0, eg==hover_eg ? 1 : 0, 0, rc);
 			eg = eg->next;
 		}
 	}

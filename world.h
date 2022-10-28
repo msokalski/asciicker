@@ -98,3 +98,7 @@ void SoftInstAdd(Inst* i);
 void SoftInstDel(Inst* i);
 void HardInstDel(Inst* i);
 
+#ifdef EDITOR
+// used in editor for enemy gen hit testing
+bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float yaw, double p[3], double v[3], double ret[3], bool positive_only);
+#endif
