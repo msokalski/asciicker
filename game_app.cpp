@@ -24,11 +24,39 @@
 # include <gpm.h>
 #endif
 
+// work around including <netinet/tcp.h>
+// which also defines TCP_CLOSE
+#ifndef TCP_DELAY
+#define TCP_NODELAY 1
+#endif
+
+#else
+#define PATH_MAX 1024
+#endif
+
+#include <assert.h>
+
+#include "render.h"
+#include "physics.h"
+#include "sprite.h"
+#include "matrix.h"
+
+#include "network.h"
+
 #define USE_V8
 
 #ifdef USE_V8
+
+
+#ifdef _WIN32
+#pragma comment(lib,"v8_monolith.lib")
+#pragma comment(lib,"Dbghelp.lib")
+#pragma comment(lib,"Winmm.lib")
+#endif
+
 #define V8_COMPRESS_POINTERS 1
 #define V8_ENABLE_SANDBOX 1
+
 #include <libplatform/libplatform.h>
 #include <v8.h>
 
@@ -40,70 +68,71 @@ int32_t ak_x = 111;
 
 // Extracts a C string from a V8 Utf8Value.
 const char* ToCString(const v8::String::Utf8Value& value) {
-  return *value ? *value : "<string conversion failed>";
+    return *value ? *value : "<string conversion failed>";
 }
 
 void XPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  bool first = true;
-  for (int i = 0; i < args.Length(); i++) {
-    v8::HandleScope handle_scope(args.GetIsolate());
-    if (first) {
-      first = false;
-    } else {
-      printf(" ");
+    bool first = true;
+    for (int i = 0; i < args.Length(); i++) {
+        v8::HandleScope handle_scope(args.GetIsolate());
+        if (first) {
+            first = false;
+        }
+        else {
+            printf(" ");
+        }
+        v8::String::Utf8Value str(args.GetIsolate(), args[i]);
+        const char* cstr = ToCString(str);
+        printf("%s", cstr);
     }
-    v8::String::Utf8Value str(args.GetIsolate(), args[i]);
-    const char* cstr = ToCString(str);
-    printf("%s", cstr);
-  }
-  printf("\n");
-  fflush(stdout);
+    printf("\n");
+    fflush(stdout);
 }
 
 void XGetter(v8::Local<v8::String> property,
-              const v8::PropertyCallbackInfo<v8::Value>& info) {
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
 
     printf("Get\n");
 
-  info.GetReturnValue().Set(ak_x);
+    info.GetReturnValue().Set(ak_x);
 }
 
 void XSetter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-             const v8::PropertyCallbackInfo<void>& info) {
+    const v8::PropertyCallbackInfo<void>& info) {
 
     printf("Set\n");
-                
-  if (!value->IsNumber())
-    return; // ignore stupid things
 
-  // which is faster? 
-  ak_x = (value->Int32Value(info.GetIsolate()->GetCurrentContext())).ToChecked();
-  // ak_x = (int32_t) value->NumberValue(isolate->GetCurrentContext()).ToChecked();
+    if (!value->IsNumber())
+        return; // ignore stupid things
+
+      // which is faster? 
+    ak_x = (value->Int32Value(info.GetIsolate()->GetCurrentContext())).ToChecked();
+    // ak_x = (int32_t) value->NumberValue(isolate->GetCurrentContext()).ToChecked();
 }
 
 void XIndexedGetter(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     // lat x = obj.prop[index];
-    printf("Get[%d]\n",index);
+    printf("Get[%d]\n", index);
 }
 
-void XIndexedSetter(uint32_t index, v8::Local< v8::Value > value, const v8::PropertyCallbackInfo< v8::Value > &info)
+void XIndexedSetter(uint32_t index, v8::Local< v8::Value > value, const v8::PropertyCallbackInfo< v8::Value >& info)
 {
     // obj.prop[index] = x;
-    printf("Set[%d]\n",index);
+    printf("Set[%d]\n", index);
 }
 
-void XIndexedQuery(uint32_t index, const v8::PropertyCallbackInfo< v8::Integer > &info)
+void XIndexedQuery(uint32_t index, const v8::PropertyCallbackInfo< v8::Integer >& info)
 {
-    printf("Query[%d]\n",index);
+    printf("Query[%d]\n", index);
 }
 
-void XIndexedDeleter(uint32_t index, const v8::PropertyCallbackInfo< v8::Boolean > &info)
+void XIndexedDeleter(uint32_t index, const v8::PropertyCallbackInfo< v8::Boolean >& info)
 {
-    printf("Delete[%d]\n",index);
+    printf("Delete[%d]\n", index);
 }
 
-void XIndexedEnumerator(const v8::PropertyCallbackInfo< v8::Array > &info)
+void XIndexedEnumerator(const v8::PropertyCallbackInfo< v8::Array >& info)
 {
     printf("Enum\n");
 }
@@ -129,30 +158,30 @@ void free_v8()
         delete array_buffer_allocator;
     array_buffer_allocator = 0;
 
-    printf("V8 DISPOSED.\n");    
+    printf("V8 DISPOSED.\n");
 }
 
 void init_v8()
 {
 
-    #ifdef V8_INTL_SUPPORT
+#ifdef V8_INTL_SUPPORT
     assert(!"V8_INTL_SUPPORT")
-    #endif
+#endif
 
-    #ifdef V8_USE_EXTERNAL_STARTUP_DATA
-    assert(!"V8_USE_EXTERNAL_STARTUP_DATA")
-    #endif
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
+        assert(!"V8_USE_EXTERNAL_STARTUP_DATA")
+#endif
 
-    // our own v8_monolith build should be compiled 
-    // w/o i18n and esd
-    // v8::V8::InitializeICUDefaultLocation(argv[0]);
-    // v8::V8::InitializeExternalStartupData(argv[0]);
+        // our own v8_monolith build should be compiled 
+        // w/o i18n and esd
+        // v8::V8::InitializeICUDefaultLocation(argv[0]);
+        // v8::V8::InitializeExternalStartupData(argv[0]);
 
-    platform = v8::platform::NewDefaultPlatform();
+        platform = v8::platform::NewDefaultPlatform();
     v8::V8::InitializePlatform(platform.get());
     v8::V8::Initialize();
 
-    printf("INITIALIZED V8 %s\n",v8::V8::GetVersion());
+    printf("INITIALIZED V8 %s\n", v8::V8::GetVersion());
 
     // Create a new Isolate and make it the current one.
     array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
@@ -161,14 +190,14 @@ void init_v8()
 
     isolate = v8::Isolate::New(create_params);
     isolate->Enter(); // v8::Isolate::Scope isolate_scope(isolate);
-    
+
     v8::HandleScope handle_scope(isolate);
 
     // YGetter/YSetter are so similar they are omitted for brevity
     v8::Local<v8::ObjectTemplate> global_templ = v8::ObjectTemplate::New(isolate);
     global_templ->SetAccessor(v8::String::NewFromUtf8(isolate, "ak_x").ToLocalChecked(), XGetter, XSetter);
 
-    global_templ->SetIndexedPropertyHandler(XIndexedGetter,XIndexedSetter,XIndexedQuery,XIndexedDeleter,XIndexedEnumerator);
+    global_templ->SetIndexedPropertyHandler(XIndexedGetter, XIndexedSetter, XIndexedQuery, XIndexedDeleter, XIndexedEnumerator);
 
     global_templ->Set(isolate, "ak_print", v8::FunctionTemplate::New(isolate, XPrint));
 
@@ -179,7 +208,7 @@ void init_v8()
 void exec_v8(const char* str)
 {
     v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();    
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
     // Create a string containing the JavaScript source code.
     v8::MaybeLocal<v8::String> source = v8::String::NewFromUtf8(isolate, str);
@@ -205,25 +234,6 @@ void exec_v8(const char* str)
 }
 
 #endif
-
-// work around including <netinet/tcp.h>
-// which also defines TCP_CLOSE
-#ifndef TCP_DELAY
-#define TCP_NODELAY 1
-#endif
-
-#else
-#define PATH_MAX 1024
-#endif
-
-#include <assert.h>
-
-#include "render.h"
-#include "physics.h"
-#include "sprite.h"
-#include "matrix.h"
-
-#include "network.h"
 
 // FOR GL 
 #include "term.h"
@@ -1473,8 +1483,6 @@ bool read_js(int fd)
 
 int main(int argc, char* argv[])
 {
-    
-    
     /*
         AnsiCell* buf / render_buf;   // AnsiCell = {uint8_t fg, bk, gl, spare}
         int buf_width, buf_height;
@@ -1602,7 +1610,7 @@ int main(int argc, char* argv[])
 			{
 				if (dotrun[i])
 				{
-					int pos = dotrun[i] - base_path;
+					int pos = (int)(dotrun[i] - base_path);
 					if (dotpos < 0 || pos < dotpos)
 						dotpos = pos;
 				}

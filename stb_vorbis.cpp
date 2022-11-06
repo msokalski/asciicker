@@ -3693,7 +3693,7 @@ static void parse_comment(vorb *f, comment* com, const char* buf, int len)
                com->buf[com->length] = 0;
 
                const char* parse = com->buf;
-               int len = strlen(parse);
+               int len = (int)strlen(parse);
 
                f->markbuf = strdup(parse);
 

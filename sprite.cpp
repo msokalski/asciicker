@@ -229,7 +229,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 
 	GZ gz;
 	int r;
-	r=fread(&gz, 10, 1, f);
+	r=(int)fread(&gz, 10, 1, f);
 
 	/*
 	assert(gz.id1 == 31 && gz.id2 == 139 && "gz identity");
@@ -245,8 +245,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	if (gz.flg & (1 << 2/*FEXTRA*/))
 	{
 		int hi, lo;
-		r=fread(&hi, 1, 1, f);
-		r=fread(&lo, 1, 1, f);
+		r=(int)fread(&hi, 1, 1, f);
+		r=(int)fread(&lo, 1, 1, f);
 
 		int len = (hi << 8) | lo;
 		fseek(f, len, SEEK_CUR);
@@ -258,7 +258,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 		do
 		{
 			ch = 0;
-			r=fread(&ch, 1, 1, f);
+			r=(int)fread(&ch, 1, 1, f);
 		} while (ch);
 	}
 
@@ -268,14 +268,14 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 		do
 		{
 			ch = 0;
-			r=fread(&ch, 1, 1, f);
+			r=(int)fread(&ch, 1, 1, f);
 		} while (ch);
 	}
 
 	if (gz.flg & (1 << 1/*FFHCRC*/))
 	{
 		uint16_t crc;
-		r=fread(&crc, 2, 1, f);
+		r=(int)fread(&crc, 2, 1, f);
 	}
 
 	// deflated data blocks ...
@@ -288,7 +288,7 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	unsigned char* in = (unsigned char*)malloc(insize);
 	fseek(f, now, SEEK_SET);
 
-	r=fread(in, 1, insize, f);
+	r=(int)fread(in, 1, insize, f);
 
 
 	size_t out_size=0;
@@ -300,8 +300,8 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 	// GZ OUTRO:
 
 	uint32_t crc32, isize;
-	r=fread(&crc32, 4, 1, f);
-	r=fread(&isize, 4, 1, f);
+	r=(int)fread(&crc32, 4, 1, f);
+	r=(int)fread(&isize, 4, 1, f);
 	fclose(f);
 
 	// assert(out && isize == *(uint32_t*)out);
@@ -841,11 +841,11 @@ Sprite* LoadSprite(const char* path, const char* name, /*bool has_refl,*/ const 
 		}
 	}
 
-	float cos30 = cosf(30 * (M_PI / 180));
+	float cos30 = (float)cos(30 * (M_PI / 180));
 	float z = fr_height / cos30 * HEIGHT_SCALE;
 	float dz = ref[0][1]*0.5f / cos30 * HEIGHT_SCALE;
 
-	float zoom = 2.0 / 3.0;
+	float zoom = 2.0f / 3.0f;
 
 	sprite->proj_bbox[0] = -fr_width * .5f * zoom;
 	sprite->proj_bbox[1] = +fr_width * .5f * zoom;

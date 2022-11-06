@@ -14,6 +14,7 @@
 # https://chromium.googlesource.com/external/github.com/v8/v8.wiki/+/8c0be5e888bda68437f15e2ea9e317fd6229a5e3/Building-with-GN.md
 # - Build instructions (raw workflow)
 
+# on LINUX:
 # we need depot_tools so:
 # > cd ~
 # > git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
@@ -39,12 +40,35 @@
 #	 v8_use_external_startup_data=false 
 #	 v8_monolithic=true 
 #    v8_static_library=true
+#    v8_enable_webassembly=false
 #	 is_debug=false 
+#    host_cpu="x64"
 #	 target_cpu="x64" 
-#	 v8_target_cpu="arm64"'
+#	 v8_target_cpu="x64"'
 # > ninja -C out.gn/x64.release v8_monolith
 
-
+# on WINDOWS:
+# install MSVC2022
+# install Win10 SDK 10.0.20348.1, open programs and features, select installed Win10 SDK, 
+# click modify, choose change, next, enable debugging tools for windows, click change
+# get depot_tools from https://storage.googleapis.com/chrome-infra/depot_tools.zip
+# unpack it to d:\depot_tools and add it to PATH envvar
+# add these 2 envvars too:
+#   DEPOT_TOOLS_WIN_TOOLCHAIN=0
+#   GYP_MSVS_VERSION=2022
+# make sure no other python takes place before one from depot_tools by:
+# > where python
+# > cd <asciicker_path>
+# > mkdir v8
+# > cd v8
+# > fetch v8
+# > git pull
+# > gclient sync
+# > python d:\depot_tools\gn.py gen out.gn/x64.release
+# edit out.gn\x64.release\args.gn file manually and paste same args as for linux.
+# you can see all set params including defaulted by:
+# > python d:\depot_tools\gn.py args out.gn/x64.release --list > ../list.txt
+# > ninja -C out.gn/x64.release v8_monolith
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	if [ -f "/usr/bin/time" ]; then

@@ -300,8 +300,8 @@ bool GetGamePadConfPath(char* path, const char* name, int axes, int buttons)
 	if (!filepart1)
 		filepart1 = filepart2;
 
-	int pos1 = filepart1 - cfg;
-	int pos2 = filepart2 - cfg;
+	int pos1 = (int)(filepart1 - cfg);
+	int pos2 = (int)(filepart2 - cfg);
 	int pos = pos1>pos2 ? pos1 : pos2;
 
 	memcpy(path,cfg,pos+1);
@@ -343,7 +343,7 @@ bool ReadGamePadConf(uint8_t map[256], const char* name, int axes, int buttons)
 		return false;
 
 	int n = 2*axes+buttons;
-	int r = fread(map,1,n,f);
+	int r = (int)fread(map,1,n,f);
 	fclose(f);
 
 	return n==r;
@@ -360,7 +360,7 @@ bool WriteGamePadConf(const uint8_t* map, const char* name, int axes, int button
 		return false;
 
 	int n = 2*axes+buttons;
-	int w = fwrite(map,1,n,f);
+	int w = (int)fwrite(map,1,n,f);
 	fclose(f);
 
 	SyncConf();
@@ -375,10 +375,10 @@ void ReadConf(Game* g)
 	if (f)
 	{
 		//printf("ReadConf ok\n");
-		int r = fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+		int r = (int)fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 
-		r = fread(&g->perspective, 1, 1, f);
-		r = fread(&g->blood, 1, 1, f);
+		r = (int)fread(&g->perspective, 1, 1, f);
+		r = (int)fread(&g->blood, 1, 1, f);
 
 		fclose(f);
 	}
@@ -2492,7 +2492,7 @@ struct Keyb
 
 		// shift modifies appeariance of space->BS and enter->LF, (possibly caps az->AZ)
 		bool shift_on = key[A3D_LSHIFT >> 3] & (1 << (A3D_LSHIFT & 7));
-		shift_on |= key[A3D_RSHIFT >> 3] & (1 << (A3D_RSHIFT & 7));
+		shift_on |= (bool)(key[A3D_RSHIFT >> 3] & (1 << (A3D_RSHIFT & 7)));
 
 
 		int sprite_w = 2 * (width - 1) / 21 + 1;
@@ -3150,7 +3150,7 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->perspective = true;
 	g->blood = true;
 
-	fast_srand(stamp);
+	fast_srand((int)stamp);
 
 #ifndef EDITOR
 	EnemyGen* eg = enemygen_head;
@@ -4149,7 +4149,7 @@ bool Game::DropItem(int index)
 	// automatically calculates pos[3]
 
 	assert(index >= 0 && index < inventory.my_items);
-	float ang = rand() % 360;
+	float ang = (float)(rand() % 360);
 
 	double ret[4];
 	double dpos[3] =
@@ -4483,7 +4483,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		KeybAutoRepChar = ch;		
 	}
 
-	int f120 = 1 + (_stamp - stamp) / 8264;
+	int f120 = (int)(1 + (_stamp - stamp) / 8264);
 	TalkBox_blink += f120;
 
 	if (KeybAutoRepChar)
@@ -4524,7 +4524,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	io.x_force = 0;
 	io.y_force = 0;
 	io.torque = 0;
-	io.water = water;
+	io.water = (float)water;
 	io.jump = false;
 
 	bool force_handled = false;
@@ -4569,7 +4569,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					else
 					if (dt > 1)
 						dt = 1;
-					yaw = prev_yaw + yaw_vel*dt;
+					yaw = (float)(prev_yaw + yaw_vel*dt);
 					SetPhysicsYaw(physics, yaw, 0);
 
 					/*
@@ -4593,7 +4593,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	io.torque = torque_sign < 0 ? -1 : torque_sign > 0 ? +1 : 0;
+	io.torque = (float)(torque_sign < 0 ? -1 : torque_sign > 0 ? +1 : 0);
 
 	if (!player.talk_box) // force & torque with keyboard
 	{
@@ -4605,13 +4605,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			if (show_inventory)
 			{
-				io.x_force = (int)input.IsKeyDown(A3D_D) - (int)input.IsKeyDown(A3D_A);
-				io.y_force = (int)input.IsKeyDown(A3D_W) - (int)input.IsKeyDown(A3D_S);
+				io.x_force = (float)((int)input.IsKeyDown(A3D_D) - (int)input.IsKeyDown(A3D_A));
+				io.y_force = (float)((int)input.IsKeyDown(A3D_W) - (int)input.IsKeyDown(A3D_S));
 			}
 			else
 			{
-				io.x_force = (int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A));
-				io.y_force = (int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S));
+				io.x_force = (float)((int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A)));
+				io.y_force = (float)((int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S)));
 			}
 
 			float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
@@ -4632,8 +4632,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		if (!torque_handled)
 		{
-			io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
-				(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E));
+			io.torque = (float)((int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
+				(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E)));
 
 			//io.torque = 1;
 			//io.y_force = 1;
@@ -4672,7 +4672,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
 		if (len > 0.5f)
 		{
-			float mul = 0.5 / len;
+			float mul = 0.5f / len;
 			io.x_force *= mul;
 			io.y_force *= mul;
 		}
@@ -4710,7 +4710,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				pio.x_force = 0;
 				pio.y_force = 0;
 				pio.torque = 0;
-				pio.water = water;
+				pio.water = (float)water;
 				pio.jump = false;
 
 				if (h->target)
@@ -4758,7 +4758,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									stamp >  500000 + h->shoot_by_stamp &&
 									stamp < 5000000 + h->shoot_by_stamp)
 								{
-									d *= 0.2;
+									d *= 0.2f;
 								}
 
 								if (!enemy_ch || d * (h2->followers + 4) < enemy_cd*(enemy_cf + 4))
@@ -4830,8 +4830,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 						if (d < 10)
 						{
-							dx *= 0.7;
-							dy *= 0.7;
+							dx *= 0.7f;
+							dy *= 0.7f;
 						}
 
 						distance = d;
@@ -4880,8 +4880,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 										x1[0] *= d / len;
 										x1[1] *= d / len;
 
-										pio.x_force = 0.1*x1[0];
-										pio.y_force = 0.1*x1[1];
+										pio.x_force = 0.1f*x1[0];
+										pio.y_force = 0.1f*x1[1];
 									}
 								}
 							}
@@ -5048,7 +5048,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 								// SWOOSH:                                                    <--------->
 								static const int frames[] = { 7,7,7,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,5,5,5, 5,5,5,5,5,5,5,5,5,5,5,5, 6,6,6,6,6,6,6 };
-								int frame_index = (_stamp - h->action_stamp) / attack_us_per_frame;
+								int frame_index = (int)((_stamp - h->action_stamp) / attack_us_per_frame);
 
 								if (frame_index > 21 && !h->hit_tested)
 								{
@@ -5069,7 +5069,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 											{
 												h->target->leak += (hp - h->target->HP) / 5;
 
-												float r = fast_rand() % 20 * 0.1f + 0.6;
+												float r = fast_rand() % 20 * 0.1f + 0.6f;
 												if (hp > 0 && h->target->HP <= 0)
 													r = fmaxf(r,2.5f);
 
@@ -5094,7 +5094,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 												}
 												else
 												{
-													h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+													h->target->dir = (float)(atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90);
 													Physics* p = (Physics*)h->target->data;
 													SetPhysicsDir(p, h->target->dir);
 
@@ -5122,7 +5122,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 							{
 								// just delay
 								//static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-								int frame_index = (_stamp - h->action_stamp) / attack_us_per_frame;
+								int frame_index = (int)((_stamp - h->action_stamp) / attack_us_per_frame);
 
 								// if frameindex jumps from first half to second half of frames
 								// sample scene at hit location, if theres something emit particles in color(s) of hit object
@@ -5148,7 +5148,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					case ACTION::FALL:
 					{
 						// animate, check if finished -> stay at last frame
-						int frame = (_stamp - h->action_stamp) / stand_us_per_frame;
+						int frame = (int)((_stamp - h->action_stamp) / stand_us_per_frame);
 						assert(frame >= 0);
 						if (frame >= h->sprite->anim[h->anim].length)
 							h->SetActionDead(_stamp);
@@ -5160,7 +5160,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					case ACTION::STAND:
 					{
 						// animate, check if finished -> switch to NONE
-						int frame = (_stamp - h->action_stamp) / stand_us_per_frame;
+						int frame = (int)((_stamp - h->action_stamp) / stand_us_per_frame);
 						assert(frame >= 0);
 						if (frame >= h->sprite->anim[h->anim].length)
 							h->SetActionNone(_stamp);
@@ -5199,7 +5199,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					// force direction
 					float dx = h->target->pos[0] - pio.pos[0];
 					float dy = h->target->pos[1] - pio.pos[1];
-					pio.player_dir = atan2(dy, dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+					pio.player_dir = (float)(atan2(dy, dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90);
 				}
 
 				h->pos[0] = pio.pos[0];
@@ -5234,7 +5234,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 					// SWOOSH:                                                    <--------->
 					static const int frames[] = { 7,7,7,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,5,5,5, 5,5,5,5,5,5,5,5,5,5,5,5, 6,6,6,6,6,6,6 };
-					int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
+					int frame_index = (int)((_stamp - player.action_stamp) / attack_us_per_frame);
 
 					Character* h = &player;
 					if (frame_index > 21 && !h->hit_tested)
@@ -5259,7 +5259,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									if (dd < /*3 * 3*/ 4*4) // player's sword a bit longer
 									{
 										// check if direction is in +/-22.5deg
-										float dif = atan2(dy, dx) * 180 / M_PI + 90 - h->dir;
+										float dif = (float)(atan2(dy, dx) * 180 / M_PI + 90 - h->dir);
 										dif = fmodf(dif, 360);
 										if (dif < -180)
 											dif += 360;
@@ -5299,7 +5299,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								{
 									h->target->leak += (hp - h->target->HP) / 5;
 
-									float r = fast_rand() % 20 * 0.1f + 0.6;
+									float r = fast_rand() % 20 * 0.1f + 0.6f;
 									if (hp > 0 && h->target->HP <= 0)
 										r = fmaxf(r, 2.5f);
 
@@ -5324,7 +5324,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									}
 									else
 									{
-										h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+										h->target->dir = (float)(atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90);
 										Physics* p = (Physics*)h->target->data;
 										SetPhysicsDir(p, h->target->dir);
 
@@ -5347,7 +5347,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				{
 					// just delay
 					//static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-					int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
+					int frame_index = (int)((_stamp - player.action_stamp) / attack_us_per_frame);
 
 					// if frameindex jumps from first half to second half of frames
 					// sample scene at hit location, if theres something emit particles in color(s) of hit object
@@ -5376,7 +5376,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		case ACTION::FALL:
 		{
 			// animate, check if finished -> stay at last frame
-			int frame = (_stamp - player.action_stamp) / stand_us_per_frame;
+			int frame = (int)((_stamp - player.action_stamp) / stand_us_per_frame);
 			assert(frame >= 0);
 			if (frame >= player.sprite->anim[player.anim].length)
 				player.SetActionDead(_stamp);
@@ -5388,7 +5388,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		case ACTION::STAND:
 		{
 			// animate, check if finished -> switch to NONE
-			int frame = (_stamp - player.action_stamp) / stand_us_per_frame;
+			int frame = (int)((_stamp - player.action_stamp) / stand_us_per_frame);
 			assert(frame >= 0);
 			if (frame >= player.sprite->anim[player.anim].length)
 				player.SetActionNone(_stamp);
@@ -5447,7 +5447,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int ss[2] = { scene_shift/2 , 0 };
 
-	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
+	::Render(renderer, _stamp, terrain, world, (float)water, 1.0f, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss, perspective);
 
 	if (input.shoot /*&& !player.shooting*/ && 
@@ -5478,7 +5478,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				// check min dist, max dist and max slope
 				if (d >= 2*2 + 2*2 && d < 30*30 + 30*30 && dz*dz < d*8*8 )
 				{
-					float a = atan2(dy, dx) * 180 / M_PI + 90;
+					float a = (float)(atan2(dy, dx) * 180 / M_PI + 90);
 					float da = a - player.dir;
 					
 					da = fmodf(da, 360);
@@ -5531,8 +5531,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				}
 				else
 				{
-					player.shoot_to[0] = player.pos[0] * HEIGHT_CELLS + 1000 * cos((player.dir - 90) * M_PI / 180);
-					player.shoot_to[1] = player.pos[1] * HEIGHT_CELLS + 1000 * sin((player.dir - 90) * M_PI / 180);
+					player.shoot_to[0] = (float)(player.pos[0] * HEIGHT_CELLS + 1000 * cos((player.dir - 90) * M_PI / 180));
+					player.shoot_to[1] = (float)(player.pos[1] * HEIGHT_CELLS + 1000 * sin((player.dir - 90) * M_PI / 180));
 					player.shoot_to[2] = player.pos[2] + 40;
 				}
 
@@ -5578,15 +5578,15 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 				if (inst || ground)
 				{
-					float dx = r1[0] * HEIGHT_CELLS - player.shoot_from[0];
-					float dy = r1[1] * HEIGHT_CELLS - player.shoot_from[1];
+					float dx = (float)(r1[0] * HEIGHT_CELLS - player.shoot_from[0]);
+					float dy = (float)(r1[1] * HEIGHT_CELLS - player.shoot_from[1]);
 					
 					if (dx*dx + dy * dy < _dist * HEIGHT_CELLS * HEIGHT_CELLS)
 					{
 						hit = false;
-						player.shoot_to[0] = r1[0] * HEIGHT_CELLS;
-						player.shoot_to[1] = r1[1] * HEIGHT_CELLS;
-						player.shoot_to[2] = r1[2];
+						player.shoot_to[0] = (float)(r1[0] * HEIGHT_CELLS);
+						player.shoot_to[1] = (float)(r1[1] * HEIGHT_CELLS);
+						player.shoot_to[2] = (float)(r1[2]);
 					}
 				}
 
@@ -5809,7 +5809,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			for (int i = 0; i < human->talks; i++)
 			{
 				int speed = 100000 + human->talk[i].box->len*400000/255; // 100000 for len=0 , 500000 for len=255
-				int elaps = stamp - human->talk[i].stamp;
+				int elaps = (int)(stamp - human->talk[i].stamp);
 				int dy = elaps / speed; // 10 dy per sec (len=0)
 			
 				if (dy <= 30)
@@ -5942,7 +5942,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		for (int i = 0; i < consume_anims; i++)
 		{
 			ConsumeAnim* a = consume_anim + i;
-			int elaps = (_stamp - a->stamp) / 50000; // 20 frames a sec (0.25 sec duration for 5x5 sprite)
+			int elaps = (int)((_stamp - a->stamp) / 50000); // 20 frames a sec (0.25 sec duration for 5x5 sprite)
 			int max_elaps = a->sprite->atlas->height;
 			if (elaps >= max_elaps)
 			{
