@@ -1,2 +1,0 @@
-placeholder for v8 
-see build.sh comments for more info

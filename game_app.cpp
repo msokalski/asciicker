@@ -54,8 +54,15 @@
 #pragma comment(lib,"Winmm.lib")
 #endif
 
+#ifdef _WIN32
+#ifdef _WIN64
 #define V8_COMPRESS_POINTERS 1
 #define V8_ENABLE_SANDBOX 1
+#endif
+#else
+#define V8_COMPRESS_POINTERS 1
+#define V8_ENABLE_SANDBOX 1
+#endif
 
 #include <libplatform/libplatform.h>
 #include <v8.h>

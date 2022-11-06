@@ -66,6 +66,7 @@
 # > gclient sync
 # > python d:\depot_tools\gn.py gen out.gn/x64.release
 # edit out.gn\x64.release\args.gn file manually and paste same args as for linux.
+# note: debug builds may require setting enable_iterator_debugging=true
 # you can see all set params including defaulted by:
 # > python d:\depot_tools\gn.py args out.gn/x64.release --list > ../list.txt
 # > ninja -C out.gn/x64.release v8_monolith
