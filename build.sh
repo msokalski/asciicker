@@ -21,9 +21,7 @@
 # > export PATH=~/depot_tools:$PATH
 
 # obtain v8 sources:
-# > cd <asciicker_path>
-# > mkdir v8
-# > cd v8
+# > cd <asciicker_path>/v8
 # > fetch v8                                # fetch and grab a cup of coffie
 # > git pull                                # pull for a total freshness of sources
 # > gclient sync                            # fetch build dependencies
@@ -41,7 +39,8 @@
 #	 v8_monolithic=true 
 #    v8_static_library=true
 #    v8_enable_webassembly=false
-#	 is_debug=false 
+#	 is_debug=false
+#    enable_iterator_debugging=false
 #    host_cpu="x64"
 #	 target_cpu="x64" 
 #	 v8_target_cpu="x64"'
@@ -49,27 +48,28 @@
 
 # on WINDOWS:
 # install MSVC2022
-# install Win10 SDK 10.0.20348.1, open programs and features, select installed Win10 SDK, 
+# install Win10 SDK 10.0.20348.0/1, important: it have to include dubug tools !!!
+# https://developer.microsoft.com/en-us/windows/downloads/sdk-archive/
 # click modify, choose change, next, enable debugging tools for windows, click change
 # get depot_tools from https://storage.googleapis.com/chrome-infra/depot_tools.zip
 # unpack it to d:\depot_tools and add it to PATH envvar
-# add these 2 envvars too:
+# also add this envvar to user variables:
 #   DEPOT_TOOLS_WIN_TOOLCHAIN=0
-#   GYP_MSVS_VERSION=2022
-# make sure no other python takes place before one from depot_tools by:
-# > where python
-# > cd <asciicker_path>
-# > mkdir v8
-# > cd v8
+# > cd <asciicker_path>/v8
 # > fetch v8
 # > git pull
 # > gclient sync
+# GENERATE EMPTY BUILD CONFIG:
 # > python d:\depot_tools\gn.py gen out.gn/x64.release
-# edit out.gn\x64.release\args.gn file manually and paste same args as for linux.
-# note: debug builds may require setting enable_iterator_debugging=true
+# CONFIGURE BUILD:
+# overwrite out.gn/x64.release/args.gn with <asciicker_path>/v8/x64.release-args.gn
 # you can see all set params including defaulted by:
 # > python d:\depot_tools\gn.py args out.gn/x64.release --list > ../list.txt
+# BUILD:
 # > ninja -C out.gn/x64.release v8_monolith
+#
+# repeat above three steps also with x64.debug, x86.release and x86.debug
+# now you can batch build all asciicker configurations
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	if [ -f "/usr/bin/time" ]; then
