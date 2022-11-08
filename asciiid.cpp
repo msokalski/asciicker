@@ -2437,10 +2437,10 @@ struct RenderContext
 	{
 		RenderContext* rc = (RenderContext*)cookie;
 
-		float zoom = 2.0 / 3.0;
-		float cos30 = cosf(30 * M_PI / 180);
-		float dwx = zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180);
-		float dwy = zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180);
+		float zoom = 2.0f/ 3.0f;
+		float cos30 = (float)cos(30 * M_PI / 180);
+		float dwx = (float)(zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180));
+		float dwy = (float)(zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180));
 		float dlz = zoom * -f->ref[1] * 0.5f / cos30 * HEIGHT_SCALE;
 		float dhz = zoom * (f->height - f->ref[1] * 0.5f) / cos30 * HEIGHT_SCALE;
 
@@ -2499,7 +2499,7 @@ struct RenderContext
 
 		glUniform2i(rc->mesh_sprite_wh_loc, f->width, f->height);
 		glUniform2i(rc->mesh_ansi_wh_loc, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
-		glUniform2i(rc->mesh_ansi_depth_ofs_loc, (int)floorf(pos[2] + 0.5), f->ref[2]);
+		glUniform2i(rc->mesh_ansi_depth_ofs_loc, (int)floorf(pos[2] + 0.5f), f->ref[2]);
 
 		for (int face = 0; face < 2; face++)
 		{
@@ -6160,7 +6160,7 @@ void my_render(A3D_WND* wnd)
 				{
 					for (int i = 0; i < 256; i++)
 					{
-						int r = fread(mat[i].shade, sizeof(MatCell), 4 * 16, f);
+						int r = (int)fread(mat[i].shade, sizeof(MatCell), 4 * 16, f);
 						mat[i].Update();
 					}
 					fclose(f);
@@ -7337,9 +7337,9 @@ void my_render(A3D_WND* wnd)
 							{
 								// we'll need to paint active_mesh with inst_tm
 								sprite_preview = true;
-								sprite_preview_pos[0] = hit[0];
-								sprite_preview_pos[1] = hit[1];
-								sprite_preview_pos[2] = hit[2];
+								sprite_preview_pos[0] = (float)(hit[0]);
+								sprite_preview_pos[1] = (float)(hit[1]);
+								sprite_preview_pos[2] = (float)(hit[2]);
 							}
 						}
 					}
@@ -7415,9 +7415,9 @@ void my_render(A3D_WND* wnd)
 							{
 								// we'll need to paint active_mesh with inst_tm
 								sprite_preview = true;
-								sprite_preview_pos[0] = hit[0];
-								sprite_preview_pos[1] = hit[1];
-								sprite_preview_pos[2] = hit[2];
+								sprite_preview_pos[0] = (float)(hit[0]);
+								sprite_preview_pos[1] = (float)(hit[1]);
+								sprite_preview_pos[2] = (float)(hit[2]);
 							}
 						}
 					}
@@ -7461,9 +7461,9 @@ void my_render(A3D_WND* wnd)
 
 							//AddEnemyGen(hit);
 							EnemyGen* eg = (EnemyGen*)malloc(sizeof(EnemyGen));
-							eg->pos[0] = hit[0];
-							eg->pos[1] = hit[1];
-							eg->pos[2] = hit[2];
+							eg->pos[0] = (float)(hit[0]);
+							eg->pos[1] = (float)(hit[1]);
+							eg->pos[2] = (float)(hit[2]);
 
 							eg->alive_max = eg_alive_max;
 							eg->revive_min = eg_revive_min;
@@ -7488,9 +7488,9 @@ void my_render(A3D_WND* wnd)
 						else
 						{
 							enemygen_preview = true;
-							enemygen_preview_pos[0] = hit[0];
-							enemygen_preview_pos[1] = hit[1];
-							enemygen_preview_pos[2] = hit[2];
+							enemygen_preview_pos[0] = (float)(hit[0]);
+							enemygen_preview_pos[1] = (float)(hit[1]);
+							enemygen_preview_pos[2] = (float)(hit[2]);
 						}
 					}
 				}
@@ -8198,7 +8198,7 @@ int main(int argc, char *argv[])
 			{
 				if (dotrun[i])
 				{
-					int pos = dotrun[i] - base_path;
+					int pos = (int)(dotrun[i] - base_path);
 					if (dotpos < 0 || pos < dotpos)
 						dotpos = pos;
 				}

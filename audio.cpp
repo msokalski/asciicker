@@ -203,7 +203,7 @@ static int FindSample(const char* name, uint32_t* h, int* l)
     if (h)
         *h = hash;
     if (l)
-        *l = n-name;
+        *l = (int)(n-name);
 
     SampleHash* buck = sample_hash[hash&HASH_MAKS];
     while (buck)
@@ -272,7 +272,7 @@ static int LoadSample(const char* name)
     fseek(f,0,SEEK_SET);
 
     uint8_t* data = (uint8_t*)malloc(size);
-    int r = fread(data,1,size,f);
+    int r = (int)fread(data,1,size,f);
     fclose(f);
 
     // decode ogg
