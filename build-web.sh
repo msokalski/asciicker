@@ -85,6 +85,7 @@ emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
     font1.cpp \
     gamepad.cpp \
     game.cpp \
+    game_api.cpp \
     game_web.cpp \
     enemygen.cpp \
     world.cpp \
@@ -98,7 +99,7 @@ emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample","_XOgg"]' \
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample","_XOgg","_akAPI_Call"]' \
     -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --no-heap-copy \

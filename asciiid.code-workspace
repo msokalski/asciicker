@@ -26,7 +26,9 @@
 			"typeinfo": "cpp",
 			"map": "cpp",
 			"__config": "cpp",
-			"typeindex": "cpp"
+			"typeindex": "cpp",
+			"functional": "cpp",
+			"*.inc": "cpp"
 		}
 	}
 }

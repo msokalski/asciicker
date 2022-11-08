@@ -343,6 +343,83 @@
 
     <script type='text/javascript'>
 
+      // API ABSTRACTION
+      var akAPI_Call = null;
+      var akAPI_Buff = 0;
+
+      function akGetF32(buf_ofs)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          return Module.HEAPF32[buf_ofs];
+      }
+      function akSetF32(val, buf_ofs)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          Module.HEAPF32[buf_ofs] = val;
+      }
+      function akReadF32(arr,arr_ofs,buf_ofs,num)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          for (let i=0; i<num; i++)
+              arr[i+arr_ofs] = Module.HEAPF32[i+buf_ofs];
+      }
+      function akWriteF32(arr,arr_ofs,buf_ofs,num)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          for (let i=0; i<num; i++)
+              Module.HEAPF32[i+buf_ofs] = arr[i+arr_ofs];
+      }   
+      function akGetI32(buf_ofs)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          return Module.HEAP32[buf_ofs];
+      }
+      function akSetI32(val, buf_ofs)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          Module.HEAP32[buf_ofs] = val;
+      }
+      function akReadI32(arr,arr_ofs,buf_ofs,num)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          for (let i=0; i<num; i++)
+              arr[i+arr_ofs] = Module.HEAP32[i+buf_ofs];
+      }
+      function akWriteI32(arr,arr_ofs,buf_ofs,num)
+      {
+          buf_ofs += akAPI_Buff>>2;
+          for (let i=0; i<num; i++)
+              Module.HEAP32[i+buf_ofs] = arr[i+arr_ofs];
+      }   
+      function akGetStr(buf_ofs)
+      {
+          buf_ofs += akAPI_Buff>>1;
+          let str="";
+          for (let i=0; i<num; i++)
+          {
+              let chr = Module.HEAPU16[i+buf_ofs];
+              str += String.fromCharCode(chr);
+          }
+          return str;
+      }   
+      function akSetStr(str,buf_ofs)
+      {
+          buf_ofs += akAPI_Buff>>1;
+          for (let i=0; i<num; i++)
+          {
+              let chr = str.charCodeAt(i);
+              if (chr <= 0 || chr > 0xFFFF)
+                chr = 63;
+              Module.HEAPU16[i+buf_ofs] = chr;
+          }
+      }
+
+      var ak = {};
+
+    </script>
+
+    <script type='text/javascript'>
+
       var Render = null;
       var Size = null;
       var Keyb = null;
@@ -1202,6 +1279,8 @@
         Focus = Module.cwrap('Focus', null, ['number']);
         Join = Module.cwrap('Join', 'number', ['string','number','number']);
         Packet = Module.cwrap('Packet', null, ['array', 'number']);
+
+        akAPI_Call = Module.cwrap('akAPI_Call', null, ['number']);
 
         ak_canvas = document.getElementById('asciicker_canvas');
         ak_canvas.hidden = false;
