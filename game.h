@@ -190,6 +190,8 @@ struct Human : Character
 	bool SetArmor(int a);
 	bool SetMount(int m);
 
+	void Say(const char* str, int len, uint64_t stamp);
+
 	TalkBox* talk_box;
 
 	struct Talk

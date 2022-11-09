@@ -11,4 +11,7 @@ extern Game* game;
 void akAPI_Init();
 void akAPI_Free();
 
+ // implemented by game_app or game_web
+void akAPI_Exec(const char* str, int len = -1, bool root=false);
+
 #endif

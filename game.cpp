@@ -13,6 +13,8 @@
 #include "gamepad.h"
 #include "audio.h"
 
+#include "game_api.h"
+
 uint8_t ConvertToCP437(uint32_t uc)
 {
 	static const uint8_t tab00A1[95]=
@@ -4445,6 +4447,64 @@ bool Human::SetMount(int m)
 	return true;
 }
 
+void Human::Say(const char* str, int len, uint64_t stamp)
+{
+	Human& player = *this;
+
+	// immediate post
+	TalkBox* box = 0;
+	if (player.talks == 3)
+	{
+		box = player.talk[0].box;
+		player.talks--;
+		for (int i = 0; i < player.talks; i++)
+			player.talk[i] = player.talk[i + 1];
+	}
+	else
+		box = (TalkBox*)malloc(sizeof(TalkBox));
+
+	memset(box, 0, sizeof(TalkBox));
+	memcpy(box->buf, str, len);
+	box->len = len;
+	box->cursor_pos = box->len;
+
+	box->max_width = 33;
+	box->max_height = 7; // 0: off
+	int s[2], p[2];
+	box->Reflow(s, p);
+	box->size[0] = s[0];
+	box->size[1] = s[1];
+	box->cursor_xy[0] = p[0];
+	box->cursor_xy[1] = p[1];
+
+	int idx = player.talks;
+	player.talk[idx].pos[0] = player.pos[0];
+	player.talk[idx].pos[1] = player.pos[1];
+	player.talk[idx].pos[2] = player.pos[2];
+	player.talk[idx].box = box;
+	player.talk[idx].stamp = stamp;
+
+	if (player.talk[idx].box->buf[0]=='\\')
+	{
+		// hacker mode
+		akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
+	}
+	else
+	{
+		if (server)
+		{
+			STRUCT_REQ_TALK req_talk = { 0 };
+			req_talk.token = 'T';
+			req_talk.len = player.talk[idx].box->len;
+			memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+			server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+		}				
+
+		ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+		player.talks++;
+	}
+}
+
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
 	if (server)
@@ -6713,32 +6773,40 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					player.talk[idx].pos[2] = player.pos[2];
 					player.talk[idx].stamp = stamp;
 
-					if (server)
+					if (player.talk[idx].box->buf[0]=='\\')
 					{
-						STRUCT_REQ_TALK req_talk = { 0 };
-						req_talk.token = 'T';
-						req_talk.len = player.talk[idx].box->len;
-						memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-						server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+						// hacker mode
+						akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
 					}
+					else
+					{
+						if (server)
+						{
+							STRUCT_REQ_TALK req_talk = { 0 };
+							req_talk.token = 'T';
+							req_talk.len = player.talk[idx].box->len;
+							memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+							server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+						}
 
-					ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-					player.talks++;
+						ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+						player.talks++;
 
-					// alloc new
-					player.talk_box = 0;
+						// alloc new
+						player.talk_box = 0;
 
-					TalkBox_blink = 32;
-					player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
-					memset(player.talk_box, 0, sizeof(TalkBox));
-					player.talk_box->max_width = 33;
-					player.talk_box->max_height = 7; // 0: off
-					int s[2], p[2];
-					player.talk_box->Reflow(s, p);
-					player.talk_box->size[0] = s[0];
-					player.talk_box->size[1] = s[1];
-					player.talk_box->cursor_xy[0] = p[0];
-					player.talk_box->cursor_xy[1] = p[1];
+						TalkBox_blink = 32;
+						player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+						memset(player.talk_box, 0, sizeof(TalkBox));
+						player.talk_box->max_width = 33;
+						player.talk_box->max_height = 7; // 0: off
+						int s[2], p[2];
+						player.talk_box->Reflow(s, p);
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
 				}
 				else
 				{
@@ -6844,50 +6912,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0 && talk_mem[mem_idx].len > 0)
 			{
-				// immediate post
-				TalkBox* box = 0;
-				if (player.talks == 3)
-				{
-					box = player.talk[0].box;
-					player.talks--;
-					for (int i = 0; i < player.talks; i++)
-						player.talk[i] = player.talk[i + 1];
-				}
-				else
-					box = (TalkBox*)malloc(sizeof(TalkBox));
-
-				memset(box, 0, sizeof(TalkBox));
-				memcpy(box->buf, talk_mem[mem_idx].buf, 256);
-				box->len = talk_mem[mem_idx].len;
-				box->cursor_pos = box->len;
-
-				box->max_width = 33;
-				box->max_height = 7; // 0: off
-				int s[2], p[2];
-				box->Reflow(s, p);
-				box->size[0] = s[0];
-				box->size[1] = s[1];
-				box->cursor_xy[0] = p[0];
-				box->cursor_xy[1] = p[1];
-
-				player.talk[player.talks].pos[0] = player.pos[0];
-				player.talk[player.talks].pos[1] = player.pos[1];
-				player.talk[player.talks].pos[2] = player.pos[2];
-				player.talk[player.talks].box = box;
-				player.talk[player.talks].stamp = stamp;
-
-				if (server)
-				{
-					int idx = player.talks;
-					STRUCT_REQ_TALK req_talk = { 0 };
-					req_talk.token = 'T';
-					req_talk.len = player.talk[idx].box->len;
-					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-				}				
-
-				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-				player.talks++;
+				player.Say(talk_mem[mem_idx].buf, talk_mem[mem_idx].len, stamp);
 			}
 
 			if (show_inventory)
@@ -7150,52 +7175,8 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0 && talk_mem[mem_idx].len > 0)
 			{
-				// immediate post
-				TalkBox* box = 0;
-				if (player.talks == 3)
-				{
-					box = player.talk[0].box;
-					player.talks--;
-					for (int i = 0; i < player.talks; i++)
-						player.talk[i] = player.talk[i + 1];
-				}
-				else
-					box = (TalkBox*)malloc(sizeof(TalkBox));
-
-				memset(box, 0, sizeof(TalkBox));
-				memcpy(box->buf, talk_mem[mem_idx].buf, 256);
-				box->len = talk_mem[mem_idx].len;
-				box->cursor_pos = box->len;
-
-				box->max_width = 33;
-				box->max_height = 7; // 0: off
-				int s[2], p[2];
-				box->Reflow(s, p);
-				box->size[0] = s[0];
-				box->size[1] = s[1];
-				box->cursor_xy[0] = p[0];
-				box->cursor_xy[1] = p[1];
-
-				player.talk[player.talks].pos[0] = player.pos[0];
-				player.talk[player.talks].pos[1] = player.pos[1];
-				player.talk[player.talks].pos[2] = player.pos[2];
-				player.talk[player.talks].box = box;
-				player.talk[player.talks].stamp = stamp;
-
-				if (server)
-				{
-					int idx = player.talks;
-					STRUCT_REQ_TALK req_talk = { 0 };
-					req_talk.token = 'T';
-					req_talk.len = player.talk[idx].box->len;
-					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-				}				
-
-				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-				player.talks++;
+				player.Say(talk_mem[mem_idx].buf, talk_mem[mem_idx].len, stamp);
 			}
-
 
 			// simulate key down / up based on a time relaxation
 			// for: QWEASD and cursor keys
@@ -7702,32 +7683,41 @@ void Game::StartContact(int id, int x, int y, int b)
 								player.talk[idx].pos[2] = player.pos[2];
 								player.talk[idx].stamp = stamp;
 
-								if (server)
+								if (player.talk[idx].box->buf[0]=='\\')
 								{
-									STRUCT_REQ_TALK req_talk = { 0 };
-									req_talk.token = 'T';
-									req_talk.len = player.talk[idx].box->len;
-									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+									// hacker mode
+									akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
 								}
+								else
+								{
 
-								ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-								player.talks++;
+									if (server)
+									{
+										STRUCT_REQ_TALK req_talk = { 0 };
+										req_talk.token = 'T';
+										req_talk.len = player.talk[idx].box->len;
+										memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+										server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+									}
 
-								// alloc new
-								player.talk_box = 0;
+									ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+									player.talks++;
 
-								TalkBox_blink = 32;
-								player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
-								memset(player.talk_box, 0, sizeof(TalkBox));
-								player.talk_box->max_width = 33;
-								player.talk_box->max_height = 7; // 0: off
-								int s[2], p[2];
-								player.talk_box->Reflow(s, p);
-								player.talk_box->size[0] = s[0];
-								player.talk_box->size[1] = s[1];
-								player.talk_box->cursor_xy[0] = p[0];
-								player.talk_box->cursor_xy[1] = p[1];
+									// alloc new
+									player.talk_box = 0;
+
+									TalkBox_blink = 32;
+									player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+									memset(player.talk_box, 0, sizeof(TalkBox));
+									player.talk_box->max_width = 33;
+									player.talk_box->max_height = 7; // 0: off
+									int s[2], p[2];
+									player.talk_box->Reflow(s, p);
+									player.talk_box->size[0] = s[0];
+									player.talk_box->size[1] = s[1];
+									player.talk_box->cursor_xy[0] = p[0];
+									player.talk_box->cursor_xy[1] = p[1];
+								}
 							}
 
 							ch = 0;
@@ -8949,32 +8939,41 @@ void Game::OnPadButton(int b, bool down)
 							player.talk[idx].pos[2] = player.pos[2];
 							player.talk[idx].stamp = stamp;
 
-							if (server)
+							if (player.talk[idx].box->buf[0]=='\\')
 							{
-								STRUCT_REQ_TALK req_talk = { 0 };
-								req_talk.token = 'T';
-								req_talk.len = player.talk[idx].box->len;
-								memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-								server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+								// hacker mode
+								akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
 							}
+							else
+							{
 
-							ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-							player.talks++;
+								if (server)
+								{
+									STRUCT_REQ_TALK req_talk = { 0 };
+									req_talk.token = 'T';
+									req_talk.len = player.talk[idx].box->len;
+									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+								}
 
-							// alloc new
-							player.talk_box = 0;
+								ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+								player.talks++;
 
-							TalkBox_blink = 32;
-							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
-							memset(player.talk_box, 0, sizeof(TalkBox));
-							player.talk_box->max_width = 33;
-							player.talk_box->max_height = 7; // 0: off
-							int s[2], p[2];
-							player.talk_box->Reflow(s, p);
-							player.talk_box->size[0] = s[0];
-							player.talk_box->size[1] = s[1];
-							player.talk_box->cursor_xy[0] = p[0];
-							player.talk_box->cursor_xy[1] = p[1];
+								// alloc new
+								player.talk_box = 0;
+
+								TalkBox_blink = 32;
+								player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+								memset(player.talk_box, 0, sizeof(TalkBox));
+								player.talk_box->max_width = 33;
+								player.talk_box->max_height = 7; // 0: off
+								int s[2], p[2];
+								player.talk_box->Reflow(s, p);
+								player.talk_box->size[0] = s[0];
+								player.talk_box->size[1] = s[1];
+								player.talk_box->cursor_xy[0] = p[0];
+								player.talk_box->cursor_xy[1] = p[1];
+							}
 						}
 						break;
 					}	

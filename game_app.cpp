@@ -46,11 +46,6 @@
 #include "game_api.h"
 
 
-#define USE_V8
-
-#ifdef USE_V8
-
-
 #ifdef _WIN32
 #pragma comment(lib,"v8_monolith.lib")
 #pragma comment(lib,"Dbghelp.lib")
@@ -63,6 +58,8 @@
 #define V8_ENABLE_SANDBOX 1
 #endif
 #else
+// i'am lazy gumix
+// only x64 linux is supported
 #define V8_COMPRESS_POINTERS 1
 #define V8_ENABLE_SANDBOX 1
 #endif
@@ -71,10 +68,8 @@
 #include <v8.h>
 
 v8::Isolate* isolate = 0;
-//v8::Persistent<v8::Context>* persistent_context = 0;
 std::unique_ptr<v8::Platform> platform = 0;
 v8::ArrayBuffer::Allocator* array_buffer_allocator = 0;
-int32_t ak_x = 111;
 
 // Extracts a C string from a V8 Utf8Value.
 const char* ToCString(const v8::String::Utf8Value& value) {
@@ -305,7 +300,7 @@ void akGetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     if (buf_ofs>=0 && buf_ofs*sizeof(int32_t)<AKAPI_BUF_SIZE)
     {
-        v8::MaybeLocal<v8::String> ms = v8::String::NewFromTwoByte(isolate, (uint16_t*)akAPI_Buff + buf_ofs);
+        v8::MaybeLocal<v8::String> ms = v8::String::NewFromUtf8(isolate, (char*)akAPI_Buff + buf_ofs);
         if (ms.IsEmpty())
         {
             printf("%s problem\n", __FUNCTION__);
@@ -327,17 +322,16 @@ void akSetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*str,buf_ofs*/)
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     v8::Local<v8::String> s = v8::Local<v8::String>::Cast(args[0]);
-    int len = s->Length();
-    if ( 2*(buf_ofs + len) >= AKAPI_BUF_SIZE)
+    int len = s->Utf8Length(isolate);
+    if ( buf_ofs + len >= AKAPI_BUF_SIZE)
     {
         printf("%s problem\n", __FUNCTION__);
         return;
     }
-    s->Write(isolate, (uint16_t*)akAPI_Buff + buf_ofs);
-    *((uint16_t*)akAPI_Buff+buf_ofs+len) = 0;
+    s->WriteUtf8(isolate, (char*)akAPI_Buff + buf_ofs);
 }
 
-void XPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void akPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
     bool first = true;
     for (int i = 0; i < args.Length(); i++) {
         v8::HandleScope handle_scope(args.GetIsolate());
@@ -413,7 +407,7 @@ void init_v8()
 
     v8::Local<v8::ObjectTemplate> global_templ = v8::ObjectTemplate::New(isolate);
     
-    global_templ->Set(isolate, "ak_print", v8::FunctionTemplate::New(isolate, XPrint));
+    global_templ->Set(isolate, "akPrint", v8::FunctionTemplate::New(isolate, akPrint));
     
     global_templ->Set(isolate, "akAPI_Call", v8::FunctionTemplate::New(isolate, akAPI_CallV8));
 
@@ -434,13 +428,29 @@ void init_v8()
     context->Enter(); // v8::Context::Scope context_scope(context);
 }
 
-void exec_v8(const char* str)
+void akAPI_Exec(const char* str, int len, bool root)
 {
+    char* buf = 0;
+    if (!root)
+    {
+        // we need to protect global scope
+        // ... invoke str code as a function
+        // somehow, without using quotes!
+        len = len<0 ? strlen(str) : len;
+        buf = (char*)malloc(len+3);
+        buf[0] = '{';
+        memcpy(buf+1,str,len);
+        buf[len+1] = '}';
+        buf[len+2] = 0;
+        str = buf;
+        len+=2;
+    }
+
     v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
     // Create a string containing the JavaScript source code.
-    v8::MaybeLocal<v8::String> source = v8::String::NewFromUtf8(isolate, str);
+    v8::MaybeLocal<v8::String> source = v8::String::NewFromUtf8(isolate, str, v8::NewStringType::kNormal, len);
 
     // Compile the source code.
     v8::MaybeLocal<v8::Script> script = v8::Script::Compile(context, source.ToLocalChecked());
@@ -459,10 +469,12 @@ void exec_v8(const char* str)
     else
     {
         printf("can't compile\n");
+        printf("len=%d\n%s\n",len,str);
     }
-}
 
-#endif
+    if (buf)
+        free(buf);
+}
 
 // FOR GL 
 #include "term.h"
@@ -1714,44 +1726,8 @@ Game* game = 0;
 
 int main(int argc, char* argv[])
 {
-    akAPI_Init();
-    
-    #ifdef USE_V8
     init_v8();
-    
-    exec_v8(R"(
-        var ak =
-        {
-            getPos: function(arr3, ofs) { akAPI_Call(0); akReadF32(arr3,ofs|0,0,3); },
-            setPos: function(arr3, ofs) { akWriteF32(arr3,ofs|0,0,3); akAPI_Call(1); },
-
-            getDir: function() { akAPI_Call(2); return akGetF32(0); },
-            setDir: function(flt) { akSetF32(flt,0); akAPI_Call(3); },
-
-            getYaw: function() { akAPI_Call(4); akGetF32(0); },
-            setYaw: function(flt) { akSetF32(flt,0); akAPI_Call(5); },
-
-            getName: function() { akAPI_Call(6); return akGetStr(0); },
-            setName: function(str) { akSetStr(str); akAPI_Call(7); },
-        };
-
-        let pos=[0,0,0];
-        ak.getPos(pos,0);
-        ak.setPos(pos,0);
-
-        let dir = ak.getDir();
-        ak.setDir(dir);
-
-        let yaw = ak.getYaw();
-        ak.setYaw(yaw);
-
-        let str = ak.getName();
-        ak.setName(str);
-
-    )");
-
-    free_v8();
-    #endif
+    akAPI_Init();
 
 	/*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
@@ -2094,7 +2070,8 @@ int main(int argc, char* argv[])
         global_lt[2] = lt[2];
         global_lt[3] = lt[3];
 
-        if (TermOpen(0, yaw, pos, MyFont::Free))
+        game = TermOpen(0, yaw, pos, MyFont::Free);
+        if (game)
         {
             char font_dirname[1024+10];
             sprintf(font_dirname, "%sfonts", base_path); // = "./fonts";
@@ -3128,6 +3105,9 @@ int main(int argc, char* argv[])
         frames++;
     }
 
+    free_v8();
+    akAPI_Free();
+
     if (jsfd>=0)
     {
         GamePadUnmount();
@@ -3180,6 +3160,6 @@ int main(int argc, char* argv[])
 #endif
 
     FreeAudio();
-    akAPI_Free();
+
 	return 0;
 }

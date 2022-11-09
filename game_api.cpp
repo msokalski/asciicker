@@ -6,9 +6,62 @@
 
 void* akAPI_Buff = 0;
 
+#define CODE(...) #__VA_ARGS__
+
 void akAPI_Init()
 {
     akAPI_Buff = malloc(AKAPI_BUF_SIZE);
+
+    akAPI_Exec( CODE(
+        this.ak = 
+        {
+            getPos : function(arr3, ofs) { akAPI_Call(0); akReadF32(arr3,ofs|0,0,3); },
+            setPos : function(arr3, ofs) { akWriteF32(arr3,ofs|0,0,3); akAPI_Call(1); },
+
+            getDir : function() { akAPI_Call(2); return akGetF32(0); },
+            setDir : function(flt) { akSetF32(flt,0); akAPI_Call(3); },
+
+            getYaw : function() { akAPI_Call(4); return akGetF32(0); },
+            setYaw : function(flt) { akSetF32(flt,0); akAPI_Call(5); },
+
+            getName : function() { akAPI_Call(6); return akGetStr(0); },
+            setName : function(str) { akSetStr(str,0); akAPI_Call(7); },
+
+            getMount : function() { akAPI_Call(8); return akGetI32(0); },
+            setMount : function(int) { akSetI32(int,0); akAPI_Call(9); },
+
+            say : function(str) { akSetStr(str,0); akAPI_Call(101); },
+            
+            // NOT IMPLEMENTED
+            /*
+            onSay  : null, // function(str)
+
+            inventory :
+            {
+                getCount   : function() {},
+                getName    : function(idx) {},
+                getProtoId : function(idx) {},
+                getStoryId : function(idx) {},
+
+                onDrop     : null, // function(idx)
+                onEquip    : null, // function(idx)
+                onConsume  : null, // function(idx)
+            },
+
+            instance :
+            {
+            },
+
+            enemy :
+            {
+            }
+
+            buddy :
+            {
+            },
+            */
+        };
+    ),-1,true);
 }
 
 void akAPI_Free()
@@ -18,10 +71,11 @@ void akAPI_Free()
 
 extern "C" void akAPI_Call(int id)
 {
-    printf("akAPI_Call(%d)\n",id);
-
     if (!game)
+    {
+        printf("game = NULL!\n");
         return;
+    }
 
     switch (id)
     {
@@ -67,34 +121,40 @@ extern "C" void akAPI_Call(int id)
         case 6:
         // getName: function() { akAPI_Call(6); return akGetStr(0); },
         {
-            int i=0;
-            while (i<31 && game->player.name_cp437[i])
-            {
-                unsigned char cp437 = (unsigned char)game->player.name_cp437[i];
-                // convert cp437 to ucs2
-                // ...
-                uint16_t ucs2 = (uint16_t)cp437;
-                *((uint16_t*)akAPI_Buff+i) = ucs2;
-                i++;
-            }
-            *((uint16_t*)akAPI_Buff+i) = 0;
+            strcpy((char*)akAPI_Buff,game->player.name);
             break;
         }
 
         case 7:
-        // setName: function(str) { akSetStr(str); akAPI_Call(7); },
+        // setName: function(str) { akSetStr(str,0); akAPI_Call(7); },
         {
-            int i=0;
-            while (i<31 && *((uint16_t*)akAPI_Buff+i))
-            {
-                uint16_t ucs2 = *((uint16_t*)akAPI_Buff+i);
-                // convert ucs2 to cp437
-                // ...
-                unsigned char cp437 = (unsigned char)ucs2;
-                game->player.name_cp437[i] = cp437;
-                i++;
-            }
-            game->player.name_cp437[i] = 0;
+            strcpy(game->player.name,(char*)akAPI_Buff);
+            // TODO: convert utf8 to cp437!
+            strncpy(game->player.name_cp437,(char*)akAPI_Buff,32);
+            break;
+        }
+
+        case 8: 
+        // getMount : function() { akAPI_Call(8); return akGetI32(0); },
+        {
+            *(int*)akAPI_Buff = game->player.req.mount;
+            break;
+        }
+
+        case 9: 
+        // setMount : function(int) { akSetI32(int,0); akAPI_Call(9); },
+        {
+            game->player.SetMount(*(int*)akAPI_Buff);
+            break;
+        }
+
+        case 101: 
+        // say : function(str) { akSetStr(str,0); akAPI_Call(101); },
+        {
+            // TODO: convert utf8 to cp437!
+            const char* str = (char*)akAPI_Buff;
+            int len = strlen(str);
+            game->player.Say(str, len, game->stamp);
             break;
         }
 

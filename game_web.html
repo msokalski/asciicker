@@ -70,6 +70,7 @@
     </style>
 
     <script type='text/javascript'>
+      "use strict";
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker.register('asciicker.js').then(function (registration) {
@@ -158,7 +159,7 @@
 
 
     <script type='text/javascript'>
-
+      "use strict";
       var audio_ctx = null;
       var audio_cb = null;
       var audio_node = null;
@@ -342,10 +343,16 @@
     </script>
 
     <script type='text/javascript'>
+      "use strict";
 
       // API ABSTRACTION
       var akAPI_Call = null;
       var akAPI_Buff = 0;
+
+      function akPrint()
+      {
+        console.log.apply(this,arguments);
+      }
 
       function akGetF32(buf_ofs)
       {
@@ -393,32 +400,16 @@
       }   
       function akGetStr(buf_ofs)
       {
-          buf_ofs += akAPI_Buff>>1;
-          let str="";
-          for (let i=0; i<num; i++)
-          {
-              let chr = Module.HEAPU16[i+buf_ofs];
-              str += String.fromCharCode(chr);
-          }
-          return str;
+          return UTF8ToString(akAPI_Buff+buf_ofs,0xFFFF-buf_ofs);
       }   
       function akSetStr(str,buf_ofs)
       {
-          buf_ofs += akAPI_Buff>>1;
-          for (let i=0; i<num; i++)
-          {
-              let chr = str.charCodeAt(i);
-              if (chr <= 0 || chr > 0xFFFF)
-                chr = 63;
-              Module.HEAPU16[i+buf_ofs] = chr;
-          }
+          stringToUTF8(str,akAPI_Buff+buf_ofs,0xFFFF-buf_ofs);
       }
-
-      var ak = {};
-
     </script>
 
     <script type='text/javascript'>
+      "use strict";
 
       var Render = null;
       var Size = null;
@@ -1419,6 +1410,7 @@
     </div-->
     <!--textarea class="asciicker" id="output" rows="8"></textarea-->
     <script type='text/javascript'>
+      "use strict";
 
       var statusElement = document.getElementById('status');
       var progressElement = document.getElementById('progress');

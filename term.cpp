@@ -485,7 +485,7 @@ void term_close(A3D_WND* wnd)
 	free(term);
 }
 
-bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
+Game* TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 {
 	PlatformInterface pi;
 	pi.close = term_close;
@@ -522,7 +522,7 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 	A3D_WND* wnd = a3dOpen(&pi, &gd, share);
 
 	if (!wnd)
-		return false;
+		return 0;
 
 	//a3dSetRect(wnd, 0, A3D_WND_FULLSCREEN);
 	//a3dSetVisible(share, false);
@@ -539,7 +539,7 @@ bool TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 	term->water = 0;
 	*/
 
-	return true;
+	return term->game;
 }
 
 void TermCloseAll()

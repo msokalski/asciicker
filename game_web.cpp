@@ -192,24 +192,19 @@ int main(int argc, char* argv[])
     return 0;
 }
 
+void akAPI_Exec(const char* str, int len, bool root)
+{
+    EM_ASM(
+    {
+        let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
+        Function("'use strict';\n" + str).apply(this);
+    }, str, len);
+}
 
 int Main()
 {
     akAPI_Init();
     EM_ASM({akAPI_Buff=$0;},akAPI_Buff);
-
-    // inject this:
-    EM_ASM(
-    {
-        ak.getPos = function(arr3, ofs) { akAPI_Call(0); akReadF32(arr3,ofs|0,0,3); };
-        ak.setPos = function(arr3, ofs) { akWriteF32(arr3,ofs|0,0,3); akAPI_Call(1); };
-
-        ak.getDir = function() { akAPI_Call(2); return akGetF32(0); };
-        ak.setDir = function(flt) { akSetF32(flt,0); akAPI_Call(3); };
-
-        ak.getYaw = function() { akAPI_Call(4); return akGetF32(0); };
-        ak.setYaw = function(flt) { akSetF32(flt,0); akAPI_Call(5); };
-    });
 
     InitAudio();
     // here we must already know if serer on not server
