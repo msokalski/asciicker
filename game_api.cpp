@@ -13,53 +13,54 @@ void akAPI_Init()
     akAPI_Buff = malloc(AKAPI_BUF_SIZE);
 
     akAPI_Exec( CODE(
+        this.akOnSay = null;
+        function akAPI_OnSay() 
+        { 
+            if (akOnSay) 
+            {
+                akPrint("calling callback (not null)\n");
+                akOnSay(akGetStr(0)); 
+                akSetI32(1,0);
+            }
+            else
+            {
+                akPrint("not going to call callback (is null)\n");
+                akSetI32(0,0);
+            }
+        }
+
         this.ak = 
         {
             getPos : function(arr3, ofs) { akAPI_Call(0); akReadF32(arr3,ofs|0,0,3); },
             setPos : function(arr3, ofs) { akWriteF32(arr3,ofs|0,0,3); akAPI_Call(1); },
 
             getDir : function() { akAPI_Call(2); return akGetF32(0); },
-            setDir : function(flt) { akSetF32(flt,0); akAPI_Call(3); },
+            setDir : function(flt) { akSetF32(Number(flt)||0,0); akAPI_Call(3); },
 
             getYaw : function() { akAPI_Call(4); return akGetF32(0); },
-            setYaw : function(flt) { akSetF32(flt,0); akAPI_Call(5); },
+            setYaw : function(flt) { akSetF32(Number(flt)||0,0); akAPI_Call(5); },
 
             getName : function() { akAPI_Call(6); return akGetStr(0); },
-            setName : function(str) { akSetStr(str,0); akAPI_Call(7); },
+            setName : function(str) { akSetStr(String(str),0); akAPI_Call(7); },
 
             getMount : function() { akAPI_Call(8); return akGetI32(0); },
-            setMount : function(int) { akSetI32(int,0); akAPI_Call(9); },
+            setMount : function(int) { akSetI32(Number(int)|0,0); akAPI_Call(9); },
 
-            say : function(str) { akSetStr(str,0); akAPI_Call(101); },
-            
-            // NOT IMPLEMENTED
-            /*
-            onSay  : null, // function(str)
+            say : function(str) { akSetStr(String(str),0); akAPI_Call(101); },
 
-            inventory :
+            onSay: function(fnc) 
             {
-                getCount   : function() {},
-                getName    : function(idx) {},
-                getProtoId : function(idx) {},
-                getStoryId : function(idx) {},
-
-                onDrop     : null, // function(idx)
-                onEquip    : null, // function(idx)
-                onConsume  : null, // function(idx)
-            },
-
-            instance :
-            {
-            },
-
-            enemy :
-            {
+                if (typeof fnc === 'function')
+                {
+                    akPrint("FNC PASSED\n");
+                    akOnSay = fnc;
+                }
+                else
+                {
+                    akPrint("FNC IS NOT A FUNCTION\n");
+                    akOnSay = null;
+                }
             }
-
-            buddy :
-            {
-            },
-            */
         };
     ),-1,true);
 }
@@ -147,6 +148,8 @@ extern "C" void akAPI_Call(int id)
             game->player.SetMount(*(int*)akAPI_Buff);
             break;
         }
+
+        case 100:
 
         case 101: 
         // say : function(str) { akSetStr(str,0); akAPI_Call(101); },

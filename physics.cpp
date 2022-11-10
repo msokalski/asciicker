@@ -16,7 +16,7 @@ struct SoupItem
 
 #if 0
 	float CheckCollision2(const float sphere_pos[3], const float sphere_vel[3], float contact_pos[3])
-	{d
+	{
 		float col_time = 2;
 
 		float col[3] = // on sphere @ time 0.0

@@ -6766,37 +6766,41 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 							player.talk[i] = player.talk[i + 1];
 					}
 
-					int idx = player.talks;
-					player.talk[idx].box = player.talk_box;
-					player.talk[idx].pos[0] = player.pos[0];
-					player.talk[idx].pos[1] = player.pos[1];
-					player.talk[idx].pos[2] = player.pos[2];
-					player.talk[idx].stamp = stamp;
-
-					if (player.talk[idx].box->buf[0]=='\\')
+					if (player.talk_box->buf[0]=='\\')
 					{
 						// hacker mode
-						akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
+						akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
 					}
 					else
 					{
-						if (server)
+						if (!akAPI_OnSay(player.talk_box->buf, player.talk_box->len))
 						{
-							STRUCT_REQ_TALK req_talk = { 0 };
-							req_talk.token = 'T';
-							req_talk.len = player.talk[idx].box->len;
-							memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-							server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+							int idx = player.talks;
+							player.talk[idx].box = player.talk_box;
+							player.talk[idx].pos[0] = player.pos[0];
+							player.talk[idx].pos[1] = player.pos[1];
+							player.talk[idx].pos[2] = player.pos[2];
+							player.talk[idx].stamp = stamp;
+
+							if (server)
+							{
+								STRUCT_REQ_TALK req_talk = { 0 };
+								req_talk.token = 'T';
+								req_talk.len = player.talk[idx].box->len;
+								memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+								server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+							}
+
+							ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+							player.talks++;
+
+							// alloc new
+							player.talk_box = 0;
+
+							TalkBox_blink = 32;
+							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
 						}
-
-						ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-						player.talks++;
-
-						// alloc new
-						player.talk_box = 0;
-
-						TalkBox_blink = 32;
-						player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+						
 						memset(player.talk_box, 0, sizeof(TalkBox));
 						player.talk_box->max_width = 33;
 						player.talk_box->max_height = 7; // 0: off

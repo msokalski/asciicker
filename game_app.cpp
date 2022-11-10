@@ -67,415 +67,6 @@
 #include <libplatform/libplatform.h>
 #include <v8.h>
 
-v8::Isolate* isolate = 0;
-std::unique_ptr<v8::Platform> platform = 0;
-v8::ArrayBuffer::Allocator* array_buffer_allocator = 0;
-
-// Extracts a C string from a V8 Utf8Value.
-const char* ToCString(const v8::String::Utf8Value& value) {
-    return *value ? *value : "<string conversion failed>";
-}
-
-void akAPI_CallV8(const v8::FunctionCallbackInfo<v8::Value>& args/*id*/) 
-{
-    if (args.Length() != 1 || !args[0]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    akAPI_Call(args[0]->Int32Value(context).ToChecked());
-}
-
-void akGetF32(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
-{
-    if (args.Length() != 1 || !args[0]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[0]->Int32Value(context).ToChecked();
-    if (buf_ofs>=0 && buf_ofs*sizeof(float)<AKAPI_BUF_SIZE)
-        args.GetReturnValue().Set((double)*((float*)akAPI_Buff + buf_ofs));
-    else
-        args.GetReturnValue().Set(0.0);
-}
-void akSetF32(const v8::FunctionCallbackInfo<v8::Value>& args/*val, buf_ofs*/)
-{
-    if (args.Length() != 2 || !args[0]->IsNumber() || !args[1]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    float val = (float)args[0]->NumberValue(context).ToChecked();
-    int buf_ofs = args[1]->Int32Value(context).ToChecked();
-    if (buf_ofs>=0 && buf_ofs*sizeof(float)<AKAPI_BUF_SIZE)
-        *((float*)akAPI_Buff + buf_ofs) = val;
-}
-void akReadF32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
-{
-    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
-        !args[2]->IsInt32() || !args[3]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[2]->Int32Value(context).ToChecked();
-    int num = args[3]->Int32Value(context).ToChecked();
-    int arr_ofs = args[1]->Int32Value(context).ToChecked();
-    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(float)>AKAPI_BUF_SIZE)
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
-    for (int i=0; i<num; i++)
-    {
-        double d = (double)*((float*)akAPI_Buff + buf_ofs + i);
-        v8::Local<v8::Value> v = v8::Number::New(isolate, d);
-        v8::Maybe<bool> ok = arr->Set(context, i+arr_ofs, v);
-        if (!ok.ToChecked())
-            break;
-    }
-}
-void akWriteF32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
-{
-    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
-        !args[2]->IsInt32() || !args[3]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[2]->Int32Value(context).ToChecked();
-    int num = args[3]->Int32Value(context).ToChecked();
-    int arr_ofs = args[1]->Int32Value(context).ToChecked();
-    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(float)>AKAPI_BUF_SIZE)
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
-    int arr_len = arr->Length();
-    if (arr_ofs + num > arr_len)
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    for (int i=0; i<num; i++)
-    {
-        v8::MaybeLocal<v8::Value> mv = arr->Get(context, i+arr_ofs);
-        if (mv.IsEmpty())
-            continue;
-        v8::Local<v8::Value> v = mv.ToLocalChecked();
-        v8::Maybe<double> md = v->NumberValue(context);
-        if (md.IsNothing())
-            continue;
-        double d = md.ToChecked();
-        *((float*)akAPI_Buff + buf_ofs + i) = (float)d;
-    }
-}
-void akGetI32(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
-{
-    if (args.Length() != 1 || !args[0]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[0]->Int32Value(context).ToChecked();
-    if (buf_ofs>=0 && buf_ofs*sizeof(int32_t)<AKAPI_BUF_SIZE)
-        args.GetReturnValue().Set(*((int32_t*)akAPI_Buff + buf_ofs));
-    else
-        args.GetReturnValue().Set((int32_t)0);
-}
-void akSetI32(const v8::FunctionCallbackInfo<v8::Value>& args/*val, buf_ofs*/)
-{
-    if (args.Length() != 2 || !args[0]->IsInt32() || !args[1]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int32_t val = args[0]->Int32Value(context).ToChecked();
-    int buf_ofs = args[1]->Int32Value(context).ToChecked();
-    if (buf_ofs>=0 && buf_ofs*sizeof(float)<AKAPI_BUF_SIZE)
-        *((int32_t*)akAPI_Buff + buf_ofs) = val;
-}
-void akReadI32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
-{
-    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
-        !args[2]->IsInt32() || !args[3]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[2]->Int32Value(context).ToChecked();
-    int num = args[3]->Int32Value(context).ToChecked();
-    int arr_ofs = args[1]->Int32Value(context).ToChecked();
-    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(int32_t)>AKAPI_BUF_SIZE)
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
-    for (int i=0; i<num; i++)
-    {
-        int32_t d = *((int32_t*)akAPI_Buff + buf_ofs + i);
-        v8::Local<v8::Value> v = v8::Number::New(isolate, d);
-        v8::Maybe<bool> ok = arr->Set(context, i+arr_ofs, v);
-        if (!ok.ToChecked())
-            break;
-    }
-}
-void akWriteI32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
-{
-    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
-        !args[2]->IsInt32() || !args[3]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[2]->Int32Value(context).ToChecked();
-    int num = args[3]->Int32Value(context).ToChecked();
-    int arr_ofs = args[1]->Int32Value(context).ToChecked();
-    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(int32_t)>AKAPI_BUF_SIZE)
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
-    int arr_len = arr->Length();
-    if (arr_ofs + num > arr_len)
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    for (int i=0; i<num; i++)
-    {
-        v8::MaybeLocal<v8::Value> mv = arr->Get(context, i+arr_ofs);
-        if (mv.IsEmpty())
-            continue;
-        v8::Local<v8::Value> v = mv.ToLocalChecked();
-        v8::Maybe<int32_t> md = v->Int32Value(context);
-        if (md.IsNothing())
-            continue;
-        int32_t d = md.ToChecked();
-        *((int32_t*)akAPI_Buff + buf_ofs + i) = d;
-    }
-}
-void akGetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
-{
-    if (args.Length() != 1 || !args[0]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[2]->Int32Value(context).ToChecked();
-    if (buf_ofs>=0 && buf_ofs*sizeof(int32_t)<AKAPI_BUF_SIZE)
-    {
-        v8::MaybeLocal<v8::String> ms = v8::String::NewFromUtf8(isolate, (char*)akAPI_Buff + buf_ofs);
-        if (ms.IsEmpty())
-        {
-            printf("%s problem\n", __FUNCTION__);
-            return;
-        }
-        v8::Local<v8::String> s = ms.ToLocalChecked();        
-        args.GetReturnValue().Set(s);
-    }
-}
-void akSetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*str,buf_ofs*/)
-{
-    if (args.Length() != 2 || !args[0]->IsString() || !args[1]->IsInt32())
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    int buf_ofs = args[2]->Int32Value(context).ToChecked();
-    v8::Local<v8::String> s = v8::Local<v8::String>::Cast(args[0]);
-    int len = s->Utf8Length(isolate);
-    if ( buf_ofs + len >= AKAPI_BUF_SIZE)
-    {
-        printf("%s problem\n", __FUNCTION__);
-        return;
-    }
-    s->WriteUtf8(isolate, (char*)akAPI_Buff + buf_ofs);
-}
-
-void akPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    bool first = true;
-    for (int i = 0; i < args.Length(); i++) {
-        v8::HandleScope handle_scope(args.GetIsolate());
-        if (first) {
-            first = false;
-        }
-        else {
-            printf(" ");
-        }
-        v8::String::Utf8Value str(args.GetIsolate(), args[i]);
-        const char* cstr = ToCString(str);
-        printf("%s", cstr);
-    }
-    printf("\n");
-    fflush(stdout);
-}
-
-
-void free_v8()
-{
-    {
-        v8::HandleScope handle_scope(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        context->Exit();
-    }
-
-    isolate->Exit();
-
-    // Dispose the isolate and tear down V8.
-    isolate->Dispose();
-    v8::V8::Dispose();
-
-    v8::V8::DisposePlatform();
-
-    if (array_buffer_allocator)
-        delete array_buffer_allocator;
-    array_buffer_allocator = 0;
-
-    printf("V8 DISPOSED.\n");
-}
-
-void init_v8()
-{
-
-#ifdef V8_INTL_SUPPORT
-    assert(!"V8_INTL_SUPPORT")
-#endif
-
-#ifdef V8_USE_EXTERNAL_STARTUP_DATA
-        assert(!"V8_USE_EXTERNAL_STARTUP_DATA")
-#endif
-
-        // our own v8_monolith build should be compiled 
-        // w/o i18n and esd
-        // v8::V8::InitializeICUDefaultLocation(argv[0]);
-        // v8::V8::InitializeExternalStartupData(argv[0]);
-
-        platform = v8::platform::NewDefaultPlatform();
-    v8::V8::InitializePlatform(platform.get());
-    v8::V8::Initialize();
-
-    printf("INITIALIZED V8 %s\n", v8::V8::GetVersion());
-
-    // Create a new Isolate and make it the current one.
-    array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
-    v8::Isolate::CreateParams create_params;
-    create_params.array_buffer_allocator = array_buffer_allocator;
-
-    isolate = v8::Isolate::New(create_params);
-    isolate->Enter(); // v8::Isolate::Scope isolate_scope(isolate);
-
-    v8::HandleScope handle_scope(isolate);
-
-    v8::Local<v8::ObjectTemplate> global_templ = v8::ObjectTemplate::New(isolate);
-    
-    global_templ->Set(isolate, "akPrint", v8::FunctionTemplate::New(isolate, akPrint));
-    
-    global_templ->Set(isolate, "akAPI_Call", v8::FunctionTemplate::New(isolate, akAPI_CallV8));
-
-    global_templ->Set(isolate, "akGetF32", v8::FunctionTemplate::New(isolate, akGetF32));
-    global_templ->Set(isolate, "akSetF32", v8::FunctionTemplate::New(isolate, akSetF32));
-    global_templ->Set(isolate, "akReadF32", v8::FunctionTemplate::New(isolate, akReadF32));
-    global_templ->Set(isolate, "akWriteF32", v8::FunctionTemplate::New(isolate, akWriteF32));
-
-    global_templ->Set(isolate, "akGetI32", v8::FunctionTemplate::New(isolate, akGetI32));
-    global_templ->Set(isolate, "akSetI32", v8::FunctionTemplate::New(isolate, akSetI32));
-    global_templ->Set(isolate, "akReadI32", v8::FunctionTemplate::New(isolate, akReadI32));
-    global_templ->Set(isolate, "akWriteI32", v8::FunctionTemplate::New(isolate, akWriteI32));
-
-    global_templ->Set(isolate, "akGetStr", v8::FunctionTemplate::New(isolate, akGetStr));
-    global_templ->Set(isolate, "akSetStr", v8::FunctionTemplate::New(isolate, akSetStr));
-
-    v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global_templ);
-    context->Enter(); // v8::Context::Scope context_scope(context);
-}
-
-void akAPI_Exec(const char* str, int len, bool root)
-{
-    char* buf = 0;
-    if (!root)
-    {
-        // we need to protect global scope
-        // ... invoke str code as a function
-        // somehow, without using quotes!
-        len = len<0 ? strlen(str) : len;
-        buf = (char*)malloc(len+3);
-        buf[0] = '{';
-        memcpy(buf+1,str,len);
-        buf[len+1] = '}';
-        buf[len+2] = 0;
-        str = buf;
-        len+=2;
-    }
-
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-    // Create a string containing the JavaScript source code.
-    v8::MaybeLocal<v8::String> source = v8::String::NewFromUtf8(isolate, str, v8::NewStringType::kNormal, len);
-
-    // Compile the source code.
-    v8::MaybeLocal<v8::Script> script = v8::Script::Compile(context, source.ToLocalChecked());
-
-    if (!script.IsEmpty())
-    {
-        // Run the script to get the result.
-        v8::MaybeLocal<v8::Value> result = script.ToLocalChecked()->Run(context);
-
-        if (!result.IsEmpty())
-        {
-            v8::String::Utf8Value utf8(isolate, result.ToLocalChecked()->ToString(context).ToLocalChecked());
-            printf("string %s\n", *utf8);
-        }
-    }
-    else
-    {
-        printf("can't compile\n");
-        printf("len=%d\n%s\n",len,str);
-    }
-
-    if (buf)
-        free(buf);
-}
-
 // FOR GL 
 #include "term.h"
 #include "gl.h"
@@ -1723,6 +1314,9 @@ bool read_js(int fd)
 }
 
 Game* game = 0;
+
+void init_v8();
+void free_v8();
 
 int main(int argc, char* argv[])
 {
@@ -3162,4 +2756,466 @@ int main(int argc, char* argv[])
     FreeAudio();
 
 	return 0;
+}
+
+//////////////////////////////////////////////////
+
+v8::Isolate* isolate = 0;
+std::unique_ptr<v8::Platform> platform = 0;
+v8::ArrayBuffer::Allocator* array_buffer_allocator = 0;
+
+// Extracts a C string from a V8 Utf8Value.
+const char* ToCString(const v8::String::Utf8Value& value) {
+    return *value ? *value : "<string conversion failed>";
+}
+
+void akAPI_CallV8(const v8::FunctionCallbackInfo<v8::Value>& args/*id*/) 
+{
+    if (args.Length() != 1 || !args[0]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    akAPI_Call(args[0]->Int32Value(context).ToChecked());
+}
+
+void akGetF32(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
+{
+    if (args.Length() != 1 || !args[0]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[0]->Int32Value(context).ToChecked();
+    if (buf_ofs>=0 && buf_ofs*sizeof(float)<AKAPI_BUF_SIZE)
+        args.GetReturnValue().Set((double)*((float*)akAPI_Buff + buf_ofs));
+    else
+        args.GetReturnValue().Set(0.0);
+}
+void akSetF32(const v8::FunctionCallbackInfo<v8::Value>& args/*val, buf_ofs*/)
+{
+    if (args.Length() != 2 || !args[0]->IsNumber() || !args[1]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    float val = (float)args[0]->NumberValue(context).ToChecked();
+    int buf_ofs = args[1]->Int32Value(context).ToChecked();
+    if (buf_ofs>=0 && buf_ofs*sizeof(float)<AKAPI_BUF_SIZE)
+        *((float*)akAPI_Buff + buf_ofs) = val;
+}
+void akReadF32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
+{
+    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
+        !args[2]->IsInt32() || !args[3]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[2]->Int32Value(context).ToChecked();
+    int num = args[3]->Int32Value(context).ToChecked();
+    int arr_ofs = args[1]->Int32Value(context).ToChecked();
+    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(float)>AKAPI_BUF_SIZE)
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
+    for (int i=0; i<num; i++)
+    {
+        double d = (double)*((float*)akAPI_Buff + buf_ofs + i);
+        v8::Local<v8::Value> v = v8::Number::New(isolate, d);
+        v8::Maybe<bool> ok = arr->Set(context, i+arr_ofs, v);
+        if (!ok.ToChecked())
+            break;
+    }
+}
+void akWriteF32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
+{
+    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
+        !args[2]->IsInt32() || !args[3]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[2]->Int32Value(context).ToChecked();
+    int num = args[3]->Int32Value(context).ToChecked();
+    int arr_ofs = args[1]->Int32Value(context).ToChecked();
+    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(float)>AKAPI_BUF_SIZE)
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
+    int arr_len = arr->Length();
+    if (arr_ofs + num > arr_len)
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    for (int i=0; i<num; i++)
+    {
+        v8::MaybeLocal<v8::Value> mv = arr->Get(context, i+arr_ofs);
+        if (mv.IsEmpty())
+            continue;
+        v8::Local<v8::Value> v = mv.ToLocalChecked();
+        v8::Maybe<double> md = v->NumberValue(context);
+        if (md.IsNothing())
+            continue;
+        double d = md.ToChecked();
+        *((float*)akAPI_Buff + buf_ofs + i) = (float)d;
+    }
+}
+void akGetI32(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
+{
+    if (args.Length() != 1 || !args[0]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[0]->Int32Value(context).ToChecked();
+    if (buf_ofs>=0 && buf_ofs*sizeof(int32_t)<AKAPI_BUF_SIZE)
+        args.GetReturnValue().Set(*((int32_t*)akAPI_Buff + buf_ofs));
+    else
+        args.GetReturnValue().Set((int32_t)0);
+}
+void akSetI32(const v8::FunctionCallbackInfo<v8::Value>& args/*val, buf_ofs*/)
+{
+    if (args.Length() != 2 || !args[0]->IsInt32() || !args[1]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int32_t val = args[0]->Int32Value(context).ToChecked();
+    int buf_ofs = args[1]->Int32Value(context).ToChecked();
+    if (buf_ofs>=0 && buf_ofs*sizeof(float)<AKAPI_BUF_SIZE)
+        *((int32_t*)akAPI_Buff + buf_ofs) = val;
+}
+void akReadI32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
+{
+    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
+        !args[2]->IsInt32() || !args[3]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[2]->Int32Value(context).ToChecked();
+    int num = args[3]->Int32Value(context).ToChecked();
+    int arr_ofs = args[1]->Int32Value(context).ToChecked();
+    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(int32_t)>AKAPI_BUF_SIZE)
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
+    for (int i=0; i<num; i++)
+    {
+        int32_t d = *((int32_t*)akAPI_Buff + buf_ofs + i);
+        v8::Local<v8::Value> v = v8::Number::New(isolate, d);
+        v8::Maybe<bool> ok = arr->Set(context, i+arr_ofs, v);
+        if (!ok.ToChecked())
+            break;
+    }
+}
+void akWriteI32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_ofs,num*/)
+{
+    if (args.Length() != 4 || !args[0]->IsArray() || !args[1]->IsInt32() ||
+        !args[2]->IsInt32() || !args[3]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[2]->Int32Value(context).ToChecked();
+    int num = args[3]->Int32Value(context).ToChecked();
+    int arr_ofs = args[1]->Int32Value(context).ToChecked();
+    if (arr_ofs < 0 || num <= 0 || buf_ofs < 0 || (buf_ofs+num)*sizeof(int32_t)>AKAPI_BUF_SIZE)
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(args[0]);
+    int arr_len = arr->Length();
+    if (arr_ofs + num > arr_len)
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    for (int i=0; i<num; i++)
+    {
+        v8::MaybeLocal<v8::Value> mv = arr->Get(context, i+arr_ofs);
+        if (mv.IsEmpty())
+            continue;
+        v8::Local<v8::Value> v = mv.ToLocalChecked();
+        v8::Maybe<int32_t> md = v->Int32Value(context);
+        if (md.IsNothing())
+            continue;
+        int32_t d = md.ToChecked();
+        *((int32_t*)akAPI_Buff + buf_ofs + i) = d;
+    }
+}
+void akGetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
+{
+    if (args.Length() != 1 || !args[0]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[2]->Int32Value(context).ToChecked();
+    if (buf_ofs>=0 && buf_ofs*sizeof(int32_t)<AKAPI_BUF_SIZE)
+    {
+        v8::MaybeLocal<v8::String> ms = v8::String::NewFromUtf8(isolate, (char*)akAPI_Buff + buf_ofs);
+        if (ms.IsEmpty())
+        {
+            printf("%s problem\n", __FUNCTION__);
+            return;
+        }
+        v8::Local<v8::String> s = ms.ToLocalChecked();        
+        args.GetReturnValue().Set(s);
+    }
+}
+void akSetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*str,buf_ofs*/)
+{
+    if (args.Length() != 2 || !args[0]->IsString() || !args[1]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    int buf_ofs = args[2]->Int32Value(context).ToChecked();
+    v8::Local<v8::String> s = v8::Local<v8::String>::Cast(args[0]);
+    int len = s->Utf8Length(isolate);
+    if ( buf_ofs + len >= AKAPI_BUF_SIZE)
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    s->WriteUtf8(isolate, (char*)akAPI_Buff + buf_ofs);
+}
+
+void akPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    bool first = true;
+    for (int i = 0; i < args.Length(); i++) {
+        v8::HandleScope handle_scope(args.GetIsolate());
+        if (first) {
+            first = false;
+        }
+        else {
+            printf(" ");
+        }
+        v8::String::Utf8Value str(args.GetIsolate(), args[i]);
+        const char* cstr = ToCString(str);
+        printf("%s", cstr);
+    }
+    printf("\n");
+    fflush(stdout);
+}
+
+int akAPI_OnSay(const char* str, int len)
+{
+    uint64_t t0 = GetTime();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    v8::Local<v8::String> fname = v8::String::NewFromUtf8Literal(isolate, "akAPI_OnSay");
+    v8::Local<v8::Value> funx;
+    if (!context->Global()->Get(context, fname).ToLocal(&funx) || !funx->IsFunction()) 
+        return 0;
+
+    v8::Local<v8::Function> func = funx.As<v8::Function>();
+
+    // copy str
+    memcpy(akAPI_Buff,str,len);
+    *((char*)akAPI_Buff+len)=0;
+
+    // invoke
+    v8::Local<v8::Value> recv;
+    v8::TryCatch trycatch(isolate);
+    v8::MaybeLocal<v8::Value> result = func->Call(context, context->Global(), 0, nullptr);
+    if (result.IsEmpty())
+    {
+        v8::Local<v8::Value> exception = trycatch.Exception();
+        v8::String::Utf8Value exception_str(isolate,exception);
+        printf("Exception: %s\n", *exception_str);          
+    }
+
+    uint64_t t1 = GetTime();
+    printf("CALLBACK in %d us\n", (int)(t1-t0));
+    return *(int*)akAPI_Buff;
+}
+
+void free_v8()
+{
+    {
+        v8::HandleScope handle_scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        context->Exit();
+    }
+
+    isolate->Exit();
+
+    // Dispose the isolate and tear down V8.
+    isolate->Dispose();
+    v8::V8::Dispose();
+
+    v8::V8::DisposePlatform();
+
+    if (array_buffer_allocator)
+        delete array_buffer_allocator;
+    array_buffer_allocator = 0;
+
+    printf("V8 DISPOSED.\n");
+}
+
+void init_v8()
+{
+
+#ifdef V8_INTL_SUPPORT
+    assert(!"V8_INTL_SUPPORT")
+#endif
+
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
+        assert(!"V8_USE_EXTERNAL_STARTUP_DATA")
+#endif
+
+        // our own v8_monolith build should be compiled 
+        // w/o i18n and esd
+        // v8::V8::InitializeICUDefaultLocation(argv[0]);
+        // v8::V8::InitializeExternalStartupData(argv[0]);
+
+        platform = v8::platform::NewDefaultPlatform();
+    v8::V8::InitializePlatform(platform.get());
+    v8::V8::Initialize();
+
+    printf("INITIALIZED V8 %s\n", v8::V8::GetVersion());
+
+    // Create a new Isolate and make it the current one.
+    array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+    v8::Isolate::CreateParams create_params;
+    create_params.array_buffer_allocator = array_buffer_allocator;
+
+    isolate = v8::Isolate::New(create_params);
+    isolate->Enter(); // v8::Isolate::Scope isolate_scope(isolate);
+
+    v8::HandleScope handle_scope(isolate);
+
+    v8::Local<v8::ObjectTemplate> global_templ = v8::ObjectTemplate::New(isolate);
+    
+    global_templ->Set(isolate, "akPrint", v8::FunctionTemplate::New(isolate, akPrint));
+    
+    global_templ->Set(isolate, "akAPI_Call", v8::FunctionTemplate::New(isolate, akAPI_CallV8));
+
+    global_templ->Set(isolate, "akGetF32", v8::FunctionTemplate::New(isolate, akGetF32));
+    global_templ->Set(isolate, "akSetF32", v8::FunctionTemplate::New(isolate, akSetF32));
+    global_templ->Set(isolate, "akReadF32", v8::FunctionTemplate::New(isolate, akReadF32));
+    global_templ->Set(isolate, "akWriteF32", v8::FunctionTemplate::New(isolate, akWriteF32));
+
+    global_templ->Set(isolate, "akGetI32", v8::FunctionTemplate::New(isolate, akGetI32));
+    global_templ->Set(isolate, "akSetI32", v8::FunctionTemplate::New(isolate, akSetI32));
+    global_templ->Set(isolate, "akReadI32", v8::FunctionTemplate::New(isolate, akReadI32));
+    global_templ->Set(isolate, "akWriteI32", v8::FunctionTemplate::New(isolate, akWriteI32));
+
+    global_templ->Set(isolate, "akGetStr", v8::FunctionTemplate::New(isolate, akGetStr));
+    global_templ->Set(isolate, "akSetStr", v8::FunctionTemplate::New(isolate, akSetStr));
+
+    v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global_templ);
+    context->Enter(); // v8::Context::Scope context_scope(context);
+}
+
+void akAPI_Exec(const char* str, int len, bool root)
+{
+    uint64_t t0 = GetTime();
+    char* buf = 0;
+    if (!root)
+    {
+        // lets isolate custom code from polluting with vars and lets
+        // they should declare variables using this.variable=something;
+
+        // (function(){...}())
+        // ^-extra parenthesis makes expression
+        //   instead of a statement (which would require a function name)
+        static const char* prefix = "(function(){";
+        static const char* suffix = "}())";
+        static const int prefix_len = strlen(prefix);
+        static const int suffix_len = strlen(suffix);
+        buf = (char*)malloc(prefix_len+len+suffix_len+1);
+        memcpy(buf,prefix,prefix_len);
+        memcpy(buf+prefix_len,str,len);
+        memcpy(buf+prefix_len+len,suffix,suffix_len+1);
+        len += prefix_len + suffix_len;
+        str = buf;
+    }
+
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    // Create a string containing the JavaScript source code.
+    v8::MaybeLocal<v8::String> source = v8::String::NewFromUtf8(isolate, str, v8::NewStringType::kNormal, len);
+
+    // Compile the source code.
+    v8::TryCatch trycatch(isolate);
+    v8::MaybeLocal<v8::Script> script = v8::Script::Compile(context, source.ToLocalChecked());
+
+    if (!script.IsEmpty())
+    {
+        // Run the script to get the result.
+        v8::MaybeLocal<v8::Value> result = script.ToLocalChecked()->Run(context);
+
+        if (result.IsEmpty())
+        {
+            v8::Local<v8::Value> exception = trycatch.Exception();
+            v8::String::Utf8Value exception_str(isolate,exception);
+            printf("Exception: %s\n", *exception_str);            
+        }
+        else
+        {
+            /*
+            v8::String::Utf8Value utf8(isolate, result.ToLocalChecked()->ToString(context).ToLocalChecked());
+            printf("string %s\n", *utf8);
+            */
+        }
+    }
+    else
+    {
+        v8::Local<v8::Value> exception = trycatch.Exception();
+        v8::String::Utf8Value exception_str(isolate,exception);
+        printf("Exception: %s\n", *exception_str);
+    }
+
+    if (buf)
+        free(buf);
+
+    uint64_t t1 = GetTime();
+    printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
 }

@@ -28,7 +28,9 @@
 			"__config": "cpp",
 			"typeindex": "cpp",
 			"functional": "cpp",
-			"*.inc": "cpp"
+			"*.inc": "cpp",
+			"exception": "cpp",
+			"system_error": "cpp"
 		}
 	}
 }

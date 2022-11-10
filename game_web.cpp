@@ -196,10 +196,33 @@ void akAPI_Exec(const char* str, int len, bool root)
 {
     EM_ASM(
     {
-        let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
-        Function("'use strict';\n" + str).apply(this);
+        try 
+        {
+            let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
+            Function("'use strict';\n" + str).apply(this);
+        }
+        catch(e)
+        {
+            console.log("Exception: "+e.name+" "+e.message);
+        }
     }, str, len);
 }
+
+int akAPI_OnSay(const char* str, int len)
+{
+    uint64_t t0 = GetTime();
+
+    // copy str
+    memcpy(akAPI_Buff,str,len);
+    *((char*)akAPI_Buff+len)=0;
+
+    EM_ASM({akAPI_OnSay();});
+
+    uint64_t t1 = GetTime();
+    printf("CALLBACK in %d us\n", (int)(t1-t0));
+    return *(int*)akAPI_Buff;
+}
+
 
 int Main()
 {
