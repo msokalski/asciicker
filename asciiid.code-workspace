@@ -30,7 +30,9 @@
 			"functional": "cpp",
 			"*.inc": "cpp",
 			"exception": "cpp",
-			"system_error": "cpp"
+			"system_error": "cpp",
+			"sstream": "cpp",
+			"numbers": "cpp"
 		}
 	}
 }

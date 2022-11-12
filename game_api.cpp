@@ -14,7 +14,8 @@ void akAPI_Init()
 
     akAPI_Exec( CODE(
         this.akOnSay = null;
-        function akAPI_OnSay() 
+
+        this.akAPI_OnSay = function () 
         { 
             if (akOnSay) 
             {
@@ -27,7 +28,7 @@ void akAPI_Init()
                 akPrint("not going to call callback (is null)\n");
                 akSetI32(0,0);
             }
-        }
+        };
 
         this.ak = 
         {

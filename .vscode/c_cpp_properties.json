@@ -6,11 +6,15 @@
                 "${workspaceFolder}/v8/v8/include",
                 "${workspaceFolder}/**"
             ],
-            "defines": ["USE_SDL","USE_GPM"],
+            "defines": [
+                "USE_SDL",
+                "USE_GPM"
+            ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "intelliSenseMode": "gcc-x64"
+            "intelliSenseMode": "gcc-x64",
+            "configurationProvider": "ms-vscode.makefile-tools"
         }
     ],
     "version": 4

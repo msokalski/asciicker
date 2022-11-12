@@ -194,18 +194,22 @@ int main(int argc, char* argv[])
 
 void akAPI_Exec(const char* str, int len, bool root)
 {
+    uint64_t t0 = GetTime();
     EM_ASM(
     {
         try 
         {
             let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
-            Function("'use strict';\n" + str).apply(this);
+            Function("'use strict';\n" + str).apply(window);
         }
         catch(e)
         {
-            console.log("Exception: "+e.name+" "+e.message);
+            console.log("Exception: "+e.name+" "+e.message+" "+$2);
         }
-    }, str, len);
+    }, str, len, root);
+
+    uint64_t t1 = GetTime();
+    printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
 }
 
 int akAPI_OnSay(const char* str, int len)

@@ -73,7 +73,7 @@ CPPFLAGS := -save-temps=obj -pthread -DGAME -DPURE_TERM -DUSE_GPM -O3 -I v8/v8/i
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME -DPURE_TERM -DUSE_GPM -fsanitize=address
 
 # linker flags
-LDFLAGS := -save-temps=obj -pthread -O3 -L v8/v8/out.gn/x64.release.new/obj
+LDFLAGS := -save-temps=obj -pthread -O3 -L v8/v8/out.gn/x64.release/obj
 # LDFLAGS := -g -save-temps=obj -pthread -O3
 # LDFLAGS := -g -save-temps=obj -pthread -fsanitize=address
 

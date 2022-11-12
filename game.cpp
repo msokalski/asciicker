@@ -810,7 +810,7 @@ struct TalkBox
 			int width, height, x, y;
 			int span;
 			int rows;
-			static void Print(int dx, int dy, const char* str, int len, void* cookie)
+			static void Print(int dx, int dy, const char* str, int len, void* cookie, int escape=0)
 			{
 				Cookie* c = (Cookie*)cookie;
 				if (c->y - dy < 0 || c->y - dy >= c->height)
@@ -818,8 +818,19 @@ struct TalkBox
 
 				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
 
+				uint8_t fg = white;
+				bool code = escape>0;
+				if (escape<0) // first line
+					code = str[0]=='\\' && len>1 && str[1]!='\\';
+
 				for (int i=0; i<len; i++)
 				{
+					uint8_t fg = white;
+					if (i==0 && escape < 0 && str[0]=='\\')
+						fg = dk_red;
+					else
+						fg = code ? yellow : white;
+
 					if (str[i] == '\n')
 					{
 						for (int x = dx + i; x < c->span; x++)
@@ -828,7 +839,7 @@ struct TalkBox
 								continue;
 
 							AnsiCell* ac = ar + x;
-							ac->fg = white;							
+							ac->fg = fg;							
 							ac->bk = dk_grey;
 							ac->gl = ' ';
 							ac->spare = 0;
@@ -841,7 +852,7 @@ struct TalkBox
 						continue;
 
 					AnsiCell* ac = ar + i + dx;
-					ac->fg = white;
+					ac->fg = fg;
 					ac->bk = dk_grey;
 					ac->gl = str[i];
 					ac->spare = 0;
@@ -1203,7 +1214,7 @@ struct TalkBox
 	// returns -1 on overflow, otherwise (b<<8) | l 
 	// where l = 'current line' length and b = buffer offset at 'current line' begining
 	// if _pos is null 'current line' is given directly by cursor_xy[1] otherwise indirectly by cursor_pos
-	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
+	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie, int escape)=0, void* cookie=0) const
 	{
 		// ALWAYS cursor_pos -> _xy={x,y} and _pos={prevline_pos,nextline_pos}
 
@@ -1217,6 +1228,9 @@ struct TalkBox
 
 		// todo:
 		// actually we need to call print() only on y++ and last line!
+
+		int escape = -1;
+		int code = buf[0]=='\\' && len>1 && buf[1]!='\\';
 
 		for (int c = 0; c < len; c++)
 		{
@@ -1238,7 +1252,7 @@ struct TalkBox
 			{
 				if (print)
 				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // +1 to include space char
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, escape); // +1 to include space char
 				}
 
 				wordlen = 0;
@@ -1251,8 +1265,11 @@ struct TalkBox
 				{
 					if (print)
 					{
-						print(x, y, "\n", 1, cookie);
+						print(x, y, "\n", 1, cookie, escape);
 					}
+
+					escape = code;
+
 					x = 0;
 					y++;
 
@@ -1265,8 +1282,10 @@ struct TalkBox
 			{
 				if (print)
 				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // including '\n'
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, escape); // including '\n'
 				}
+
+				escape = code;
 
 				if (x >= w) // moved
 					w = x+1;
@@ -1294,9 +1313,11 @@ struct TalkBox
 
 						if (print)
 						{
-							print(0, y, buf+c-wordlen, wordlen, cookie);
-							print(x, y, "\n", 1, cookie);
+							print(0, y, buf+c-wordlen, wordlen, cookie, escape);
+							print(x, y, "\n", 1, cookie, escape);
 						}
+
+						escape = code;
 
 						wordlen = 0;
 						y++;
@@ -1319,8 +1340,10 @@ struct TalkBox
 
 						if (print)
 						{
-							print(x - wordlen, y, "\n", 1, cookie);
+							print(x - wordlen, y, "\n", 1, cookie, escape);
 						}
+
+						escape = code;
 
 						c -= wordlen+1;
 						wordlen = 0;
@@ -1347,8 +1370,8 @@ struct TalkBox
 
 		if (print)
 		{
-			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie);
-			print(x, y, "\n", 1, cookie);
+			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie, escape);
+			print(x, y, "\n", 1, cookie, escape);
 		}
 
 		if (x >= w)
@@ -4477,20 +4500,22 @@ void Human::Say(const char* str, int len, uint64_t stamp)
 	box->cursor_xy[0] = p[0];
 	box->cursor_xy[1] = p[1];
 
-	int idx = player.talks;
-	player.talk[idx].pos[0] = player.pos[0];
-	player.talk[idx].pos[1] = player.pos[1];
-	player.talk[idx].pos[2] = player.pos[2];
-	player.talk[idx].box = box;
-	player.talk[idx].stamp = stamp;
-
-	if (player.talk[idx].box->buf[0]=='\\')
+	if (box->len>1 &&
+		box->buf[0]=='\\' && 
+		box->buf[1]!='\\')
 	{
 		// hacker mode
-		akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
+		akAPI_Exec(box->buf+1, box->len-1);
 	}
 	else
 	{
+		int idx = player.talks;
+		player.talk[idx].pos[0] = player.pos[0];
+		player.talk[idx].pos[1] = player.pos[1];
+		player.talk[idx].pos[2] = player.pos[2];
+		player.talk[idx].box = box;
+		player.talk[idx].stamp = stamp;
+
 		if (server)
 		{
 			STRUCT_REQ_TALK req_talk = { 0 };
@@ -6766,7 +6791,9 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 							player.talk[i] = player.talk[i + 1];
 					}
 
-					if (player.talk_box->buf[0]=='\\')
+					if (player.talk_box->len>1 &&
+						player.talk_box->buf[0]=='\\' && 
+						player.talk_box->buf[1]!='\\')
 					{
 						// hacker mode
 						akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
@@ -7680,20 +7707,22 @@ void Game::StartContact(int id, int x, int y, int b)
 										player.talk[i] = player.talk[i + 1];
 								}
 
-								int idx = player.talks;
-								player.talk[idx].box = player.talk_box;
-								player.talk[idx].pos[0] = player.pos[0];
-								player.talk[idx].pos[1] = player.pos[1];
-								player.talk[idx].pos[2] = player.pos[2];
-								player.talk[idx].stamp = stamp;
-
-								if (player.talk[idx].box->buf[0]=='\\')
+								if (player.talk_box->len>1 &&
+									player.talk_box->buf[0]=='\\' && 
+									player.talk_box->buf[1]!='\\')
 								{
 									// hacker mode
-									akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
+									akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
 								}
 								else
 								{
+
+									int idx = player.talks;
+									player.talk[idx].box = player.talk_box;
+									player.talk[idx].pos[0] = player.pos[0];
+									player.talk[idx].pos[1] = player.pos[1];
+									player.talk[idx].pos[2] = player.pos[2];
+									player.talk[idx].stamp = stamp;
 
 									if (server)
 									{
@@ -8936,20 +8965,22 @@ void Game::OnPadButton(int b, bool down)
 									player.talk[i] = player.talk[i + 1];
 							}
 
-							int idx = player.talks;
-							player.talk[idx].box = player.talk_box;
-							player.talk[idx].pos[0] = player.pos[0];
-							player.talk[idx].pos[1] = player.pos[1];
-							player.talk[idx].pos[2] = player.pos[2];
-							player.talk[idx].stamp = stamp;
-
-							if (player.talk[idx].box->buf[0]=='\\')
+							if (player.talk_box->len>1 &&
+								player.talk_box->buf[0]=='\\' && 
+								player.talk_box->buf[1]!='\\')
 							{
 								// hacker mode
-								akAPI_Exec(player.talk[idx].box->buf+1, player.talk[idx].box->len-1);
+								akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
 							}
 							else
 							{
+								int idx = player.talks;
+								player.talk[idx].box = player.talk_box;
+								player.talk[idx].pos[0] = player.pos[0];
+								player.talk[idx].pos[1] = player.pos[1];
+								player.talk[idx].pos[2] = player.pos[2];
+								player.talk[idx].stamp = stamp;
+
 
 								if (server)
 								{
