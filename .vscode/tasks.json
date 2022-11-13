@@ -4,7 +4,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "run",
+            "label": "run-game",
             "type": "shell",
             "command": ".run/game",
             "problemMatcher": [
@@ -16,7 +16,7 @@
             }
         },
         {
-            "label": "build",
+            "label": "build-all",
             "type": "shell",
             "command": "./build.sh",
             "problemMatcher": [
@@ -28,7 +28,7 @@
             }
         },
         {
-            "label": "clean",
+            "label": "clean-all",
             "type": "shell",
             "command": "./clean.sh",
             "problemMatcher": [

@@ -810,7 +810,10 @@ struct TalkBox
 			int width, height, x, y;
 			int span;
 			int rows;
-			static void Print(int dx, int dy, const char* str, int len, void* cookie, int escape=0)
+
+			int state; // used to colorize tokens
+
+			static void Print(int dx, int dy, const char* str, int len, void* cookie)
 			{
 				Cookie* c = (Cookie*)cookie;
 				if (c->y - dy < 0 || c->y - dy >= c->height)
@@ -818,21 +821,30 @@ struct TalkBox
 
 				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
 
-				uint8_t fg = white;
-				bool code = escape>0;
-				if (escape<0) // first line
-					code = str[0]=='\\' && len>1 && str[1]!='\\';
+				// cookie->state:
+				// -1 : before first char is printed -> 0 or 1 if \ is being printed 
+				//  0 : white -> stay at 0
+				//  1 : first char was '\' -> 0 if second '\' is being printed or 2 otherwise
+				//  2 : yellow -> stay at 2
+
+				uint8_t fg = c->state == 2 ? yellow : white;
 
 				for (int i=0; i<len; i++)
 				{
-					uint8_t fg = white;
-					if (i==0 && escape < 0 && str[0]=='\\')
-						fg = dk_red;
-					else
-						fg = code ? yellow : white;
-
 					if (str[i] == '\n')
 					{
+						if (c->state==-1)
+						{
+							fg = white;
+							c->state=0;
+						}
+						else
+						if (c->state==1)
+						{
+							fg = yellow;
+							c->state=2;
+						}
+						
 						for (int x = dx + i; x < c->span; x++)
 						{
 							if (x + c->x < 0 || x + c->x >= c->width)
@@ -850,6 +862,42 @@ struct TalkBox
 
 					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
 						continue;
+
+					// -1 : before first char is printed -> 0 or 1 if \ is being printed 
+					//  0 : first char wasnt '\' -> stay at 0
+					//  1 : first char was '\' -> 0 if scond \ is being printed or 2 otherwise
+					//  2 : two '\' -> stay at 2
+
+					switch (c->state)
+					{
+						case -1:
+						{
+							if (str[i]=='\\')
+							{
+								fg = dk_red;
+								c->state = 1;
+							}
+							else
+							{
+								fg = white;
+								c->state = 0;
+							}
+							break;
+						}
+						case 1:
+						{
+							if (str[i]=='\\')
+							{
+								fg = white;
+								c->state = 0;
+							}
+							else
+							{
+								fg = yellow;
+								c->state = 2;
+							}
+						}
+					}
 
 					AnsiCell* ac = ar + i + dx;
 					ac->fg = fg;
@@ -869,7 +917,7 @@ struct TalkBox
 		int lower = y + 1;
 		int upper = y + 4 + size[1];
 
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, -1/*state*/ };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 
@@ -1214,7 +1262,7 @@ struct TalkBox
 	// returns -1 on overflow, otherwise (b<<8) | l 
 	// where l = 'current line' length and b = buffer offset at 'current line' begining
 	// if _pos is null 'current line' is given directly by cursor_xy[1] otherwise indirectly by cursor_pos
-	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie, int escape)=0, void* cookie=0) const
+	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
 	{
 		// ALWAYS cursor_pos -> _xy={x,y} and _pos={prevline_pos,nextline_pos}
 
@@ -1228,9 +1276,6 @@ struct TalkBox
 
 		// todo:
 		// actually we need to call print() only on y++ and last line!
-
-		int escape = -1;
-		int code = buf[0]=='\\' && len>1 && buf[1]!='\\';
 
 		for (int c = 0; c < len; c++)
 		{
@@ -1252,7 +1297,7 @@ struct TalkBox
 			{
 				if (print)
 				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, escape); // +1 to include space char
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // +1 to include space char
 				}
 
 				wordlen = 0;
@@ -1265,10 +1310,8 @@ struct TalkBox
 				{
 					if (print)
 					{
-						print(x, y, "\n", 1, cookie, escape);
+						print(x, y, "\n", 1, cookie);
 					}
-
-					escape = code;
 
 					x = 0;
 					y++;
@@ -1282,10 +1325,8 @@ struct TalkBox
 			{
 				if (print)
 				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, escape); // including '\n'
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // including '\n'
 				}
-
-				escape = code;
 
 				if (x >= w) // moved
 					w = x+1;
@@ -1313,11 +1354,9 @@ struct TalkBox
 
 						if (print)
 						{
-							print(0, y, buf+c-wordlen, wordlen, cookie, escape);
-							print(x, y, "\n", 1, cookie, escape);
+							print(0, y, buf+c-wordlen, wordlen, cookie);
+							print(x, y, "\n", 1, cookie);
 						}
-
-						escape = code;
 
 						wordlen = 0;
 						y++;
@@ -1340,10 +1379,8 @@ struct TalkBox
 
 						if (print)
 						{
-							print(x - wordlen, y, "\n", 1, cookie, escape);
+							print(x - wordlen, y, "\n", 1, cookie);
 						}
-
-						escape = code;
 
 						c -= wordlen+1;
 						wordlen = 0;
@@ -1370,8 +1407,8 @@ struct TalkBox
 
 		if (print)
 		{
-			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie, escape);
-			print(x, y, "\n", 1, cookie, escape);
+			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie);
+			print(x, y, "\n", 1, cookie);
 		}
 
 		if (x >= w)
