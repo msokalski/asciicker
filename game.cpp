@@ -799,6 +799,10 @@ struct TalkBox
 	int cursor_pos;
 	int len;
 
+	int escape; // 0:none(text), 1:script, 2:double(text)
+	// if escape >0, we need to visually move first line by 1 char left!
+	// that needs to handle cursor movments as well
+
 	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor, const char* name=0) const
 	{
 		// x,y is at smoke spot, box will be centered above it
@@ -811,8 +815,6 @@ struct TalkBox
 			int span;
 			int rows;
 
-			int state; // used to colorize tokens
-
 			static void Print(int dx, int dy, const char* str, int len, void* cookie)
 			{
 				Cookie* c = (Cookie*)cookie;
@@ -821,30 +823,12 @@ struct TalkBox
 
 				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
 
-				// cookie->state:
-				// -1 : before first char is printed -> 0 or 1 if \ is being printed 
-				//  0 : white -> stay at 0
-				//  1 : first char was '\' -> 0 if second '\' is being printed or 2 otherwise
-				//  2 : yellow -> stay at 2
-
-				uint8_t fg = c->state == 2 ? yellow : white;
+				uint8_t fg = white;
 
 				for (int i=0; i<len; i++)
 				{
 					if (str[i] == '\n')
 					{
-						if (c->state==-1)
-						{
-							fg = white;
-							c->state=0;
-						}
-						else
-						if (c->state==1)
-						{
-							fg = yellow;
-							c->state=2;
-						}
-						
 						for (int x = dx + i; x < c->span; x++)
 						{
 							if (x + c->x < 0 || x + c->x >= c->width)
@@ -862,42 +846,6 @@ struct TalkBox
 
 					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
 						continue;
-
-					// -1 : before first char is printed -> 0 or 1 if \ is being printed 
-					//  0 : first char wasnt '\' -> stay at 0
-					//  1 : first char was '\' -> 0 if scond \ is being printed or 2 otherwise
-					//  2 : two '\' -> stay at 2
-
-					switch (c->state)
-					{
-						case -1:
-						{
-							if (str[i]=='\\')
-							{
-								fg = dk_red;
-								c->state = 1;
-							}
-							else
-							{
-								fg = white;
-								c->state = 0;
-							}
-							break;
-						}
-						case 1:
-						{
-							if (str[i]=='\\')
-							{
-								fg = white;
-								c->state = 0;
-							}
-							else
-							{
-								fg = yellow;
-								c->state = 2;
-							}
-						}
-					}
 
 					AnsiCell* ac = ar + i + dx;
 					ac->fg = fg;
@@ -917,7 +865,7 @@ struct TalkBox
 		int lower = y + 1;
 		int upper = y + 4 + size[1];
 
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, -1/*state*/ };
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 
@@ -1274,6 +1222,15 @@ struct TalkBox
 
 		int w = 2;
 
+		int escape = 0;
+		if (len>0 && buf[0]=='\\')
+		{
+			escape++;
+			x--;
+			if (len>1 && buf[1]=='\\')
+				escape++;
+		}
+
 		// todo:
 		// actually we need to call print() only on y++ and last line!
 
@@ -1290,7 +1247,7 @@ struct TalkBox
 			if (y==cursor_xy[1])
 			{
 				if (x<=cursor_xy[0])
-					ret = (c << 8) | x;
+					ret = (c << 8) | (x&0xFF);
 			}				
 
 			if (buf[c] == ' ')
@@ -1347,7 +1304,7 @@ struct TalkBox
 						{
 							// overwrite possibly bigger ret!
 							if ((x-1)<=cursor_xy[0])
-								ret = ((c-1) << 8) | (x-1);
+								ret = ((c-1) << 8) | ((x-1)&0xFF);
 						}
 
 						w = max_width;
@@ -1374,7 +1331,7 @@ struct TalkBox
 						{
 							// overwrite possibly bigger ret!
 							if ((x - wordlen - 1)<=cursor_xy[0])
-								ret = ((c-wordlen-1) << 8) | (x-wordlen-1);
+								ret = ((c-wordlen-1) << 8) | ((x-wordlen-1)&0xFF);
 						}
 
 						if (print)
@@ -1402,7 +1359,7 @@ struct TalkBox
 		if (y==cursor_xy[1])
 		{
 			if (x<=cursor_xy[0])
-				ret = (len << 8) | x;		
+				ret = (len << 8) | (x&0xFF);		
 		}
 
 		if (print)
@@ -1427,7 +1384,7 @@ struct TalkBox
 			if (y==cursor_xy[1])
 			{
 				if (x<=cursor_xy[0])
-					ret = (len << 8) | x;
+					ret = (len << 8) | (x&0xFF);
 			}			
 		}
 
