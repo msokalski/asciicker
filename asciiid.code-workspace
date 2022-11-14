@@ -32,7 +32,8 @@
 			"exception": "cpp",
 			"system_error": "cpp",
 			"sstream": "cpp",
-			"numbers": "cpp"
+			"numbers": "cpp",
+			"__locale": "cpp"
 		}
 	}
 }

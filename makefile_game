@@ -77,8 +77,8 @@ CFLAGS :=
 CXXFLAGS := -std=c++17
 
 # C/C++ flags
-CPPFLAGS := -save-temps=obj -pthread -DGAME -O3 -DUSE_SDL -I v8/v8/include
-#CPPFLAGS := -save-temps=obj -pthread -DGAME -g -DUSE_SDL -I v8/v8/include
+#CPPFLAGS := -save-temps=obj -pthread -DGAME -O3 -DUSE_SDL -I v8/v8/include
+CPPFLAGS := -save-temps=obj -pthread -DGAME -g -DUSE_SDL -I v8/v8/include
 
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME -O3
 # CPPFLAGS := -g -save-temps=obj -pthread -DGAME

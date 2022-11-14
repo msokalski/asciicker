@@ -248,19 +248,35 @@ static const int stand_us_per_frame = 30000;
 static const int fall_us_per_frame = 30000;
 static const int attack_us_per_frame = 20000;
 
+// note: outside 16c pal !!!!
+static const uint8_t xd_grey = 16 + 1 * 1 + 1 * 6 + 1 * 36;
+static const uint8_t xd_key = 16 + 5 * 1 + 4 * 6 + 2 * 36;
+static const uint8_t xd_id = 16 + 5 * 1 + 5 * 6 + 4 * 36;
+static const uint8_t xd_op = 16 + 5 * 1 + 3 * 6 + 5 * 36;
+static const uint8_t xd_com = 16 + 2 * 1 + 5 * 6 + 2 * 36;
+static const uint8_t xd_str = 16 + 3 * 1 + 4 * 6 + 5 * 36;
+static const uint8_t xd_chr = 16 + 5 * 1 + 5 * 6 + 5 * 36;
+static const uint8_t xd_par = 16 + 1 * 1 + 5 * 6 + 5 * 36;
+static const uint8_t xd_num = 16 + 4 * 1 + 5 * 6 + 2 * 36;
+
+
+
 static const uint8_t black = 16;
 static const uint8_t white =   16 + 5 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
 static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
 static const uint8_t lt_red = 16 + 1 * 1 + 1 * 6 + 5 * 36;
 static const uint8_t dk_red = 16 + 0 * 1 + 0 * 6 + 3 * 36;
-static const uint8_t cyan = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t lt_cyan = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t dk_cyan = 16 + 3 * 1 + 3 * 6 + 0 * 36;
 static const uint8_t yellow = 16 + 1 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t lt_blue = 16 + 5 * 1 + 1 * 6 + 1 * 36;
 static const uint8_t dk_blue = 16 + 3 * 1 + 0 * 6 + 0 * 36;
 static const uint8_t brown = 16 + 0 * 1 + 2 * 6 + 3 * 36;
 static const uint8_t lt_green = 16 + 1 * 1 + 5 * 6 + 1 * 36;
 static const uint8_t dk_green = 16 + 0 * 1 + 3 * 6 + 0 * 36;
+static const uint8_t dk_magenta = 16 + 3 * 1 + 0 * 6 + 3 * 36;
+static const uint8_t lt_magenta = 16 + 5 * 1 + 1 * 6 + 5 * 36;
 
 extern Terrain* terrain;
 extern World* world;
@@ -438,7 +454,7 @@ struct HPBar
 			right = 221;
 			lt = lt_blue;
 			dk = dk_blue;
-			ul = cyan;
+			ul = lt_cyan;
 			left_line = 191;
 			right_line = 218;
 		}
@@ -791,6 +807,10 @@ struct HPBar
 	}
 };
 
+#include <algorithm>
+#include <iterator>
+#include <regex>
+
 struct TalkBox
 {
 	int max_width, max_height;
@@ -799,9 +819,449 @@ struct TalkBox
 	int cursor_pos;
 	int len;
 
-	int escape; // 0:none(text), 1:script, 2:double(text)
-	// if escape >0, we need to visually move first line by 1 char left!
-	// that needs to handle cursor movments as well
+	struct Lexer
+	{
+		int state;
+		char buf[16];
+		int len;
+
+		int Get(char c)
+		{
+			enum 
+			{
+				white_space,
+				string_delimiter,
+				string_escape,
+				string_error, // \n inside string
+				string_char,
+				temp_slash, // can turn into operator (default) or comment
+				number_char,
+				error_char, // \ outside of string!
+				operator_char,
+				identifier,
+				keyword,
+				line_comment,
+				block_comment,
+				parenthesis,
+			};
+
+			static const char* match[] = 
+			{
+				"await", "break", "case", "catch", "class",
+				"const", "continue", "debugger", "default", "delete",
+				"do", "else", "enum", "export", "extends",
+				"false", "finally", "for", "function", "if",
+				"implements", "import", "in", "instanceof", "interface",
+				"let", "new", "null", "package", "private",
+				"protected", "public", "return", "super", "switch",
+				"static", "this", "throw", "try", "true",
+				"typeof", "var", "void", "while", "with",
+				"yield",0
+			};
+
+			switch (state)
+			{
+				case 0:
+				{
+					switch (c)
+					{
+						case ' ':
+						case '\n':
+							return white_space;
+
+						case '\"': 
+							state = 1;
+							return string_delimiter;
+
+						case '\'': 
+							state = 2;
+							return string_delimiter;
+
+						case '/':
+							state = 5;
+							// could be operator / or comment // or comment /*
+							return temp_slash;
+
+						case '0':
+							state = 12;
+							return number_char;
+
+						case '\\':
+							return error_char;
+
+						case '.':
+							state = 11;
+							return operator_char; // may be float or member op !!!!
+
+						default:
+						if (c>='1' && c<='9')
+						{
+							state = 13;
+							return number_char;
+						}
+						else
+						if (strchr("!%^&*-+=:;,.?<>|~",c))
+						{
+							return operator_char;
+						}
+						else
+						if (strchr("{}()[]",c))
+						{
+							return parenthesis;
+						}
+						else
+						if (c>='a' && c<='z' || c>='A' && c<='Z' || c=='_' || c=='$')
+						{
+							state = 9;
+							len = 1;
+							buf[0] = c;
+							return identifier;
+						}
+						else
+						{
+							//assert(0);
+							state = 0;
+							return error_char;
+						}
+					}						
+					break;
+				}
+
+				case 1:
+				{
+					switch (c)
+					{
+						case '\"': 
+							state = 0;
+							return string_delimiter;
+						case '\\':
+							state = 3;
+							return string_escape;
+						case '\n':
+							state=0;
+							return string_error;
+							break;
+						default:
+							return string_char;
+					}
+					break;
+				}
+
+				case 2:
+				{
+					switch (c)
+					{
+						case '\'': 
+							state = 0;
+							return string_delimiter;
+						case '\\':
+							state = 3;
+							return string_escape;
+						case '\n':
+							state=0;
+							return string_error;
+							break;
+						default:
+							return string_char;
+					}
+					break;
+				}
+
+				case 3:
+				{
+					switch (c)
+					{
+						case '\n':
+						{
+							state=0;
+							return string_error;							
+						}
+
+						default:
+							state = 1;
+							return string_escape;
+					}
+					break;
+				}
+
+				case 4:
+				{
+					switch (c)
+					{
+						case '\n':
+						{
+							state=0;
+							return string_error;							
+						}
+
+						default:
+							state = 1;
+							return string_escape;
+					}
+					break;
+				}
+
+				case 5:
+				{
+					switch (c)
+					{
+						case '*':
+							state = 6;
+							return block_comment | (1<<8); // recolor prev char as well!
+						case '/':
+							state = 7;
+							return line_comment | (1<<8); // recolor prev char as well!
+						default:
+							// rescan with state 0
+							state = 0;
+							return Get(c);
+					}
+					break;
+				}
+				
+				case 6:
+				{
+					switch (c)
+					{
+						case '*':
+							state = 8;
+							return block_comment;
+						default:
+							return block_comment;
+					}
+					break;
+				}
+
+				case 7:
+				{
+					switch (c)
+					{
+						case '\n':
+							state = 0;
+							return block_comment;
+						default:
+							return block_comment;
+					}
+					break;
+				}
+
+				case 8:
+				{
+					switch (c)
+					{
+						case '*':
+							return block_comment;
+						case '/':
+							state = 0;
+							return block_comment;
+						default:
+							state = 6;
+							return block_comment;
+					}
+					break;
+				}
+
+				case 9:
+				{
+					if (c>='a' && c<='z' || c>='A' && c<='Z' ||
+						c=='_' || c=='$' || c>='0' && c<='9')
+					{
+						if (len<15)
+						{
+							buf[len++]=c;
+							buf[len]=0;
+							
+							for (int k=0; match[k]; k++)
+							{
+								if (strcmp(buf,match[k])==0)
+								{
+									state = 10;
+									return keyword | ((len-1)<<8);
+								}
+							}
+						}
+						return identifier;
+					}
+					else
+					{
+						// rescan
+						state = 0;
+						return Get(c);
+					}
+					break;
+				}
+
+				case 10:
+				{
+					if (c>='a' && c<='z' || c>='A' && c<='Z' ||
+						c=='_' || c=='$' || c>='0' && c<='9')
+					{
+						if (len<15)
+						{
+							buf[len++]=c;
+							buf[len]=0;
+							
+							for (int k=0; match[k]; k++)
+							{
+								if (strcmp(buf,match[k])==0)
+									return keyword;
+							}
+						}
+						state = 9;
+						return identifier | ((len-1)<<8);
+					}
+					else
+					{
+						// rescan
+						state = 0;
+						return Get(c);
+					}
+					break;
+				}
+
+				case 11: // . (float literal without quotient or member operator)
+				{
+					if (c>='0' && c<='9')
+					{
+						state = 17;
+						return number_char | (1<<8);
+					}
+					else
+					{
+						// rescan
+						state = 0;
+						return Get(c);
+					}
+
+					break;
+				}
+
+				case 12: // 765 (decimal quotient)
+				{
+					if (c>='0' && c<='9')
+						return number_char;
+					if (c=='e' || c=='E')
+					{
+						state=18;
+						return number_char;
+					}
+					if (c=='.')
+					{
+						state = 17;
+						return number_char;
+					}
+					state = 0;
+					return Get(c);
+				}
+
+				case 13: // 0 (number leading)
+				{
+					if (c>='0' && c<='9')
+					{
+						state=14;
+						return number_char;
+					}
+					if (c=='x' || c=='X')
+					{
+						state=15;
+						return number_char;
+					}
+					if (c=='b' || c=='B')
+					{
+						state=16;
+						return number_char;
+					}
+					if (c=='e' || c=='E')
+					{
+						state=18;
+						return number_char;
+					}
+					if (c=='.')
+					{
+						state = 17;
+						return number_char;
+					}
+					state = 0;
+					return Get(c);
+				}
+				
+				case 14: // 234
+				{
+					if (c>='0' && c<='9')
+					{
+						state=14;
+						return number_char;
+					}
+					if (c=='e' || c=='E')
+					{
+						state=18;
+						return number_char;
+					}
+					if (c=='.')
+					{
+						state = 17;
+						return number_char;
+					}
+					state = 0;
+					return Get(c);
+				}
+
+				case 15: // 0x (hex integer)
+				{
+					if (c>='0' && c<='9' || c>='a' && c<='f' || c>='A' && c<='F')
+						return number_char;
+					state = 0;
+					return Get(c);
+				}
+
+				case 16: // 0b (bin integer)
+				{
+					if (c=='0' || c=='1')
+						return number_char;
+					state = 0;
+					return Get(c);
+				}
+
+				case 17: // .42 fraction
+				{
+					if (c>='0' && c<='9')
+						return number_char;
+					if (c=='e' || c=='E')
+					{
+						state=18;
+						return number_char;
+					}
+					state = 0;
+					return Get(c);
+				}
+
+				case 18: // exponent, awaits sign
+				{
+					if (c>='0' && c<='9' || c=='-' || c=='+')
+					{
+						state=19;
+						return number_char;
+					}
+					state = 0;
+					return Get(c);
+				}
+
+				case 19: // exponent sign, await decimal digits
+				{
+					if (c>='0' && c<='9')
+						return number_char;
+					state = 0;
+					return Get(c);
+				}
+
+				default:
+					state = 0;
+					return error_char;
+			}
+
+			return error_char;
+		}
+	};
 
 	void Paint(AnsiCell* ptr, int width, int height, int x, int y, bool cursor, const char* name=0) const
 	{
@@ -814,6 +1274,8 @@ struct TalkBox
 			int width, height, x, y;
 			int span;
 			int rows;
+			uint8_t fg;
+			Lexer lex;
 
 			static void Print(int dx, int dy, const char* str, int len, void* cookie)
 			{
@@ -823,7 +1285,72 @@ struct TalkBox
 
 				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
 
-				uint8_t fg = white;
+				uint8_t fg = c->fg;
+				bool script = fg != white;
+
+				// line-comment //...\n
+				// block-comment /*...*/
+				// string '...'
+				// string "..."
+				// block parenthesis {...}
+				// expression parenthesis (...)
+				// index parenthesis [...]
+				// arithmetic / assignment operators: >> === + ++ ...
+				// member operator .
+				// keywords: for throw instanceof return function...
+				// predefined classes: Object Function String Math
+				// identifiers: _$id identifier my_work ...
+				// numbers: 0x234 -3.14e-44 
+
+				// 0 ready for next token (begining or after space)
+				// 1 open "
+				// 2 open '
+				// 3 open \ inside " 
+				// 4 open \ inside '
+				// 5 open / (awaiting * or /)
+				// 6 open /*
+				// 7 open //
+				// 8 about to close /*...* if / will follow
+
+				// 9 identifier _6$asd -> may become keyword
+				// 10 keyword (same as identifier but matched) -> may become identifier
+
+				// number literals are sick:
+
+				// 11 flt_or_mbr: .
+				// 12 dec quot: 2
+				// 13 num leading: 0
+				// 14 oct_or_flt: 03
+				// 15 hex leading: 0x
+				// 16 bin leading: 0b
+				// 17 hex value: 0xAF8
+				// 18 bin value: 0b10101
+
+				// 19 dec frac: 234.
+				// 20 dec exp: 234.34e
+				// 21 dec exp sign: 234.34e+
+				// 22 dec exp value: 234.34e+55
+
+				static const uint8_t color[]=
+				{
+					white,   // white_space,
+					xd_par,  // string_delimiter, '' / ""
+					xd_chr,  // string_escape,
+					lt_red,  // string_error, // \n inside string
+					xd_str,  // string_char, 
+					xd_op,   // REPLACE WITH OPERATOR (temp slash)
+					xd_num,  // number_char,
+					lt_red,  // error_char, // \ outside of string!
+					xd_op,   // operator_char,
+					xd_id,   // identifier,
+					xd_key,  // keyword
+					xd_com,  // line_comment,
+					xd_com,  // block_comment,		
+					xd_par,  // parenthesis () [] {}		
+				};
+
+				AnsiCell* back[16] = {0};
+				int back_pos=-1;
 
 				for (int i=0; i<len; i++)
 				{
@@ -831,27 +1358,59 @@ struct TalkBox
 					{
 						for (int x = dx + i; x < c->span; x++)
 						{
+							if (script)
+							{
+								int mode = c->lex.Get(str[i]);
+								fg = color[mode&0xFF];
+
+								int bk = mode>>8;
+								for (int bk = 0; bk<(mode>>8); bk++)
+									if (back[(back_pos-bk)&0xF])
+										back[(back_pos-bk)&0xF]->fg = fg;
+							}
+
 							if (x + c->x < 0 || x + c->x >= c->width)
+							{
+								back[(++back_pos)&0xF]=0;
 								continue;
+							}
 
 							AnsiCell* ac = ar + x;
 							ac->fg = fg;							
-							ac->bk = dk_grey;
+							ac->bk = xd_grey;
 							ac->gl = ' ';
 							ac->spare = 0;
+
+							back[(++back_pos)&0xF]=ac;
 						}
 						c->rows++;
 						break;
 					}
 
+					if (script)
+					{
+						int mode = c->lex.Get(str[i]);
+						fg = color[mode&0xFF];
+
+						int bk = mode>>8;
+						for (int bk = 0; bk<(mode>>8); bk++)
+							if (back[(back_pos-bk)&0xF])
+								back[(back_pos-bk)&0xF]->fg = fg;
+					}
+
 					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
+					{
+						back[(++back_pos)&0xF]=0;
 						continue;
+					}
 
 					AnsiCell* ac = ar + i + dx;
 					ac->fg = fg;
-					ac->bk = dk_grey;
+					ac->bk = xd_grey;
 					ac->gl = str[i];
 					ac->spare = 0;
+
+					back[(++back_pos)&0xF]=ac;
 				}
 			}
 		};
@@ -865,7 +1424,18 @@ struct TalkBox
 		int lower = y + 1;
 		int upper = y + 4 + size[1];
 
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
+
+		int escape = 0;
+		if (len>0 && buf[0]=='\\')
+		{
+			escape++;
+			x--;
+			if (len>1 && buf[1]=='\\')
+				escape++;
+		}
+
+		uint8_t fg = escape == 1 ? lt_cyan : white;
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {0,0,0} };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 
@@ -982,7 +1552,7 @@ struct TalkBox
 			{
 				if (i >= 0 && i < width)
 				{
-					row[i].bk = dk_grey;
+					row[i].bk = xd_grey;
 					row[i].fg = black;
 					row[i].gl = ' ';
 				}
@@ -1003,7 +1573,7 @@ struct TalkBox
 
 				if (left + 1 >= 0 && left + 1 < width)
 				{
-					row[left + 1].bk = dk_grey;
+					row[left + 1].bk = xd_grey;
 					row[left + 1].fg = black;
 					row[left + 1].gl = ' ';
 				}
@@ -1025,10 +1595,22 @@ struct TalkBox
 			{
 				if (i >= 0 && i < width)
 				{
-					row[i].bk = dk_grey;
+					row[i].bk = xd_grey;
 					row[i].fg = black;
 					row[i].gl = ' ';
 				}
+			}
+		}
+
+		if (len>0 && buf[0]=='\\')
+		{
+			int qx = left+2 - 1;
+			int qy = y + size[1]+2;
+			if (qx>=0 && qx<width && qy>=0 && qy<height)
+			{
+				AnsiCell* ac = ptr + left+2 - 1 + width * (y + size[1]+2);
+				ac->fg = dk_red;
+				ac->gl = '\\';
 			}
 		}
 
@@ -1076,7 +1658,7 @@ struct TalkBox
 		int _pos[2];
 		int bl = Reflow(0, _pos);
 		assert(bl >= 0);
-		cursor_xy[0] = bl & 0xFF;
+		cursor_xy[0] = (int8_t)(bl & 0xFF);
 		cursor_pos = bl >> 8;
 	}
 
@@ -1086,7 +1668,7 @@ struct TalkBox
 		int _pos[2];
 		int bl = Reflow(0, _pos);
 		assert(bl >= 0);
-		cursor_xy[0] = bl & 0xFF;
+		cursor_xy[0] = (int8_t)(bl & 0xFF);
 		cursor_pos = bl >> 8;
 	}
 
@@ -1114,13 +1696,16 @@ struct TalkBox
 	{
 		if (dy < 0 && cursor_xy[1]>0 || dy > 0 && cursor_xy[1] < size[1] - 1)
 		{
+			if (cursor_xy[0]<0)
+				cursor_xy[0]=0;
+
 			cursor_xy[1] += dy;
 			assert(cursor_xy[1]>=0 && cursor_xy[1] < size[1]);
 
 			int bl = Reflow(0, 0);
 			assert(bl>=0);
 			cursor_pos = bl>>8;
-			cursor_xy[0] = bl&0xFF;
+			cursor_xy[0] = (int8_t)(bl&0xFF);
 		}
 	}
 	
@@ -1231,6 +1816,10 @@ struct TalkBox
 				escape++;
 		}
 
+		int c_xy[2] = {cursor_xy[0],cursor_xy[1]};
+		if (c_xy[0]<0 && !escape)
+			c_xy[0]=0;
+
 		// todo:
 		// actually we need to call print() only on y++ and last line!
 
@@ -1244,9 +1833,9 @@ struct TalkBox
 				cy = y;
 			}
 
-			if (y==cursor_xy[1])
+			if (y==c_xy[1])
 			{
-				if (x<=cursor_xy[0])
+				if (x<=c_xy[0])
 					ret = (c << 8) | (x&0xFF);
 			}				
 
@@ -1300,10 +1889,10 @@ struct TalkBox
 				{
 					if (x == wordlen) // break the word!
 					{
-						if (y==cursor_xy[1])
+						if (y==c_xy[1])
 						{
 							// overwrite possibly bigger ret!
-							if ((x-1)<=cursor_xy[0])
+							if ((x-1)<=c_xy[0])
 								ret = ((c-1) << 8) | ((x-1)&0xFF);
 						}
 
@@ -1327,10 +1916,10 @@ struct TalkBox
 					}
 					else // try wrapping the word
 					{
-						if (y==cursor_xy[1])
+						if (y==c_xy[1])
 						{
 							// overwrite possibly bigger ret!
-							if ((x - wordlen - 1)<=cursor_xy[0])
+							if ((x - wordlen - 1)<=c_xy[0])
 								ret = ((c-wordlen-1) << 8) | ((x-wordlen-1)&0xFF);
 						}
 
@@ -1356,9 +1945,9 @@ struct TalkBox
 			}
 		}
 
-		if (y==cursor_xy[1])
+		if (y==c_xy[1])
 		{
-			if (x<=cursor_xy[0])
+			if (x<=c_xy[0])
 				ret = (len << 8) | (x&0xFF);		
 		}
 
@@ -1381,9 +1970,9 @@ struct TalkBox
 				cy = y;
 			}
 
-			if (y==cursor_xy[1])
+			if (y==c_xy[1])
 			{
-				if (x<=cursor_xy[0])
+				if (x<=c_xy[0])
 					ret = (len << 8) | (x&0xFF);
 			}			
 		}
@@ -1411,7 +2000,8 @@ struct TalkBox
 		// this is possible that when pressing backspace
 		// when x=0 and y>0 in last line, we will not reach current line (1)
 		// fix it so caller won't blame us.
-		assert(ret>=0 || y<cursor_xy[1]);
+
+		assert(ret>=0 || y<c_xy[1]);
 
 		return ret;
 	}
