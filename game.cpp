@@ -260,8 +260,7 @@ static const uint8_t xd_chr = 16 + 5 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t xd_par = 16 + 1 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t xd_num = 16 + 4 * 1 + 5 * 6 + 2 * 36;
 static const uint8_t xd_tem = 16 + 4 * 1 + 2 * 6 + 4 * 36;
-
-
+static const uint8_t xd_fnc = 16 + 1 * 1 + 4 * 6 + 5 * 36;
 
 static const uint8_t black = 16;
 static const uint8_t white =   16 + 5 * 1 + 5 * 6 + 5 * 36;
@@ -831,6 +830,9 @@ struct TalkBox
 			uint8_t fg;
 			Lexer lex;
 
+			AnsiCell* back[256];
+			int back_pos;			
+
 			static void Print(int dx, int dy, const char* str, int len, void* cookie)
 			{
 				Cookie* c = (Cookie*)cookie;
@@ -897,13 +899,11 @@ struct TalkBox
 					xd_key,  // keyword
 					xd_com,  // line_comment,
 					xd_com,  // block_comment,		
-					xd_par,  // parenthesis () [] {}
+					xd_par,  // parenthesis ()
+					xd_par,  // parenthesis []
+					xd_par,  // parenthesis {}
 					xd_tem,  // ${ } in a backtick string (template)
-					// 2 more to go
 				};
-
-				AnsiCell* back[16] = {0};
-				int back_pos=-1;
 
 				for (int i=0; i<len; i++)
 				{
@@ -916,15 +916,20 @@ struct TalkBox
 								int mode = c->lex.Get(str[i]);
 								fg = color[mode&0xFF];
 
-								int bk = mode>>8;
-								for (int bk = 0; bk<(mode>>8); bk++)
-									if (back[(back_pos-bk)&0xF])
-										back[(back_pos-bk)&0xF]->fg = fg;
+								int bk_len = mode>>8;
+								
+								uint8_t back_fg = fg;
+								if ((mode&0xFF)==Lexer::parenthesis_rnd && bk_len)
+									back_fg = xd_fnc;
+
+								for (int bk = 0; bk<bk_len; bk++)
+									if (c->back[(c->back_pos-bk)&0xF])
+										c->back[(c->back_pos-bk)&0xF]->fg = back_fg;
 							}
 
 							if (x + c->x < 0 || x + c->x >= c->width)
 							{
-								back[(++back_pos)&0xF]=0;
+								c->back[(++c->back_pos)&0xF]=0;
 								continue;
 							}
 
@@ -934,7 +939,7 @@ struct TalkBox
 							ac->gl = ' ';
 							ac->spare = 0;
 
-							back[(++back_pos)&0xF]=ac;
+							c->back[(++c->back_pos)&0xF]=ac;
 						}
 						c->rows++;
 						break;
@@ -945,15 +950,20 @@ struct TalkBox
 						int mode = c->lex.Get(str[i]);
 						fg = color[mode&0xFF];
 
-						int bk = mode>>8;
-						for (int bk = 0; bk<(mode>>8); bk++)
-							if (back[(back_pos-bk)&0xF])
-								back[(back_pos-bk)&0xF]->fg = fg;
+						int bk_len = mode>>8;
+						
+						uint8_t back_fg = fg;
+						if ((mode&0xFF)==Lexer::parenthesis_rnd && bk_len)
+							back_fg = xd_fnc;
+
+						for (int bk = 0; bk<bk_len; bk++)
+							if (c->back[(c->back_pos-bk)&0xF])
+								c->back[(c->back_pos-bk)&0xF]->fg = back_fg;
 					}
 
 					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
 					{
-						back[(++back_pos)&0xF]=0;
+						c->back[(++c->back_pos)&0xF]=0;
 						continue;
 					}
 
@@ -963,7 +973,7 @@ struct TalkBox
 					ac->gl = str[i];
 					ac->spare = 0;
 
-					back[(++back_pos)&0xF]=ac;
+					c->back[(++c->back_pos)&0xF]=ac;
 				}
 			}
 		};
@@ -988,7 +998,7 @@ struct TalkBox
 		}
 
 		uint8_t fg = escape == 1 ? lt_cyan : white;
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {Lexer::Pure,0,0} };
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {/*lexer*/0}, {/*backbuf*/0}, /*backidx*/-1};
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 

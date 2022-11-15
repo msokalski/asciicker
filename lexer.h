@@ -61,26 +61,28 @@ struct Lexer
         keyword,
         line_comment,
         block_comment,
-        parenthesis,
+        parenthesis_rnd,
+        parenthesis_sqr,
+        parenthesis_crl,
         template_delimiter, // '${' and '}' but interior is colorized as reglar code!
     };
 
     uint8_t  state;  // main state 8 bits  
-    uint8_t  depth;  // string termplate recursion depth (0-255)
+    uint8_t  depth;  // string termplate expression recursion depth (0-255)
     uint16_t idxlen; // shared between: keyword matcher state and escape oct/hex/hexgrp length
+    uint32_t call;   // optional, shifted<<8 length of identifier call including whitespaces before '('
 
-    int Get(char c) /*returns token | (back_num<<8)*/
+    static const int idx_bits = 9; // 512 keywords (adjustable)
+    static const int len_bits = 15-idx_bits;
+    static const int max_len  = (1<<len_bits)-1;
+    static const int max_idx  = (1<<idx_bits)-1;
+
+    uint32_t Get(char c) /*returns token | (back_num<<8)*/
     {
         struct Matcher
         {
-            // exact keyword match: index | (len<<8)
-            // partial match:       index | (len<<8) | (1<<15)
-            // no match:            0xffff
             static uint16_t find(uint16_t state, char c)
             {
-                static const int max_len = 63;
-                static const int max_num = 512;
-
                 // don't attack me, i already said there's no match!
                 assert(state != 0xffff);
                 static const char* match[] = 
@@ -99,7 +101,7 @@ struct Lexer
 
                 static bool init = true;
                 const size_t size = sizeof(match)/sizeof(match[0]);
-                /*statc_*/assert(size <= max_num);
+                /*statc_*/assert(size <= max_idx+1);
                 static uint16_t index[256];
 
                 if (init)
@@ -123,8 +125,8 @@ struct Lexer
                         return 0xFFFF;
                 }
 
-                int idx = state & 0x1FF;
-                int len = (state >> 9) & 0x3f;
+                int idx = state & max_idx;
+                int len = (state >> idx_bits) & max_len;
                 const char* org = match[idx];
 
                 do
@@ -133,7 +135,7 @@ struct Lexer
                     {
                         len++;
                         // exact or partial?
-                        return match[idx][len] == 0 ? idx | (len<<9) : idx | (len<<9) | (1<<15);
+                        return idx | (len<<idx_bits) | (match[idx][len] ? 1<<15 : 0);
                     }
 
                     if (match[idx][len] > c)
@@ -157,71 +159,99 @@ struct Lexer
             {
                 switch (c)
                 {
+                    case '[':
+                    case ']':
+                    {
+                        call=0;
+                        return parenthesis_sqr;
+                    }
+
+                    case '(':
+                    {
+                        // call is already shifted!
+                        uint32_t ret = parenthesis_rnd | call;
+                        call=0;
+                        return ret;
+                    }
+
+                    case ')':
+                    {
+                        call=0;
+                        return parenthesis_rnd;
+                    }
+
                     case '{':
                     {
+                        call=0;
                         if (depth)
                             return error_char;
-                        return parenthesis;
+                        return parenthesis_crl;
                     }
 
                     case '}':
                     {
+                        call=0;
                         if (depth)
                         {
                             depth--;
                             state = StringTemplate;
                             return template_delimiter;
                         }
-                        return parenthesis;
+                        return parenthesis_crl;
                     }
 
                     case '`':
+                        call=0;
                         state = StringTemplate;
                         return string_delimiter;
 
                     case '\"': 
+                        call=0;
                         state = StringDouble;
                         return string_delimiter;
 
                     case '\'': 
+                        call=0;
                         state = StringSingle;
                         return string_delimiter;
 
                     case '/':
+                        call=0;
                         state = SlashCommentOrDiv;
                         // could be operator / or comment // or comment /*
                         return operator_char;
 
                     case '0':
+                        call=0;
                         state = NumberLeadingZero;
                         return number_char;
 
                     case '\\':
+                        call=0;
                         return error_char;
 
                     case '.':
+                        call=0;
                         state = FloatOrMember;
                         return operator_char; // may be float or member op !!!!
 
                     default:
                     if (c>='1' && c<='9')
                     {
+                        call=0;
                         state = DecimalQuotient;
                         return number_char;
                     }
                     else
                     if (strchr("!%^&*-+=:;,.?<>|~",c))
                     {
+                        call=0;
                         return operator_char;
-                    }
-                    else
-                    if (strchr("()[]",c))
-                    {
-                        return parenthesis;
                     }
                     else
                     if (c>='a' && c<='z' || c>='A' && c<='Z' || c=='_' || c=='$')
                     {
+                        call=0x100;
                         idxlen = Matcher::find(0,c);
                         if (idxlen>>15)
                         {
@@ -232,18 +262,23 @@ struct Lexer
                         else
                         {
                             // exact match
-                            state =  Keyword;
+                            state = Keyword;
                             return keyword;
                         }
                     }
                     else
                     {
                         if (strchr(" \n\r\v\f\t",c))
+                        {
+                            if (call)
+                                call+=0x100;
                             return white_space;
+                        }
 
                         // probably \ or # or @ 
                         // (backtick will be handled as string)
                         // or a special char 0-31 or anything above 126
+                        call=0;
                         return error_char;
                     }
                 }						
@@ -693,9 +728,11 @@ struct Lexer
                 if (c>='a' && c<='z' || c>='A' && c<='Z' ||
                     c=='_' || c=='$' || c>='0' && c<='9')
                 {
+                    if (call)
+                        call+=0x100;
                     if (idxlen != 0xffff)
                     {
-                        int len = (idxlen >> 9) & 0x3f;
+                        int len = (idxlen >> idx_bits) & max_len;
                         idxlen = Matcher::find(idxlen, c);
                         if (idxlen>>15)
                             return identifier;
@@ -707,6 +744,11 @@ struct Lexer
                 }
                 else
                 {
+                    // do not clear it, 
+                    // it can be white-space or actual call '('
+                    // Pure state will handle it
+                    // call=0;
+
                     // rescan
                     state = Pure;
                     return Get(c);
@@ -719,7 +761,9 @@ struct Lexer
                 if (c>='a' && c<='z' || c>='A' && c<='Z' ||
                     c=='_' || c=='$' || c>='0' && c<='9')
                 {
-                    int len = (idxlen >> 9) & 0x3f;
+                    if (call)
+                        call+=0x100;
+                    int len = (idxlen >> idx_bits) & max_len;
                     idxlen = Matcher::find(idxlen, c);
                     if (idxlen >> 15)
                     {
@@ -730,6 +774,10 @@ struct Lexer
                 }
                 else
                 {
+                    // clear it! we don't want while() if() for() etc
+                    // to look like a func call
+                    call=0;
+
                     // rescan
                     state = Pure;
                     return Get(c);
