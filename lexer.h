@@ -276,7 +276,6 @@ struct Lexer
                         }
 
                         // probably \ or # or @ 
-                        // (backtick will be handled as string)
                         // or a special char 0-31 or anything above 126
                         call=0;
                         return error_char;
