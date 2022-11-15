@@ -5,10 +5,6 @@
 
 struct Lexer
 {
-    // todo:
-    // merge and parametrize Single+Double String states
-    // then add BackTick strings
-
     enum State
     {
         Pure,
@@ -43,11 +39,11 @@ struct Lexer
         white_space,
         string_delimiter,
         string_escape,
-        string_error, // \n inside string
+        string_error,
         string_char,
-        temp_slash, // can turn into operator (default) or comment
+        temp_slash,
         number_char,
-        error_char, // \ outside of string!
+        error_char,
         operator_char,
         identifier,
         keyword,
@@ -56,25 +52,65 @@ struct Lexer
         parenthesis,
     };
 
-    State state;
-    char buf[16];
-    int len;
+    State state; // 16 bits? (8bits:state + 8bits:template_expression_depth (1 means root=`${here}`)
+    uint16_t idxlen; // shared between: keyword matcher state and escape oct/hex length
 
     int Get(char c) /*returns token | (back_num<<8)*/
     {
-        static const char* match[] = 
+        struct Matcher
         {
-            "console", "ak",
-            "await", "break", "case", "catch", "class",
-            "const", "continue", "debugger", "default", "delete",
-            "do", "else", "enum", "export", "extends",
-            "false", "finally", "for", "function", "if",
-            "implements", "import", "in", "instanceof", "interface",
-            "let", "new", "null", "package", "private",
-            "protected", "public", "return", "super", "switch",
-            "static", "this", "throw", "try", "true",
-            "typeof", "var", "void", "while", "with", 
-            "yield", 0
+            // exact keyword match: index | (len<<8)
+            // partial match:       index | (len<<8) | (1<<15)
+            // no match:            0xffff
+            static uint16_t find(uint16_t state, char c)
+            {
+                // don't attack me, i already said there's no match!
+                assert(state != 0xffff);
+
+                // must be sorted !!!
+                static const char* match[] = 
+                {
+                    // max keyword len is 127, (upper bit is reserved for exact/partial match)
+                    // max keyword num is 256, please behave.
+                    // "console", "ak",
+                    "await", "break", "case", "catch", "class",
+                    "const", "continue", "debugger", "default", "delete",
+                    "do", "else", "enum", "export", "extends",
+                    "false", "finally", "for", "function", "if",
+                    "implements", "import", "in", "instanceof", "interface",
+                    "let", "new", "null", "package", "private",
+                    "protected", "public", "return", "super", "switch",
+                    "static", "this", "throw", "try", "true",
+                    "typeof", "var", "void", "while", "with", 
+                    "yield", 0
+                };
+
+                int idx = state & 0xFF;
+                int len = (state >> 8) & 0x7f;
+                const char* org = match[idx];
+
+                do
+                {
+                    if (match[idx][len] == c)
+                    {
+                        len++;
+                        // exact or partial?
+                        return match[idx][len] == 0 ? idx | (len<<8) : idx | (len<<8) | (1<<15);
+                    }
+
+                    if (match[idx][len] > c)
+                    {
+                        // early rejection, 
+                        // thanks to alphabetical order
+                        break;
+                    }
+
+                    idx++;
+                } while (match[idx] && (!len || strncmp(org,match[idx],len)==0));
+
+                // no match
+                return 0xFFFF;
+            }
         };
 
         switch (state)
@@ -130,10 +166,19 @@ struct Lexer
                     else
                     if (c>='a' && c<='z' || c>='A' && c<='Z' || c=='_' || c=='$')
                     {
-                        state = Identifier;
-                        len = 1;
-                        buf[0] = c;
-                        return identifier;
+                        idxlen = Matcher::find(0,c);
+                        if (idxlen>>15)
+                        {
+                            // unmatched 0xffff or partially matched 1<<15 | ...
+                            state = Identifier;
+                            return identifier;
+                        }
+                        else
+                        {
+                            // exact match
+                            state =  Keyword;
+                            return keyword;
+                        }
                     }
                     else
                     {
@@ -198,14 +243,14 @@ struct Lexer
                     case 'X':
                     {
                         state = StringDoubleHex;
-                        len = 0;
+                        idxlen = 0;
                         return string_escape;
                     }
 
                     default:
                     if (c>='0' && c<='3')
                     {
-                        len = 1;
+                        idxlen = 1;
                         state = StringDoubleOct;
                         return string_escape;
                     }
@@ -229,14 +274,14 @@ struct Lexer
                     case 'X':
                     {
                         state = StringSingleHex;
-                        len = 0;
+                        idxlen = 0;
                         return string_escape;
                     }
 
                     default:
                     if (c>='0' && c<='3')
                     {
-                        len = 1;
+                        idxlen = 1;
                         state = StringSingleOct;
                         return string_escape;
                     }
@@ -262,8 +307,8 @@ struct Lexer
                 else
                 if (c>='0' && c<='7')
                 {
-                    len++;
-                    if (len==3)
+                    idxlen++;
+                    if (idxlen==3)
                         state = StringDouble;
                     return string_escape;
                 }
@@ -288,8 +333,8 @@ struct Lexer
                 else
                 if (c>='0' && c<='7')
                 {
-                    len++;
-                    if (len==3)
+                    idxlen++;
+                    if (idxlen==3)
                         state = StringSingle;
                     return string_escape;
                 }
@@ -316,8 +361,8 @@ struct Lexer
                     c>='a' && c<='f' ||
                     c>='A' && c<='F')
                 {
-                    len++;
-                    if (len==2)
+                    idxlen++;
+                    if (idxlen==2)
                         state = StringDouble;
                     return string_escape;
                 }
@@ -344,8 +389,8 @@ struct Lexer
                     c>='a' && c<='f' ||
                     c>='A' && c<='F')
                 {
-                    len++;
-                    if (len==2)
+                    idxlen++;
+                    if (idxlen==2)
                         state = StringSingle;
                     return string_escape;
                 }
@@ -419,20 +464,15 @@ struct Lexer
                 if (c>='a' && c<='z' || c>='A' && c<='Z' ||
                     c=='_' || c=='$' || c>='0' && c<='9')
                 {
-                    if (len<15)
+                    if (idxlen != 0xffff)
                     {
-                        buf[len++]=c;
-                        buf[len]=0;
-                        
-                        for (int k=0; match[k]; k++)
-                        {
-                            if (strcmp(buf,match[k])==0)
-                            {
-                                state = Keyword;
-                                // recolor identifier into keyword
-                                return keyword | ((len-1)<<8);
-                            }
-                        }
+                        int len = (idxlen >> 8) & 0x7f;
+                        idxlen = Matcher::find(idxlen, c);
+                        if (idxlen>>15)
+                            return identifier;
+
+                        state = Keyword;
+                        return keyword | (len<<8);
                     }
                     return identifier;
                 }
@@ -450,21 +490,14 @@ struct Lexer
                 if (c>='a' && c<='z' || c>='A' && c<='Z' ||
                     c=='_' || c=='$' || c>='0' && c<='9')
                 {
-                    if (len<15)
+                    int len = (idxlen >> 8) & 0x7f;
+                    idxlen = Matcher::find(idxlen, c);
+                    if (idxlen >> 15)
                     {
-                        buf[len++]=c;
-                        buf[len]=0;
-                        
-                        for (int k=0; match[k]; k++)
-                        {
-                            if (strcmp(buf,match[k])==0)
-                                return keyword;
-                        }
+                        state = Identifier;
+                        return identifier | (len<<8);
                     }
-                    state = Identifier;
-
-                    // recolor keyword into identifier
-                    return identifier | ((len-1)<<8);
+                    return keyword;
                 }
                 else
                 {

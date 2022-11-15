@@ -986,7 +986,7 @@ struct TalkBox
 		}
 
 		uint8_t fg = escape == 1 ? lt_cyan : white;
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {Lexer::Pure,0,0} };
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {Lexer::Pure} };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 
