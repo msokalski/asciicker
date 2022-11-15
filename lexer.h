@@ -5,6 +5,10 @@
 
 struct Lexer
 {
+    // todo:
+    // merge and parametrize Single+Double String states
+    // then add BackTick strings
+
     enum State
     {
         Pure,
@@ -133,6 +137,9 @@ struct Lexer
                     }
                     else
                     {
+                        // probably \ or # or @ 
+                        // (backtick will be handled as string)
+                        // or a special char 0-31 or anything above 126
                         return error_char;
                     }
                 }						
@@ -491,7 +498,7 @@ struct Lexer
                     return number_char;
                 if (c=='e' || c=='E')
                 {
-                    state=FloatExponent;
+                    state = FloatExponent;
                     return number_char;
                 }
                 if (c=='.')
