@@ -61,9 +61,9 @@ struct Lexer
         keyword,
         line_comment,
         block_comment,
-        parenthesis_rnd,
-        parenthesis_sqr,
-        parenthesis_crl,
+        bracket_rnd,
+        bracket_sqr,
+        bracket_crl,
         template_delimiter, // '${' and '}' but interior is colorized as reglar code!
     };
 
@@ -163,13 +163,13 @@ struct Lexer
                     case ']':
                     {
                         call=0;
-                        return parenthesis_sqr;
+                        return bracket_sqr;
                     }
 
                     case '(':
                     {
                         // call is already shifted!
-                        uint32_t ret = parenthesis_rnd | call;
+                        uint32_t ret = bracket_rnd | call;
                         call=0;
                         return ret;
                     }
@@ -177,7 +177,7 @@ struct Lexer
                     case ')':
                     {
                         call=0;
-                        return parenthesis_rnd;
+                        return bracket_rnd;
                     }
 
                     case '{':
@@ -185,7 +185,7 @@ struct Lexer
                         call=0;
                         if (depth)
                             return error_char;
-                        return parenthesis_crl;
+                        return bracket_crl;
                     }
 
                     case '}':
@@ -197,7 +197,7 @@ struct Lexer
                             state = StringTemplate;
                             return template_delimiter;
                         }
-                        return parenthesis_crl;
+                        return bracket_crl;
                     }
 
                     case '`':

@@ -919,17 +919,18 @@ struct TalkBox
 								int bk_len = mode>>8;
 								
 								uint8_t back_fg = fg;
-								if ((mode&0xFF)==Lexer::parenthesis_rnd && bk_len)
+								if ((mode&0xFF)==Lexer::bracket_rnd && bk_len)
 									back_fg = xd_fnc;
 
 								for (int bk = 0; bk<bk_len; bk++)
-									if (c->back[(c->back_pos-bk)&0xF])
-										c->back[(c->back_pos-bk)&0xF]->fg = back_fg;
+									if (c->back[(c->back_pos-bk)&0xFF])
+										if (back_fg != xd_fnc || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
+											c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
 							}
 
 							if (x + c->x < 0 || x + c->x >= c->width)
 							{
-								c->back[(++c->back_pos)&0xF]=0;
+								c->back[(++c->back_pos)&0xFF]=0;
 								continue;
 							}
 
@@ -939,7 +940,7 @@ struct TalkBox
 							ac->gl = ' ';
 							ac->spare = 0;
 
-							c->back[(++c->back_pos)&0xF]=ac;
+							c->back[(++c->back_pos)&0xFF]=ac;
 						}
 						c->rows++;
 						break;
@@ -953,17 +954,18 @@ struct TalkBox
 						int bk_len = mode>>8;
 						
 						uint8_t back_fg = fg;
-						if ((mode&0xFF)==Lexer::parenthesis_rnd && bk_len)
+						if ((mode&0xFF)==Lexer::bracket_rnd && bk_len)
 							back_fg = xd_fnc;
 
 						for (int bk = 0; bk<bk_len; bk++)
-							if (c->back[(c->back_pos-bk)&0xF])
-								c->back[(c->back_pos-bk)&0xF]->fg = back_fg;
+							if (c->back[(c->back_pos-bk)&0xFF])
+								if (back_fg != xd_fnc || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
+									c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
 					}
 
 					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
 					{
-						c->back[(++c->back_pos)&0xF]=0;
+						c->back[(++c->back_pos)&0xFF]=0;
 						continue;
 					}
 
@@ -973,7 +975,7 @@ struct TalkBox
 					ac->gl = str[i];
 					ac->spare = 0;
 
-					c->back[(++c->back_pos)&0xF]=ac;
+					c->back[(++c->back_pos)&0xFF]=ac;
 				}
 			}
 		};
