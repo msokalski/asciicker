@@ -259,6 +259,7 @@ static const uint8_t xd_str = 16 + 3 * 1 + 4 * 6 + 5 * 36;
 static const uint8_t xd_chr = 16 + 5 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t xd_par = 16 + 1 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t xd_num = 16 + 4 * 1 + 5 * 6 + 2 * 36;
+static const uint8_t xd_tem = 16 + 4 * 1 + 2 * 6 + 4 * 36;
 
 
 
@@ -889,7 +890,6 @@ struct TalkBox
 					xd_chr,  // string_escape,
 					lt_red,  // string_error, // \n inside string
 					xd_str,  // string_char, 
-					xd_op,   // REPLACE WITH OPERATOR (temp slash)
 					xd_num,  // number_char,
 					lt_red,  // error_char, // \ outside of string!
 					xd_op,   // operator_char,
@@ -897,7 +897,9 @@ struct TalkBox
 					xd_key,  // keyword
 					xd_com,  // line_comment,
 					xd_com,  // block_comment,		
-					xd_par,  // parenthesis () [] {}		
+					xd_par,  // parenthesis () [] {}
+					xd_tem,  // ${ } in a backtick string (template)
+					// 2 more to go
 				};
 
 				AnsiCell* back[16] = {0};
@@ -986,7 +988,7 @@ struct TalkBox
 		}
 
 		uint8_t fg = escape == 1 ? lt_cyan : white;
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {Lexer::Pure} };
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {Lexer::Pure,0,0} };
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 

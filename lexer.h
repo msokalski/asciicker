@@ -2,6 +2,7 @@
 #define LEXER_H
 
 #include <string.h>
+#include <algorithm>
 
 struct Lexer
 {
@@ -11,7 +12,7 @@ struct Lexer
         StringDouble,
         StringDoubleEsc,
         StringDoubleOct, 
-        StringDoubleHex, 
+        StringDoubleHex,
         StringSingle,
         StringSingleEsc,
         StringSingleOct,
@@ -23,15 +24,26 @@ struct Lexer
         Identifier,
         Keyword,
         FloatOrMember,
-        DecimalQuotient, // dec or flt (no 0)
+        DecimalQuotient,
         NumberLeadingZero,
-        FloatOrOctal, // had 0
+        FloatOrOctal,
         HexNumber,
         BinNumber,
         FloatQuotient,
         FloatFraction,
         FloatExponent,
         FloatSignedExponent,
+
+        StringTemplate,
+        StringTemplateEsc,
+        StringTemplateOct, 
+        StringTemplateHex, 
+        StringTemplateDol, // $ awaits {
+
+        // these 3 states await '}' after any number of hex digits
+        StringTemplateHexGrp, 
+        StringDoubleHexGrp, 
+        StringSingleHexGrp, 
     };
 
     enum Token
@@ -41,7 +53,6 @@ struct Lexer
         string_escape,
         string_error,
         string_char,
-        temp_slash,
         number_char,
         error_char,
         operator_char,
@@ -50,9 +61,11 @@ struct Lexer
         line_comment,
         block_comment,
         parenthesis,
+        template_delimiter, // '${' and '}' but interior is colorized as reglar code!
     };
 
-    State state; // 16 bits? (8bits:state + 8bits:template_expression_depth (1 means root=`${here}`)
+    State state; // 8 bits? 
+    uint8_t depth; // string termplate recursion depth (max 255)
     uint16_t idxlen; // shared between: keyword matcher state and escape oct/hex length
 
     int Get(char c) /*returns token | (back_num<<8)*/
@@ -66,13 +79,11 @@ struct Lexer
             {
                 // don't attack me, i already said there's no match!
                 assert(state != 0xffff);
-
-                // must be sorted !!!
                 static const char* match[] = 
                 {
                     // max keyword len is 127, (upper bit is reserved for exact/partial match)
                     // max keyword num is 256, please behave.
-                    // "console", "ak",
+                    "console", "ak",
                     "await", "break", "case", "catch", "class",
                     "const", "continue", "debugger", "default", "delete",
                     "do", "else", "enum", "export", "extends",
@@ -81,9 +92,33 @@ struct Lexer
                     "let", "new", "null", "package", "private",
                     "protected", "public", "return", "super", "switch",
                     "static", "this", "throw", "try", "true",
-                    "typeof", "var", "void", "while", "with", 
-                    "yield", 0
+                    "typeof", "var", "void", "while", "with", "yield"
                 };
+
+                static bool init = true;
+                const size_t size = sizeof(match)/sizeof(match[0]);
+                static_assert(size <= 256);
+                static uint16_t index[256];
+
+                if (init)
+                {
+                    init = false;
+                    std::sort(match,match+size,[](const char* a, const char* b){ return strcmp(a,b)<0; });
+                    memset(index,0xFF,size*sizeof(uint16_t));
+                    for (uint16_t i=0; i<(uint16_t)size; i++)
+                    {
+                        assert(strlen(match[i])<128);
+                        if (index[match[i][0]] == 0xFFFF)
+                            index[match[i][0]] = i;
+                    }
+                }
+
+                if (!state)
+                {
+                    state = index[c];
+                    if (state >= size)
+                        return 0xFFFF;
+                }
 
                 int idx = state & 0xFF;
                 int len = (state >> 8) & 0x7f;
@@ -106,7 +141,7 @@ struct Lexer
                     }
 
                     idx++;
-                } while (match[idx] && (!len || strncmp(org,match[idx],len)==0));
+                } while (idx < size && (!len || !strncmp(org,match[idx],len)));
 
                 // no match
                 return 0xFFFF;
@@ -119,9 +154,27 @@ struct Lexer
             {
                 switch (c)
                 {
-                    case ' ':
-                    case '\n':
-                        return white_space;
+                    case '{':
+                    {
+                        if (depth)
+                            return error_char;
+                        return parenthesis;
+                    }
+
+                    case '}':
+                    {
+                        if (depth)
+                        {
+                            depth--;
+                            state = StringTemplate;
+                            return template_delimiter;
+                        }
+                        return parenthesis;
+                    }
+
+                    case '`':
+                        state = StringTemplate;
+                        return string_delimiter;
 
                     case '\"': 
                         state = StringDouble;
@@ -134,7 +187,7 @@ struct Lexer
                     case '/':
                         state = SlashCommentOrDiv;
                         // could be operator / or comment // or comment /*
-                        return temp_slash;
+                        return operator_char;
 
                     case '0':
                         state = NumberLeadingZero;
@@ -159,7 +212,7 @@ struct Lexer
                         return operator_char;
                     }
                     else
-                    if (strchr("{}()[]",c))
+                    if (strchr("()[]",c))
                     {
                         return parenthesis;
                     }
@@ -182,6 +235,9 @@ struct Lexer
                     }
                     else
                     {
+                        if (strchr(" \n\r\v\f\t",c))
+                            return white_space;
+
                         // probably \ or # or @ 
                         // (backtick will be handled as string)
                         // or a special char 0-31 or anything above 126
@@ -189,6 +245,128 @@ struct Lexer
                     }
                 }						
                 break;
+            }
+
+            case StringTemplate:
+            {
+                switch (c)
+                {
+                    case '`': 
+                        state = Pure;
+                        return string_delimiter;
+                    case '\\':
+                        state = StringTemplateEsc;
+                        return string_escape;
+                    case '$':
+                        state = StringTemplateDol;
+                        return template_delimiter;
+                    default:
+                        return string_char;
+                }
+            }
+
+            case StringTemplateDol:
+            {
+                if (c=='{')
+                {
+                    depth++;
+                    state = Pure;
+                    return template_delimiter;
+                }
+
+                // recolor $ back
+                state = StringTemplate;
+                return string_char | (1<<8);
+            }
+
+            case StringTemplateEsc:
+            {
+                switch (c)
+                {
+                    case 'u':
+                    {
+                        state = StringTemplateHex;
+                        idxlen = 0;
+                        return string_escape;
+                    }
+
+                    case 'x':
+                    {
+                        state = StringTemplateHex;
+                        idxlen = 2;
+                        return string_escape;
+                    }
+
+                    default:
+                    if (c>='0' && c<='3')
+                    {
+                        idxlen = 1;
+                        state = StringTemplateOct;
+                        return string_escape;
+                    }
+                    state = StringTemplate;
+                    return string_escape;
+                }
+            }
+
+            case StringTemplateOct:
+            {
+                if (c=='\\')
+                {
+                    state = StringTemplateEsc;
+                    return string_escape;
+                }
+                else
+                if (c=='`')
+                {
+                    state = Pure;
+                    return string_delimiter;
+                }
+                else
+                if (c>='0' && c<='7')
+                {
+                    idxlen++;
+                    if (idxlen==3)
+                        state = StringTemplate;
+                    return string_escape;
+                }
+                
+                state = StringTemplate;
+                return string_char;
+            }
+
+            case StringTemplateHex:
+            {
+                if (idxlen==0 && c=='{')
+                {
+                    state = StringTemplateHexGrp;
+                    return string_escape;
+                }
+
+                if (c=='\\')
+                {
+                    state = StringTemplateEsc;
+                    return string_escape;
+                }
+                else
+                if (c=='`')
+                {
+                    state = Pure;
+                    return string_delimiter;
+                }
+                else
+                if (c>='0' && c<='9' || 
+                    c>='a' && c<='f' ||
+                    c>='A' && c<='F')
+                {
+                    idxlen++;
+                    if (idxlen==4)
+                        state = StringTemplate;
+                    return string_escape;
+                }
+                
+                state = StringTemplate;
+                return string_char;
             }
 
             case StringDouble:
@@ -239,11 +417,17 @@ struct Lexer
                         return string_error;							
                     }
 
-                    case 'x':
-                    case 'X':
+                    case 'u':
                     {
                         state = StringDoubleHex;
                         idxlen = 0;
+                        return string_escape;
+                    }
+
+                    case 'x':
+                    {
+                        state = StringDoubleHex;
+                        idxlen = 2;
                         return string_escape;
                     }
 
@@ -271,7 +455,13 @@ struct Lexer
                     }
 
                     case 'x':
-                    case 'X':
+                    {
+                        state = StringSingleHex;
+                        idxlen = 2;
+                        return string_escape;
+                    }
+
+                    case 'u':
                     {
                         state = StringSingleHex;
                         idxlen = 0;
@@ -293,6 +483,12 @@ struct Lexer
 
             case StringDoubleOct:
             {
+                if (c=='\\')
+                {
+                    state = StringDoubleEsc;
+                    return string_escape;
+                }
+                else
                 if (c=='\"')
                 {
                     state = Pure;
@@ -319,6 +515,12 @@ struct Lexer
 
             case StringSingleOct:
             {
+                if (c=='\\')
+                {
+                    state = StringSingleEsc;
+                    return string_escape;
+                }
+                else
                 if (c=='\'')
                 {
                     state = Pure;
@@ -345,6 +547,18 @@ struct Lexer
 
             case StringDoubleHex:
             {
+                if (idxlen==0 && c=='{')
+                {
+                    state = StringDoubleHexGrp;
+                    return string_escape;
+                }
+
+                if (c=='\\')
+                {
+                    state = StringDoubleEsc;
+                    return string_escape;
+                }
+                else
                 if (c=='\"')
                 {
                     state = Pure;
@@ -362,7 +576,7 @@ struct Lexer
                     c>='A' && c<='F')
                 {
                     idxlen++;
-                    if (idxlen==2)
+                    if (idxlen==4)
                         state = StringDouble;
                     return string_escape;
                 }
@@ -373,6 +587,18 @@ struct Lexer
 
             case StringSingleHex:
             {
+                if (idxlen==0 && c=='{')
+                {
+                    state = StringSingleHexGrp;
+                    return string_escape;
+                }
+
+                if (c=='\\')
+                {
+                    state = StringSingleEsc;
+                    return string_escape;
+                }
+                else
                 if (c=='\'')
                 {
                     state = Pure;
@@ -390,7 +616,7 @@ struct Lexer
                     c>='A' && c<='F')
                 {
                     idxlen++;
-                    if (idxlen==2)
+                    if (idxlen==4)
                         state = StringSingle;
                     return string_escape;
                 }
@@ -675,6 +901,144 @@ struct Lexer
                     return number_char;
                 state = Pure;
                 return Get(c);
+            }
+
+            case StringTemplateHexGrp:
+            {
+                switch (c)
+                {
+                    case '$':
+                    {
+                        state = StringTemplateDol;
+                        return string_escape;
+                    }
+
+                    case '}':
+                    {
+                        state = StringTemplate;
+                        return string_escape;
+                    }
+
+                    case '\\':
+                    {
+                        state = StringTemplateEsc;
+                        return string_escape;
+                    }
+
+                    case '`':
+                    {
+                        state = Pure;
+                        return string_delimiter;
+                    }
+
+                    default:
+                    //if (idxlen<5)
+                    {
+                        if (c>='0' && c<='9' || 
+                            c>='a' && c<='f' ||
+                            c>='A' && c<='F')
+                        {
+                            if (idxlen<0xffff)
+                                idxlen++;
+                            return string_escape;
+                        }
+                    }
+                }
+                
+                state = StringTemplate;
+                return string_char;
+            }
+
+            case StringDoubleHexGrp:
+            {
+                switch (c)
+                {
+                    case '}':
+                    {
+                        state = StringDouble;
+                        return string_escape;
+                    }
+
+                    case '\\':
+                    {
+                        state = StringDoubleEsc;
+                        return string_escape;
+                    }
+
+                    case '\"':
+                    {
+                        state = Pure;
+                        return string_delimiter;
+                    }
+
+                    case '\n':
+                    {
+                        state = Pure;
+                        return string_error;
+                    }
+
+                    default:
+                    // if (idxlen<5)
+                    {
+                        if (c>='0' && c<='9' || 
+                            c>='a' && c<='f' ||
+                            c>='A' && c<='F')
+                        {
+                            if (idxlen<0xffff)
+                                idxlen++;
+                            return string_escape;
+                        }
+                    }
+                }
+                
+                state = StringDouble;
+                return string_char;
+            }
+
+            case StringSingleHexGrp:
+            {
+                switch (c)
+                {
+                    case '}':
+                    {
+                        state = StringSingle;
+                        return string_escape;
+                    }
+
+                    case '\\':
+                    {
+                        state = StringSingleEsc;
+                        return string_escape;
+                    }
+
+                    case '\'':
+                    {
+                        state = Pure;
+                        return string_delimiter;
+                    }
+
+                    case '\n':
+                    {
+                        state = Pure;
+                        return string_error;
+                    }
+
+                    default:
+                    //if (idxlen<5)
+                    {
+                        if (c>='0' && c<='9' || 
+                            c>='a' && c<='f' ||
+                            c>='A' && c<='F')
+                        {
+                            if (idxlen<0xffff)
+                                idxlen++;
+                            return string_escape;
+                        }
+                    }
+                }
+                
+                state = StringSingle;
+                return string_char;
             }
 
             default:
