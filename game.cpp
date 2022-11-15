@@ -833,7 +833,7 @@ struct TalkBox
 			AnsiCell* back[256];
 			int back_pos;			
 
-			static void Print(int dx, int dy, const char* str, int len, void* cookie)
+			static void Print(int dx, int dy, const char* str, int len, void* cookie, bool synth)
 			{
 				Cookie* c = (Cookie*)cookie;
 				if (c->y - dy < 0 || c->y - dy >= c->height)
@@ -843,47 +843,6 @@ struct TalkBox
 
 				uint8_t fg = c->fg;
 				bool script = fg != white;
-
-				// line-comment //...\n
-				// block-comment /*...*/
-				// string '...'
-				// string "..."
-				// block parenthesis {...}
-				// expression parenthesis (...)
-				// index parenthesis [...]
-				// arithmetic / assignment operators: >> === + ++ ...
-				// member operator .
-				// keywords: for throw instanceof return function...
-				// predefined classes: Object Function String Math
-				// identifiers: _$id identifier my_work ...
-				// numbers: 0x234 -3.14e-44 
-
-				// 0 ready for next token (begining or after space)
-				// 1 open "
-				// 2 open '
-				// 3 open \ inside " 
-				// 4 open \ inside '
-				// 5 open / (awaiting * or /)
-				// 6 open /*
-				// 7 open //
-				// 8 about to close /*...* if / will follow
-
-				// 9 identifier _6$asd -> may become keyword
-				// 10 keyword (same as identifier but matched) -> may become identifier
-
-				// number literals are sick:
-
-				// 11 flt_or_mbr: .
-				// 12 dec quot: 2
-				// 13 num leading: 0
-				// 14 oct_or_flt: 03
-				// 15 hex leading: 0x
-				// 16 bin leading: 0b
-
-				// 17 dec frac: 234.
-				// 18 dec exp: 234.34e
-				// 19 dec exp sign: 234.34e+
-				// 20 dec exp value: 234.34e+55
 
 				static const uint8_t color[]=
 				{
@@ -911,7 +870,7 @@ struct TalkBox
 					{
 						for (int x = dx + i; x < c->span; x++)
 						{
-							if (script)
+							if (script && !synth)
 							{
 								int mode = c->lex.Get(str[i]);
 								fg = color[mode&0xFF];
@@ -930,7 +889,8 @@ struct TalkBox
 
 							if (x + c->x < 0 || x + c->x >= c->width)
 							{
-								c->back[(++c->back_pos)&0xFF]=0;
+								if (script && !synth)
+									c->back[(++c->back_pos)&0xFF]=0;
 								continue;
 							}
 
@@ -940,13 +900,14 @@ struct TalkBox
 							ac->gl = ' ';
 							ac->spare = 0;
 
-							c->back[(++c->back_pos)&0xFF]=ac;
+							if (script && !synth)
+								c->back[(++c->back_pos)&0xFF]=ac;
 						}
 						c->rows++;
 						break;
 					}
 
-					if (script)
+					if (script && !synth)
 					{
 						int mode = c->lex.Get(str[i]);
 						fg = color[mode&0xFF];
@@ -965,7 +926,8 @@ struct TalkBox
 
 					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
 					{
-						c->back[(++c->back_pos)&0xFF]=0;
+						if (script && !synth)
+							c->back[(++c->back_pos)&0xFF]=0;
 						continue;
 					}
 
@@ -975,7 +937,8 @@ struct TalkBox
 					ac->gl = str[i];
 					ac->spare = 0;
 
-					c->back[(++c->back_pos)&0xFF]=ac;
+					if (script && !synth)
+						c->back[(++c->back_pos)&0xFF]=ac;
 				}
 			}
 		};
@@ -1360,7 +1323,7 @@ struct TalkBox
 	// returns -1 on overflow, otherwise (b<<8) | l 
 	// where l = 'current line' length and b = buffer offset at 'current line' begining
 	// if _pos is null 'current line' is given directly by cursor_xy[1] otherwise indirectly by cursor_pos
-	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
+	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie, bool synth)=0, void* cookie=0) const
 	{
 		// ALWAYS cursor_pos -> _xy={x,y} and _pos={prevline_pos,nextline_pos}
 
@@ -1413,9 +1376,7 @@ struct TalkBox
 			if (buf[c] == ' ')
 			{
 				if (print)
-				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // +1 to include space char
-				}
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, false); // +1 to include space char
 
 				wordlen = 0;
 				x++;
@@ -1426,9 +1387,7 @@ struct TalkBox
 				if (x == max_width)
 				{
 					if (print)
-					{
-						print(x, y, "\n", 1, cookie);
-					}
+						print(x, y, "\n", 1, cookie, true);
 
 					x = 0;
 					y++;
@@ -1441,9 +1400,7 @@ struct TalkBox
 			if (buf[c] == '\n')
 			{
 				if (print)
-				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // including '\n'
-				}
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, false); // including '\n'
 
 				if (x >= w) // moved
 					w = x+1;
@@ -1471,8 +1428,8 @@ struct TalkBox
 
 						if (print)
 						{
-							print(0, y, buf+c-wordlen, wordlen, cookie);
-							print(x, y, "\n", 1, cookie);
+							print(0, y, buf+c-wordlen, wordlen, cookie, false);
+							print(x, y, "\n", 1, cookie, true);
 						}
 
 						wordlen = 0;
@@ -1495,9 +1452,7 @@ struct TalkBox
 						}
 
 						if (print)
-						{
-							print(x - wordlen, y, "\n", 1, cookie);
-						}
+							print(x - wordlen, y, "\n", 1, cookie, true);
 
 						c -= wordlen+1;
 						wordlen = 0;
@@ -1524,8 +1479,8 @@ struct TalkBox
 
 		if (print)
 		{
-			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie);
-			print(x, y, "\n", 1, cookie);
+			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie, false);
+			print(x, y, "\n", 1, cookie, true);
 		}
 
 		if (x >= w)
