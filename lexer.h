@@ -1,6 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+#include <assert.h>
 #include <string.h>
 #include <algorithm>
 
@@ -64,9 +65,9 @@ struct Lexer
         template_delimiter, // '${' and '}' but interior is colorized as reglar code!
     };
 
-    State state; // 8 bits? 
-    uint8_t depth; // string termplate recursion depth (max 255)
-    uint16_t idxlen; // shared between: keyword matcher state and escape oct/hex length
+    uint8_t  state;  // main state 8 bits  
+    uint8_t  depth;  // string termplate recursion depth (0-255)
+    uint16_t idxlen; // shared between: keyword matcher state and escape oct/hex/hexgrp length
 
     int Get(char c) /*returns token | (back_num<<8)*/
     {
@@ -77,12 +78,13 @@ struct Lexer
             // no match:            0xffff
             static uint16_t find(uint16_t state, char c)
             {
+                static const int max_len = 63;
+                static const int max_num = 512;
+
                 // don't attack me, i already said there's no match!
                 assert(state != 0xffff);
                 static const char* match[] = 
                 {
-                    // max keyword len is 127, (upper bit is reserved for exact/partial match)
-                    // max keyword num is 256, please behave.
                     "console", "ak",
                     "await", "break", "case", "catch", "class",
                     "const", "continue", "debugger", "default", "delete",
@@ -97,7 +99,7 @@ struct Lexer
 
                 static bool init = true;
                 const size_t size = sizeof(match)/sizeof(match[0]);
-                static_assert(size <= 256);
+                /*statc_*/assert(size <= max_num);
                 static uint16_t index[256];
 
                 if (init)
@@ -107,7 +109,7 @@ struct Lexer
                     memset(index,0xFF,size*sizeof(uint16_t));
                     for (uint16_t i=0; i<(uint16_t)size; i++)
                     {
-                        assert(strlen(match[i])<128);
+                        assert(strlen(match[i])<=max_len);
                         if (index[match[i][0]] == 0xFFFF)
                             index[match[i][0]] = i;
                     }
@@ -115,13 +117,14 @@ struct Lexer
 
                 if (!state)
                 {
+                    // coarse lookup
                     state = index[c];
                     if (state >= size)
                         return 0xFFFF;
                 }
 
-                int idx = state & 0xFF;
-                int len = (state >> 8) & 0x7f;
+                int idx = state & 0x1FF;
+                int len = (state >> 9) & 0x3f;
                 const char* org = match[idx];
 
                 do
@@ -130,7 +133,7 @@ struct Lexer
                     {
                         len++;
                         // exact or partial?
-                        return match[idx][len] == 0 ? idx | (len<<8) : idx | (len<<8) | (1<<15);
+                        return match[idx][len] == 0 ? idx | (len<<9) : idx | (len<<9) | (1<<15);
                     }
 
                     if (match[idx][len] > c)
@@ -692,7 +695,7 @@ struct Lexer
                 {
                     if (idxlen != 0xffff)
                     {
-                        int len = (idxlen >> 8) & 0x7f;
+                        int len = (idxlen >> 9) & 0x3f;
                         idxlen = Matcher::find(idxlen, c);
                         if (idxlen>>15)
                             return identifier;
@@ -716,7 +719,7 @@ struct Lexer
                 if (c>='a' && c<='z' || c>='A' && c<='Z' ||
                     c=='_' || c=='$' || c>='0' && c<='9')
                 {
-                    int len = (idxlen >> 8) & 0x7f;
+                    int len = (idxlen >> 9) & 0x3f;
                     idxlen = Matcher::find(idxlen, c);
                     if (idxlen >> 15)
                     {
