@@ -250,16 +250,19 @@ static const int fall_us_per_frame = 30000;
 static const int attack_us_per_frame = 20000;
 
 // note: outside 16c pal !!!!
-static const uint8_t xd_grey = 16 + 1 * 1 + 1 * 6 + 1 * 36;
+static const uint8_t xd_bck = 16 + 1 * 1 + 1 * 6 + 1 * 36;
+static const uint8_t xd_err = 16 + 1 * 1 + 1 * 6 + 5 * 36;
+static const uint8_t xd_wsp = 16 + 5 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t xd_key = 16 + 5 * 1 + 4 * 6 + 2 * 36;
-static const uint8_t xd_id = 16 + 5 * 1 + 5 * 6 + 4 * 36;
-static const uint8_t xd_op = 16 + 5 * 1 + 3 * 6 + 5 * 36;
+static const uint8_t xd_idn = 16 + 5 * 1 + 5 * 6 + 4 * 36;
+static const uint8_t xd_opr = 16 + 5 * 1 + 3 * 6 + 5 * 36;
 static const uint8_t xd_com = 16 + 3 * 1 + 3 * 6 + 3 * 36;
 static const uint8_t xd_str = 16 + 3 * 1 + 4 * 6 + 5 * 36;
-static const uint8_t xd_chr = 16 + 5 * 1 + 5 * 6 + 5 * 36;
-static const uint8_t xd_par1 = 16 + 1 * 1 + 5 * 6 + 5 * 36;
-static const uint8_t xd_par2 = 16 + 2 * 1 + 5 * 6 + 2 * 36;
-static const uint8_t xd_par3 = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t xd_esc = 16 + 0 * 1 + 3 * 6 + 5 * 36;
+static const uint8_t xd_qmk = 16 + 2 * 1 + 3 * 6 + 5 * 36;
+static const uint8_t xd_rnd = 16 + 1 * 1 + 5 * 6 + 5 * 36;
+static const uint8_t xd_sqr = 16 + 2 * 1 + 5 * 6 + 2 * 36;
+static const uint8_t xd_crl = 16 + 5 * 1 + 5 * 6 + 1 * 36;
 static const uint8_t xd_num = 16 + 4 * 1 + 5 * 6 + 1 * 36;
 static const uint8_t xd_tem = 16 + 4 * 1 + 2 * 6 + 4 * 36;
 static const uint8_t xd_fnc = 16 + 1 * 1 + 4 * 6 + 5 * 36;
@@ -849,21 +852,21 @@ struct TalkBox
 
 				static const uint8_t color[]=
 				{
-					white,   // white_space,
-					xd_par1,  // string_delimiter, '' / ""
-					xd_chr,  // string_escape,
-					lt_red,  // string_error, // \n inside string
+					xd_wsp,   // white_space,
+					xd_qmk,  // string_delimiter, '' "" ``
+					xd_esc,  // string_escape,
+					xd_err,  // string_error, // \n inside string
 					xd_str,  // string_char, 
 					xd_num,  // number_char,
-					lt_red,  // error_char, // \ outside of string!
-					xd_op,   // operator_char,
-					xd_id,   // identifier,
+					xd_err,  // error_char, // \ outside of string!
+					xd_opr,   // operator_char,
+					xd_idn,   // identifier,
 					xd_key,  // keyword
 					xd_com,  // line_comment,
 					xd_com,  // block_comment,		
-					xd_par1,  // parenthesis ()
-					xd_par2,  // parenthesis []
-					xd_par3,  // parenthesis {}
+					xd_rnd,  // parenthesis ()
+					xd_sqr,  // parenthesis []
+					xd_crl,  // parenthesis {}
 					xd_tem,  // ${ } in a backtick string (template)
 				};
 
@@ -895,7 +898,7 @@ struct TalkBox
 
 								for (int bk = 0; bk<bk_len; bk++)
 									if (c->back[(c->back_pos-bk)&0xFF])
-										if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
+										if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_idn)
 											c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
 							}
 
@@ -908,7 +911,7 @@ struct TalkBox
 
 							AnsiCell* ac = ar + x;
 							ac->fg = fg;							
-							ac->bk = xd_grey;
+							ac->bk = xd_bck;
 							ac->gl = ' ';
 							ac->spare = 0;
 
@@ -941,7 +944,7 @@ struct TalkBox
 
 						for (int bk = 0; bk<bk_len; bk++)
 							if (c->back[(c->back_pos-bk)&0xFF])
-								if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
+								if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_idn)
 									c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
 					}
 
@@ -954,7 +957,7 @@ struct TalkBox
 
 					AnsiCell* ac = ar + i + dx;
 					ac->fg = fg;
-					ac->bk = xd_grey;
+					ac->bk = xd_bck;
 					ac->gl = str[i];
 					ac->spare = 0;
 
@@ -1101,7 +1104,7 @@ struct TalkBox
 			{
 				if (i >= 0 && i < width)
 				{
-					row[i].bk = xd_grey;
+					row[i].bk = xd_bck;
 					row[i].fg = black;
 					row[i].gl = ' ';
 				}
@@ -1122,7 +1125,7 @@ struct TalkBox
 
 				if (left + 1 >= 0 && left + 1 < width)
 				{
-					row[left + 1].bk = xd_grey;
+					row[left + 1].bk = xd_bck;
 					row[left + 1].fg = black;
 					row[left + 1].gl = ' ';
 				}
@@ -1144,7 +1147,7 @@ struct TalkBox
 			{
 				if (i >= 0 && i < width)
 				{
-					row[i].bk = xd_grey;
+					row[i].bk = xd_bck;
 					row[i].fg = black;
 					row[i].gl = ' ';
 				}
@@ -7056,10 +7059,32 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0)
 			{
-				// store, even if empty
-				memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
-				talk_mem[mem_idx].len = player.talk_box->len;
-				WriteConf(this);
+				// if +shift then restore!
+				bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
+				if (left_shift || right_shift)
+				{
+					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);
+					player.talk_box->len = talk_mem[mem_idx].len;
+					
+					player.talk_box->max_width = 33;
+					player.talk_box->max_height = 7; // 0: off!
+					int s[2], p[2];
+					if (player.talk_box->Reflow(s, p) >= 0)
+					{
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
+				}
+				else
+				{
+					// store, even if empty
+					memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
+					talk_mem[mem_idx].len = player.talk_box->len;
+					WriteConf(this);
+				}
 			}				
 		}
 		else
@@ -7319,10 +7344,32 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0)
 			{
-				// store, even if empty
-				memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
-				talk_mem[mem_idx].len = player.talk_box->len;
-				WriteConf(this);
+				// if +shift then restore!
+				bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
+				if (left_shift || right_shift)
+				{
+					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);
+					player.talk_box->len = talk_mem[mem_idx].len;
+					
+					player.talk_box->max_width = 33;
+					player.talk_box->max_height = 7; // 0: off!
+					int s[2], p[2];
+					if (player.talk_box->Reflow(s, p) >= 0)
+					{
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
+				}
+				else
+				{
+					// store, even if empty
+					memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
+					talk_mem[mem_idx].len = player.talk_box->len;
+					WriteConf(this);
+				}
 			}
 		}
 		else
