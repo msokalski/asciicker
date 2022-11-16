@@ -827,7 +827,7 @@ struct TalkBox
 			int width, height, x, y;
 			int span;
 			int rows;
-			uint8_t fg;
+			bool script;
 			Lexer lex;
 
 			AnsiCell* back[256];
@@ -841,8 +841,8 @@ struct TalkBox
 
 				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
 
-				uint8_t fg = c->fg;
-				bool script = fg != white;
+				uint8_t fg = white;
+				bool script = c->script;
 
 				static const uint8_t color[]=
 				{
@@ -962,8 +962,8 @@ struct TalkBox
 				escape++;
 		}
 
-		uint8_t fg = escape == 1 ? lt_cyan : white;
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, fg, {/*lexer*/0}, {/*backbuf*/0}, /*backidx*/-1};
+		bool script = escape == 1;
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, script, {/*lexer*/0}, {/*backbuf*/0}, /*backidx*/-1};
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 
@@ -4596,17 +4596,18 @@ void Human::Say(const char* str, int len, uint64_t stamp)
 	else
 		box = (TalkBox*)malloc(sizeof(TalkBox));
 
+	int lim = len < 256 ? len : 256;
 	memset(box, 0, sizeof(TalkBox));
-	memcpy(box->buf, str, len);
-	box->len = len;
+	memcpy(box->buf, str, lim);
+	box->len = lim;
 	box->cursor_pos = box->len;
 
 	box->max_width = 33;
-	box->max_height = 7; // 0: off
+	box->max_height = 0; // 0: off!
 	int s[2], p[2];
-	box->Reflow(s, p);
+	int bl = box->Reflow(s, p);
 	box->size[0] = s[0];
-	box->size[1] = s[1];
+	box->size[1] = s[1] < 7 ? s[1] : 7;
 	box->cursor_xy[0] = p[0];
 	box->cursor_xy[1] = p[1];
 
