@@ -96,7 +96,47 @@ struct Lexer
                     "let", "new", "null", "package", "private",
                     "protected", "public", "return", "super", "switch",
                     "static", "this", "throw", "try", "true",
-                    "typeof", "var", "void", "while", "with", "yield"
+                    "typeof", "var", "void", "while", "with", "yield",
+                    
+                    //#if 0
+                    /*consts*/
+                    "Infinity", "NaN", "undefined",
+
+                    /*writable/configurable! not enumerable*/
+                    "globalThis",
+
+                    /*funcs*/
+                    "eval", "isFinite", "isNaN", "parseFloat", "parseInt", 
+                    "encodeURI", "encodeURIComponent", "decodeURI",
+                    "decodeURIComponent",
+
+                    /*deprFuncs*/
+                    "escape", "unescape",
+
+                    /*constructors*/
+                    "Object", "Function", "Boolean", "Symbol", 
+                    
+                    "Error", "AggregateError", "EvalError", "RangeError",
+                    "ReferenceError", "SyntaxError", "TypeError", "URIError",
+
+                    /* Math is object!*/
+                    "Number", "BigInt", "Math", "Date", "String", "RegExp",
+
+                    "Array", "Int8Array", "Uint8Array", "Uint8ClampedArray",
+                    "Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
+                    "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+
+                    "Map", "Set", "WeakMap", "WeakSet",
+
+                    "ArrayBuffer", "SharedArrayBuffer", "Atomics", "DataView",
+
+                    /*object!!!*/
+                    "JSON",
+
+                    /*constructors*/
+                    "Promise", "Generator", "GeneratorFunction", "AsyncFunction",
+                    "AsyncGenerator", "AsyncGeneratorFunction",
+                    //#endif
                 };
 
                 static bool init = true;

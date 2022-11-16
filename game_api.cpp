@@ -47,6 +47,9 @@ void akAPI_Init()
             getMount : function() { akAPI_Call(8); return akGetI32(0); },
             setMount : function(int) { akSetI32(Number(int)|0,0); akAPI_Call(9); },
 
+            getAction : function() { akAPI_Call(10); return akGetI32(0); },
+            setAction : function(int) { akSetI32(Number(int)|0,0); akAPI_Call(11); },
+
             say : function(str) { akSetStr(String(str),0); akAPI_Call(101); },
 
             onSay: function(fnc) 
@@ -147,6 +150,28 @@ extern "C" void akAPI_Call(int id)
         // setMount : function(int) { akSetI32(int,0); akAPI_Call(9); },
         {
             game->player.SetMount(*(int*)akAPI_Buff);
+            break;
+        }
+
+        case 10:
+        // getAction : function() { akAPI_Call(10); return akGetI32(0); }.
+        {
+            *(int*)akAPI_Buff = game->player.req.action;
+            break;
+        }
+
+        case 11:
+        // setAction : function(int) { akSetI32(Number(int)|0,0); akAPI_Call(11); },
+        {
+            uint64_t stamp = game->stamp;
+            switch (*(int*)akAPI_Buff)
+            {
+                case ACTION::NONE:   game->player.SetActionNone(stamp);   break;
+                case ACTION::ATTACK: game->player.SetActionAttack(stamp); break;
+                case ACTION::FALL:   game->player.SetActionFall(stamp);   break;
+                case ACTION::DEAD:   game->player.SetActionDead(stamp);   break;
+                case ACTION::STAND:  game->player.SetActionStand(stamp);  break;
+            }
             break;
         }
 
