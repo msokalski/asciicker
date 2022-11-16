@@ -7064,6 +7064,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
 				if (left_shift || right_shift)
 				{
+					memset(player.talk_box, 0, sizeof(TalkBox));
 					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);
 					player.talk_box->len = talk_mem[mem_idx].len;
 					
@@ -7349,6 +7350,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
 				if (left_shift || right_shift)
 				{
+					memset(player.talk_box, 0, sizeof(TalkBox));
 					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);
 					player.talk_box->len = talk_mem[mem_idx].len;
 					
