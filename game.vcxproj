@@ -200,6 +200,7 @@
     <ClCompile Include="font1.cpp" />
     <ClCompile Include="game.cpp" />
     <ClCompile Include="gamepad.cpp" />
+    <ClCompile Include="game_api.cpp" />
     <ClCompile Include="gl45_emu.cpp" />
     <ClCompile Include="inventory.cpp" />
     <ClCompile Include="network.cpp" />
