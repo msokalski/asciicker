@@ -254,13 +254,16 @@ static const uint8_t xd_grey = 16 + 1 * 1 + 1 * 6 + 1 * 36;
 static const uint8_t xd_key = 16 + 5 * 1 + 4 * 6 + 2 * 36;
 static const uint8_t xd_id = 16 + 5 * 1 + 5 * 6 + 4 * 36;
 static const uint8_t xd_op = 16 + 5 * 1 + 3 * 6 + 5 * 36;
-static const uint8_t xd_com = 16 + 2 * 1 + 5 * 6 + 2 * 36;
+static const uint8_t xd_com = 16 + 3 * 1 + 3 * 6 + 3 * 36;
 static const uint8_t xd_str = 16 + 3 * 1 + 4 * 6 + 5 * 36;
 static const uint8_t xd_chr = 16 + 5 * 1 + 5 * 6 + 5 * 36;
-static const uint8_t xd_par = 16 + 1 * 1 + 5 * 6 + 5 * 36;
-static const uint8_t xd_num = 16 + 4 * 1 + 5 * 6 + 2 * 36;
+static const uint8_t xd_par1 = 16 + 1 * 1 + 5 * 6 + 5 * 36;
+static const uint8_t xd_par2 = 16 + 2 * 1 + 5 * 6 + 2 * 36;
+static const uint8_t xd_par3 = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t xd_num = 16 + 4 * 1 + 5 * 6 + 1 * 36;
 static const uint8_t xd_tem = 16 + 4 * 1 + 2 * 6 + 4 * 36;
 static const uint8_t xd_fnc = 16 + 1 * 1 + 4 * 6 + 5 * 36;
+static const uint8_t xd_arr = 16 + 3 * 1 + 5 * 6 + 3 * 36;
 
 static const uint8_t black = 16;
 static const uint8_t white =   16 + 5 * 1 + 5 * 6 + 5 * 36;
@@ -847,7 +850,7 @@ struct TalkBox
 				static const uint8_t color[]=
 				{
 					white,   // white_space,
-					xd_par,  // string_delimiter, '' / ""
+					xd_par1,  // string_delimiter, '' / ""
 					xd_chr,  // string_escape,
 					lt_red,  // string_error, // \n inside string
 					xd_str,  // string_char, 
@@ -858,9 +861,9 @@ struct TalkBox
 					xd_key,  // keyword
 					xd_com,  // line_comment,
 					xd_com,  // block_comment,		
-					xd_par,  // parenthesis ()
-					xd_par,  // parenthesis []
-					xd_par,  // parenthesis {}
+					xd_par1,  // parenthesis ()
+					xd_par2,  // parenthesis []
+					xd_par3,  // parenthesis {}
 					xd_tem,  // ${ } in a backtick string (template)
 				};
 
@@ -878,12 +881,21 @@ struct TalkBox
 								int bk_len = mode>>8;
 								
 								uint8_t back_fg = fg;
+								bool all = true;
 								if ((mode&0xFF)==Lexer::bracket_rnd && bk_len)
+								{
+									all = false;
 									back_fg = xd_fnc;
+								}
+								if ((mode&0xFF)==Lexer::bracket_sqr && bk_len)
+								{
+									all = false;
+									back_fg = xd_arr;
+								}
 
 								for (int bk = 0; bk<bk_len; bk++)
 									if (c->back[(c->back_pos-bk)&0xFF])
-										if (back_fg != xd_fnc || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
+										if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
 											c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
 							}
 
@@ -915,12 +927,21 @@ struct TalkBox
 						int bk_len = mode>>8;
 						
 						uint8_t back_fg = fg;
+						bool all = true;
 						if ((mode&0xFF)==Lexer::bracket_rnd && bk_len)
+						{
+							all = false;
 							back_fg = xd_fnc;
+						}
+						if ((mode&0xFF)==Lexer::bracket_sqr && bk_len)
+						{
+							all = false;
+							back_fg = xd_arr;
+						}
 
 						for (int bk = 0; bk<bk_len; bk++)
 							if (c->back[(c->back_pos-bk)&0xFF])
-								if (back_fg != xd_fnc || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
+								if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_id)
 									c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
 					}
 

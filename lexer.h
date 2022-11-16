@@ -160,6 +160,13 @@ struct Lexer
                 switch (c)
                 {
                     case '[':
+                    {
+                        // call is already shifted!
+                        uint32_t ret = bracket_sqr | call;
+                        call=0;
+                        return ret;
+                    }
+
                     case ']':
                     {
                         call=0;
