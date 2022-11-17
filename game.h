@@ -285,6 +285,8 @@ struct Game
 	float prev_yaw;
 	float yaw_vel;
 
+	bool prev_grounded; // moved from static Render::prev_grounded
+
 	Renderer* renderer;
 	Physics* physics;
 

@@ -4885,8 +4885,6 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// blocked by enemies? (closest one)
 	// ...
 
-	static bool prev_grounded = false;
-
 	if (prev_grounded && player.req.mount == MOUNT::BEE)
 	{
 		float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);

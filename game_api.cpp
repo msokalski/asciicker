@@ -50,7 +50,10 @@ void akAPI_Init()
             getAction : function() { akAPI_Call(10); return akGetI32(0); },
             setAction : function(int) { akSetI32(Number(int)|0,0); akAPI_Call(11); },
 
-            say : function(str) { akSetStr(String(str),0); akAPI_Call(101); },
+            say  : function(str) { akSetStr(String(str),0); akAPI_Call(100); },
+            jump : function()    { akAPI_Call(101); },
+
+            isGrounded : function() { akAPI_Call(200); return akGetI32(0)!=0; },
 
             onSay: function(fnc) 
             {
@@ -177,10 +180,8 @@ extern "C" void akAPI_Call(int id)
             break;
         }
 
-        case 100:
-
-        case 101: 
-        // say : function(str) { akSetStr(str,0); akAPI_Call(101); },
+        case 100: 
+        // say : function(str) { akSetStr(str,0); akAPI_Call(100); },
         {
             // TODO: convert utf8 to cp437!
             const char* str = (char*)akAPI_Buff;
@@ -188,6 +189,20 @@ extern "C" void akAPI_Call(int id)
             game->player.Say(str, len, game->stamp);
             break;
         }
+
+        case 101: 
+        // jump : function() { akAPI_Call(101); },
+        {
+            game->input.jump = true;
+            break;
+        }
+
+        case 200: 
+        // isGrounded : function() { akAPI_Call(200); return akGetI32(0)!=0; },
+        {
+            *(int*)akAPI_Buff = game->prev_grounded ? 1:0;
+            break;
+        }        
 
         default:
             break;
