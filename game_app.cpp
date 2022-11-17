@@ -2777,7 +2777,7 @@ void akAPI_CallV8(const v8::FunctionCallbackInfo<v8::Value>& args/*id*/)
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     akAPI_Call(args[0]->Int32Value(context).ToChecked());
 }
@@ -2790,7 +2790,7 @@ void akGetF32(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[0]->Int32Value(context).ToChecked();
     if (buf_ofs>=0 && buf_ofs*sizeof(float)<AKAPI_BUF_SIZE)
@@ -2806,7 +2806,7 @@ void akSetF32(const v8::FunctionCallbackInfo<v8::Value>& args/*val, buf_ofs*/)
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     float val = (float)args[0]->NumberValue(context).ToChecked();
     int buf_ofs = args[1]->Int32Value(context).ToChecked();
@@ -2822,7 +2822,7 @@ void akReadF32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     int num = args[3]->Int32Value(context).ToChecked();
@@ -2851,7 +2851,7 @@ void akWriteF32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     int num = args[3]->Int32Value(context).ToChecked();
@@ -2889,7 +2889,7 @@ void akGetI32(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[0]->Int32Value(context).ToChecked();
     if (buf_ofs>=0 && buf_ofs*sizeof(int32_t)<AKAPI_BUF_SIZE)
@@ -2905,7 +2905,7 @@ void akSetI32(const v8::FunctionCallbackInfo<v8::Value>& args/*val, buf_ofs*/)
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int32_t val = args[0]->Int32Value(context).ToChecked();
     int buf_ofs = args[1]->Int32Value(context).ToChecked();
@@ -2921,7 +2921,7 @@ void akReadI32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf_
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     int num = args[3]->Int32Value(context).ToChecked();
@@ -2950,7 +2950,7 @@ void akWriteI32(const v8::FunctionCallbackInfo<v8::Value>& args/*arr,arr_ofs,buf
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     int num = args[3]->Int32Value(context).ToChecked();
@@ -2988,7 +2988,7 @@ void akGetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     if (buf_ofs>=0 && buf_ofs*sizeof(int32_t)<AKAPI_BUF_SIZE)
@@ -3011,7 +3011,7 @@ void akSetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*str,buf_ofs*/)
         return;
     }
     v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
+//  v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
     int buf_ofs = args[2]->Int32Value(context).ToChecked();
     v8::Local<v8::String> s = v8::Local<v8::String>::Cast(args[0]);
@@ -3027,7 +3027,7 @@ void akSetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*str,buf_ofs*/)
 void akPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
     bool first = true;
     for (int i = 0; i < args.Length(); i++) {
-        v8::HandleScope handle_scope(args.GetIsolate());
+//      v8::HandleScope handle_scope(args.GetIsolate());
         if (first) {
             first = false;
         }

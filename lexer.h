@@ -88,7 +88,7 @@ struct Lexer
                 static const char* match[] = 
                 {
                     "console", "ak",
-                    "await", "break", "case", "catch", "class",
+                    /*"await",*/ "break", "case", "catch", "class",
                     "const", "continue", "debugger", "default", "delete",
                     "do", "else", "enum", "export", "extends",
                     "false", "finally", "for", "function", "if",
@@ -96,7 +96,7 @@ struct Lexer
                     "let", "new", "null", "package", "private",
                     "protected", "public", "return", "super", "switch",
                     "static", "this", "throw", "try", "true",
-                    "typeof", "var", "void", "while", "with", "yield",
+                    "typeof", "var", "void", "while", "with", /*"yield",*/
                     
                     //#if 0
                     /*consts*/
@@ -134,8 +134,9 @@ struct Lexer
                     "JSON",
 
                     /*constructors*/
-                    "Promise", "Generator", "GeneratorFunction", "AsyncFunction",
-                    "AsyncGenerator", "AsyncGeneratorFunction",
+                    "Promise", /*"Generator", "GeneratorFunction", "AsyncFunction",
+                    "AsyncGenerator", "AsyncGeneratorFunction",*/
+
                     //#endif
                 };
 

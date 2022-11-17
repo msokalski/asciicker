@@ -195,18 +195,40 @@ int main(int argc, char* argv[])
 void akAPI_Exec(const char* str, int len, bool root)
 {
     uint64_t t0 = GetTime();
-    EM_ASM(
+
+    if (root)
     {
-        try 
+        EM_ASM(
         {
-            let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
-            Function("'use strict';\n" + str).apply(window);
-        }
-        catch(e)
+            try 
+            {
+                let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
+                Function("'use strict';\n" + str).apply(window);
+            }
+            catch(e)
+            {
+                console.log("Exception: "+e.name+" "+e.message+" "+$2);
+            }
+        }, str, len, root);
+    }
+    else
+    {
+        EM_ASM(
         {
-            console.log("Exception: "+e.name+" "+e.message+" "+$2);
-        }
-    }, str, len, root);
+            globalThis=window.akAPI_This;
+            try 
+            {
+                let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
+                window.akAPI_Prot[akAPI_Prot.length-1] = "'use strict';\n" + str;
+                Function.apply(this,akAPI_Prot).apply(window.akAPI_This,[ak]); 
+            }
+            catch(e)
+            {
+                console.log("Exception: "+e.name+" "+e.message+" "+$2);
+            }
+            globalThis=window;
+        }, str, len, root);       
+    }
 
     uint64_t t1 = GetTime();
     printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
@@ -232,6 +254,37 @@ int Main()
 {
     akAPI_Init();
     EM_ASM({akAPI_Buff=$0;},akAPI_Buff);
+
+    EM_ASM(
+    {
+        // prepare protection array
+        window.akAPI_Prot = ["ak"];
+        let all = Object.getOwnPropertyNames(window);
+        let pub = new Array(
+            "console","akPrint",
+            "Object","Function","Array","Number","Boolean","String","Symbol","Date","Promise","RegExp",
+            "ArrayBuffer","Uint8Array","Int8Array","Uint16Array","Int16Array","Uint32Array","Int32Array",
+            "Float32Array","Float64Array","Uint8ClampedArray","BigUint64Array","BigInt64Array",
+            "DataView","Map","BigInt","Set","WeakMap","WeakSet","Proxy","Reflect","FinalizationRegistry","WeakRef",
+            "Error","AggregateError","EvalError","RangeError","ReferenceError","SyntaxError","TypeError","URIError",
+            "JSON","Math","Intl",
+            "decodeURI","decodeURIComponent","encodeURI","encodeURIComponent","escape","unescape",
+            "eval","isFinite","isNaN",
+            "parseFloat","parseInt",
+            "Infinity","NaN","undefined",
+            "globalThis"
+        );
+
+        for (const e of all)
+        {
+            if (e!='ak' && !pub.includes(e))
+                akAPI_Prot.push(e);
+        }
+
+        // user source code place holder
+        akAPI_Prot.push("");
+    });
+
 
     InitAudio();
     // here we must already know if serer on not server

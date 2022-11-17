@@ -66,6 +66,8 @@ void akAPI_Init()
                 }
             }
         };
+
+        Object.freeze(ak);
     ),-1,true);
 }
 
@@ -133,7 +135,7 @@ extern "C" void akAPI_Call(int id)
         case 7:
         // setName: function(str) { akSetStr(str,0); akAPI_Call(7); },
         {
-            strcpy(game->player.name,(char*)akAPI_Buff);
+            strncpy(game->player.name,(char*)akAPI_Buff,128);
             // TODO: convert utf8 to cp437!
             strncpy(game->player.name_cp437,(char*)akAPI_Buff,32);
             break;
