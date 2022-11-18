@@ -1318,12 +1318,128 @@ Game* game = 0;
 void init_v8();
 void free_v8();
 
+#define CODE(...) #__VA_ARGS__
+
 int main(int argc, char* argv[])
 {
     init_v8();
+    
+    akAPI_Exec(CODE(
+    {
+        // emulate emscripten heap view
+        this.akAPI_Buff = 0;
+        
+        this.Module = 
+        {
+            HEAPF64 : new Float64Array(akAPI_V8AB),
+            HEAPF32 : new Float32Array(akAPI_V8AB),
+            HEAPU32 : new Uint32Array(akAPI_V8AB),
+            HEAP32  : new Int32Array(akAPI_V8AB),
+            HEAPU16 : new Uint16Array(akAPI_V8AB),
+            HEAP16  : new Int16Array(akAPI_V8AB),
+            HEAPU8  : new Uint8Array(akAPI_V8AB),
+            HEAP8   : new Int8Array(akAPI_V8AB),
+        };
+        
+        this.UTF8ToString = function(ptr,len)
+        {
+            let arr = Module.HEAPU8;
+            let endIdx = ptr+len;
+            let idx = ptr;
+            let str = '';
+            while (!(idx >= endIdx)) 
+            {
+                let u0 = arr[idx++];
+                if (!u0) 
+                    return str;
+                if (!(u0 & 0x80)) 
+                { 
+                    str += String.fromCharCode(u0); 
+                    continue; 
+                }
+                let u1 = arr[idx++] & 63;
+                if ((u0 & 0xE0) == 0xC0) 
+                { 
+                    str += String.fromCharCode(((u0 & 31) << 6) | u1); 
+                    continue; 
+                }
+                let u2 = arr[idx++] & 63;
+                if ((u0 & 0xF0) == 0xE0) 
+                    u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
+                else 
+                    u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (arr[idx++] & 63);
+
+                if (u0 < 0x10000) 
+                    str += String.fromCharCode(u0);
+                else 
+                {
+                    let ch = u0 - 0x10000;
+                    str += String.fromCharCode(0xD800 | (ch >> 10), 0xDC00 | (ch & 0x3FF));
+                }
+            }
+            return str;
+        };
+
+        this.stringToUTF8 = function(str,ptr,len)
+        {
+            if (!(len > 0))
+                return 0;
+            
+            let arr = Module.HEAPU8;
+            let startIdx = ptr;
+            let endIdx = ptr + len -1;
+            let idx = ptr;
+            for (let i = 0; i < str.length; ++i) 
+            {
+                let u = str.charCodeAt(i); // possibly a lead surrogate
+                if (u >= 0xD800 && u <= 0xDFFF) 
+                {
+                    let u1 = str.charCodeAt(++i);
+                    u = 0x10000 + ((u & 0x3FF) << 10) | (u1 & 0x3FF);
+                }
+                if (u <= 0x7F) 
+                {
+                    if (idx >= endIdx) 
+                        break;
+                    arr[idx++] = u;
+                } 
+                else 
+                if (u <= 0x7FF) 
+                {
+                    if (idx + 1 >= endIdx) 
+                        break;
+                    arr[idx++] = 0xC0 | (u >> 6);
+                    arr[idx++] = 0x80 | (u & 63);
+                }
+                else 
+                if (u <= 0xFFFF) 
+                {
+                    if (idx + 2 >= endIdx) 
+                        break;
+                    arr[idx++] = 0xE0 | (u >> 12);
+                    arr[idx++] = 0x80 | ((u >> 6) & 63);
+                    arr[idx++] = 0x80 | (u & 63);
+                } 
+                else 
+                {
+                    if (idx + 3 >= endIdx) 
+                        break;
+
+                    arr[idx++] = 0xF0 | (u >> 18);
+                    arr[idx++] = 0x80 | ((u >> 12) & 63);
+                    arr[idx++] = 0x80 | ((u >> 6) & 63);
+                    arr[idx++] = 0x80 | (u & 63);
+                }
+            }
+
+            arr[idx] = 0;
+            return idx - startIdx;
+        };
+    }),-1,true);
+
     akAPI_Init();
 
-	/*
+    /*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
 	for (int i = 0; i < 16; i++)
 	{
@@ -2782,6 +2898,7 @@ void akAPI_CallV8(const v8::FunctionCallbackInfo<v8::Value>& args/*id*/)
     akAPI_Call(args[0]->Int32Value(context).ToChecked());
 }
 
+#if 0
 void akGetF32(const v8::FunctionCallbackInfo<v8::Value>& args/*buf_ofs*/)
 {
     if (args.Length() != 1 || !args[0]->IsInt32())
@@ -3023,6 +3140,7 @@ void akSetStr(const v8::FunctionCallbackInfo<v8::Value>& args/*str,buf_ofs*/)
     }
     s->WriteUtf8(isolate, (char*)akAPI_Buff + buf_ofs);
 }
+#endif
 
 void akPrint(const v8::FunctionCallbackInfo<v8::Value>& args) {
     bool first = true;
@@ -3082,8 +3200,9 @@ void free_v8()
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
         context->Exit();
     }
-
     isolate->Exit();
+
+    akAPI_Buff = 0;
 
     // Dispose the isolate and tear down V8.
     isolate->Dispose();
@@ -3133,9 +3252,9 @@ void init_v8()
     v8::Local<v8::ObjectTemplate> global_templ = v8::ObjectTemplate::New(isolate);
     
     global_templ->Set(isolate, "akPrint", v8::FunctionTemplate::New(isolate, akPrint));
-    
     global_templ->Set(isolate, "akAPI_Call", v8::FunctionTemplate::New(isolate, akAPI_CallV8));
 
+    #if 0
     global_templ->Set(isolate, "akGetF32", v8::FunctionTemplate::New(isolate, akGetF32));
     global_templ->Set(isolate, "akSetF32", v8::FunctionTemplate::New(isolate, akSetF32));
     global_templ->Set(isolate, "akReadF32", v8::FunctionTemplate::New(isolate, akReadF32));
@@ -3148,9 +3267,17 @@ void init_v8()
 
     global_templ->Set(isolate, "akGetStr", v8::FunctionTemplate::New(isolate, akGetStr));
     global_templ->Set(isolate, "akSetStr", v8::FunctionTemplate::New(isolate, akSetStr));
+    #endif
 
     v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global_templ);
     context->Enter(); // v8::Context::Scope context_scope(context);
+
+    v8::Local<v8::ArrayBuffer> arrbuf = v8::ArrayBuffer::New(isolate, AKAPI_BUF_SIZE);
+    akAPI_Buff = arrbuf->Data();
+
+    v8::Local<v8::String> key = v8::String::NewFromUtf8Literal(isolate,"akAPI_V8AB");
+    v8::Maybe<bool> ok = context->Global()->Set(context, key, arrbuf);
+    assert(ok.ToChecked());
 }
 
 void akAPI_Exec(const char* str, int len, bool root)

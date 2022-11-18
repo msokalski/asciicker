@@ -345,73 +345,6 @@
     <script type='text/javascript'>
       "use strict";
 
-      // API ABSTRACTION
-      var akAPI_Call = null;
-      var akAPI_Buff = 0;
-      var akAPI_This = {};
-
-      function akPrint()
-      {
-        console.log.apply(this,arguments);
-      }
-
-      function akGetF32(buf_ofs)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          return Module.HEAPF32[buf_ofs];
-      }
-      function akSetF32(val, buf_ofs)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          Module.HEAPF32[buf_ofs] = val;
-      }
-      function akReadF32(arr,arr_ofs,buf_ofs,num)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          for (let i=0; i<num; i++)
-              arr[i+arr_ofs] = Module.HEAPF32[i+buf_ofs];
-      }
-      function akWriteF32(arr,arr_ofs,buf_ofs,num)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          for (let i=0; i<num; i++)
-              Module.HEAPF32[i+buf_ofs] = arr[i+arr_ofs];
-      }   
-      function akGetI32(buf_ofs)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          return Module.HEAP32[buf_ofs];
-      }
-      function akSetI32(val, buf_ofs)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          Module.HEAP32[buf_ofs] = val;
-      }
-      function akReadI32(arr,arr_ofs,buf_ofs,num)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          for (let i=0; i<num; i++)
-              arr[i+arr_ofs] = Module.HEAP32[i+buf_ofs];
-      }
-      function akWriteI32(arr,arr_ofs,buf_ofs,num)
-      {
-          buf_ofs += akAPI_Buff>>2;
-          for (let i=0; i<num; i++)
-              Module.HEAP32[i+buf_ofs] = arr[i+arr_ofs];
-      }   
-      function akGetStr(buf_ofs)
-      {
-          return UTF8ToString(akAPI_Buff+buf_ofs,0xFFFF-buf_ofs);
-      }   
-      function akSetStr(str,buf_ofs)
-      {
-          stringToUTF8(str,akAPI_Buff+buf_ofs,0xFFFF-buf_ofs);
-      }
-    </script>
-
-    <script type='text/javascript'>
-      "use strict";
-
       var Render = null;
       var Size = null;
       var Keyb = null;
@@ -1271,8 +1204,6 @@
         Focus = Module.cwrap('Focus', null, ['number']);
         Join = Module.cwrap('Join', 'number', ['string','number','number']);
         Packet = Module.cwrap('Packet', null, ['array', 'number']);
-
-        akAPI_Call = Module.cwrap('akAPI_Call', null, ['number']);
 
         ak_canvas = document.getElementById('asciicker_canvas');
         ak_canvas.hidden = false;

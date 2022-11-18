@@ -12,7 +12,7 @@
 
 void Buzz();
 
-void ConvertToCP437(char* cp437, const char* utf8);
+void ConvertToCP437(char* cp437, const char* utf8, int maxlen=-1);
 
 extern char player_name[];
 extern char player_name_cp437[];
@@ -385,6 +385,11 @@ struct Game
 		int wheel;   // relative mouse wheel (only from real mouse)
 		int size[2]; // window size (in pixels)
 		bool jump;
+
+		float api_move[3]; // x,y,alpha 
+		// x,y is screen space (rotate it by yaw to set it in world space)
+		// alpha=0 : fully additive, 
+		// alpha=1 : replace
 
 		bool shoot;
 		int shoot_xy[2];

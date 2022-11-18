@@ -164,12 +164,12 @@ uint8_t ConvertToCP437(uint32_t uc)
 	return cp;
 }
 
-void ConvertToCP437(char* cp437, const char* _utf8)
+void ConvertToCP437(char* cp437, const char* _utf8, int maxlen)
 {
 	const uint8_t* utf8 = (const uint8_t*)_utf8;
 
 	int i=0,j=0;
-	while (1)
+	while (j!=maxlen)
 	{
 		uint32_t uc;
 
@@ -3873,6 +3873,13 @@ void Game::CancelItemContacts()
 void Game::ExecuteItem(int my_item)
 {
 	Item* item = inventory.my_item[my_item].item;
+
+	// invoke execute item api call
+	// with one of actions: EQUIP, UNEQUIP, CONSUME
+	// (action, story_id, proto->kind, proto->sub, proto->weight, my_item->desc)
+	// check return value to know if we should proceed or not
+	// ...
+
 	switch (item->proto->kind)
 	{
 		case 'F': // food
@@ -3905,6 +3912,7 @@ void Game::ExecuteItem(int my_item)
 
 		case 'R':
 		{
+			// invoke 
 			inventory.my_item[my_item].in_use = !inventory.my_item[my_item].in_use;
 			break;
 		}
@@ -4294,8 +4302,16 @@ bool Game::PickItem(Item* item)
 			if (!ok)
 				continue;
 
+			const char* desc = item->proto->desc;
+
+			// call api, player is about to pick the item
+			// ACTION = PICK
+			// (action, story_id, proto->kind, proto->sub, proto->weight, proto->desc)
+			// expect return value to contain desc string, if not string / empty, prevent picking!
+			// ...
+
 			int xy[2] = { x,y };
-			inventory.InsertItem(item, xy);
+			inventory.InsertItem(item, xy, desc);
 
 			return true;
 		}
@@ -4347,6 +4363,12 @@ bool Game::DropItem(int index)
 			+(float)dpos[1],
 			+(float)z
 		};
+
+		// call api, player is about to drop the item
+		// ACTION = drop
+		// (action, story_id, proto->kind, proto->sub, proto->weight, proto->desc)
+		// expect boolean return, then proceed or not!
+		// ...		
 
 		inventory.RemoveItem(index, _pos, prev_yaw);
 	}
@@ -4756,6 +4778,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		switch (input.contact[i].action)
 		{
 			case Input::Contact::FORCE:
+			{
 				assert(!force_handled);
 				force_handled = true;
 				if (i==0)
@@ -4770,8 +4793,17 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					io.x_force = 4 * (input.contact[i].pos[0] - input.contact[i].drag_from[0]) / (float)input.size[0];
 					io.y_force = 4 * (input.contact[i].drag_from[1] - input.contact[i].pos[1]) / (float)input.size[0];
 				}
+
+				float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
+				if (len > 1)
+				{
+					io.x_force /= len;
+					io.y_force /= len;
+				}
+
 				break;
-			
+			}
+
 			case Input::Contact::TORQUE:
 				if (i==0)
 				{
@@ -4864,6 +4896,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		io.torque += (input.pad_axis[4] - input.pad_axis[5]) / 1024 / 32.0f;
 
 	io.jump = input.jump;
+
+	io.x_force = io.x_force * (1-input.api_move[2]) + input.api_move[0];
+	io.y_force = io.y_force * (1-input.api_move[2]) + input.api_move[1];	
 
 	if (player.req.action == ACTION::FALL || 
 		player.req.action == ACTION::STAND ||
@@ -6213,6 +6248,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		int focus_rect[4];
 		Item* focus_item = 0;
+		const char* item_desc = 0;
 		for (int i = 0; i < inventory.my_items; i++)
 		{
 			int ix = inventory.layout_x + inventory.my_item[i].xy[0]*4 + 4;
@@ -6266,6 +6302,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				focus_rect[2] = isf->width + 2;
 				focus_rect[3] = isf->height + 2;
 				focus_item = inventory.my_item[i].item;
+				item_desc = inventory.my_item[i].desc;
 			}
 			else
 				PaintFrame(ptr, width, height, ix - 1, iy - 1, isf->width + 2, isf->height + 2, frm_clip, black/*fg*/, 255/*bk*/, true/*dbl-line*/,true/*combine*/);
@@ -6277,13 +6314,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			if (inventory.layout_y + 6 >= 0)
 			{
 				Item* item = focus_item;
-				const char* str = item->proto->desc;
-				for (int s = 0; str[s]; s++)
+				for (int s = 0; s<32 && item_desc[s]; s++)
 				{
 					if (inventory.layout_x + 4 + s >= 0 && inventory.layout_x + 4 + s < width)
 					{
 						AnsiCell* ac = ptr + inventory.layout_x + 4 + s + (inventory.layout_y + 6)*width;
-						ac->gl = str[s];
+						ac->gl = item_desc[s];
 					}
 				}
 			}
@@ -6933,6 +6969,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					}
 					else
 					{
+						//ConvertToUTF8((char*)akAPI_Buff,player.talk_box->buf,player.talk_box->len);
 						if (!akAPI_OnSay(player.talk_box->buf, player.talk_box->len))
 						{
 							int idx = player.talks;
@@ -8331,7 +8368,15 @@ void Game::EndContact(int id, int x, int y)
 						int drop_at[2];
 						if (CheckDrop(id, drop_at, 0, render_size[0], render_size[1]))
 						{
-							inventory.InsertItem(items_inrange[i], drop_at);
+							const char* desc = items_inrange[i]->proto->desc;
+							
+							// call api, player is about to pick the item
+							// action = PICK
+							// (action, story_id, proto->kind, proto->sub, proto->weight, proto->desc)
+							// expect return value to contain desc string, if not string / empty, prevent picking!
+							// ...
+
+							inventory.InsertItem(items_inrange[i], drop_at, desc);
 						}
 					}
 

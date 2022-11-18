@@ -39,6 +39,7 @@ struct Inventory
 		int story_id;
 
 		bool in_use;
+		char desc[32]; // 32*max_items = 5KB
 	};
 
 	int my_items;
@@ -46,7 +47,7 @@ struct Inventory
 
 	void UpdateLayout(int width, int height, int scene_shift, int bars_pos);
 
-	bool InsertItem(Item* item, int xy[2]); 
+	bool InsertItem(Item* item, int xy[2], const char* desc=0); 
 	bool RemoveItem(int index, float pos[3], float yaw);
 
 	void FocusNext(int dx, int dy);

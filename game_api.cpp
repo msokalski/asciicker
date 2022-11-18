@@ -10,25 +10,64 @@ void* akAPI_Buff = 0;
 
 void akAPI_Init()
 {
-    akAPI_Buff = malloc(AKAPI_BUF_SIZE);
-
     akAPI_Exec( CODE(
-        this.akOnSay = null;
-
-        this.akAPI_OnSay = function () 
-        { 
-            if (akOnSay) 
-            {
-                akPrint("calling callback (not null)\n");
-                akOnSay(akGetStr(0)); 
-                akSetI32(1,0);
-            }
-            else
-            {
-                akPrint("not going to call callback (is null)\n");
-                akSetI32(0,0);
-            }
+    {
+        this.akGetF32 = function(buf_ofs)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            return Module.HEAPF32[buf_ofs];
         };
+        this.akSetF32 = function(val, buf_ofs)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            Module.HEAPF32[buf_ofs] = val;
+        };
+        this.akReadF32 = function(arr,arr_ofs,buf_ofs,num)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            for (let i=0; i<num; i++)
+                arr[i+arr_ofs] = Module.HEAPF32[i+buf_ofs];
+        };
+        this.akWriteF32 = function(arr,arr_ofs,buf_ofs,num)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            for (let i=0; i<num; i++)
+                Module.HEAPF32[i+buf_ofs] = arr[i+arr_ofs];
+        }; 
+        this.akGetI32 = function(buf_ofs)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            return Module.HEAP32[buf_ofs];
+        };
+        this.akSetI32 = function(val, buf_ofs)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            Module.HEAP32[buf_ofs] = val;
+        };
+        this.akReadI32 = function(arr,arr_ofs,buf_ofs,num)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            for (let i=0; i<num; i++)
+                arr[i+arr_ofs] = Module.HEAP32[i+buf_ofs];
+        };
+        this.akWriteI32 = function(arr,arr_ofs,buf_ofs,num)
+        {
+            buf_ofs += akAPI_Buff>>2;
+            for (let i=0; i<num; i++)
+                Module.HEAP32[i+buf_ofs] = arr[i+arr_ofs];
+        };
+        this.akGetStr = function(buf_ofs)
+        {
+            return UTF8ToString(akAPI_Buff+buf_ofs,0xFFFF-buf_ofs);
+        };
+        this.akSetStr = function(str,buf_ofs)
+        {
+            stringToUTF8(str,akAPI_Buff+buf_ofs,0xFFFF-buf_ofs);
+        };
+
+        this.akAPI_Back = [];
+        let cb = function(fnc) { return (typeof fnc === 'function') ? fnc : null; };
+
 
         this.ak = 
         {
@@ -50,33 +89,63 @@ void akAPI_Init()
             getAction : function() { akAPI_Call(10); return akGetI32(0); },
             setAction : function(int) { akSetI32(Number(int)|0,0); akAPI_Call(11); },
 
+            getMove : function(arr3, ofs) { akAPI_Call(12); akReadF32(arr3,ofs|0,0,3); },
+            setMove : function(arr3, ofs) { akWriteF32(arr3,ofs|0,0,3); akAPI_Call(13); },
+
+            //////////////////////////////////////////////////////////////////////
+
             say  : function(str) { akSetStr(String(str),0); akAPI_Call(100); },
             jump : function()    { akAPI_Call(101); },
 
+            //////////////////////////////////////////////////////////////////////
+
             isGrounded : function() { akAPI_Call(200); return akGetI32(0)!=0; },
 
-            onSay: function(fnc) 
+            //////////////////////////////////////////////////////////////////////
+            onSay: function(fnc) { akAPI_Back[0] = cb(fnc); },
+            onItem: function(fnc) { akAPI_Back[1] = cb(fnc); }
+        };
+       
+        Object.freeze(ak);
+
+
+        this.akAPI_OnSay = function () 
+        { 
+            let f = akAPI_Back[0];
+            if (f) 
             {
-                if (typeof fnc === 'function')
-                {
-                    akPrint("FNC PASSED\n");
-                    akOnSay = fnc;
-                }
-                else
-                {
-                    akPrint("FNC IS NOT A FUNCTION\n");
-                    akOnSay = null;
-                }
+                f(akGetStr(0)); 
+                akSetI32(1,0);
             }
+            akSetI32(0,0);
         };
 
-        Object.freeze(ak);
-    ),-1,true);
+        this.akAPI_OnItem = function () 
+        {
+            let f = akAPI_Back[1];
+            if (f) 
+            {
+
+                let str = f(akGetStr(0));
+                if (typeof str === 'string')
+                {
+                    akSetI32(0,2);
+                    akSetStr(str,4);
+                }
+                else
+                    akSetI32(0,1);
+            }
+            akSetI32(0,0);
+        };
+
+
+    }),-1,true);
 }
 
 void akAPI_Free()
 {
-    free(akAPI_Buff);
+    // allocated by platform specific thing
+    // free(akAPI_Buff);
 }
 
 extern "C" void akAPI_Call(int id)
@@ -124,6 +193,7 @@ extern "C" void akAPI_Call(int id)
         case 5: 
         // setYaw: function(flt) { akSetF32(flt,0); akAPI_Call(5); }
         {
+            // do it smooth?
             SetPhysicsYaw(game->physics,*(float*)akAPI_Buff,0);
             break;
         }
@@ -139,8 +209,8 @@ extern "C" void akAPI_Call(int id)
         // setName: function(str) { akSetStr(str,0); akAPI_Call(7); },
         {
             strncpy(game->player.name,(char*)akAPI_Buff,128);
-            // TODO: convert utf8 to cp437!
-            strncpy(game->player.name_cp437,(char*)akAPI_Buff,32);
+            ConvertToCP437(game->player.name_cp437,(char*)akAPI_Buff,32);
+            game->player.name_cp437[31] = 0;
             break;
         }
 
@@ -180,11 +250,29 @@ extern "C" void akAPI_Call(int id)
             break;
         }
 
+        case 12: 
+        // getMove: function(arr3, ofs) { akAPI_Call(12); akReadF32(arr3,ofs|0,0,3); }
+        {
+            memcpy(akAPI_Buff, game->input.api_move, sizeof(float[3]));
+            break;
+        }
+        case 13: 
+        // setMove: function(arr3, ofs) { akWriteF32(arr3,ofs|0,0,3); akAPI_Call(13); }
+        {
+            memcpy(game->input.api_move, akAPI_Buff, sizeof(float[3]));
+            break;
+        }
+
+
+        ////////////////////////////////////////////////////////////////////////
+
         case 100: 
         // say : function(str) { akSetStr(str,0); akAPI_Call(100); },
         {
-            // TODO: convert utf8 to cp437!
-            const char* str = (char*)akAPI_Buff;
+            char* str = (char*)akAPI_Buff + AKAPI_BUF_SIZE/2;
+            ConvertToCP437(str, (char*)akAPI_Buff, AKAPI_BUF_SIZE/2);
+            ((char*)akAPI_Buff)[AKAPI_BUF_SIZE-1] = 0;
+
             int len = strlen(str);
             game->player.Say(str, len, game->stamp);
             break;
@@ -196,6 +284,8 @@ extern "C" void akAPI_Call(int id)
             game->input.jump = true;
             break;
         }
+
+        ////////////////////////////////////////////////////////////////////////
 
         case 200: 
         // isGrounded : function() { akAPI_Call(200); return akGetI32(0)!=0; },

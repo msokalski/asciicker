@@ -252,8 +252,19 @@ int akAPI_OnSay(const char* str, int len)
 
 int Main()
 {
+    akAPI_Buff = malloc(AKAPI_BUF_SIZE);
+    EM_ASM(
+    {
+        window.akAPI_Buff=$0;
+        window.akAPI_Call = Module.cwrap('akAPI_Call', null, ['number']);
+        window.akAPI_This = {};
+        window.akPrint = function()
+        {
+            console.log.apply(this,arguments);
+        };
+    },akAPI_Buff);
+
     akAPI_Init();
-    EM_ASM({akAPI_Buff=$0;},akAPI_Buff);
 
     EM_ASM(
     {

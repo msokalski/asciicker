@@ -87,9 +87,8 @@ struct Lexer
                 assert(state != 0xffff);
                 static const char* match[] = 
                 {
-                    "console", "ak",
                     /*"await",*/ "break", "case", "catch", "class",
-                    "const", "continue", "debugger", "default", "delete",
+                    "const", "continue", "default", "delete",
                     "do", "else", "enum", "export", "extends",
                     "false", "finally", "for", "function", "if",
                     "implements", "import", "in", "instanceof", "interface",
@@ -97,45 +96,21 @@ struct Lexer
                     "protected", "public", "return", "super", "switch",
                     "static", "this", "throw", "try", "true",
                     "typeof", "var", "void", "while", "with", /*"yield",*/
-                    
-                    //#if 0
-                    /*consts*/
-                    "Infinity", "NaN", "undefined",
 
-                    /*writable/configurable! not enumerable*/
-                    "globalThis",
-
-                    /*funcs*/
-                    "eval", "isFinite", "isNaN", "parseFloat", "parseInt", 
-                    "encodeURI", "encodeURIComponent", "decodeURI",
-                    "decodeURIComponent",
-
-                    /*deprFuncs*/
-                    "escape", "unescape",
-
-                    /*constructors*/
-                    "Object", "Function", "Boolean", "Symbol", 
-                    
-                    "Error", "AggregateError", "EvalError", "RangeError",
-                    "ReferenceError", "SyntaxError", "TypeError", "URIError",
-
-                    /* Math is object!*/
-                    "Number", "BigInt", "Math", "Date", "String", "RegExp",
-
-                    "Array", "Int8Array", "Uint8Array", "Uint8ClampedArray",
-                    "Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
-                    "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
-
-                    "Map", "Set", "WeakMap", "WeakSet",
-
-                    "ArrayBuffer", "SharedArrayBuffer", "Atomics", "DataView",
-
-                    /*object!!!*/
-                    "JSON",
-
-                    /*constructors*/
-                    "Promise", /*"Generator", "GeneratorFunction", "AsyncFunction",
-                    "AsyncGenerator", "AsyncGeneratorFunction",*/
+                    "ak", "akPrint", // these should have another color
+                    "Object","Function","Array","Number","Boolean",
+                    "String","Symbol","Date","Promise","RegExp","ArrayBuffer",
+                    "Uint8Array","Int8Array","Uint16Array","Int16Array",
+                    "Uint32Array","Int32Array","Float32Array","Float64Array",
+                    "Uint8ClampedArray","BigUint64Array","BigInt64Array",
+                    "DataView","Map","BigInt","Set","WeakMap","WeakSet",
+                    "Proxy","Reflect","FinalizationRegistry","WeakRef",
+                    "Error","AggregateError","EvalError","RangeError",
+                    "ReferenceError","SyntaxError","TypeError","URIError",
+                    "JSON","Math","Intl","decodeURI","decodeURIComponent",
+                    "encodeURI","encodeURIComponent","escape","unescape",
+                    "eval","isFinite","isNaN","parseFloat","parseInt",
+                    "Infinity","NaN","undefined","globalThis"
 
                     //#endif
                 };

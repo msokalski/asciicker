@@ -33,7 +33,12 @@
 			"system_error": "cpp",
 			"sstream": "cpp",
 			"numbers": "cpp",
-			"__locale": "cpp"
+			"__locale": "cpp",
+			"regex": "cpp",
+			"strstream": "cpp",
+			"atomic": "cpp",
+			"memory": "cpp",
+			"charconv": "cpp"
 		}
 	}
 }
