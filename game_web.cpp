@@ -234,25 +234,19 @@ void akAPI_Exec(const char* str, int len, bool root)
     printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
 }
 
-int akAPI_OnSay(const char* str, int len)
+void akAPI_CB(int id)
 {
-    uint64_t t0 = GetTime();
-
-    // copy str
-    memcpy(akAPI_Buff,str,len);
-    *((char*)akAPI_Buff+len)=0;
-
-    EM_ASM({akAPI_OnSay();});
-
-    uint64_t t1 = GetTime();
-    printf("CALLBACK in %d us\n", (int)(t1-t0));
-    return *(int*)akAPI_Buff;
+    EM_ASM(
+    {
+        akAPI_CB.apply(window,[$0]);
+    },id);
 }
 
 
 int Main()
 {
     akAPI_Buff = malloc(AKAPI_BUF_SIZE);
+    memset(akAPI_Buff,0,AKAPI_BUF_SIZE);
     EM_ASM(
     {
         window.akAPI_Buff=$0;

@@ -65,9 +65,20 @@ void akAPI_Init()
             stringToUTF8(str,akAPI_Buff+buf_ofs,0xFFFF-buf_ofs);
         };
 
-        this.akAPI_Back = [];
-        let cb = function(fnc) { return (typeof fnc === 'function') ? fnc : null; };
+        this.akAPI_Back = Array(256);
+        let cb = function(idx,fnc) 
+        { 
+            fnc = typeof fnc === 'function' ? fnc : null;
+            akAPI_Back[idx] = fnc;
 
+            // last 256 bits of api buffer contains
+            // flags set if given cb is set
+            let adr = akAPI_Buff+65536+(idx>>3);
+            let flg = Module.HEAPU8[adr];
+            let bit = 1<<(idx&0x7);
+            flg = fnc ? flg|bit : flg&~bit; 
+            Module.HEAPU8[adr] = flg;
+        };
 
         this.ak = 
         {
@@ -102,44 +113,75 @@ void akAPI_Init()
             isGrounded : function() { akAPI_Call(200); return akGetI32(0)!=0; },
 
             //////////////////////////////////////////////////////////////////////
-            onSay: function(fnc) { akAPI_Back[0] = cb(fnc); },
-            onItem: function(fnc) { akAPI_Back[1] = cb(fnc); }
+            onSay: function(fnc) { cb(0,fnc); },
+            onItem: function(fnc) { cb(1,fnc); }
         };
        
         Object.freeze(ak);
 
-
-        this.akAPI_OnSay = function () 
-        { 
-            let f = akAPI_Back[0];
-            if (f) 
-            {
-                f(akGetStr(0)); 
-                akSetI32(1,0);
-            }
-            akSetI32(0,0);
-        };
-
-        this.akAPI_OnItem = function () 
+        this.akAPI_CB = function(id)
         {
-            let f = akAPI_Back[1];
-            if (f) 
+            let fnc = akAPI_Back[id];
+            let ret;
+            switch(id)
             {
+                case 0:
+                    // onSay(str)
+                    ret = fnc.apply(akAPI_This,[akGetStr(0)]);
+                    akSetStr(ret);
+                    break;
 
-                let str = f(akGetStr(0));
-                if (typeof str === 'string')
-                {
-                    akSetI32(0,2);
-                    akSetStr(str,4);
-                }
-                else
-                    akSetI32(0,1);
+                case 1:
+                    // onItem(action,story,kind,subkind,weight,desc)
+                    ret = fnc.apply(akAPI_This,[
+                        akGetI32(0), akGetI32(1), akGetI32(2),
+                        akGetI32(3), akGetI32(4), akGetStr(20)]);
+                    akSetStr(ret);
+                    break;
             }
-            akSetI32(0,0);
         };
-
 
     }),-1,true);
+}
+
+bool akAPI_CheckCB(int id)
+{
+    int bit = 1<<(id&0x7);
+    uint8_t* ptr = (uint8_t*)akAPI_Buff + 65536 + (id>>3);
+    return (*ptr & bit) != 0;
+}
+
+bool akAPI_OnSay(const char* str, int len)
+{
+    const int id = 0;
+    if (!akAPI_CheckCB(id))
+        return false;
+
+    strncpy((char*)akAPI_Buff,str,len);
+    akAPI_CB(id);
+
+    // returns string (on akAPI_Buff)
+
+    return true; 
+}
+
+bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, const char* str)
+{
+    const int id = 1;
+    if (!akAPI_CheckCB(id))
+        return false;
+
+    int* ptr = (int*)akAPI_Buff;
+    ptr[0] = action;
+    ptr[1] = story_id;
+    ptr[2] = kind;
+    ptr[3] = subkind;
+    ptr[4] = weight;
+    akAPI_CB(1);
+
+    // returns string (on akAPI_Buff)
+
+    return true;
 }
 
 void akAPI_Free()
@@ -269,9 +311,9 @@ extern "C" void akAPI_Call(int id)
         case 100: 
         // say : function(str) { akSetStr(str,0); akAPI_Call(100); },
         {
-            char* str = (char*)akAPI_Buff + AKAPI_BUF_SIZE/2;
-            ConvertToCP437(str, (char*)akAPI_Buff, AKAPI_BUF_SIZE/2);
-            ((char*)akAPI_Buff)[AKAPI_BUF_SIZE-1] = 0;
+            char* str = (char*)akAPI_Buff + 256;
+            ConvertToCP437(str, (char*)akAPI_Buff, 256);
+            ((char*)akAPI_Buff)[256-1] = 0;
 
             int len = strlen(str);
             game->player.Say(str, len, game->stamp);
