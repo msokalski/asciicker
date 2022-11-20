@@ -3872,13 +3872,21 @@ void Game::CancelItemContacts()
 
 void Game::ExecuteItem(int my_item)
 {
-	Item* item = inventory.my_item[my_item].item;
+	Inventory::MyItem* mi = inventory.my_item + my_item;
+	Item* item = mi->item;
 
-	// invoke execute item api call
-	// with one of actions: EQUIP, UNEQUIP, CONSUME
-	// (action, story_id, proto->kind, proto->sub, proto->weight, my_item->desc)
-	// check return value to know if we should proceed or not
-	// ...
+	bool called = akAPI_OnItem(
+		mi->in_use ? 'U'/*inuse->unequip*/ : 'E',/*equip/consume*/
+		mi->story_id,
+		item->proto->kind,
+		item->proto->sub_kind,
+		item->proto->weight,
+		mi->desc);
+
+	if (called)
+	{
+		// check if we can proceed
+	}
 
 	switch (item->proto->kind)
 	{
@@ -4303,15 +4311,24 @@ bool Game::PickItem(Item* item)
 				continue;
 
 			const char* desc = item->proto->desc;
+			int story_id = GetInstStoryID(item->inst);
 
-			// call api, player is about to pick the item
-			// ACTION = PICK
-			// (action, story_id, proto->kind, proto->sub, proto->weight, proto->desc)
-			// expect return value to contain desc string, if not string / empty, prevent picking!
-			// ...
+			bool called = akAPI_OnItem(
+				'P', // PICK
+				story_id,
+				item->proto->kind,
+				item->proto->sub_kind,
+				item->proto->weight,
+				desc);
+
+			if (called)
+			{
+				// check if we can proceed
+				// check if story_id and/or desc should be modified
+			}
 
 			int xy[2] = { x,y };
-			inventory.InsertItem(item, xy, desc);
+			inventory.InsertItem(item, xy, desc, &story_id);
 
 			return true;
 		}
@@ -4364,11 +4381,20 @@ bool Game::DropItem(int index)
 			+(float)z
 		};
 
-		// call api, player is about to drop the item
-		// ACTION = drop
-		// (action, story_id, proto->kind, proto->sub, proto->weight, proto->desc)
-		// expect boolean return, then proceed or not!
-		// ...		
+		Inventory::MyItem* mi = inventory.my_item + index;
+
+		bool called = akAPI_OnItem(
+			'D', //DROP
+			mi->story_id,
+			mi->item->proto->kind,
+			mi->item->proto->sub_kind,
+			mi->item->proto->weight,
+			mi->desc);
+
+		if (called)
+		{
+			// check if we can proceed
+		}
 
 		inventory.RemoveItem(index, _pos, prev_yaw);
 	}
@@ -8368,15 +8394,25 @@ void Game::EndContact(int id, int x, int y)
 						int drop_at[2];
 						if (CheckDrop(id, drop_at, 0, render_size[0], render_size[1]))
 						{
-							const char* desc = items_inrange[i]->proto->desc;
+							Item* item = items_inrange[i];
+							const char* desc = item->proto->desc;
+							int story_id = GetInstStoryID(item->inst); 
 							
-							// call api, player is about to pick the item
-							// action = PICK
-							// (action, story_id, proto->kind, proto->sub, proto->weight, proto->desc)
-							// expect return value to contain desc string, if not string / empty, prevent picking!
-							// ...
+							bool called = akAPI_OnItem(
+								'P', // PICK
+								story_id,
+								item->proto->kind,
+								item->proto->sub_kind,
+								item->proto->weight,
+								desc);
 
-							inventory.InsertItem(items_inrange[i], drop_at, desc);
+							if (called)
+							{
+								// check if we can proceed
+								// check if story_id and/or desc should be modified
+							}
+
+							inventory.InsertItem(items_inrange[i], drop_at, desc, &story_id);
 						}
 					}
 

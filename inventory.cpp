@@ -186,7 +186,7 @@ void Inventory::SetFocus(int index)
 	focus = index;
 }
 
-bool Inventory::InsertItem(Item* item, int xy[2], const char* desc)
+bool Inventory::InsertItem(Item* item, int xy[2], const char* desc, const int* story_id)
 {
 	if (!desc)
 		desc = item->proto->desc;
@@ -247,7 +247,7 @@ bool Inventory::InsertItem(Item* item, int xy[2], const char* desc)
 
 				item->inst = 0;
 
-				my_item[my_items].story_id = io->has[i].story_id;
+				my_item[my_items].story_id = story_id ? *story_id : io->has[i].story_id;
 				my_item[my_items].xy[0] = xy[0];
 				my_item[my_items].xy[1] = xy[1];
 				my_item[my_items].item = item;
@@ -290,7 +290,7 @@ bool Inventory::InsertItem(Item* item, int xy[2], const char* desc)
 	// and will remove it from there and from world
 	// it will also remember we own it
 
-	my_item[my_items].story_id = GetInstStoryID(item->inst);
+	my_item[my_items].story_id = story_id ? *story_id : GetInstStoryID(item->inst);
 	my_item[my_items].xy[0] = xy[0];
 	my_item[my_items].xy[1] = xy[1];
 	my_item[my_items].item = item;

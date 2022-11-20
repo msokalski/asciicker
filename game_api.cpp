@@ -72,7 +72,7 @@ void akAPI_Init()
             akAPI_Back[idx] = fnc;
 
             // last 256 bits of api buffer contains
-            // flags set if given cb is set
+            // flags set if given cb is active
             let adr = akAPI_Buff+65536+(idx>>3);
             let flg = Module.HEAPU8[adr];
             let bit = 1<<(idx&0x7);
@@ -128,7 +128,10 @@ void akAPI_Init()
                 case 0:
                     // onSay(str)
                     ret = fnc.apply(akAPI_This,[akGetStr(0)]);
-                    akSetStr(ret);
+                    if (typeof ret == 'string')
+                        akSetStr(ret,0);
+                    else
+                        akSetI32(0,0);
                     break;
 
                 case 1:
@@ -136,7 +139,10 @@ void akAPI_Init()
                     ret = fnc.apply(akAPI_This,[
                         akGetI32(0), akGetI32(1), akGetI32(2),
                         akGetI32(3), akGetI32(4), akGetStr(20)]);
-                    akSetStr(ret);
+                    if (typeof ret == 'string')
+                        akSetStr(ret,0);
+                    else
+                        akSetI32(0,0);
                     break;
             }
         };
@@ -157,7 +163,14 @@ bool akAPI_OnSay(const char* str, int len)
     if (!akAPI_CheckCB(id))
         return false;
 
-    strncpy((char*)akAPI_Buff,str,len);
+    if (len<0)
+        len=strlen(str);
+
+    if (len>255)
+        len=255;
+
+    memcpy((char*)akAPI_Buff,str,len);
+    ((char*)akAPI_Buff)[len] = 0;
     akAPI_CB(id);
 
     // returns string (on akAPI_Buff)
@@ -177,7 +190,14 @@ bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, c
     ptr[2] = kind;
     ptr[3] = subkind;
     ptr[4] = weight;
-    akAPI_CB(1);
+
+    int len=strlen(str);
+    if (len>31)
+        len=31;
+
+    memcpy((char*)akAPI_Buff+20,str,len);
+    ((char*)akAPI_Buff+20)[len] = 0;
+    akAPI_CB(id);    
 
     // returns string (on akAPI_Buff)
 
@@ -311,9 +331,11 @@ extern "C" void akAPI_Call(int id)
         case 100: 
         // say : function(str) { akSetStr(str,0); akAPI_Call(100); },
         {
-            char* str = (char*)akAPI_Buff + 256;
-            ConvertToCP437(str, (char*)akAPI_Buff, 256);
-            ((char*)akAPI_Buff)[256-1] = 0;
+            //char* str = (char*)akAPI_Buff + 256;
+            //ConvertToCP437(str, (char*)akAPI_Buff, 256);
+            //((char*)akAPI_Buff)[256-1] = 0;
+
+            char* str = (char*)akAPI_Buff;
 
             int len = strlen(str);
             game->player.Say(str, len, game->stamp);

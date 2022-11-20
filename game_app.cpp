@@ -3012,21 +3012,6 @@ void init_v8()
     global_templ->Set(isolate, "akPrint", v8::FunctionTemplate::New(isolate, akPrint));
     global_templ->Set(isolate, "akAPI_Call", v8::FunctionTemplate::New(isolate, akAPI_CallV8));
 
-    #if 0
-    global_templ->Set(isolate, "akGetF32", v8::FunctionTemplate::New(isolate, akGetF32));
-    global_templ->Set(isolate, "akSetF32", v8::FunctionTemplate::New(isolate, akSetF32));
-    global_templ->Set(isolate, "akReadF32", v8::FunctionTemplate::New(isolate, akReadF32));
-    global_templ->Set(isolate, "akWriteF32", v8::FunctionTemplate::New(isolate, akWriteF32));
-
-    global_templ->Set(isolate, "akGetI32", v8::FunctionTemplate::New(isolate, akGetI32));
-    global_templ->Set(isolate, "akSetI32", v8::FunctionTemplate::New(isolate, akSetI32));
-    global_templ->Set(isolate, "akReadI32", v8::FunctionTemplate::New(isolate, akReadI32));
-    global_templ->Set(isolate, "akWriteI32", v8::FunctionTemplate::New(isolate, akWriteI32));
-
-    global_templ->Set(isolate, "akGetStr", v8::FunctionTemplate::New(isolate, akGetStr));
-    global_templ->Set(isolate, "akSetStr", v8::FunctionTemplate::New(isolate, akSetStr));
-    #endif
-
     v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global_templ);
     context->Enter(); // v8::Context::Scope context_scope(context);
 
@@ -3051,8 +3036,33 @@ void akAPI_Exec(const char* str, int len, bool root)
         // (function(){...}())
         // ^-extra parenthesis makes expression
         //   instead of a statement (which would require a function name)
-        static const char* prefix = "(function(){";
-        static const char* suffix = "}())";
+
+        // we should also hide all things except "ak" and "akPrint"
+
+        static const char* prefix = 
+        "(function("
+            "ak,akPrint," // pass only these 2
+            /*
+            "akAPI_Back,"
+            "akAPI_Buff,"
+            "akAPI_This,"
+            "akAPI_CB,"
+            "Module,"
+            "UTF8ToString,"
+            "stringToUTF8,"
+            "akGetF32,"
+            "akSetF32,"
+            "akReadF32,"
+            "akWriteF32,"
+            "akGetI32,"
+            "akSetI32,"
+            "akReadI32,"
+            "akWriteI32,"
+            "akGetStr,"
+            "akSetStr"
+            */
+        "){";
+        static const char* suffix = "}.apply(akAPI_This,[ak,akPrint]))";
         static const int prefix_len = strlen(prefix);
         static const int suffix_len = strlen(suffix);
         buf = (char*)malloc(prefix_len+len+suffix_len+1);
