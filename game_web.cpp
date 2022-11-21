@@ -292,7 +292,10 @@ int Main()
 
 
     InitAudio();
-    // here we must already know if serer on not server
+
+    // GOOD PLACE TO RUN INTRO -> MAIN_MENU
+
+    // here we must already know if serer or not server
 
     float water = 55.0f;
     float yaw = 45;

@@ -122,27 +122,80 @@ void akAPI_Init()
         this.akAPI_CB = function(id)
         {
             let fnc = akAPI_Back[id];
-            let ret;
+            let ret,t;
             switch(id)
             {
-                case 0:
-                    // onSay(str)
-                    ret = fnc.apply(akAPI_This,[akGetStr(0)]);
-                    if (typeof ret == 'string')
-                        akSetStr(ret,0);
+                case 0: // onSay(str) -> bool
+                    let str = akGetStr(0);
+                    ret = fnc.apply(akAPI_This,[str]);
+
+                    t = typeof ret;
+
+                    if (t == 'boolean')
+                        akSetI32(ret?1:0,0);
                     else
-                        akSetI32(0,0);
+                        akSetI32(1,0);
                     break;
 
-                case 1:
-                    // onItem(action,story,kind,subkind,weight,desc)
+                case 1: // onItem(action,story,kind,subkind,weight,desc) -> bool/int/str/[int,str]/{story_id,desc}
+                    let story_id = akGetI32(1);
+                    let desc = akGetStr(20);
                     ret = fnc.apply(akAPI_This,[
-                        akGetI32(0), akGetI32(1), akGetI32(2),
-                        akGetI32(3), akGetI32(4), akGetStr(20)]);
-                    if (typeof ret == 'string')
-                        akSetStr(ret,0);
+                        akGetI32(0), story_id, akGetI32(2),
+                        akGetI32(3), akGetI32(4), desc]);
+                    
+                    t = typeof ret;
+                    if (t == 'boolean')
+                    {
+                        akSetI32(ret?1:0,0);
+                        if (!ret)
+                            break;
+                    }
+
+                    akSetI32(1,0);
+
+                    if (t == 'number')
+                    {
+                        akSetI32(ret|0,4);
+                        akSetStr(desc,8);
+                    }
                     else
-                        akSetI32(0,0);
+                    if (t == 'string')
+                    {
+                        akSetI32(story_id,4);
+                        akSetStr(ret,8);
+                    }
+                    else
+                    if (t == 'array')
+                    {
+                        if (typeof ret[0] == 'number')
+                            akSetI32(ret[0]|4);
+                        else
+                            akSetI32(story_id,4);
+
+                        if (typeof ret[1] == 'string')
+                            akSetStr(ret[1],8);
+                        else
+                            akSetStr(desc,8);
+                    }
+                    else
+                    if (t == 'object')
+                    {
+                        if (typeof ret.story_id == 'number')
+                            akSetI32(ret.story_id|4);
+                        else
+                            akSetI32(story_id,4);
+
+                        if (typeof ret.desc == 'string')
+                            akSetStr(ret.desc,8);
+                        else
+                            akSetStr(desc,8);
+                    }
+                    else
+                    {
+                        akSetI32(story_id,4);
+                        akSetStr(desc,8);
+                    }
                     break;
             }
         };
@@ -157,7 +210,8 @@ bool akAPI_CheckCB(int id)
     return (*ptr & bit) != 0;
 }
 
-bool akAPI_OnSay(const char* str, int len)
+bool akAPI_OnSay(const char* str, int len, 
+                 bool* allowed)
 {
     const int id = 0;
     if (!akAPI_CheckCB(id))
@@ -171,14 +225,17 @@ bool akAPI_OnSay(const char* str, int len)
 
     memcpy((char*)akAPI_Buff,str,len);
     ((char*)akAPI_Buff)[len] = 0;
+    
     akAPI_CB(id);
 
-    // returns string (on akAPI_Buff)
+    if (allowed)
+        *allowed = *(int*)akAPI_Buff != 0;
 
     return true; 
 }
 
-bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, const char* str)
+bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, const char* desc,
+                  bool* allowed, int* out_story_id, const char** out_desc)
 {
     const int id = 1;
     if (!akAPI_CheckCB(id))
@@ -191,15 +248,21 @@ bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, c
     ptr[3] = subkind;
     ptr[4] = weight;
 
-    int len=strlen(str);
+    int len=strlen(desc);
     if (len>31)
         len=31;
 
-    memcpy((char*)akAPI_Buff+20,str,len);
+    memcpy((char*)akAPI_Buff+20,desc,len);
     ((char*)akAPI_Buff+20)[len] = 0;
+
     akAPI_CB(id);    
 
-    // returns string (on akAPI_Buff)
+    if (allowed)
+        *allowed = *(int*)akAPI_Buff != 0;
+    if (out_story_id)
+        *out_story_id = *(int*)akAPI_Buff ? *((int*)akAPI_Buff+4) : story_id;
+    if (out_desc)
+        *out_desc = *(int*)akAPI_Buff ? (char*)akAPI_Buff+8 : desc;
 
     return true;
 }

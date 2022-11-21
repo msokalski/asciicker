@@ -3875,17 +3875,24 @@ void Game::ExecuteItem(int my_item)
 	Inventory::MyItem* mi = inventory.my_item + my_item;
 	Item* item = mi->item;
 
+	bool allowed = false;
+	int story_id;
+	const char* desc;
 	bool called = akAPI_OnItem(
-		mi->in_use ? 'U'/*inuse->unequip*/ : 'E',/*equip/consume*/
+		mi->in_use ? 'U'/*inuse->[U]nequip*/ : 'E',/*notused->[E]quip/consume*/
 		mi->story_id,
 		item->proto->kind,
 		item->proto->sub_kind,
 		item->proto->weight,
-		mi->desc);
+		mi->desc,
+		&allowed,
+		&story_id,
+		&desc);
 
 	if (called)
 	{
-		// check if we can proceed
+		if (!allowed)
+			return;
 	}
 
 	switch (item->proto->kind)
@@ -4312,19 +4319,19 @@ bool Game::PickItem(Item* item)
 
 			const char* desc = item->proto->desc;
 			int story_id = GetInstStoryID(item->inst);
-
+			bool allowed = false;
 			bool called = akAPI_OnItem(
 				'P', // PICK
 				story_id,
 				item->proto->kind,
 				item->proto->sub_kind,
 				item->proto->weight,
-				desc);
+				desc, &allowed, &story_id, &desc);
 
 			if (called)
 			{
-				// check if we can proceed
-				// check if story_id and/or desc should be modified
+				if (!allowed)
+					return false;
 			}
 
 			int xy[2] = { x,y };
@@ -4383,17 +4390,22 @@ bool Game::DropItem(int index)
 
 		Inventory::MyItem* mi = inventory.my_item + index;
 
+		bool allowed;
+		int story_id;
 		bool called = akAPI_OnItem(
 			'D', //DROP
 			mi->story_id,
 			mi->item->proto->kind,
 			mi->item->proto->sub_kind,
 			mi->item->proto->weight,
-			mi->desc);
+			mi->desc,
+			&allowed,&story_id,0);
 
 		if (called)
 		{
 			// check if we can proceed
+			if (!allowed)
+				return false;
 		}
 
 		inventory.RemoveItem(index, _pos, prev_yaw);
@@ -6996,7 +7008,8 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					else
 					{
 						//ConvertToUTF8((char*)akAPI_Buff,player.talk_box->buf,player.talk_box->len);
-						if (!akAPI_OnSay(player.talk_box->buf, player.talk_box->len))
+						bool allowed=false;
+						if (!akAPI_OnSay(player.talk_box->buf, player.talk_box->len,&allowed) || allowed)
 						{
 							int idx = player.talks;
 							player.talk[idx].box = player.talk_box;
@@ -8397,19 +8410,20 @@ void Game::EndContact(int id, int x, int y)
 							Item* item = items_inrange[i];
 							const char* desc = item->proto->desc;
 							int story_id = GetInstStoryID(item->inst); 
-							
+							bool allowed = false;
 							bool called = akAPI_OnItem(
 								'P', // PICK
 								story_id,
 								item->proto->kind,
 								item->proto->sub_kind,
 								item->proto->weight,
-								desc);
+								desc,
+								&allowed,&story_id,&desc);
 
 							if (called)
 							{
-								// check if we can proceed
-								// check if story_id and/or desc should be modified
+								if (!allowed)
+									break;
 							}
 
 							inventory.InsertItem(items_inrange[i], drop_at, desc, &story_id);

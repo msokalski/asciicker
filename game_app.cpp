@@ -1523,6 +1523,11 @@ int main(int argc, char* argv[])
 
 	InitAudio();
 
+    // TODO:
+    // REFACTOR ME SUCH TERM IS INITIALIZED BEFORE
+    // CONNECTING TO SERVER AND LOADING SPRITES & WORLD!
+    // this is really needed for driving intro / main manu
+
     /*
     int c16 = 13;
     printf("\x1B[%d;%dm%s",(c16&7)+40,c16<8?25:5,"\n");
