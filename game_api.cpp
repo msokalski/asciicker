@@ -275,7 +275,7 @@ void akAPI_Free()
 
 extern "C" void akAPI_Call(int id)
 {
-    if (!game)
+    if (!game || game->main_menu)
     {
         printf("game = NULL!\n");
         return;

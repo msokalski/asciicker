@@ -293,7 +293,9 @@ int Main()
 
     InitAudio();
 
-    // GOOD PLACE TO RUN INTRO -> MAIN_MENU
+    LoadSprites();
+
+    #if 0  // HANDLED BY MAIN MENU
 
     // here we must already know if serer or not server
 
@@ -302,8 +304,6 @@ int Main()
     float dir = 0;
     float pos[3] = {0,15,0};
     uint64_t stamp;
-
-    LoadSprites();
 
     {
         FILE* f = fopen("a3d/game_map_y8.a3d","rb");
@@ -388,6 +388,9 @@ int Main()
         }
     }
 
+    stamp = GetTime();
+    #endif // post
+
     render_buf = (AnsiCell*)malloc(sizeof(AnsiCell) * 160 * 160);
     if (!render_buf)
     {
@@ -395,8 +398,7 @@ int Main()
         return -7;
     }
 
-    stamp = GetTime();
-    game = CreateGame(water,pos,yaw,dir,stamp);
+    game = CreateGame();
 
     printf("all ok\n");
     return 0;
@@ -435,19 +437,19 @@ extern "C"
     void Keyb(int type, int val)
     {
         if (game)
-            game->OnKeyb((Game::GAME_KEYB)type,val);
+            game->OnKeyb((GAME_KEYB)type,val);
     }
 
     void Mouse(int type, int x, int y)
     {
         if (game)
-            game->OnMouse((Game::GAME_MOUSE)type, x, y);
+            game->OnMouse((GAME_MOUSE)type, x, y);
     }
 
     void Touch(int type, int id, int x, int y)
     {
         if (game)
-            game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
+            game->OnTouch((GAME_TOUCH)type, id, x, y);
     }
 
     void GamePad(int ev, int idx, float val)

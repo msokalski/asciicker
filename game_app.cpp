@@ -1687,6 +1687,7 @@ int main(int argc, char* argv[])
 
 	LoadSprites();
 
+    #if 0 // HANDLED BY MAIN MENU
 	{
         char a3d_path[1024 + 20];
         sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
@@ -1758,6 +1759,7 @@ int main(int argc, char* argv[])
             #endif
         }
 	}
+    #endif
 
 	if (gs)
 	{
@@ -2040,7 +2042,7 @@ int main(int argc, char* argv[])
     begin = GetTime();
     stamp = begin;
 
-    game = CreateGame(water,pos,yaw,dir,stamp);
+    game = CreateGame();
     
     if (jsfd>=0)
     {
@@ -2148,13 +2150,13 @@ int main(int argc, char* argv[])
                     if (event->wdy>0)
                     {  
                         xy_processed = true;
-                        game->OnMouse(Game::MOUSE_WHEEL_UP, mouse_x, mouse_y);
+                        game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_UP, mouse_x, mouse_y);
                     }
                     else
                     if (event->wdy<0)
                     {
                         xy_processed = true;
-                        game->OnMouse(Game::MOUSE_WHEEL_DOWN, mouse_x, mouse_y);
+                        game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_DOWN, mouse_x, mouse_y);
                     }
 
                     if (event->type & GPM_DOWN)
@@ -2163,19 +2165,19 @@ int main(int argc, char* argv[])
                         {
                             xy_processed = true;
                             mouse_down|=GPM_B_LEFT;
-                            game->OnMouse(Game::MOUSE_LEFT_BUT_DOWN, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_DOWN, mouse_x, mouse_y);
                         }
                         if (!(mouse_down&GPM_B_MIDDLE) && (event->buttons & GPM_B_MIDDLE))
                         {
                             xy_processed = true;
                             mouse_down|=GPM_B_MIDDLE;
-                            game->OnMouse(Game::MOUSE_MIDDLE_BUT_DOWN, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_MIDDLE_BUT_DOWN, mouse_x, mouse_y);
                         }
                         if (!(mouse_down&GPM_B_RIGHT) && (event->buttons & GPM_B_RIGHT))
                         {
                             xy_processed = true;
                             mouse_down|=GPM_B_RIGHT;
-                            game->OnMouse(Game::MOUSE_RIGHT_BUT_DOWN, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN, mouse_x, mouse_y);
                         }
                     }
 
@@ -2185,26 +2187,26 @@ int main(int argc, char* argv[])
                         {
                             xy_processed = true;
                             mouse_down&=~GPM_B_LEFT;
-                            game->OnMouse(Game::MOUSE_LEFT_BUT_UP, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_UP, mouse_x, mouse_y);
                         }
                         if ((mouse_down&GPM_B_MIDDLE) && (event->buttons & GPM_B_MIDDLE))
                         {
                             xy_processed = true;
                             mouse_down&=~GPM_B_MIDDLE;
-                            game->OnMouse(Game::MOUSE_MIDDLE_BUT_UP, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_MIDDLE_BUT_UP, mouse_x, mouse_y);
                         }
                         if ((mouse_down&GPM_B_RIGHT) && (event->buttons & GPM_B_RIGHT))
                         {
                             xy_processed = true;
                             mouse_down&=~GPM_B_RIGHT;
-                            game->OnMouse(Game::MOUSE_RIGHT_BUT_UP, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_UP, mouse_x, mouse_y);
                         }
                     }                
 
                     if (!xy_processed && (event->type & (GPM_MOVE|GPM_DRAG)))
                     {
                         xy_processed = true;
-                        game->OnMouse(Game::MOUSE_MOVE, mouse_x, mouse_y);
+                        game->OnMouse(GAME_MOUSE::MOUSE_MOVE, mouse_x, mouse_y);
                     }
                 }
 
@@ -2283,7 +2285,7 @@ int main(int argc, char* argv[])
                 if (stream[i] == 27 && i == bytes-1)
                 {
                     // there are still chances this would be followed by esc sequence
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_ESCAPE);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_ESCAPE);
                     break;
                 }
 
@@ -2293,17 +2295,17 @@ int main(int argc, char* argv[])
                     if (stream[i] == ' ')
                     {
                         // we need it both as char for TalkBox and as press for Jump
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, ' ');
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_SPACE);
+                        game->OnKeyb(GAME_KEYB::KEYB_CHAR, ' ');
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_SPACE);
                     }
                     else
                     if (stream[i] == '\t')
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_TAB);
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_TAB);
                     else
                     if (stream[i] == 127) // backspace (8) is encoded as del (127)
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, 8);
+                        game->OnKeyb(GAME_KEYB::KEYB_CHAR, 8);
                     else
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, stream[i]);
+                        game->OnKeyb(GAME_KEYB::KEYB_CHAR, stream[i]);
                     i++;
                     continue;
                 }
@@ -2322,7 +2324,7 @@ int main(int argc, char* argv[])
                     if (stream[i+4] == 0x7E)
                     {
                         // no mods
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, a3d_fkey);
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, a3d_fkey);
                         i+=5;
                         continue;
                     }
@@ -2346,7 +2348,7 @@ int main(int argc, char* argv[])
                             a3d_mods |= 0x4<<8;
                         }                            
 
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, a3d_fkey | a3d_mods);
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, a3d_fkey | a3d_mods);
                         i+=7;
                         continue;
                     }
@@ -2356,7 +2358,7 @@ int main(int argc, char* argv[])
                     stream[i+3] == 0x35 && stream[i+4] == 0x7E)
                 {
                     // F5
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F5);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F5);
                     i+=5;
                     continue;
                 }
@@ -2364,7 +2366,7 @@ int main(int argc, char* argv[])
                     stream[i+3] == 0x37 && stream[i+4] == 0x7E)
                 {
                     // F6
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F6);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F6);
                     i+=5;
                     continue;
                 }
@@ -2372,7 +2374,7 @@ int main(int argc, char* argv[])
                     stream[i+3] == 0x38 && stream[i+4] == 0x7E)
                 {
                     // F7
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F7);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F7);
                     i+=5;
                     continue;
                 }
@@ -2380,7 +2382,7 @@ int main(int argc, char* argv[])
                     stream[i+3] == 0x39 && stream[i+4] == 0x7E)
                 {
                     // F8
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F8);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F8);
                     i+=5;
                     continue;
                 }
@@ -2389,75 +2391,75 @@ int main(int argc, char* argv[])
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'P')
                 {
                     // F1
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F1);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F1);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'Q')
                 {
                     // F2
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F2);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F2);
                     i+=3;
                 }
 
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '3' && stream[i+3] == '~')
                 {
                     // DEL
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, 127);
+                    game->OnKeyb(GAME_KEYB::KEYB_CHAR, 127);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '2' && stream[i+3] == '~')
                 {
                     // INS
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_INSERT);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_INSERT);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '5' && stream[i+3] == '~')
                 {
                     // PGUP
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEUP);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEUP);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '6' && stream[i+3] == '~')
                 {
                     // PGDN
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN);
                     i+=4;
                 }
 
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'D')
                 {
                     // left
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_LEFT);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_LEFT);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'C')
                 {
                     // right
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_RIGHT);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_RIGHT);
                     i+=3;
                 }                
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'A')
                 {
                     // up
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_UP);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_UP);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'B')
                 {
                     // down
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DOWN);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_DOWN);
                     i+=3;
                 }    
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'H')
                 {
                     // home
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_HOME);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_HOME);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'F')
                 {
                     // end
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_END);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_END);
                     i+=3;
                 }    
 
@@ -2489,36 +2491,36 @@ int main(int argc, char* argv[])
                     switch (stream[i+5])
                     {
                         case 'P': // f1
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F1 | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F1 | a3d_mods);
                             break;
                         case 'Q': // f2
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F2 | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F2 | a3d_mods);
                             break;
 
                         case '3': // del
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DELETE | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_DELETE | a3d_mods);
                             break;
                         case '2': // ins
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_INSERT | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_INSERT | a3d_mods);
                             break;
                         case '5': // pgup
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEUP | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEUP | a3d_mods);
                             break;
                         case '6': // pgdn
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN | a3d_mods);
                             break;
 
                         case 'A': // up
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_UP | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_UP | a3d_mods);
                             break;
                         case 'B': // down
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DOWN | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_DOWN | a3d_mods);
                             break;
                         case 'C': // right
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_RIGHT | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_RIGHT | a3d_mods);
                             break;
                         case 'D': // left
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_LEFT | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_LEFT | a3d_mods);
                             break;
                     }
 
@@ -2560,17 +2562,17 @@ int main(int argc, char* argv[])
 										{
 											// wheel
 											if (but == 0)
-												game->OnMouse(Game::MOUSE_WHEEL_UP, val[1] - 1, val[2] - 1);
+												game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_UP, val[1] - 1, val[2] - 1);
 											else
 											if (but == 1)
-												game->OnMouse(Game::MOUSE_WHEEL_DOWN, val[1] - 1, val[2] - 1);
+												game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_DOWN, val[1] - 1, val[2] - 1);
 										}
 										else
                                         if (val[0] >= 32)
                                         {
                                             // motion
                                             int a=0;
-                                            game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                            game->OnMouse(GAME_MOUSE::MOUSE_MOVE,val[1]-1,val[2]-1);
                                         }
                                         else
                                         if (c=='M')
@@ -2578,14 +2580,14 @@ int main(int argc, char* argv[])
                                             switch(but)
                                             {
                                                 case 0:
-                                                    game->OnMouse(Game::MOUSE_LEFT_BUT_DOWN,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_DOWN,val[1]-1,val[2]-1);
                                                     break;
                                                 case 2:
-                                                    game->OnMouse(Game::MOUSE_RIGHT_BUT_DOWN,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN,val[1]-1,val[2]-1);
                                                     break;
 
                                                 default:
-                                                    game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_MOVE,val[1]-1,val[2]-1);
                                             }
                                         }
                                         else
@@ -2594,13 +2596,13 @@ int main(int argc, char* argv[])
                                             switch(but)
                                             {
                                                 case 0:
-                                                    game->OnMouse(Game::MOUSE_LEFT_BUT_UP,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_UP,val[1]-1,val[2]-1);
                                                     break;
                                                 case 2:
-                                                    game->OnMouse(Game::MOUSE_RIGHT_BUT_UP,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_UP,val[1]-1,val[2]-1);
                                                     break;
                                                 default:
-                                                    game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_MOVE,val[1]-1,val[2]-1);
                                             }
                                         }
                                     }
@@ -2935,7 +2937,10 @@ int main(int argc, char* argv[])
         free(buf);
 
     if (game)
+    {
+        FreeGame(game);
         DeleteGame(game);
+    }
 
     SetScreen(false);
 

@@ -171,13 +171,13 @@ void term_mouse(A3D_WND* wnd, int x, int y, MouseInfo mi)
 			break;
 		}
 
-		case MouseInfo::MOVE:		term->game->OnMouse(Game::GAME_MOUSE::MOUSE_MOVE, x, y); break;
-		case MouseInfo::LEFT_DN:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_LEFT_BUT_DOWN, x, y); break;
-		case MouseInfo::LEFT_UP:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_LEFT_BUT_UP, x, y); break;
-		case MouseInfo::RIGHT_DN:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN, x, y); break;
-		case MouseInfo::RIGHT_UP:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_RIGHT_BUT_UP, x, y); break;
-		case MouseInfo::WHEEL_UP:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_WHEEL_UP, x, y); break;
-		case MouseInfo::WHEEL_DN:	term->game->OnMouse(Game::GAME_MOUSE::MOUSE_WHEEL_DOWN, x, y); break;
+		case MouseInfo::MOVE:		term->game->OnMouse(GAME_MOUSE::MOUSE_MOVE, x, y); break;
+		case MouseInfo::LEFT_DN:	term->game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_DOWN, x, y); break;
+		case MouseInfo::LEFT_UP:	term->game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_UP, x, y); break;
+		case MouseInfo::RIGHT_DN:	term->game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN, x, y); break;
+		case MouseInfo::RIGHT_UP:	term->game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_UP, x, y); break;
+		case MouseInfo::WHEEL_UP:	term->game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_UP, x, y); break;
+		case MouseInfo::WHEEL_DN:	term->game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_DOWN, x, y); break;
 	}
 }
 
@@ -199,11 +199,14 @@ void term_init(A3D_WND* wnd)
 
 	uint64_t stamp = a3dGetTime();
 
+	term->game = CreateGame();
+	#ifdef EDITOR
 	float pos[3] = { pos_x, pos_y, pos_z };
 	float yaw = rot_yaw;
 	float dir = 0;
-	int water = probe_z;
-	term->game = CreateGame(water, pos, yaw, dir, stamp);
+	int water = probe_z;	
+	InitGame(term->game, water, pos, yaw, dir, stamp);
+	#endif
 
 	int loglen = 999;
 	char logstr[1000] = "";
@@ -408,7 +411,7 @@ void term_init(A3D_WND* wnd)
 void term_keyb_char(A3D_WND* wnd, wchar_t chr)
 {
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
-	term->game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, (int)chr);
+	term->game->OnKeyb(GAME_KEYB::KEYB_CHAR, (int)chr);
 }
 
 void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
@@ -434,7 +437,7 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 		{
 			// send press
 			if (!(ki & A3D_AUTO_REPEAT))
-				term->game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, ki);
+				term->game->OnKeyb(GAME_KEYB::KEYB_PRESS, ki);
 		}
 		else
 		if (ki == A3D_F11)
@@ -442,11 +445,11 @@ void term_keyb_key(A3D_WND* wnd, KeyInfo ki, bool down)
 			ToggleFullscreen(term->game);
 		}
 		else
-			term->game->OnKeyb(Game::GAME_KEYB::KEYB_DOWN, ki);
+			term->game->OnKeyb(GAME_KEYB::KEYB_DOWN, ki);
 	}
 	else
 		if (ki != A3D_F11)
-			term->game->OnKeyb(Game::GAME_KEYB::KEYB_UP, ki);
+			term->game->OnKeyb(GAME_KEYB::KEYB_UP, ki);
 }
 
 void term_keyb_focus(A3D_WND* wnd, bool set)
@@ -460,7 +463,10 @@ void term_close(A3D_WND* wnd)
 	TERM_LIST* term = (TERM_LIST*)a3dGetCookie(wnd);
 
 	if (term->game)
+	{
+		FreeGame(term->game);
 		DeleteGame(term->game);
+	}
 
 	glDeleteTextures(1, &term->tex);
 	glDeleteVertexArrays(1, &term->vao);

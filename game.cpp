@@ -16,6 +16,8 @@
 #include "game_api.h"
 #include "lexer.h"
 
+#include "mainmenu.h"
+
 uint8_t ConvertToCP437(uint32_t uc)
 {
 	static const uint8_t tab00A1[95]=
@@ -3298,12 +3300,10 @@ void FreeSprites()
 		FreeSprite(s);
 }
 
-Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
+// TODO:
+// CreateGame will be called before loading world !!!
+void InitGame(Game* g, int water, float pos[3], float yaw, float dir, uint64_t stamp)
 {
-	// load defaults
-	Game* g = (Game*)malloc(sizeof(Game));
-	memset(g, 0, sizeof(Game));
-
 	g->menu_depth = -1;
 
 	g->perspective = true;
@@ -3783,10 +3783,29 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 	if (!prime_game)
 		prime_game = g;
+}
+
+Game* CreateGame()
+{
+	// load defaults
+	Game* g = (Game*)malloc(sizeof(Game));
+	memset(g, 0, sizeof(Game));
+
+	#ifdef EDITOR
+	g->main_menu = false;
+	#else
+	g->main_menu = true; // in this case we must not use World / Terrain etc ...
+	#endif
+
 	return g;
 }
 
 void DeleteGame(Game* g)
+{
+	free(g);
+}
+
+void FreeGame(Game* g)
 {
 	if (g)
 	{
@@ -3853,8 +3872,6 @@ void DeleteGame(Game* g)
 			h = n;
 		}
 		#endif
-
-		free(g);
 	}
 }
 
@@ -4787,6 +4804,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	render_size[0] = width;
 	render_size[1] = height;
+
+	if (main_menu)
+	{
+		MainMenu_Render(_stamp, ptr, width, height);
+		return;
+	}
 
 	float lt[4] = { 1,0,1,0.5 };
 	float n = lt[0] * lt[0] + lt[1] * lt[1] + lt[2] * lt[2];
@@ -6868,6 +6891,10 @@ void Game::OnSize(int w, int h, int fw, int fh)
 	input.size[1] = h;
 	font_size[0] = fw;
 	font_size[1] = fh;
+
+
+	if (main_menu)
+		MainMenu_OnSize(w,h,fw,fh);
 }
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)
@@ -6890,6 +6917,12 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	}
 
 	// handle layers first ...
+	if (main_menu)
+	{
+		MainMenu_OnKeyb(keyb,key);
+		return;
+	}
+
 	if (menu_depth>=0)
 	{
 		MenuKeyb(keyb,key);
@@ -8647,6 +8680,13 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 	*/
 
 	// handle layers first ...
+
+	if (main_menu)
+	{
+		MainMenu_OnMouse(mouse,x,y);
+		return;
+	}
+
 	if (menu_depth>=0)
 	{
 		MenuMouse(mouse,x,y);
@@ -8875,6 +8915,13 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 
 
 	// handle layers first ...
+
+	if (main_menu)
+	{
+		MainMenu_OnTouch(touch,id,x,y);
+		return;
+	}
+
 	if (menu_depth>=0)
 	{
 		MenuTouch(touch,id,x,y);
@@ -8957,6 +9004,11 @@ void Game::OnFocus(bool set)
 		input.size[0] = w;
 		input.size[1] = h;
 	}
+
+	if (main_menu)
+	{
+		MainMenu_OnFocus(set);
+	}
 }
 
 void Game::OnMessage(const uint8_t* msg, int len)
@@ -8980,10 +9032,22 @@ void Game::OnPadMount(bool connect)
 	{
 		MenuPadMount(connect);
 	}
+
+	if (main_menu)
+	{
+		MainMenu_OnPadMount(connect);
+		return;
+	}	
 }
 
 void Game::OnPadButton(int b, bool down)
 {
+	if (main_menu)
+	{
+		MainMenu_OnPadButton(b,down);
+		return;
+	}	
+
 	if (show_gamepad)
 	{
 		return;
@@ -9431,6 +9495,12 @@ void Game::OnPadButton(int b, bool down)
 
 void Game::OnPadAxis(int a, int16_t pos)
 {
+	if (main_menu)
+	{
+		MainMenu_OnPadAxis(a,pos);
+		return;
+	}	
+
 	if (show_gamepad)
 	{
 		return;
@@ -9809,6 +9879,12 @@ void menu_gamepad(Game* g)
 	GamePadOpen(gamepad_close,(void*)g);
 }
 
+void main_menu(Game* g)
+{
+	g->CloseMenu();
+	g->main_menu = true;
+}
+
 static const Menu settings_menu[]=
 {
 	{"ZOOM IN", 0, menu_zoomin, 0},
@@ -9840,6 +9916,7 @@ static const Menu game_menu[]=
 {
 	{"SETTINGS", settings_menu, 0, 0},
 	{"CONTROLS", controls_menu, 0, 0},
+	{"MAIN MENU", 0, main_menu, 0},
 	{"EXIT?", exit_menu, 0, 0},
 	{0}
 };

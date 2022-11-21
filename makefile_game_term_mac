@@ -6,6 +6,7 @@ BIN := .run/game_term
 
 # source files
 SRCS :=	game.cpp \
+		mainmenu.cpp \
 	    game_api.cpp \
 		gamepad.cpp \
 		font1.cpp \

@@ -85,6 +85,7 @@ emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
     font1.cpp \
     gamepad.cpp \
     game.cpp \
+    mainmenu.cpp \
     game_api.cpp \
     game_web.cpp \
     enemygen.cpp \

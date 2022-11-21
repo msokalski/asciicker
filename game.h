@@ -9,6 +9,34 @@
 #include "inventory.h"
 #include "network.h"
 
+enum GAME_KEYB
+{
+	KEYB_DOWN,
+	KEYB_UP,
+	KEYB_CHAR,
+	KEYB_PRESS, // non-char terminal input with modifiers
+};
+
+enum GAME_MOUSE
+{
+	MOUSE_MOVE,
+	MOUSE_LEFT_BUT_DOWN,
+	MOUSE_LEFT_BUT_UP,
+	MOUSE_RIGHT_BUT_DOWN,
+	MOUSE_RIGHT_BUT_UP,
+	MOUSE_MIDDLE_BUT_DOWN,
+	MOUSE_MIDDLE_BUT_UP,
+	MOUSE_WHEEL_DOWN,
+	MOUSE_WHEEL_UP
+};
+
+enum GAME_TOUCH
+{
+	TOUCH_MOVE,
+	TOUCH_BEGIN,
+	TOUCH_END,
+	TOUCH_CANCEL
+};
 
 void Buzz();
 
@@ -247,6 +275,8 @@ struct Game
 
 	uint64_t stamp;
 
+	bool main_menu;
+
 	static const int fps_window_size = 100;
 	int fps_window_pos;
 	uint64_t fps_window[fps_window_size];
@@ -409,35 +439,6 @@ struct Game
 
 	Input input;
 
-	enum GAME_KEYB
-	{
-		KEYB_DOWN,
-		KEYB_UP,
-		KEYB_CHAR,
-		KEYB_PRESS, // non-char terminal input with modifiers
-	};
-
-	enum GAME_MOUSE
-	{
-		MOUSE_MOVE,
-		MOUSE_LEFT_BUT_DOWN,
-		MOUSE_LEFT_BUT_UP,
-		MOUSE_RIGHT_BUT_DOWN,
-		MOUSE_RIGHT_BUT_UP,
-		MOUSE_MIDDLE_BUT_DOWN,
-		MOUSE_MIDDLE_BUT_UP,
-		MOUSE_WHEEL_DOWN,
-		MOUSE_WHEEL_UP
-	};
-
-	enum GAME_TOUCH
-	{
-		TOUCH_MOVE,
-		TOUCH_BEGIN,
-		TOUCH_END,
-		TOUCH_CANCEL
-	};
-
 	// just accumulates input
 	void OnKeyb(GAME_KEYB keyb, int key);
 	void OnMouse(GAME_MOUSE mouse, int x, int y);
@@ -483,8 +484,11 @@ struct Game
 	int menu_temp; 
 };
 
-Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp);
+Game* CreateGame();
 void DeleteGame(Game* g);
+
+void InitGame(Game* g, int water, float pos[3], float yaw, float dir, uint64_t stamp);
+void FreeGame(Game* g);
 
 void LoadSprites();
 void FreeSprites();

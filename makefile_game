@@ -13,6 +13,7 @@ SRCS :=	gl.c \
         term.cpp \
 		font1.cpp \
 		game.cpp \
+		mainmenu.cpp \
 	    game_api.cpp \
 		gamepad.cpp \
 		enemygen.cpp \
