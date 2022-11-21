@@ -7384,6 +7384,18 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	else
 	if (keyb == GAME_KEYB::KEYB_PRESS)
 	{
+		int mods = (key>>8) & 0xFF;
+		key = key & 0xFF;
+
+		if (key == A3D_ESCAPE)
+		{
+			// cancel all contacts
+			for (int i = 0; i < 4; i++)
+			{
+				input.contact[i].action = Input::Contact::NONE;
+			}
+		}
+
 		// it is like a KEYB_CHAR (not producing releases) but for non-printable keys
 		// main input from terminals 
 		// ....
@@ -7420,9 +7432,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			if (mem_idx >= 0)
 			{
 				// if +shift then restore!
-				bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
-				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
-				if (left_shift || right_shift)
+				if (mods & 1 /*shift*/)
 				{
 					memset(player.talk_box, 0, sizeof(TalkBox));
 					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);
@@ -7496,10 +7506,11 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			}
 		}
 
-		if (key == A3D_TAB)
+		//if (key == A3D_TAB)
+		if ((key == A3D_TAB || key == A3D_ESCAPE) /*&& !auto_rep*/)
 		{
 			// HANDLED BY EMULATION!
-			if (!player.talk_box/* && show_buts*/)
+			if (!player.talk_box && key == A3D_TAB/* && show_buts*/)
 			{
 				CancelItemContacts();
 				//show_buts = false;
@@ -7518,6 +7529,86 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			else
 			{
 				//show_buts = true;
+
+				if (player.talk_box->len > 0 && key == A3D_TAB)
+				{
+					if (player.talks == 3)
+					{
+						free(player.talk[0].box);
+						player.talks--;
+						for (int i = 0; i < player.talks; i++)
+							player.talk[i] = player.talk[i + 1];
+					}
+
+					if (player.talk_box->len>1 &&
+						player.talk_box->buf[0]=='\\' && 
+						player.talk_box->buf[1]!='\\')
+					{
+						// hacker mode
+						akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
+					}
+					else
+					{
+						//ConvertToUTF8((char*)akAPI_Buff,player.talk_box->buf,player.talk_box->len);
+						bool allowed=false;
+						if (!akAPI_OnSay(player.talk_box->buf, player.talk_box->len,&allowed) || allowed)
+						{
+							int idx = player.talks;
+							player.talk[idx].box = player.talk_box;
+							player.talk[idx].pos[0] = player.pos[0];
+							player.talk[idx].pos[1] = player.pos[1];
+							player.talk[idx].pos[2] = player.pos[2];
+							player.talk[idx].stamp = stamp;
+
+							if (server)
+							{
+								STRUCT_REQ_TALK req_talk = { 0 };
+								req_talk.token = 'T';
+								req_talk.len = player.talk[idx].box->len;
+								memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+								server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+							}
+
+							ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+							player.talks++;
+
+							// alloc new
+							player.talk_box = 0;
+
+							TalkBox_blink = 32;
+							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+						}
+						
+						memset(player.talk_box, 0, sizeof(TalkBox));
+						player.talk_box->max_width = 33;
+						player.talk_box->max_height = 7; // 0: off
+						int s[2], p[2];
+						player.talk_box->Reflow(s, p);
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
+				}
+				else
+				{
+					free(player.talk_box);
+					player.talk_box = 0;
+				}
+
+				if (show_keyb)
+					memset(keyb_key, 0, 32);
+				show_keyb = false;
+				KeybAutoRepChar = 0;
+				KeybAutoRepCap = 0;
+				for (int i=0; i<4; i++)
+				{
+					if (input.contact[i].action == Input::Contact::KEYBCAP)
+						input.contact[i].action = Input::Contact::NONE;
+				}
+
+				#if 0
+				//show_buts = true;
 				free(player.talk_box);
 				player.talk_box = 0;
 				if (show_keyb)
@@ -7530,6 +7621,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					if (input.contact[i].action == Input::Contact::KEYBCAP)
 						input.contact[i].action = Input::Contact::NONE;
 				}
+				#endif
 			}
 		}		
 	}
@@ -9931,7 +10023,7 @@ void Game::MenuKeyb(GAME_KEYB keyb, int key)
 	}
 
 	if (keyb==KEYB_CHAR && (key=='\\' || key=='|') ||
-		keyb==KEYB_DOWN && key==A3D_ESCAPE)
+		(keyb==KEYB_DOWN || keyb==KEYB_PRESS) && key==A3D_ESCAPE)
 	{
 		CloseMenu();
 		return;

@@ -29,8 +29,8 @@
 
         //    /*
             "program": "${workspaceFolder}/.run/game",
-        //    "args": ["-term"],
-            //"externalConsole": true,
+            "args": ["-term"],
+            "externalConsole": true,
         //    */
 
             /*

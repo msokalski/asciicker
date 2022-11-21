@@ -38,7 +38,8 @@
 			"strstream": "cpp",
 			"atomic": "cpp",
 			"memory": "cpp",
-			"charconv": "cpp"
+			"charconv": "cpp",
+			"__node_handle": "cpp"
 		}
 	}
 }

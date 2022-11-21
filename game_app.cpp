@@ -2266,13 +2266,11 @@ int main(int argc, char* argv[])
 
             int bytes = stream_bytes + fresh_bytes;
 
-            /*
             FILE* kl = fopen("keylog.txt","a");
             for (int i=0; i<bytes; i++)
                 fprintf(kl,"0x%02X, ",stream[i]);
             fprintf(kl,"\n");
             fclose(kl);
-            */
 
             int i = 0;
             while (i<bytes)
@@ -2280,6 +2278,14 @@ int main(int argc, char* argv[])
                 int j=i;
 
                 int type = 0, mods = 0;
+
+
+                if (stream[i] == 27 && i == bytes-1)
+                {
+                    // there are still chances this would be followed by esc sequence
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_ESCAPE);
+                    break;
+                }
 
                 if (stream[i]>=' ' && stream[i]<=127 || 
                     stream[i]==8 || stream[i]=='\r' || stream[i]=='\n' || stream[i]=='\t')
@@ -2306,6 +2312,79 @@ int main(int argc, char* argv[])
                 // TODO: non-kitty just to rotate, should emu sticky down
                 // F1,F2,DEL,INS,PGUP,PGDN
                 // ...
+
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    (stream[i+3] == 0x35 || stream[i+3] == 0x37 || stream[i+3] == 0x38 || stream[i+3] == 0x39))
+                {
+                    int a3d_mods = 0;
+                    int a3d_fkey = stream[i+3] == 0x35 ? A3D_F5 : stream[i+3] - 0x37 + A3D_F6;
+
+                    if (stream[i+4] == 0x7E)
+                    {
+                        // no mods
+                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, a3d_fkey);
+                        i+=5;
+                        continue;
+                    }
+
+                    if (bytes-i >= 7 && stream[i+4] == 0x3B && stream[i+6] == 0x7E)
+                    {
+                        int mods = stream[i+5] - 0x31;
+                        if (mods&1)
+                        {
+                            // shift
+                            a3d_mods |= 0x1<<8;
+                        }
+                        if (mods&2)
+                        {
+                            // alt
+                            a3d_mods |= 0x2<<8;
+                        }
+                        if (mods&4)
+                        {
+                            // ctrl ???
+                            a3d_mods |= 0x4<<8;
+                        }                            
+
+                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, a3d_fkey | a3d_mods);
+                        i+=7;
+                        continue;
+                    }
+                }
+
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x35 && stream[i+4] == 0x7E)
+                {
+                    // F5
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F5);
+                    i+=5;
+                    continue;
+                }
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x37 && stream[i+4] == 0x7E)
+                {
+                    // F6
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F6);
+                    i+=5;
+                    continue;
+                }
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x38 && stream[i+4] == 0x7E)
+                {
+                    // F7
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F7);
+                    i+=5;
+                    continue;
+                }
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x39 && stream[i+4] == 0x7E)
+                {
+                    // F8
+                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F8);
+                    i+=5;
+                    continue;
+                }
+
 
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'P')
                 {
@@ -2415,6 +2494,7 @@ int main(int argc, char* argv[])
                         case 'Q': // f2
                             game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F2 | a3d_mods);
                             break;
+
                         case '3': // del
                             game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DELETE | a3d_mods);
                             break;
