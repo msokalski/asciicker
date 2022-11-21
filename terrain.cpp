@@ -1530,10 +1530,12 @@ void QueryTerrainSample(QuadItem* q, int x, int y, int range, void(*cb)(Patch* p
 #ifdef DARK_TERRAIN
 void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor)
 {
+	static int dark_samples = 0;
 	struct Updater
 	{
 		static void cb(Patch* p, int u, int v, double coords[3], void* cookie)
 		{
+			dark_samples++;
 			Updater* updater = (Updater*)cookie;
 
 			double hit[3] = { coords[0], coords[1], coords[2] };
@@ -1579,6 +1581,9 @@ void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor)
 
 	if (t->root)
 		QueryTerrainSample(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, Updater::cb, &updater);
+
+	printf("updated %d terrain samples\n", dark_samples);
+
 }
 #endif
 

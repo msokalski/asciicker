@@ -9881,8 +9881,10 @@ void menu_gamepad(Game* g)
 
 void main_menu(Game* g)
 {
+	#ifndef EDITOR
 	g->CloseMenu();
 	g->main_menu = true;
+	#endif
 }
 
 static const Menu settings_menu[]=
