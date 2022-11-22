@@ -3038,7 +3038,7 @@ void akAPI_CB(int id)
     }
 
     uint64_t t1 = GetTime();
-    printf("CALLBACK in %d us\n", (int)(t1-t0));
+    //printf("CALLBACK in %d us\n", (int)(t1-t0));
 }
 
 void free_v8()
@@ -3203,5 +3203,5 @@ void akAPI_Exec(const char* str, int len, bool root)
         free(buf);
 
     uint64_t t1 = GetTime();
-    printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
+    //printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
 }

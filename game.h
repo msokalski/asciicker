@@ -312,6 +312,7 @@ struct Game
 	uint8_t keyb_key[32]; // simulated key presses by touch/mouse
 
 	int water;
+	float light[4];
 	float prev_yaw;
 	float yaw_vel;
 
@@ -487,7 +488,7 @@ struct Game
 Game* CreateGame();
 void DeleteGame(Game* g);
 
-void InitGame(Game* g, int water, float pos[3], float yaw, float dir, uint64_t stamp);
+void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4], uint64_t stamp);
 void FreeGame(Game* g);
 
 void LoadSprites();

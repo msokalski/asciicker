@@ -103,6 +103,12 @@ void akAPI_Init()
             getMove : function(arr3, ofs) { akAPI_Call(12); akReadF32(arr3,ofs|0,0,3); },
             setMove : function(arr3, ofs) { akWriteF32(arr3,ofs|0,0,3); akAPI_Call(13); },
 
+            getWater : function() { akAPI_Call(14); return akGetF32(0); },
+            setWater : function(flt) { akSetF32(Number(flt)||0,0); akAPI_Call(15); },
+
+            getLight : function(arr4, ofs) { akAPI_Call(16); akReadF32(arr4,ofs|0,0,4); },
+            setLight : function(arr4, ofs) { akWriteF32(arr4,ofs|0,0,4); akAPI_Call(17); },
+
             //////////////////////////////////////////////////////////////////////
 
             say  : function(str) { akSetStr(String(str),0); akAPI_Call(100); },
@@ -114,7 +120,8 @@ void akAPI_Init()
 
             //////////////////////////////////////////////////////////////////////
             onSay: function(fnc) { cb(0,fnc); },
-            onItem: function(fnc) { cb(1,fnc); }
+            onItem: function(fnc) { cb(1,fnc); },
+            onFrame: function(fnc) { cb(2,fnc); }
         };
        
         Object.freeze(ak);
@@ -197,6 +204,13 @@ void akAPI_Init()
                         akSetStr(desc,8);
                     }
                     break;
+
+                case 2:
+                // onFrame()  
+                {
+                    ret = fnc.apply(akAPI_This);            
+                    break;
+                }
             }
         };
 
@@ -264,6 +278,16 @@ bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, c
     if (out_desc)
         *out_desc = *(int*)akAPI_Buff ? (char*)akAPI_Buff+8 : desc;
 
+    return true;
+}
+
+bool akAPI_OnFrame()
+{
+    const int id = 2;
+    if (!akAPI_CheckCB(id))
+        return false;
+
+    akAPI_CB(id);    
     return true;
 }
 
@@ -388,6 +412,31 @@ extern "C" void akAPI_Call(int id)
             break;
         }
 
+        case 14: 
+        // getWater : function() { akAPI_Call(13); return akGetF32(0); },
+        {
+            *(float*)akAPI_Buff = game->water;
+            break;
+        }
+        case 15:
+        // setWater : function(flt) { akSetF32(Number(flt)||0,0); akAPI_Call(14); },
+        {
+            game->water = *(float*)akAPI_Buff,0;
+            break;
+        }
+
+        case 16: 
+        // getLight : function(arr4, ofs) { akAPI_Call(15); akReadF32(arr4,ofs|0,0,4); },
+        {
+            memcpy(akAPI_Buff, game->light, sizeof(float[4]));
+            break;
+        }
+        case 17: 
+        // setLight : function(arr4, ofs) { akWriteF32(arr4,ofs|0,0,4); akAPI_Call(16); },
+        {
+            memcpy(game->light, akAPI_Buff, sizeof(float[4]));
+            break;
+        }
 
         ////////////////////////////////////////////////////////////////////////
 

@@ -3302,8 +3302,9 @@ void FreeSprites()
 
 // TODO:
 // CreateGame will be called before loading world !!!
-void InitGame(Game* g, int water, float pos[3], float yaw, float dir, uint64_t stamp)
+void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4], uint64_t stamp)
 {
+	memset(g, 0, sizeof(Game));	
 	g->menu_depth = -1;
 
 	g->perspective = true;
@@ -3770,6 +3771,9 @@ void InitGame(Game* g, int water, float pos[3], float yaw, float dir, uint64_t s
 
 	g->water = water;
 	g->prev_yaw = yaw;
+
+	for (int i=0; i<4; i++)
+		g->light[i]=lt[i];	
 
 	// fancy part
 	// create player sprite instance inside world but never paint
@@ -4811,7 +4815,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		return;
 	}
 
-	float lt[4] = { 1,0,1,0.5 };
+	float lt[4] = {light[0],light[1],light[2],light[3]};
 	float n = lt[0] * lt[0] + lt[1] * lt[1] + lt[2] * lt[2];
 	if (n > 0.001)
 	{
@@ -6027,6 +6031,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	if (input.shoot)
 		input.shoot = false;
+
+
+	bool called = akAPI_OnFrame();
 
 	Item** inrange = GetNearbyItems(renderer);
 

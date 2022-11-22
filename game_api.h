@@ -19,10 +19,12 @@ void akAPI_CB(int id);
 bool akAPI_OnSay(const char* str, int len, bool* allowed=0);
 bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, const char* str,
                   bool* allowed=0, int* out_story_id=0, const char** out_desc=0);
+bool akAPI_OnFrame();                  
 #else
 bool akAPI_OnSay(const char* str, int len, bool* allowed=0) {return false;}
 bool akAPI_OnItem(int action, int story_id, int kind, int subkind, int weight, const char* str,
                   bool* allowed=0, int* out_story_id=0, const char** out_desc=0) {return false;}
+bool akAPI_OnFrame() {return false;}
 #endif
 
 #endif

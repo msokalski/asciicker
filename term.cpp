@@ -204,8 +204,9 @@ void term_init(A3D_WND* wnd)
 	float pos[3] = { pos_x, pos_y, pos_z };
 	float yaw = rot_yaw;
 	float dir = 0;
-	int water = probe_z;	
-	InitGame(term->game, water, pos, yaw, dir, stamp);
+	int water = probe_z;
+	float lt[4] = { 1,0,1,0.5 };
+	InitGame(term->game, water, pos, yaw, dir, lt, stamp);
 	#endif
 
 	int loglen = 999;
