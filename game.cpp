@@ -3304,7 +3304,7 @@ void FreeSprites()
 // CreateGame will be called before loading world !!!
 void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4], uint64_t stamp)
 {
-	memset(g, 0, sizeof(Game));	
+	//memset(g, 0, sizeof(Game));	
 	g->menu_depth = -1;
 
 	g->perspective = true;
@@ -7471,8 +7471,12 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0)
 			{
+				// mix of GUI/TERM mods, dirty but works!
+				bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
+
 				// if +shift then restore!
-				if (mods & 1 /*shift*/)
+				if ((mods & 1) || left_shift || right_shift)
 				{
 					memset(player.talk_box, 0, sizeof(TalkBox));
 					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);

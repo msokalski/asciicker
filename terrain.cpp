@@ -1530,7 +1530,9 @@ void QueryTerrainSample(QuadItem* q, int x, int y, int range, void(*cb)(Patch* p
 #ifdef DARK_TERRAIN
 void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor)
 {
-	static int dark_samples = 0;
+	static int dark_samples;
+	dark_samples = 0;
+	
 	struct Updater
 	{
 		static void cb(Patch* p, int u, int v, double coords[3], void* cookie)
