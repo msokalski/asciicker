@@ -14,32 +14,199 @@ static bool show_continue = false;
 
 static uint64_t mainmenu_stamp = 0;
 
-struct Manifest // till we have no real manifests
+struct Manifest
 {
-    const char* sprite_icon;
-    const char* title_icon;
+    const char* icon_xp;
+    const char* title;
     const char* desc;
-    const char* a3d;
-    const char* js;
+    union
+    {
+        struct
+        {
+            // item
+            const char* a3d;
+            const char* ajs;
+        };
+
+        struct
+        {
+            // directory
+            int children;
+            Manifest* child_arr;
+        };
+    };
+    
 
     /*
-    // this should come from js execution:
-    // ak.setWater
-    // ak.setDir
-    // ak.setYaw
-    // ak.setPos
-    // ak.setLight
+    note that .ajs file is embedded 
+    */
 
-    float water = 55;
-    float dir = 0;
-    float yaw = 45;
-    float pos[3];
-    float lt[4];
+    /*
+    .ajs is required to initialize world with:
+    - ak.setWater
+    - ak.setDir
+    - ak.setYaw
+    - ak.setPos
+    - ak.setLight
+    */
+
+    /*
+    .ajs optionally may hook these 2 to handle loading/saving game state
+    - function onRead(arrbuf) -> applies modifications stored in arrbuf to the world
+    - function onWrite() -> stores modified world state in array buffer, returns arrbuf
+    // - read will be called only during fresh page load -> CreateGame
+    // - write will be called on 'beforeunload' event or when process is about to
+    //   terminate when there's game currently playing or is suspended by main menu
     */
 };
 
-static int manifests = 1;
+static const Manifest dev_toys_manifest_arr[]=
+{
+    {
+        "dev_toy.xp",
+        "DEV TOY1",
+        "Example showing thing1",
+        "dev_toys.a3d",
+        "dev_toy1.ajs",
+    },
 
+    {
+        "dev_toy.xp",
+        "DEV TOY2",
+        "Example showing thing2",
+        "dev_toys.a3d",
+        "dev_toy2.ajs",
+    },
+
+    {
+        "dev_toy.xp",
+        "DEV TOY3",
+        "Example showing thing3",
+        "dev_toys.a3d",
+        "dev_toy3.ajs",
+    },
+
+    {0} // terminator
+};
+
+static const Manifest manifest[]=
+{
+    {
+        "y9.xp", // this can be -preloaded into wasm (no need for async fetch)
+        "Y9 DEMO",
+        "Latest official demo world containig few playable quest",
+        "game_map_y9.a3d",
+        "game_map_y9.ajs", // this can be also -preloaded but must be executed on every InitGame
+    },
+
+    {
+        "devtoys.xp", // this can be -preloaded into wasm (no need for async fetch)
+        "DEV TOYS",
+        "Latest official dev toys",
+        0, // if no a3d is given, following is directory contents, (also null terminated)
+        (const char*)dev_toys_manifest_arr,
+    },
+
+    {0} // terminator
+};
+
+void LoadGame()
+{
+    float water = 55;
+    float dir = 0;
+    float yaw = 45;
+    float pos[3] = {0,15,0};
+    float lt[4] = {1,0,1,.5};
+
+    // a little trouble here,
+    // this func needs to be async on web platform:
+    // (will fetch: a3d file, referenced meshes and .ajs script)
+
+    {
+        // here the path should be taken from the module manifest
+        // ...
+
+        char a3d_path[1024 + 20];
+        sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
+        FILE* f = fopen(a3d_path, "rb");
+
+        // TODO:
+        // if GameServer* gs != 0
+        // DO NOT LOAD ITEMS!
+        // we will receive them from server
+
+        if (f)
+        {
+            terrain = LoadTerrain(f);
+
+            if (terrain)
+            {
+                for (int i = 0; i < 256; i++)
+                {
+                    if (fread(mat[i].shade, 1, sizeof(MatCell) * 4 * 16, f) != sizeof(MatCell) * 4 * 16)
+                        break;
+                }
+
+                world = LoadWorld(f, false);
+                if (world)
+                {
+                    // reload meshes too
+                    Mesh* m = GetFirstMesh(world);
+
+                    while (m)
+                    {
+                        char mesh_name[256];
+                        GetMeshName(m, mesh_name, 256);
+                        char obj_path[4096];
+                        sprintf(obj_path, "%smeshes/%s", base_path, mesh_name);
+                        if (!UpdateMesh(m, obj_path))
+                        {
+                            // what now?
+                            // missing mesh file!
+                        }
+
+                        m = GetNextMesh(m);
+                    }
+
+                    LoadEnemyGens(f);
+                }
+            }
+
+            fclose(f);
+        }
+
+        // if (!terrain || !world)
+        //    return -1;
+
+        // add meshes from library that aren't present in scene file
+        char mesh_dirname[4096];
+        sprintf(mesh_dirname, "%smeshes", base_path);
+        //a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
+
+        // this is the only case when instances has no valid bboxes yet
+        // as meshes weren't present during their creation
+        // now meshes are loaded ...
+        // so we need to update instance boxes with (,true)
+
+        if (world)
+        {
+            RebuildWorld(world, true);
+            #ifdef DARK_TERRAIN
+            // TODO: add Patch Iterator holding stack of parents
+            // and single Patch dark updater
+            UpdateTerrainDark(terrain, world, lt, false);
+            #endif
+        }
+    }
+
+    InitGame(game, water, pos, yaw, dir, lt, mainmenu_stamp);
+
+    // here we should also execute some .ajs
+    // ...
+
+    // if it sets onRead, and we have same saved progress, call it now.
+    // ...
+}
 
 static void ResetGame()
 {
@@ -111,93 +278,7 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     else
     if (game_loading == 2)
     {
-        float water = 55;
-        float dir = 0;
-        float yaw = 45;
-        float pos[3] = {0,15,0};
-        float lt[4] = {1,0,1,.5};
-
-        {
-            // here the path should be taken from the module manifest
-            // ...
-
-            char a3d_path[1024 + 20];
-            sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
-            FILE* f = fopen(a3d_path, "rb");
-
-            // TODO:
-            // if GameServer* gs != 0
-            // DO NOT LOAD ITEMS!
-            // we will receive them from server
-
-            if (f)
-            {
-                terrain = LoadTerrain(f);
-
-                if (terrain)
-                {
-                    for (int i = 0; i < 256; i++)
-                    {
-                        if (fread(mat[i].shade, 1, sizeof(MatCell) * 4 * 16, f) != sizeof(MatCell) * 4 * 16)
-                            break;
-                    }
-
-                    world = LoadWorld(f, false);
-                    if (world)
-                    {
-                        // reload meshes too
-                        Mesh* m = GetFirstMesh(world);
-
-                        while (m)
-                        {
-                            char mesh_name[256];
-                            GetMeshName(m, mesh_name, 256);
-                            char obj_path[4096];
-                            sprintf(obj_path, "%smeshes/%s", base_path, mesh_name);
-                            if (!UpdateMesh(m, obj_path))
-                            {
-                                // what now?
-                                // missing mesh file!
-                            }
-
-                            m = GetNextMesh(m);
-                        }
-
-                        LoadEnemyGens(f);
-                    }
-                }
-
-                fclose(f);
-            }
-
-            // if (!terrain || !world)
-            //    return -1;
-
-            // add meshes from library that aren't present in scene file
-            char mesh_dirname[4096];
-            sprintf(mesh_dirname, "%smeshes", base_path);
-            //a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
-
-            // this is the only case when instances has no valid bboxes yet
-            // as meshes weren't present during their creation
-            // now meshes are loaded ...
-            // so we need to update instance boxes with (,true)
-
-            if (world)
-            {
-                RebuildWorld(world, true);
-                #ifdef DARK_TERRAIN
-                // TODO: add Patch Iterator holding stack of parents
-                // and single Patch dark updater
-                UpdateTerrainDark(terrain, world, lt, false);
-                #endif
-            }
-        }
-
-        // here we should also execute some js module (given in manifest)
-        // ...
-
-        InitGame(game, water, pos, yaw, dir, lt, mainmenu_stamp);
+        LoadGame(); // here we should provide manifest index
         game_loading = 3;
         game->main_menu = false;
     }
