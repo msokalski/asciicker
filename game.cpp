@@ -3304,7 +3304,6 @@ void FreeSprites()
 // CreateGame will be called before loading world !!!
 void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4], uint64_t stamp)
 {
-	//memset(g, 0, sizeof(Game));	
 	g->menu_depth = -1;
 
 	g->perspective = true;

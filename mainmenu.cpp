@@ -16,38 +16,25 @@ static uint64_t mainmenu_stamp = 0;
 
 struct Manifest
 {
-    const char* icon_xp;
-    const char* title;
-    const char* desc;
-    union
-    {
-        struct
-        {
-            // item
-            const char* a3d;
-            const char* ajs;
-        };
+    const char* xp;    // this should be embedded using --preload-file
+    const char* title; // short title (big font)
+    const char* desc;  // long description (small font)
+    const char* a3d;   // world file
+    const char* ajs;   // game script 
+    void* cookie;      // this contains menu runtime data (loaded sprites etc. or ad cookie)
 
-        struct
-        {
-            // directory
-            int children;
-            Manifest* child_arr;
-        };
-    };
-    
-
-    /*
-    note that .ajs file is embedded 
-    */
+    // if this is terminator, all fileds should be null
+    // if this is dir, a3d must be null and ajs must point to Manifest array of children
+    // if this is server based game, ajs must be null and a3d must contain address
+    // if this is "coming soon" / ad, both a3d and ajs must be null, cookie may point to url 
 
     /*
     .ajs is required to initialize world with:
-    - ak.setWater
-    - ak.setDir
-    - ak.setYaw
-    - ak.setPos
-    - ak.setLight
+    - ak.setWater (55)
+    - ak.setDir   (0)
+    - ak.setYaw   (45)
+    - ak.setPos   (0,15,0)
+    - ak.setLight (1,0,1,.5)
     */
 
     /*
@@ -60,67 +47,115 @@ struct Manifest
     */
 };
 
-static const Manifest dev_toys_manifest_arr[]=
+
+char cookie_ad[] = "https://twitter.com/mrgumix";
+
+static Manifest dev_toys_manifest_arr[]=
 {
     {
         "dev_toy.xp",
         "DEV TOY1",
-        "Example showing thing1",
+        "Example showing thing1, source: https://...dev_toy1",
         "dev_toys.a3d",
         "dev_toy1.ajs",
+        0 // cookie
     },
 
     {
         "dev_toy.xp",
         "DEV TOY2",
-        "Example showing thing2",
+        "Example showing thing2, source: https://...dev_toy2",
         "dev_toys.a3d",
         "dev_toy2.ajs",
+        0 // cookie
     },
 
     {
         "dev_toy.xp",
         "DEV TOY3",
-        "Example showing thing3",
+        "Example showing thing3, source: https://...dev_toy3",
         "dev_toys.a3d",
         "dev_toy3.ajs",
+        0 // cookie
     },
 
     {0} // terminator
 };
 
-static const Manifest manifest[]=
+static Manifest manifest[]=
 {
     {
-        "y9.xp", // this can be -preloaded into wasm (no need for async fetch)
+        "tutorial.xp",
+        "CONTROLS TUTORIAL ",
+        "Tutorial teaching you how to control the game",
+        "tutorial.a3d",
+        "tutorial.ajs",
+        0 // cookie
+    },
+
+    {
+        "y9.xp",
         "Y9 DEMO",
         "Latest official demo world containig few playable quest",
         "game_map_y9.a3d",
-        "game_map_y9.ajs", // this can be also -preloaded but must be executed on every InitGame
+        "game_map_y9.ajs",
+        0 // cookie
     },
 
     {
-        "devtoys.xp", // this can be -preloaded into wasm (no need for async fetch)
+        "y9_online.xp",
+        "Y9 MULTIPLAYER DEMO",
+        "Latest official multiplayer demo",
+        "y9_server", // if ajs (below) is null, this is wss/endpoint 
+        0, // real a3d and ajs files will be sent by server during joining
+        0 // cookie
+    },
+
+    {
+        "dev_toys.xp",
         "DEV TOYS",
         "Latest official dev toys",
-        0, // if no a3d is given, following is directory contents, (also null terminated)
-        (const char*)dev_toys_manifest_arr,
+        0, // this is directory!
+        (const char*)dev_toys_manifest_arr, // and here are children
+        0 // cookie
+    },
+
+    {
+        "gumix.xp",
+        "GUMIX NEWS",
+        "",
+        0,        // this
+        0,        // is an ad
+        cookie_ad // with a cookie
     },
 
     {0} // terminator
 };
 
+void LoadMainMenuSprites()
+{
+    // parse manifest, load sprites (oridinary sync)
+    // and store cookies (ad cookies require copying original value into the actual cookie)
+}
+
+void FreeMainMenuSprites()
+{
+    // undo LoadMainMenuSprites
+}
+
 void LoadGame()
 {
+    // a little trouble here,
+    // this func needs to be async on web platform:
+    // (will fetch: a3d file, referenced meshes and .ajs script)
+    // we must run fetches and lock ui until promise resolves
+    // also adding cancel button would be a nice touch
+
     float water = 55;
     float dir = 0;
     float yaw = 45;
     float pos[3] = {0,15,0};
     float lt[4] = {1,0,1,.5};
-
-    // a little trouble here,
-    // this func needs to be async on web platform:
-    // (will fetch: a3d file, referenced meshes and .ajs script)
 
     {
         // here the path should be taken from the module manifest
