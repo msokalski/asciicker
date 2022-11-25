@@ -39,7 +39,9 @@
 			"atomic": "cpp",
 			"memory": "cpp",
 			"charconv": "cpp",
-			"__node_handle": "cpp"
+			"__node_handle": "cpp",
+			"queue": "cpp",
+			"stack": "cpp"
 		}
 	}
 }

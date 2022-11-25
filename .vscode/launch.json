@@ -9,6 +9,14 @@
             "type": "cppdbg",
             "request": "launch",
 
+
+        //    /*
+            "program": "${workspaceFolder}/png2xp/png2xp",
+            "args": ["~/Pictures/mainmenu_background_320x180.png", 
+                     "~/REXPaint-v1.60/images/work/converted.xp"],
+            "externalConsole": false,
+        //    */            
+
            /*
             "program": "${workspaceFolder}/.run/asciiid",
             "args": [],
@@ -27,11 +35,11 @@
             "externalConsole": true,
             */
 
-        //    /*
+            /*
             "program": "${workspaceFolder}/.run/game",
         //    "args": ["-term"],
             "externalConsole": true,
-        //    */
+            */
 
             /*
             "program": "${workspaceFolder}/.run/game",
