@@ -88,12 +88,13 @@ uint8_t CHN(uint32_t p, int c)
 }
 
 // 216C
+
 uint8_t PAL(uint8_t v) 
 {
 	return (v+25)/51*51;
 }
 
-uint8_t PAL_LO(uint8_t v) 
+uint8_t PAL_LO(uint8_t v)             
 {
 	return (v)/51*51;
 }
@@ -105,6 +106,7 @@ uint8_t PAL_HI(uint8_t v)
 
 /*
 // 64C test
+
 uint8_t PAL(uint8_t v) 
 {
 	return (v+42)/85*85;
@@ -121,8 +123,9 @@ uint8_t PAL_HI(uint8_t v)
 }
 */
 
-/*
+
 // 4096C test
+/*
 uint8_t PAL(uint8_t v) 
 {
 	return (v+8)/17*17;
@@ -156,9 +159,9 @@ int main(int argc, char* argv[])
 {
 	uint64_t t0 = GetTime();
 
-    if (argc<3)
+    if (argc<2)
     {
-        printf("usage: png2xp <file.png> <file.xp>\n");
+        printf("usage: png2xp <file.png> [<file.xp>]\n");
         return 1;
     }
 
@@ -177,11 +180,27 @@ int main(int argc, char* argv[])
         return -2;
     }
 
+	const char* xp_name;
+	char xp_buff[4096];
+	if (argc>=3)
+	{
+		xp_name = argv[2];
+	}
+	else
+    {
+		xp_name = xp_buff;
+		sprintf(xp_buff,"%s.xp",argv[1]);
+    }
+
 	int dither_blocks[2] = {0};
 	int half_blocks[2] = {0};
 	int solids = 0;
 
-	FILE* xp = fopen(argv[2], "w");
+	uint8_t* hist = (uint8_t*)malloc(256*256*256/8);
+	int used = 0;
+	memset(hist, 0, 256*256*256/8);
+
+	FILE* xp = fopen(xp_name, "w");
 	if (!xp)
     {
         printf("can't write to: %s\n", argv[2]);
@@ -346,6 +365,23 @@ int main(int argc, char* argv[])
 			}
 
 			(*stat)++;
+
+
+			int b = cell.bk[0] | (cell.bk[1]<<8) | (cell.bk[2]<<16);
+			int f = cell.fg[0] | (cell.fg[1]<<8) | (cell.fg[2]<<16);
+
+			if ( !(hist[b>>3] & (1<<(b&7))) )
+			{
+				hist[b>>3] |= (1<<(b&7));
+				used++;
+			}
+
+			if ( !(hist[f>>3] & (1<<(f&7))) )
+			{
+				hist[f>>3] |= (1<<(f&7));
+				used++;
+			}
+		
 			fwrite(&cell,sizeof(XPCell),1,xp);
         }
     } 
@@ -353,6 +389,7 @@ int main(int argc, char* argv[])
 	fclose(xp);
 
     free(pix);
+	free(hist);
 
 	uint64_t t1 = GetTime();
 
@@ -369,7 +406,7 @@ int main(int argc, char* argv[])
 			half_blocks[0],
 			half_blocks[1] );
  
-
+	printf(	"colors: %5d\n", used);
 
     return 0;
 }
