@@ -88,7 +88,7 @@ uint8_t CHN(uint32_t p, int c)
 }
 
 // 216C
-
+/*
 uint8_t PAL(uint8_t v) 
 {
 	return (v+25)/51*51;
@@ -103,10 +103,29 @@ uint8_t PAL_HI(uint8_t v)
 {
 	return ((v)+50)/51*51;
 }
+*/
 
+// 27C test
 /*
-// 64C test
+uint8_t PAL(uint8_t v) 
+{
+	return (v+64)/128*128;
+}
 
+uint8_t PAL_LO(uint8_t v) 
+{
+	return (v)/128*128;
+}
+
+uint8_t PAL_HI(uint8_t v) 
+{
+	return ((v)+128)/128*128;
+}
+*/
+
+
+// 64C test
+/*
 uint8_t PAL(uint8_t v) 
 {
 	return (v+42)/85*85;
@@ -122,7 +141,6 @@ uint8_t PAL_HI(uint8_t v)
 	return ((v)+84)/85*85;
 }
 */
-
 
 // 4096C test
 /*
@@ -142,6 +160,23 @@ uint8_t PAL_HI(uint8_t v)
 }
 */
 
+// NO PAL (all 16M colors)
+uint8_t PAL(uint8_t v) 
+{
+	return v;
+}
+
+uint8_t PAL_LO(uint8_t v) 
+{
+	return v;
+}
+
+uint8_t PAL_HI(uint8_t v) 
+{
+	return v;
+}
+
+
 int32_t ABS(int32_t v) 
 {
 	return v<0 ? -v : v;
@@ -153,6 +188,229 @@ uint32_t DIF(uint8_t c[3], uint32_t r)
 	    1*ABS((int32_t)(c[0])-(int32_t)(CHN(r,0))) +
     	1*ABS((int32_t)(c[1])-(int32_t)(CHN(r,1))) +
     	1*ABS((int32_t)(c[2])-(int32_t)(CHN(r,2)));
+}
+
+void DEV(uint8_t c[3], uint32_t r, int d[3])
+{
+	d[0] += (int32_t)(c[0])-(int32_t)CHN(r,0);
+	d[1] += (int32_t)(c[1])-(int32_t)CHN(r,1);
+	d[2] += (int32_t)(c[2])-(int32_t)CHN(r,2);
+}
+
+int MIN(int a, int b)
+{
+	return a < b ? a : b;
+}
+
+int MAX(int a, int b)
+{
+	return a > b ? a : b;
+}
+
+void ADD(uint32_t* p, int d[3])
+{
+	uint32_t v = *p;
+	int c[3] =
+	{
+		MIN(255,MAX(0,CHN(v,0) + d[0])),
+		MIN(255,MAX(0,CHN(v,1) + d[1])),
+		MIN(255,MAX(0,CHN(v,2) + d[2]))
+	};
+
+	*p = c[0] | (c[1]<<8) | (c[2]<<16);
+}
+
+void Do(uint32_t src[4], XPCell* ptr, int dev[3])
+{
+	uint32_t ll = src[0];
+	uint32_t lr = src[1];
+	uint32_t ul = src[2];
+	uint32_t ur = src[3];
+
+	uint8_t M[3] = 
+	{
+		(uint8_t)((CHN(ll,0) + CHN(lr,0) + CHN(ul,0) + CHN(ur,0) + 2) / 4),
+		(uint8_t)((CHN(ll,1) + CHN(lr,1) + CHN(ul,1) + CHN(ur,1) + 2) / 4),
+		(uint8_t)((CHN(ll,2) + CHN(lr,2) + CHN(ul,2) + CHN(ur,2) + 2) / 4),
+	};
+
+	uint8_t ML[3] = { (uint8_t)PAL_LO(M[0]), (uint8_t)PAL_LO(M[1]), (uint8_t)PAL_LO(M[2]) };
+	uint8_t MH[3] = { (uint8_t)PAL_HI(M[0]), (uint8_t)PAL_HI(M[1]), (uint8_t)PAL_HI(M[2]) };
+
+	uint8_t D[8][3]=
+	{
+		{ ML[0], ML[1], ML[2] },
+		{ ML[0], ML[1], MH[2] },
+		{ ML[0], MH[1], ML[2] },
+		{ ML[0], MH[1], MH[2] },
+		{ MH[0], ML[1], ML[2] },
+		{ MH[0], ML[1], MH[2] },
+		{ MH[0], MH[1], ML[2] },
+		{ MH[0], MH[1], MH[2] },
+	};
+
+	int d_err;
+	int d_gl=0, d_c0, d_c1;
+	int d_dev[3];
+
+	// find best 2 color indices C0, C1
+	// and mixing factor  3/4 C0 + 1/4 C1 or 2/4 C0 + 2/4 C1
+	for (int gl=1; gl<3; gl++)
+	{
+		int c0_w = 4-gl;
+		int c1_w = gl;
+		for (int c0 = 0; c0<8; c0++)
+		{
+			for (int c1 = 0; c1<8; c1++)
+			{
+				uint8_t G[3] =
+				{
+					(uint8_t)((c0_w * D[c0][0] + c1_w * D[c1][0])/4),
+					(uint8_t)((c0_w * D[c0][1] + c1_w * D[c1][1])/4),
+					(uint8_t)((c0_w * D[c0][2] + c1_w * D[c1][2])/4),
+				};
+
+				// calc err
+				int g_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
+
+				if (!d_gl || g_err < d_err)
+				{
+					d_err = g_err;
+					d_gl = gl;
+					d_c0 = c0;
+					d_c1 = c1;
+
+					d_dev[0]=0;
+					d_dev[1]=0;
+					d_dev[2]=0;
+
+					DEV(G,ll,d_dev);
+					DEV(G,lr,d_dev);
+					DEV(G,ul,d_dev);
+					DEV(G,ur,d_dev);
+				}
+			}
+		}
+	}
+
+	// find out if using half-blocks is beter than dither blocks
+
+	uint8_t L[3] = 
+	{
+		(uint8_t)PAL( (CHN(ll,0) + CHN(ul,0) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(ll,1) + CHN(ul,1) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(ll,2) + CHN(ul,2) + 1) / 2 ),
+	};
+
+	uint8_t R[3] = 
+	{
+		(uint8_t)PAL( (CHN(lr,0) + CHN(ur,0) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(lr,1) + CHN(ur,1) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(lr,2) + CHN(ur,2) + 1) / 2 ),
+	};
+
+	uint8_t B[3] =
+	{
+		(uint8_t)PAL( (CHN(ll,0) + CHN(lr,0) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(ll,1) + CHN(lr,1) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(ll,2) + CHN(lr,2) + 1) / 2 ),
+	};
+
+	uint8_t T[3] =
+	{ 
+		(uint8_t)PAL( (CHN(ul,0) + CHN(ur,0) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(ul,1) + CHN(ur,1) + 1) / 2 ),
+		(uint8_t)PAL( (CHN(ul,2) + CHN(ur,2) + 1) / 2 ),
+	};
+
+
+	int v_err = DIF(L,ll) + DIF(L,ul) + DIF(R,lr) + DIF(R,ur);
+	int h_err = DIF(B,ll) + DIF(B,lr) + DIF(T,ul) + DIF(T,ur);
+
+	XPCell cell;
+
+	if (d_err < v_err && d_err < h_err)
+	{
+		cell.bk[0]=D[d_c0][0];
+		cell.bk[1]=D[d_c0][1];
+		cell.bk[2]=D[d_c0][2];
+
+		cell.fg[0]=D[d_c1][0];
+		cell.fg[1]=D[d_c1][1];
+		cell.fg[2]=D[d_c1][2];
+
+		cell.glyph = d_gl+175;
+		//stat = dither_blocks+d_gl-1;
+
+		dev[0]+=d_dev[0];
+		dev[1]+=d_dev[1];
+		dev[2]+=d_dev[2];
+	}
+	else
+	if (v_err < h_err)
+	{
+		cell.bk[0]=R[0];
+		cell.bk[1]=R[1];
+		cell.bk[2]=R[2];
+
+		cell.fg[0]=L[0];
+		cell.fg[1]=L[1];
+		cell.fg[2]=L[2];
+
+		cell.glyph = 221;
+		//stat = half_blocks+1;
+
+		DEV(L,ll,dev);
+		DEV(L,ul,dev);
+		DEV(R,lr,dev);
+		DEV(R,ur,dev);
+	}
+	else
+	{
+		cell.bk[0]=B[0];
+		cell.bk[1]=B[1];
+		cell.bk[2]=B[2];
+
+		cell.fg[0]=T[0];
+		cell.fg[1]=T[1];
+		cell.fg[2]=T[2];
+
+		cell.glyph = 220;
+		//stat = half_blocks+0;
+
+		DEV(B,ll,dev);
+		DEV(B,lr,dev);
+		DEV(T,ul,dev);
+		DEV(T,ur,dev);		
+	}
+
+
+	if (memcmp(cell.bk,cell.fg,3)==0)
+	{
+		cell.glyph = 219; //32;
+		//stat = &solids;
+	}
+
+	//(*stat)++;
+
+	/*
+	int b = cell.bk[0] | (cell.bk[1]<<8) | (cell.bk[2]<<16);
+	int f = cell.fg[0] | (cell.fg[1]<<8) | (cell.fg[2]<<16);
+
+	if ( !(hist[b>>3] & (1<<(b&7))) )
+	{
+		hist[b>>3] |= (1<<(b&7));
+		used++;
+	}
+
+	if ( !(hist[f>>3] & (1<<(f&7))) )
+	{
+		hist[f>>3] |= (1<<(f&7));
+		used++;
+	}
+	*/
+
+	*(ptr++) = cell;
 }
 
 int main(int argc, char* argv[])
@@ -211,164 +469,41 @@ int main(int argc, char* argv[])
 
 	fwrite(hdr, sizeof(hdr), 1, xp);
 
+	XPCell* buf = (XPCell*)malloc(sizeof(XPCell) * (w/2) * (h/2));
+	XPCell* ptr = buf;
+
+
+    uint32_t* org = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
+	memcpy(org,pix,sizeof(uint32_t)*w*h); // for error check
+
     for (int x=0; x<w; x+=2)
     {
 	    for (int y=0; y<h; y+=2)
         {
 			int* stat = 0;
 
-            uint32_t ll = pix[x + w*y];
-            uint32_t lr = pix[x + 1 + w*y];
-            uint32_t ul = pix[x + w*y + w];
-            uint32_t ur = pix[x + 1 + w*y + w];
-
-            uint8_t M[3] = 
+			uint32_t src[4] = 
 			{
-            	(uint8_t)((CHN(ll,0) + CHN(lr,0) + CHN(ul,0) + CHN(ur,0) + 2) / 4),
-            	(uint8_t)((CHN(ll,1) + CHN(lr,1) + CHN(ul,1) + CHN(ur,1) + 2) / 4),
-            	(uint8_t)((CHN(ll,2) + CHN(lr,2) + CHN(ul,2) + CHN(ur,2) + 2) / 4),
+				pix[x + w*y],
+				pix[x + 1 + w*y],
+				pix[x + w*y + w],
+				pix[x + 1 + w*y + w]
 			};
 
-            uint8_t ML[3] = { (uint8_t)PAL_LO(M[0]), (uint8_t)PAL_LO(M[1]), (uint8_t)PAL_LO(M[2]) };
-            uint8_t MH[3] = { (uint8_t)PAL_HI(M[0]), (uint8_t)PAL_HI(M[1]), (uint8_t)PAL_HI(M[2]) };
+			int dev[3] = {0,0,0};
+			Do(src,ptr,dev);
 
-			uint8_t D[8][3]=
+			switch (ptr->glyph)
 			{
-				{ ML[0], ML[1], ML[2] },
-				{ ML[0], ML[1], MH[2] },
-				{ ML[0], MH[1], ML[2] },
-				{ ML[0], MH[1], MH[2] },
-				{ MH[0], ML[1], ML[2] },
-				{ MH[0], ML[1], MH[2] },
-				{ MH[0], MH[1], ML[2] },
-				{ MH[0], MH[1], MH[2] },
-			};
-
-			int d_err;
-			int d_gl=0, d_c0, d_c1;
-
-			// find best 2 color indices C0, C1
-			// and mixing factor  3/4 C0 + 1/4 C1 or 2/4 C0 + 2/4 C1
-			for (int gl=1; gl<3; gl++)
-			{
-				int c0_w = 4-gl;
-				int c1_w = gl;
-				for (int c0 = 0; c0<8; c0++)
-				{
-					for (int c1 = 0; c1<8; c1++)
-					{
-						uint8_t G[3] =
-						{
-							(uint8_t)((c0_w * D[c0][0] + c1_w * D[c1][0])/4),
-							(uint8_t)((c0_w * D[c0][1] + c1_w * D[c1][1])/4),
-							(uint8_t)((c0_w * D[c0][2] + c1_w * D[c1][2])/4),
-						};
-
-						// calc err
-						int g_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
-
-				
-
-						if (!d_gl || g_err < d_err)
-						{
-							d_err = g_err;
-							d_gl = gl;
-							d_c0 = c0;
-							d_c1 = c1;
-						}
-					}
-				}
+				case 219: solids++; break;
+				case 220: half_blocks[0]++; break;
+				case 221: half_blocks[1]++; break;
+				case 176: dither_blocks[0]++; break;
+				case 177: dither_blocks[1]++; break;
 			}
 
-			// find out if using half-blocks is beter than dither blocks
-
-            uint8_t L[3] = 
-            {
-                (uint8_t)PAL( (CHN(ll,0) + CHN(ul,0) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(ll,1) + CHN(ul,1) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(ll,2) + CHN(ul,2) + 1) / 2 ),
-            };
-
-            uint8_t R[3] = 
-            {
-                (uint8_t)PAL( (CHN(lr,0) + CHN(ur,0) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(lr,1) + CHN(ur,1) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(lr,2) + CHN(ur,2) + 1) / 2 ),
-            };
-
-            uint8_t B[3] =
-            {
-                (uint8_t)PAL( (CHN(ll,0) + CHN(lr,0) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(ll,1) + CHN(lr,1) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(ll,2) + CHN(lr,2) + 1) / 2 ),
-            };
-
-            uint8_t T[3] =
-            { 
-                (uint8_t)PAL( (CHN(ul,0) + CHN(ur,0) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(ul,1) + CHN(ur,1) + 1) / 2 ),
-                (uint8_t)PAL( (CHN(ul,2) + CHN(ur,2) + 1) / 2 ),
-            };
-
-
-            int v_err = DIF(L,ll) + DIF(L,ul) + DIF(R,lr) + DIF(R,ur);
-            int h_err = DIF(B,ll) + DIF(B,lr) + DIF(T,ul) + DIF(T,ur);
-
-			XPCell cell;
-
-			if (d_err < v_err && d_err < h_err)
-			{
-                cell.bk[0]=D[d_c0][0];
-				cell.bk[1]=D[d_c0][1];
-				cell.bk[2]=D[d_c0][2];
-
-                cell.fg[0]=D[d_c1][0];
-				cell.fg[1]=D[d_c1][1];
-				cell.fg[2]=D[d_c1][2];
-
-				cell.glyph = d_gl+175;
-				stat = dither_blocks+d_gl-1;
-			}
-			else
-            if (v_err < h_err)
-            {
-                cell.bk[0]=R[0];
-				cell.bk[1]=R[1];
-				cell.bk[2]=R[2];
-
-                cell.fg[0]=L[0];
-				cell.fg[1]=L[1];
-				cell.fg[2]=L[2];
-
-				cell.glyph = 221;
-				stat = half_blocks+1;
-            }
-			else
-			{
-                cell.bk[0]=B[0];
-				cell.bk[1]=B[1];
-				cell.bk[2]=B[2];
-
-                cell.fg[0]=T[0];
-				cell.fg[1]=T[1];
-				cell.fg[2]=T[2];
-
-				cell.glyph = 220;
-				stat = half_blocks+0;
-			}
-
-
-			if (memcmp(cell.bk,cell.fg,3)==0)
-			{
-				cell.glyph = 219; //32;
-				stat = &solids;
-			}
-
-			(*stat)++;
-
-
-			int b = cell.bk[0] | (cell.bk[1]<<8) | (cell.bk[2]<<16);
-			int f = cell.fg[0] | (cell.fg[1]<<8) | (cell.fg[2]<<16);
+			int b = ptr->bk[0] | (ptr->bk[1]<<8) | (ptr->bk[2]<<16);
+			int f = ptr->fg[0] | (ptr->fg[1]<<8) | (ptr->fg[2]<<16);
 
 			if ( !(hist[b>>3] & (1<<(b&7))) )
 			{
@@ -381,15 +516,119 @@ int main(int argc, char* argv[])
 				hist[f>>3] |= (1<<(f&7));
 				used++;
 			}
-		
-			fwrite(&cell,sizeof(XPCell),1,xp);
+
+			ptr++;
+
+			// -4 is 100% , -8 is 50%, ... -1024 should be 0%
+			dev[0]/=-4;
+			dev[1]/=-4;
+			dev[2]/=-4;
+
+			int hlf[3] = {dev[0]/2,dev[1]/2,dev[2]/2};
+			dev[0] -= hlf[0];
+			dev[1] -= hlf[1];
+			dev[2] -= hlf[2];
+
+			if (x<w-2)
+			{
+				ADD(pix + x+2 + w*y, dev);
+				ADD(pix + x+2 + 1 + w*y, dev);
+				ADD(pix + x+2 + w*y + w, dev);
+				ADD(pix + x+2 + 1 + w*y + w, dev);
+			}
+
+			if (y<h-2)
+			{
+				ADD(pix + x+2*w + w*y, hlf);
+				ADD(pix + x+2*w + 1 + w*y, hlf);
+				ADD(pix + x+2*w + w*y + w, hlf);
+				ADD(pix + x+2*w + 1 + w*y + w, hlf);
+			}
         }
     } 
+
+	fwrite(buf,sizeof(XPCell),(w/2)*(h/2),xp);
 
 	fclose(xp);
 
     free(pix);
 	free(hist);
+
+	ptr = buf;
+	uint64_t err = 0;
+    for (int x=0; x<w; x+=2)
+    {
+	    for (int y=0; y<h; y+=2)
+        {
+			uint32_t src[4] = 
+			{
+				org[x + w*y],
+				org[x + 1 + w*y],
+				org[x + w*y + w],
+				org[x + 1 + w*y + w]
+			};
+
+			// calc err
+			switch (ptr->glyph)
+			{
+				case 219: solids++; break;
+					err += DIF(ptr->bk, src[0]);
+					err += DIF(ptr->bk, src[1]);
+					err += DIF(ptr->bk, src[2]);
+					err += DIF(ptr->bk, src[3]);
+					break;
+
+				case 220: 
+					err += DIF(ptr->bk, src[0]);
+					err += DIF(ptr->bk, src[1]);
+					err += DIF(ptr->fg, src[2]);
+					err += DIF(ptr->fg, src[3]);
+					break;
+
+				case 221: half_blocks[1]++; break;
+					err += DIF(ptr->bk, src[1]);
+					err += DIF(ptr->bk, src[3]);
+					err += DIF(ptr->fg, src[0]);
+					err += DIF(ptr->fg, src[2]);
+					break;
+
+				case 176: 
+				{	
+					uint8_t mix[3] = 
+					{
+						(uint8_t)((ptr->bk[0]*3 + ptr->fg[0])/4),
+						(uint8_t)((ptr->bk[1]*3 + ptr->fg[1])/4),
+						(uint8_t)((ptr->bk[2]*3 + ptr->fg[2])/4),
+					};
+					err += DIF(mix, src[0]);
+					err += DIF(mix, src[1]);
+					err += DIF(mix, src[2]);
+					err += DIF(mix, src[3]);
+					break;
+				}
+
+				case 177:
+				{
+					uint8_t mix[3] = 
+					{
+						(uint8_t)((ptr->bk[0] + ptr->fg[0])/2),
+						(uint8_t)((ptr->bk[1] + ptr->fg[1])/2),
+						(uint8_t)((ptr->bk[2] + ptr->fg[2])/2),
+					};
+					err += DIF(mix, src[0]);
+					err += DIF(mix, src[1]);
+					err += DIF(mix, src[2]);
+					err += DIF(mix, src[3]);
+					break;
+				}
+			}
+
+			ptr++;
+        }
+    } 
+
+	free(org);
+	free(buf);
 
 	uint64_t t1 = GetTime();
 
@@ -407,6 +646,117 @@ int main(int argc, char* argv[])
 			half_blocks[1] );
  
 	printf(	"colors: %5d\n", used);
+	printf(	"avrerr: %5.2f\n", (double)err / (w*h*3));
 
     return 0;
+} 
+
+#if 0
+// return pal output size, it can be smaller than requested size!
+int MakePal(const uint32_t* pix, int wh, uint32_t pal[], int pal_size)
+{
+	if (pal_size <= 1)
+		return 0;
+
+	// 1, extract unique colors and number of occurences
+	int* hist = (int*)malloc(256*256*256 * sizeof(int));
+	int size = 0;
+	memset(hist, -1, 256*256*256 * sizeof(int));
+	for (int i=0; i<wh; i++)
+	{
+		uint32_t p = pix[i] & 0xffffff;
+		if ( hist[p]<0 )
+			hist[p] = size++;
+	}
+
+	if (size<=pal_size)
+	{
+		size = 0;
+		memset(hist, -1, 256*256*256 * sizeof(int));
+		for (int i=0; i<wh; i++)
+		{
+			uint32_t p = pix[i] & 0xffffff;
+			if ( hist[p]<0 )
+			{
+				pal[size] = p;
+				hist[p] = size++;
+			}
+		}
+		free(hist);
+		return size;		
+	}
+
+	struct Point
+	{
+		int n;
+		uint8_t c[3];
+	};
+
+	Point* data = (Point*)malloc(sizeof(Point) * size);
+	size = 0;
+	memset(hist, -1, 256*256*256 * sizeof(int));	
+	for (int i=0; i<wh; i++)
+	{
+		uint32_t p = pix[i] & 0xffffff;
+		if ( hist[p]<0 )
+		{
+			Point* d = data+size;
+			d->c[0] = CHN(p,0);
+			d->c[1] = CHN(p,1);
+			d->c[2] = CHN(p,2);
+			d->n = 1;
+			hist[p] = size++;
+		}
+		else
+		{
+			Point* d = data+hist[p];
+			d->n++;			
+		}
+	}
+
+	free(hist);
+	
+
+	struct Centroid
+	{
+		int c[3];
+	};
+
+	Centroid* ctr = (Centroid*)malloc(sizeof(Centroid) * pal_size);
+
+	// k-means plus plus seeding
+
+	uint32_t rnd = pix[rand() % wh];
+
+	ctr->c[0] = CHN(rnd,0);
+	ctr->c[1] = CHN(rnd,1);
+	ctr->c[2] = CHN(rnd,2);
+
+	for (int i = 1; i<size; i++)
+	{
+		// find minimum distance to closest 
+	}	
+
+
+
+	free(data);
+
+	for (int i=0; i<pal_size; i++)
+	{
+		
+	}
+
+	free(ctr);
 }
+
+/*
+
+1. do without palette -> all halfblocks
+2. pick smallest gradient cell
+   finding closest color to 4 samples average 
+
+
+
+
+*/
+#endif
