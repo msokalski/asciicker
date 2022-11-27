@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #include "../upng.h"
 #include "../rgba8.h"
@@ -105,6 +106,24 @@ uint8_t PAL_HI(uint8_t v)
 }
 */
 
+// 8C test (3 bits!!!)
+/*
+uint8_t PAL(uint8_t v) 
+{
+	return (v+128)/255*255;
+}
+
+uint8_t PAL_LO(uint8_t v) 
+{
+	return (v)/255*255;
+}
+
+uint8_t PAL_HI(uint8_t v) 
+{
+	return ((v)+255)/255*255;
+}
+*/
+
 // 27C test
 /*
 uint8_t PAL(uint8_t v) 
@@ -161,6 +180,7 @@ uint8_t PAL_HI(uint8_t v)
 */
 
 // NO PAL (all 16M colors)
+/*
 uint8_t PAL(uint8_t v) 
 {
 	return v;
@@ -175,7 +195,7 @@ uint8_t PAL_HI(uint8_t v)
 {
 	return v;
 }
-
+*/
 
 int32_t ABS(int32_t v) 
 {
@@ -220,34 +240,30 @@ void ADD(uint32_t* p, int d[3])
 	*p = c[0] | (c[1]<<8) | (c[2]<<16);
 }
 
-void Do(uint32_t src[4], XPCell* ptr, int dev[3])
+void PAL(uint8_t c[3], uint8_t pal[][3], int pal_size)
+{
+	int e = -1;
+	int p;
+	for (int i=0; i<pal_size; i++)
+	{
+		int ie = ABS(c[0]-pal[i][0]) + ABS(c[1]-pal[i][1]) + ABS(c[2]-pal[i][2]);
+		if (e<0 || ie<e)
+		{
+			e = ie;
+			p = i;
+		}
+	}
+	c[0] = pal[p][0];
+	c[1] = pal[p][1];
+	c[2] = pal[p][2];
+}
+
+void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size)
 {
 	uint32_t ll = src[0];
 	uint32_t lr = src[1];
 	uint32_t ul = src[2];
 	uint32_t ur = src[3];
-
-	uint8_t M[3] = 
-	{
-		(uint8_t)((CHN(ll,0) + CHN(lr,0) + CHN(ul,0) + CHN(ur,0) + 2) / 4),
-		(uint8_t)((CHN(ll,1) + CHN(lr,1) + CHN(ul,1) + CHN(ur,1) + 2) / 4),
-		(uint8_t)((CHN(ll,2) + CHN(lr,2) + CHN(ul,2) + CHN(ur,2) + 2) / 4),
-	};
-
-	uint8_t ML[3] = { (uint8_t)PAL_LO(M[0]), (uint8_t)PAL_LO(M[1]), (uint8_t)PAL_LO(M[2]) };
-	uint8_t MH[3] = { (uint8_t)PAL_HI(M[0]), (uint8_t)PAL_HI(M[1]), (uint8_t)PAL_HI(M[2]) };
-
-	uint8_t D[8][3]=
-	{
-		{ ML[0], ML[1], ML[2] },
-		{ ML[0], ML[1], MH[2] },
-		{ ML[0], MH[1], ML[2] },
-		{ ML[0], MH[1], MH[2] },
-		{ MH[0], ML[1], ML[2] },
-		{ MH[0], ML[1], MH[2] },
-		{ MH[0], MH[1], ML[2] },
-		{ MH[0], MH[1], MH[2] },
-	};
 
 	int d_err;
 	int d_gl=0, d_c0, d_c1;
@@ -259,15 +275,30 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3])
 	{
 		int c0_w = 4-gl;
 		int c1_w = gl;
-		for (int c0 = 0; c0<8; c0++)
+		for (int c0 = 0; c0<pal_size; c0++)
 		{
-			for (int c1 = 0; c1<8; c1++)
+			for (int c1 = 0; c1<pal_size; c1++)
 			{
+				/*
+				if (ABS(pal[c0][0] - pal[c1][0]) > 51 ||
+					ABS(pal[c0][1] - pal[c1][1]) > 51 ||
+					ABS(pal[c0][2] - pal[c1][2]) > 51)
+					continue;
+
 				uint8_t G[3] =
 				{
-					(uint8_t)((c0_w * D[c0][0] + c1_w * D[c1][0])/4),
-					(uint8_t)((c0_w * D[c0][1] + c1_w * D[c1][1])/4),
-					(uint8_t)((c0_w * D[c0][2] + c1_w * D[c1][2])/4),
+					(uint8_t)((c0_w * pal[c0][0] + c1_w * pal[c1][0])/4),
+					(uint8_t)((c0_w * pal[c0][1] + c1_w * pal[c1][1])/4),
+					(uint8_t)((c0_w * pal[c0][2] + c1_w * pal[c1][2])/4),
+				};
+				*/
+
+				// make use gamma = 2 (solves bleached colors and bad dither blocks)
+				uint8_t G[3] =
+				{
+					(uint8_t)sqrt( (c0_w * pal[c0][0] * pal[c0][0] + c1_w * pal[c1][0] * pal[c1][0]) / 4 ),
+					(uint8_t)sqrt( (c0_w * pal[c0][1] * pal[c0][1] + c1_w * pal[c1][1] * pal[c1][1]) / 4 ),
+					(uint8_t)sqrt( (c0_w * pal[c0][2] * pal[c0][2] + c1_w * pal[c1][2] * pal[c1][2]) / 4 ),
 				};
 
 				// calc err
@@ -297,31 +328,39 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3])
 
 	uint8_t L[3] = 
 	{
-		(uint8_t)PAL( (CHN(ll,0) + CHN(ul,0) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(ll,1) + CHN(ul,1) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(ll,2) + CHN(ul,2) + 1) / 2 ),
+		(uint8_t)( (CHN(ll,0) + CHN(ul,0) + 1) / 2 ),
+		(uint8_t)( (CHN(ll,1) + CHN(ul,1) + 1) / 2 ),
+		(uint8_t)( (CHN(ll,2) + CHN(ul,2) + 1) / 2 ),
 	};
+
+	PAL(L,pal,pal_size);
 
 	uint8_t R[3] = 
 	{
-		(uint8_t)PAL( (CHN(lr,0) + CHN(ur,0) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(lr,1) + CHN(ur,1) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(lr,2) + CHN(ur,2) + 1) / 2 ),
+		(uint8_t)( (CHN(lr,0) + CHN(ur,0) + 1) / 2 ),
+		(uint8_t)( (CHN(lr,1) + CHN(ur,1) + 1) / 2 ),
+		(uint8_t)( (CHN(lr,2) + CHN(ur,2) + 1) / 2 ),
 	};
+
+	PAL(R,pal,pal_size);
 
 	uint8_t B[3] =
 	{
-		(uint8_t)PAL( (CHN(ll,0) + CHN(lr,0) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(ll,1) + CHN(lr,1) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(ll,2) + CHN(lr,2) + 1) / 2 ),
+		(uint8_t)( (CHN(ll,0) + CHN(lr,0) + 1) / 2 ),
+		(uint8_t)( (CHN(ll,1) + CHN(lr,1) + 1) / 2 ),
+		(uint8_t)( (CHN(ll,2) + CHN(lr,2) + 1) / 2 ),
 	};
+
+	PAL(B,pal,pal_size);
 
 	uint8_t T[3] =
 	{ 
-		(uint8_t)PAL( (CHN(ul,0) + CHN(ur,0) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(ul,1) + CHN(ur,1) + 1) / 2 ),
-		(uint8_t)PAL( (CHN(ul,2) + CHN(ur,2) + 1) / 2 ),
+		(uint8_t)( (CHN(ul,0) + CHN(ur,0) + 1) / 2 ),
+		(uint8_t)( (CHN(ul,1) + CHN(ur,1) + 1) / 2 ),
+		(uint8_t)( (CHN(ul,2) + CHN(ur,2) + 1) / 2 ),
 	};
+
+	PAL(T,pal,pal_size);
 
 
 	int v_err = DIF(L,ll) + DIF(L,ul) + DIF(R,lr) + DIF(R,ur);
@@ -331,13 +370,13 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3])
 
 	if (d_err < v_err && d_err < h_err)
 	{
-		cell.bk[0]=D[d_c0][0];
-		cell.bk[1]=D[d_c0][1];
-		cell.bk[2]=D[d_c0][2];
+		cell.bk[0]=pal[d_c0][0];
+		cell.bk[1]=pal[d_c0][1];
+		cell.bk[2]=pal[d_c0][2];
 
-		cell.fg[0]=D[d_c1][0];
-		cell.fg[1]=D[d_c1][1];
-		cell.fg[2]=D[d_c1][2];
+		cell.fg[0]=pal[d_c1][0];
+		cell.fg[1]=pal[d_c1][1];
+		cell.fg[2]=pal[d_c1][2];
 
 		cell.glyph = d_gl+175;
 		//stat = dither_blocks+d_gl-1;
@@ -476,6 +515,16 @@ int main(int argc, char* argv[])
     uint32_t* org = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
 	memcpy(org,pix,sizeof(uint32_t)*w*h); // for error check
 
+	const int pal_size = 216;
+	uint8_t pal[pal_size][3];
+	for (int i=0; i<pal_size; i++)
+	{
+		int j = i;
+		pal[i][0] = j%6*51; j /= 6;
+		pal[i][1] = j%6*51; j /= 6;
+		pal[i][2] = j%6*51; j /= 6;
+	}
+
     for (int x=0; x<w; x+=2)
     {
 	    for (int y=0; y<h; y+=2)
@@ -491,7 +540,7 @@ int main(int argc, char* argv[])
 			};
 
 			int dev[3] = {0,0,0};
-			Do(src,ptr,dev);
+			Do(src,ptr,dev, pal, pal_size);
 
 			switch (ptr->glyph)
 			{
@@ -519,10 +568,13 @@ int main(int argc, char* argv[])
 
 			ptr++;
 
+			// if no dithering
+			continue;
+
 			// -4 is 100% , -8 is 50%, ... -1024 should be 0%
-			dev[0]/=-4;
-			dev[1]/=-4;
-			dev[2]/=-4;
+			dev[0]/=-6;
+			dev[1]/=-6;
+			dev[2]/=-6;
 
 			int hlf[3] = {dev[0]/2,dev[1]/2,dev[2]/2};
 			dev[0] -= hlf[0];
@@ -596,9 +648,9 @@ int main(int argc, char* argv[])
 				{	
 					uint8_t mix[3] = 
 					{
-						(uint8_t)((ptr->bk[0]*3 + ptr->fg[0])/4),
-						(uint8_t)((ptr->bk[1]*3 + ptr->fg[1])/4),
-						(uint8_t)((ptr->bk[2]*3 + ptr->fg[2])/4),
+						(uint8_t)sqrt((3*ptr->bk[0]*ptr->bk[0] + 1*ptr->fg[0]*ptr->fg[0])/4),
+						(uint8_t)sqrt((3*ptr->bk[1]*ptr->bk[1] + 1*ptr->fg[1]*ptr->fg[1])/4),
+						(uint8_t)sqrt((3*ptr->bk[2]*ptr->bk[2] + 1*ptr->fg[2]*ptr->fg[2])/4),
 					};
 					err += DIF(mix, src[0]);
 					err += DIF(mix, src[1]);
@@ -611,9 +663,9 @@ int main(int argc, char* argv[])
 				{
 					uint8_t mix[3] = 
 					{
-						(uint8_t)((ptr->bk[0] + ptr->fg[0])/2),
-						(uint8_t)((ptr->bk[1] + ptr->fg[1])/2),
-						(uint8_t)((ptr->bk[2] + ptr->fg[2])/2),
+						(uint8_t)sqrt((2*ptr->bk[0]*ptr->bk[0] + 2*ptr->fg[0]*ptr->fg[0])/4),
+						(uint8_t)sqrt((2*ptr->bk[1]*ptr->bk[1] + 2*ptr->fg[1]*ptr->fg[1])/4),
+						(uint8_t)sqrt((2*ptr->bk[2]*ptr->bk[2] + 2*ptr->fg[2]*ptr->fg[2])/4),
 					};
 					err += DIF(mix, src[0]);
 					err += DIF(mix, src[1]);
