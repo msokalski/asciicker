@@ -205,16 +205,22 @@ int32_t ABS(int32_t v)
 uint32_t DIF(uint8_t c[3], uint32_t r) 
 {
 	return 
-	    1*ABS((int32_t)(c[0])-(int32_t)(CHN(r,0))) +
-    	1*ABS((int32_t)(c[1])-(int32_t)(CHN(r,1))) +
+	    2*ABS((int32_t)(c[0])-(int32_t)(CHN(r,0))) +
+    	3*ABS((int32_t)(c[1])-(int32_t)(CHN(r,1))) +
     	1*ABS((int32_t)(c[2])-(int32_t)(CHN(r,2)));
 }
 
 void DEV(uint8_t c[3], uint32_t r, int d[3])
 {
+	/*
 	d[0] += (int32_t)(c[0])-(int32_t)CHN(r,0);
 	d[1] += (int32_t)(c[1])-(int32_t)CHN(r,1);
 	d[2] += (int32_t)(c[2])-(int32_t)CHN(r,2);
+	*/
+
+	d[0] += (int32_t)(c[0]) * c[0] - (int32_t)CHN(r,0) * CHN(r,0);
+	d[1] += (int32_t)(c[1]) * c[1] - (int32_t)CHN(r,1) * CHN(r,1);
+	d[2] += (int32_t)(c[2]) * c[2] - (int32_t)CHN(r,2) * CHN(r,2);
 }
 
 int MIN(int a, int b)
@@ -230,11 +236,20 @@ int MAX(int a, int b)
 void ADD(uint32_t* p, int d[3])
 {
 	uint32_t v = *p;
+	/*
 	int c[3] =
 	{
 		MIN(255,MAX(0,CHN(v,0) + d[0])),
 		MIN(255,MAX(0,CHN(v,1) + d[1])),
 		MIN(255,MAX(0,CHN(v,2) + d[2]))
+	};
+	*/
+
+	int c[3] =
+	{
+		MIN(255,MAX(0,(int)sqrt((int)CHN(v,0) * CHN(v,0) + d[0]))),
+		MIN(255,MAX(0,(int)sqrt((int)CHN(v,1) * CHN(v,1) + d[1]))),
+		MIN(255,MAX(0,(int)sqrt((int)CHN(v,2) * CHN(v,2) + d[2]))),
 	};
 
 	*p = c[0] | (c[1]<<8) | (c[2]<<16);
@@ -246,7 +261,7 @@ void PAL(uint8_t c[3], uint8_t pal[][3], int pal_size)
 	int p;
 	for (int i=0; i<pal_size; i++)
 	{
-		int ie = ABS(c[0]-pal[i][0]) + ABS(c[1]-pal[i][1]) + ABS(c[2]-pal[i][2]);
+		int ie = 2*ABS(c[0]-pal[i][0]) + 3*ABS(c[1]-pal[i][1]) + ABS(c[2]-pal[i][2]);
 		if (e<0 || ie<e)
 		{
 			e = ie;
@@ -379,7 +394,6 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 		cell.fg[2]=pal[d_c1][2];
 
 		cell.glyph = d_gl+175;
-		//stat = dither_blocks+d_gl-1;
 
 		dev[0]+=d_dev[0];
 		dev[1]+=d_dev[1];
@@ -397,7 +411,6 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 		cell.fg[2]=L[2];
 
 		cell.glyph = 221;
-		//stat = half_blocks+1;
 
 		DEV(L,ll,dev);
 		DEV(L,ul,dev);
@@ -415,7 +428,6 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 		cell.fg[2]=T[2];
 
 		cell.glyph = 220;
-		//stat = half_blocks+0;
 
 		DEV(B,ll,dev);
 		DEV(B,lr,dev);
@@ -427,27 +439,7 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 	if (memcmp(cell.bk,cell.fg,3)==0)
 	{
 		cell.glyph = 219; //32;
-		//stat = &solids;
 	}
-
-	//(*stat)++;
-
-	/*
-	int b = cell.bk[0] | (cell.bk[1]<<8) | (cell.bk[2]<<16);
-	int f = cell.fg[0] | (cell.fg[1]<<8) | (cell.fg[2]<<16);
-
-	if ( !(hist[b>>3] & (1<<(b&7))) )
-	{
-		hist[b>>3] |= (1<<(b&7));
-		used++;
-	}
-
-	if ( !(hist[f>>3] & (1<<(f&7))) )
-	{
-		hist[f>>3] |= (1<<(f&7));
-		used++;
-	}
-	*/
 
 	*(ptr++) = cell;
 }
@@ -515,7 +507,7 @@ int main(int argc, char* argv[])
     uint32_t* org = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
 	memcpy(org,pix,sizeof(uint32_t)*w*h); // for error check
 
-	const int pal_size = 216;
+	const int pal_size = 216; // ASCIICKER TERM
 	uint8_t pal[pal_size][3];
 	for (int i=0; i<pal_size; i++)
 	{
@@ -524,6 +516,17 @@ int main(int argc, char* argv[])
 		pal[i][1] = j%6*51; j /= 6;
 		pal[i][2] = j%6*51; j /= 6;
 	}
+
+	/*
+	const int pal_size = 16; // ANSI
+	uint8_t pal[pal_size][3] = 
+	{
+		{0x00,0x00,0x00},{0x55,0x55,0x55},{0x00,0x00,0xAA},{0x55,0x55,0xFF},
+		{0x00,0xAA,0x00},{0x55,0xFF,0x55},{0x00,0xAA,0xAA},{0x55,0xFF,0xFF},
+		{0xAA,0x00,0x00},{0xFF,0x55,0x55},{0xAA,0x00,0xAA},{0xFF,0x55,0xFF},
+		{0xAA,0x55,0x00},{0xFF,0xFF,0x55},{0xAA,0xAA,0xAA},{0xFF,0xFF,0xFF},
+	};
+	*/
 
     for (int x=0; x<w; x+=2)
     {
