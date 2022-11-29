@@ -8,6 +8,8 @@
 #include "../upng.h"
 #include "../rgba8.h"
 
+#define GAMMA 2.2
+
 uint64_t GetTime()
 {
 	#ifdef _WIN32
@@ -95,17 +97,35 @@ int32_t ABS(int32_t v)
 
 uint32_t DIF(uint8_t c[3], uint32_t r) 
 {
-	return 
+	uint32_t chr =  
 	    2*ABS((int32_t)(c[0])-(int32_t)(CHN(r,0))) +
     	3*ABS((int32_t)(c[1])-(int32_t)(CHN(r,1))) +
     	1*ABS((int32_t)(c[2])-(int32_t)(CHN(r,2)));
+
+	int lum_c = 2*c[0] + 3*c[1] + c[2];
+	int lum_r = 2*CHN(r,0) + 3*CHN(r,1) + CHN(r,2);
+
+	return chr;// + ABS(lum_c-lum_r);
+}
+
+uint32_t DIF(uint8_t c[3], uint8_t r[3]) 
+{
+	uint32_t chr =  
+	    2*ABS((int32_t)(c[0])-(int32_t)(r[0])) +
+    	3*ABS((int32_t)(c[1])-(int32_t)(r[1])) +
+    	1*ABS((int32_t)(c[2])-(int32_t)(r[2]));
+
+	int lum_c = 2*c[0] + 3*c[1] + c[2];
+	int lum_r = 2*r[0] + 3*r[1] + r[2];
+
+	return chr;// + ABS(lum_c-lum_r);
 }
 
 void DEV(uint8_t c[3], uint32_t r, int d[3])
 {
-	d[0] += (int32_t)(c[0]) * c[0] - (int32_t)CHN(r,0) * CHN(r,0);
-	d[1] += (int32_t)(c[1]) * c[1] - (int32_t)CHN(r,1) * CHN(r,1);
-	d[2] += (int32_t)(c[2]) * c[2] - (int32_t)CHN(r,2) * CHN(r,2);
+	d[0] += (int32_t)(pow(c[0],GAMMA) - pow(CHN(r,0),GAMMA));
+	d[1] += (int32_t)(pow(c[1],GAMMA) - pow(CHN(r,1),GAMMA));
+	d[2] += (int32_t)(pow(c[2],GAMMA) - pow(CHN(r,2),GAMMA));
 }
 
 int MIN(int a, int b)
@@ -118,15 +138,20 @@ int MAX(int a, int b)
 	return a > b ? a : b;
 }
 
+int CL8(int v)
+{
+	return MIN(255,MAX(0,v));
+}
+
 void ADD(uint32_t* p, int d[3])
 {
 	uint32_t v = *p;
 
 	int c[3] =
 	{
-		MIN(255,MAX(0,(int)sqrt((int)CHN(v,0) * CHN(v,0) + d[0]))),
-		MIN(255,MAX(0,(int)sqrt((int)CHN(v,1) * CHN(v,1) + d[1]))),
-		MIN(255,MAX(0,(int)sqrt((int)CHN(v,2) * CHN(v,2) + d[2]))),
+		(int)CL8(pow(pow(CHN(v,0),GAMMA) + d[0], 1.0/GAMMA)),
+		(int)CL8(pow(pow(CHN(v,1),GAMMA) + d[1], 1.0/GAMMA)),
+		(int)CL8(pow(pow(CHN(v,2),GAMMA) + d[2], 1.0/GAMMA)),
 	};
 
 	*p = c[0] | (c[1]<<8) | (c[2]<<16);
@@ -146,7 +171,7 @@ void INIT_HACK(uint8_t pal[][3], int pal_size)
 			{
 				for (int c=0; c<3; c++)
 				{
-					hack[g][c0][c1][c] = (uint8_t)(pow( (c0_w * pow(pal[c0][c], 2.2) + c1_w * pow(pal[c1][c], 2.2)) / 4, 1.0/2.2 ) + 0.499);
+					hack[g][c0][c1][c] = (uint8_t)CL8(pow( (c0_w * pow(pal[c0][c], GAMMA) + c1_w * pow(pal[c1][c], GAMMA)) / 4, 1.0/GAMMA ) + 0.499);
 				}
 			}
 		}
@@ -195,10 +220,10 @@ uint32_t Make(uint32_t src, XPCell* ptr, uint8_t pal[][3], int pal_size)
 
 	int e = -1;
 	int p;
-	int c[3] = { CHN(src,0), CHN(src,1), CHN(src,2) };
+	uint8_t c[3] = { CHN(src,0), CHN(src,1), CHN(src,2) };
 	for (int i=0; i<pal_size; i++)
 	{
-		int ie = 2*ABS(c[0]-pal[i][0]) + 3*ABS(c[1]-pal[i][1]) + ABS(c[2]-pal[i][2]);
+		int ie = DIF(c, pal[i]);
 		if (e<0 || ie<e)
 		{
 			e = ie;
@@ -219,14 +244,13 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	int d_err;
 	int d_gl=0, d_c0, d_c1;
-	int d_dev[3];
 
 	// target rgb
 	uint8_t G[3] = 
 	{
-		(uint8_t)pow( (pow(CHN(ll,0),2.2) + pow(CHN(ul,0),2.2) + pow(CHN(lr,0),2.2) + pow(CHN(ur,0),2.2)) / 4, 1.0/2.2 ),
-		(uint8_t)pow( (pow(CHN(ll,1),2.2) + pow(CHN(ul,1),2.2) + pow(CHN(lr,1),2.2) + pow(CHN(ur,1),2.2)) / 4, 1.0/2.2 ),
-		(uint8_t)pow( (pow(CHN(ll,2),2.2) + pow(CHN(ul,2),2.2) + pow(CHN(lr,2),2.2) + pow(CHN(ur,2),2.2)) / 4, 1.0/2.2 ),
+		(uint8_t)CL8(pow( (pow(CHN(ll,0),GAMMA) + pow(CHN(ul,0),GAMMA) + pow(CHN(lr,0),GAMMA) + pow(CHN(ur,0),GAMMA)) / 4, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( (pow(CHN(ll,1),GAMMA) + pow(CHN(ul,1),GAMMA) + pow(CHN(lr,1),GAMMA) + pow(CHN(ur,1),GAMMA)) / 4, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( (pow(CHN(ll,2),GAMMA) + pow(CHN(ul,2),GAMMA) + pow(CHN(lr,2),GAMMA) + pow(CHN(ur,2),GAMMA)) / 4, 1.0/GAMMA )),
 	};	
 
 	int xxx_offs = 0; //xxx_step / 2;
@@ -246,7 +270,6 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	d_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
 
-
 	// find best 2 color indices C0, C1
 	// and mixing factor  3/4 C0 + 1/4 C1 or 2/4 C0 + 2/4 C1
 
@@ -254,9 +277,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t L[3] = 
 	{
-		(uint8_t)pow( (pow(CHN(ll,0),2.2) + pow(CHN(ul,0),2.2)) / 2 , 1.0/2.2),
-		(uint8_t)pow( (pow(CHN(ll,1),2.2) + pow(CHN(ul,1),2.2)) / 2 , 1.0/2.2),
-		(uint8_t)pow( (pow(CHN(ll,2),2.2) + pow(CHN(ul,2),2.2)) / 2 , 1.0/2.2),
+		(uint8_t)CL8(pow( (pow(CHN(ll,0),GAMMA) + pow(CHN(ul,0),GAMMA)) / 2 , 1.0/GAMMA)),
+		(uint8_t)CL8(pow( (pow(CHN(ll,1),GAMMA) + pow(CHN(ul,1),GAMMA)) / 2 , 1.0/GAMMA)),
+		(uint8_t)CL8(pow( (pow(CHN(ll,2),GAMMA) + pow(CHN(ul,2),GAMMA)) / 2 , 1.0/GAMMA)),
 	};
 
 	L[0] = (L[0] + xxx_offs ) / xxx_step;
@@ -270,9 +293,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t R[3] = 
 	{
-		(uint8_t)pow( pow(CHN(lr,0),2.2) + pow(CHN(ur,0),2.2) / 2, 1.0/2.2 ),
-		(uint8_t)pow( pow(CHN(lr,1),2.2) + pow(CHN(ur,1),2.2) / 2, 1.0/2.2 ),
-		(uint8_t)pow( pow(CHN(lr,2),2.2) + pow(CHN(ur,2),2.2) / 2, 1.0/2.2 ),
+		(uint8_t)CL8(pow( pow(CHN(lr,0),GAMMA) + pow(CHN(ur,0),GAMMA) / 2, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( pow(CHN(lr,1),GAMMA) + pow(CHN(ur,1),GAMMA) / 2, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( pow(CHN(lr,2),GAMMA) + pow(CHN(ur,2),GAMMA) / 2, 1.0/GAMMA )),
 	};
 	R[0] = (R[0] + xxx_offs ) / xxx_step;
 	R[1] = (R[1] + xxx_offs ) / xxx_step;
@@ -285,9 +308,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t B[3] =
 	{
-		(uint8_t)pow( (pow(CHN(ll,0),2.2) + pow(CHN(lr,0),2.2)) / 2, 1.0/2.2 ),
-		(uint8_t)pow( (pow(CHN(ll,1),2.2) + pow(CHN(lr,1),2.2)) / 2, 1.0/2.2 ),
-		(uint8_t)pow( (pow(CHN(ll,2),2.2) + pow(CHN(lr,2),2.2)) / 2, 1.0/2.2 ),
+		(uint8_t)CL8(pow( (pow(CHN(ll,0),GAMMA) + pow(CHN(lr,0),GAMMA)) / 2, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( (pow(CHN(ll,1),GAMMA) + pow(CHN(lr,1),GAMMA)) / 2, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( (pow(CHN(ll,2),GAMMA) + pow(CHN(lr,2),GAMMA)) / 2, 1.0/GAMMA )),
 	};
 	B[0] = (B[0] + xxx_offs ) / xxx_step;
 	B[1] = (B[1] + xxx_offs ) / xxx_step;
@@ -300,9 +323,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t T[3] =
 	{ 
-		(uint8_t)pow( (pow(CHN(ul,0),2.2) + pow(CHN(ur,0),2.2)) / 2, 1.0/2.2 ),
-		(uint8_t)pow( (pow(CHN(ul,1),2.2) + pow(CHN(ur,1),2.2)) / 2, 1.0/2.2 ),
-		(uint8_t)pow( (pow(CHN(ul,2),2.2) + pow(CHN(ur,2),2.2)) / 2, 1.0/2.2 ),
+		(uint8_t)CL8(pow( (pow(CHN(ul,0),GAMMA) + pow(CHN(ur,0),GAMMA)) / 2, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( (pow(CHN(ul,1),GAMMA) + pow(CHN(ur,1),GAMMA)) / 2, 1.0/GAMMA )),
+		(uint8_t)CL8(pow( (pow(CHN(ul,2),GAMMA) + pow(CHN(ur,2),GAMMA)) / 2, 1.0/GAMMA )),
 	};
 	T[0] = (T[0] + xxx_offs ) / xxx_step;
 	T[1] = (T[1] + xxx_offs ) / xxx_step;
@@ -334,9 +357,10 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 		cell.glyph = d_gl+175;
 
-		dev[0]+=d_dev[0];
-		dev[1]+=d_dev[1];
-		dev[2]+=d_dev[2];
+		DEV(G, ll, dev);
+		DEV(G, lr, dev);
+		DEV(G, ul, dev);
+		DEV(G, ur, dev);
 	} 
 	else
 	if (v_err < h_err)
@@ -475,7 +499,7 @@ int main(int argc, char* argv[])
 	ok = fread(&xxx_step,4,1,plt);
 	if (!ok)
 		return -7;
-	int xxx_steps = 256 / xxx_step;
+	int xxx_steps = 255 / xxx_step + 1;
 	uint32_t* xxx = (uint32_t*)malloc(xxx_steps*xxx_steps*xxx_steps * sizeof(uint32_t));
 	ok = fread(xxx,xxx_steps*xxx_steps*xxx_steps * sizeof(uint32_t),1,plt);
 	if (!ok)
@@ -549,7 +573,7 @@ int main(int argc, char* argv[])
 			};
 
 			int dev[3] = {0,0,0};
-			err += Do(src,ptr,dev, pal, pal_size, xxx + 1/*skip_step*/, xxx_step);
+			err += Do(src,ptr,dev, pal, pal_size, xxx, xxx_step);
 
 			switch (ptr->glyph)
 			{
@@ -587,12 +611,12 @@ int main(int argc, char* argv[])
 			ptr++;
 
 			// if no dithering
-			continue;
+			//continue;
 
 			// -4 is 100% , -8 is 50%, ... -1024 should be 0%
-			dev[0]/=-6;
-			dev[1]/=-6;
-			dev[2]/=-6;
+			dev[0]/=-4;
+			dev[1]/=-4;
+			dev[2]/=-4;
 
 			int hlf[3] = {dev[0]/2,dev[1]/2,dev[2]/2};
 			dev[0] -= hlf[0];
