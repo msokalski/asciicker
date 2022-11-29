@@ -88,115 +88,6 @@ uint8_t CHN(uint32_t p, int c)
 	return (p>>(c*8))&0xff; 
 }
 
-// 216C
-/*
-uint8_t PAL(uint8_t v) 
-{
-	return (v+25)/51*51;
-}
-
-uint8_t PAL_LO(uint8_t v)             
-{
-	return (v)/51*51;
-}
-
-uint8_t PAL_HI(uint8_t v) 
-{
-	return ((v)+50)/51*51;
-}
-*/
-
-// 8C test (3 bits!!!)
-/*
-uint8_t PAL(uint8_t v) 
-{
-	return (v+128)/255*255;
-}
-
-uint8_t PAL_LO(uint8_t v) 
-{
-	return (v)/255*255;
-}
-
-uint8_t PAL_HI(uint8_t v) 
-{
-	return ((v)+255)/255*255;
-}
-*/
-
-// 27C test
-/*
-uint8_t PAL(uint8_t v) 
-{
-	return (v+64)/128*128;
-}
-
-uint8_t PAL_LO(uint8_t v) 
-{
-	return (v)/128*128;
-}
-
-uint8_t PAL_HI(uint8_t v) 
-{
-	return ((v)+128)/128*128;
-}
-*/
-
-
-// 64C test
-/*
-uint8_t PAL(uint8_t v) 
-{
-	return (v+42)/85*85;
-}
-
-uint8_t PAL_LO(uint8_t v) 
-{
-	return (v)/85*85;
-}
-
-uint8_t PAL_HI(uint8_t v) 
-{
-	return ((v)+84)/85*85;
-}
-*/
-
-// 4096C test
-/*
-uint8_t PAL(uint8_t v) 
-{
-	return (v+8)/17*17;
-}
-
-uint8_t PAL_LO(uint8_t v) 
-{
-	return (v)/17*17;
-}
-
-uint8_t PAL_HI(uint8_t v) 
-{
-	return ((v)+16)/17*17;
-}
-*/
-
-// NO PAL (all 16M colors)
-/*
-uint8_t PAL(uint8_t v) 
-{
-	return v;
-}
-
-uint8_t PAL_LO(uint8_t v) 
-{
-	return v;
-}
-
-uint8_t PAL_HI(uint8_t v) 
-{
-	return v;
-}
-*/
-
 int32_t ABS(int32_t v) 
 {
 	return v<0 ? -v : v;
@@ -212,12 +103,6 @@ uint32_t DIF(uint8_t c[3], uint32_t r)
 
 void DEV(uint8_t c[3], uint32_t r, int d[3])
 {
-	/*
-	d[0] += (int32_t)(c[0])-(int32_t)CHN(r,0);
-	d[1] += (int32_t)(c[1])-(int32_t)CHN(r,1);
-	d[2] += (int32_t)(c[2])-(int32_t)CHN(r,2);
-	*/
-
 	d[0] += (int32_t)(c[0]) * c[0] - (int32_t)CHN(r,0) * CHN(r,0);
 	d[1] += (int32_t)(c[1]) * c[1] - (int32_t)CHN(r,1) * CHN(r,1);
 	d[2] += (int32_t)(c[2]) * c[2] - (int32_t)CHN(r,2) * CHN(r,2);
@@ -236,14 +121,6 @@ int MAX(int a, int b)
 void ADD(uint32_t* p, int d[3])
 {
 	uint32_t v = *p;
-	/*
-	int c[3] =
-	{
-		MIN(255,MAX(0,CHN(v,0) + d[0])),
-		MIN(255,MAX(0,CHN(v,1) + d[1])),
-		MIN(255,MAX(0,CHN(v,2) + d[2]))
-	};
-	*/
 
 	int c[3] =
 	{
@@ -255,34 +132,39 @@ void ADD(uint32_t* p, int d[3])
 	*p = c[0] | (c[1]<<8) | (c[2]<<16);
 }
 
-void PAL(uint8_t c[3], uint8_t pal[][3], int pal_size)
+uint8_t hack[2][216][216][3];
+void INIT_HACK(uint8_t pal[][3], int pal_size)
 {
-	int e = -1;
-	int p;
-	for (int i=0; i<pal_size; i++)
+	for (int gl=1; gl<3; gl++)
 	{
-		int ie = 2*ABS(c[0]-pal[i][0]) + 3*ABS(c[1]-pal[i][1]) + ABS(c[2]-pal[i][2]);
-		if (e<0 || ie<e)
+		int g = gl-1;
+		int c0_w = 4 - gl;
+		int c1_w = gl;
+		for (int c0=0; c0<216; c0++)
 		{
-			e = ie;
-			p = i;
+			for (int c1=0; c1<216; c1++)
+			{
+				for (int c=0; c<3; c++)
+				{
+					hack[g][c0][c1][c] = (uint8_t)(pow( (c0_w * pow(pal[c0][c], 2.2) + c1_w * pow(pal[c1][c], 2.2)) / 4, 1.0/2.2 ) + 0.499);
+				}
+			}
 		}
 	}
-	c[0] = pal[p][0];
-	c[1] = pal[p][1];
-	c[2] = pal[p][2];
 }
 
-void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size)
+void HACK(uint8_t* G, int gl, uint8_t c0, uint8_t c1)
 {
-	uint32_t ll = src[0];
-	uint32_t lr = src[1];
-	uint32_t ul = src[2];
-	uint32_t ur = src[3];
+	int g = gl-1;
+	G[0] = hack[g][c0][c1][0];
+	G[1] = hack[g][c0][c1][1];
+	G[2] = hack[g][c0][c1][2];
+}
 
+uint32_t Make(uint32_t src, XPCell* ptr, uint8_t pal[][3], int pal_size)
+{
 	int d_err;
 	int d_gl=0, d_c0, d_c1;
-	int d_dev[3];
 
 	// find best 2 color indices C0, C1
 	// and mixing factor  3/4 C0 + 1/4 C1 or 2/4 C0 + 2/4 C1
@@ -294,30 +176,11 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 		{
 			for (int c1 = 0; c1<pal_size; c1++)
 			{
-				/*
-				if (ABS(pal[c0][0] - pal[c1][0]) > 51 ||
-					ABS(pal[c0][1] - pal[c1][1]) > 51 ||
-					ABS(pal[c0][2] - pal[c1][2]) > 51)
-					continue;
-
-				uint8_t G[3] =
-				{
-					(uint8_t)((c0_w * pal[c0][0] + c1_w * pal[c1][0])/4),
-					(uint8_t)((c0_w * pal[c0][1] + c1_w * pal[c1][1])/4),
-					(uint8_t)((c0_w * pal[c0][2] + c1_w * pal[c1][2])/4),
-				};
-				*/
-
-				// make use gamma = 2 (solves bleached colors and bad dither blocks)
-				uint8_t G[3] =
-				{
-					(uint8_t)sqrt( (c0_w * pal[c0][0] * pal[c0][0] + c1_w * pal[c1][0] * pal[c1][0]) / 4 ),
-					(uint8_t)sqrt( (c0_w * pal[c0][1] * pal[c0][1] + c1_w * pal[c1][1] * pal[c1][1]) / 4 ),
-					(uint8_t)sqrt( (c0_w * pal[c0][2] * pal[c0][2] + c1_w * pal[c1][2] * pal[c1][2]) / 4 ),
-				};
+				uint8_t G[3];
+				HACK(G, gl,c0,c1);
 
 				// calc err
-				int g_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
+				int g_err = 4 * DIF(G,src);
 
 				if (!d_gl || g_err < d_err)
 				{
@@ -325,66 +188,142 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 					d_gl = gl;
 					d_c0 = c0;
 					d_c1 = c1;
-
-					d_dev[0]=0;
-					d_dev[1]=0;
-					d_dev[2]=0;
-
-					DEV(G,ll,d_dev);
-					DEV(G,lr,d_dev);
-					DEV(G,ul,d_dev);
-					DEV(G,ur,d_dev);
 				}
 			}
 		}
 	}
 
+	int e = -1;
+	int p;
+	int c[3] = { CHN(src,0), CHN(src,1), CHN(src,2) };
+	for (int i=0; i<pal_size; i++)
+	{
+		int ie = 2*ABS(c[0]-pal[i][0]) + 3*ABS(c[1]-pal[i][1]) + ABS(c[2]-pal[i][2]);
+		if (e<0 || ie<e)
+		{
+			e = ie;
+			p = i;
+		}
+	}		
+
+	return d_c0 == d_c1 ? d_c0 | (d_c1<<8) | (p<<16) : d_c0 | (d_c1<<8) | (p<<16) | ((d_gl-1)<<24);
+}
+
+// return err
+int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size, uint32_t* xxx, int xxx_step)
+{
+	uint32_t ll = src[0];
+	uint32_t lr = src[1];
+	uint32_t ul = src[2];
+	uint32_t ur = src[3];
+
+	int d_err;
+	int d_gl=0, d_c0, d_c1;
+	int d_dev[3];
+
+	// target rgb
+	uint8_t G[3] = 
+	{
+		(uint8_t)pow( (pow(CHN(ll,0),2.2) + pow(CHN(ul,0),2.2) + pow(CHN(lr,0),2.2) + pow(CHN(ur,0),2.2)) / 4, 1.0/2.2 ),
+		(uint8_t)pow( (pow(CHN(ll,1),2.2) + pow(CHN(ul,1),2.2) + pow(CHN(lr,1),2.2) + pow(CHN(ur,1),2.2)) / 4, 1.0/2.2 ),
+		(uint8_t)pow( (pow(CHN(ll,2),2.2) + pow(CHN(ul,2),2.2) + pow(CHN(lr,2),2.2) + pow(CHN(ur,2),2.2)) / 4, 1.0/2.2 ),
+	};	
+
+	int xxx_offs = xxx_step / 2;
+	int xxx_size = 256 / xxx_step;
+	G[0] = (G[0] + xxx_offs ) / xxx_step;
+	G[1] = (G[1] + xxx_offs ) / xxx_step;
+	G[2] = (G[2] + xxx_offs ) / xxx_step;
+
+	uint32_t xxx_slot = xxx[ G[0] + G[1]*xxx_size + G[2]*xxx_size*xxx_size ];
+
+	d_c0 = xxx_slot & 0xFF;
+	d_c1 = (xxx_slot >> 8) & 0xFF;
+	d_gl = ((xxx_slot >> 24) & 0xFF) + 1;
+
+	// reconstructed rgb
+	HACK(G, d_gl,d_c0,d_c1);
+
+	int g_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
+
+
+	// find best 2 color indices C0, C1
+	// and mixing factor  3/4 C0 + 1/4 C1 or 2/4 C0 + 2/4 C1
+
 	// find out if using half-blocks is beter than dither blocks
 
 	uint8_t L[3] = 
 	{
-		(uint8_t)( (CHN(ll,0) + CHN(ul,0) + 1) / 2 ),
-		(uint8_t)( (CHN(ll,1) + CHN(ul,1) + 1) / 2 ),
-		(uint8_t)( (CHN(ll,2) + CHN(ul,2) + 1) / 2 ),
+		(uint8_t)pow( (pow(CHN(ll,0),2.2) + pow(CHN(ul,0),2.2)) / 2 , 1.0/2.2),
+		(uint8_t)pow( (pow(CHN(ll,1),2.2) + pow(CHN(ul,1),2.2)) / 2 , 1.0/2.2),
+		(uint8_t)pow( (pow(CHN(ll,2),2.2) + pow(CHN(ul,2),2.2)) / 2 , 1.0/2.2),
 	};
 
-	PAL(L,pal,pal_size);
+	L[0] = (L[0] + xxx_offs ) / xxx_step;
+	L[1] = (L[1] + xxx_offs ) / xxx_step;
+	L[2] = (L[2] + xxx_offs ) / xxx_step;
+	xxx_slot = xxx[ L[0] + L[1]*xxx_size + L[2]*xxx_size*xxx_size ];
+	xxx_slot = (xxx_slot >> 16) & 0xFF;
+	L[0] = pal[xxx_slot][0];
+	L[1] = pal[xxx_slot][1];
+	L[2] = pal[xxx_slot][2];	
 
 	uint8_t R[3] = 
 	{
-		(uint8_t)( (CHN(lr,0) + CHN(ur,0) + 1) / 2 ),
-		(uint8_t)( (CHN(lr,1) + CHN(ur,1) + 1) / 2 ),
-		(uint8_t)( (CHN(lr,2) + CHN(ur,2) + 1) / 2 ),
+		(uint8_t)pow( pow(CHN(lr,0),2.2) + pow(CHN(ur,0),2.2) / 2, 1.0/2.2 ),
+		(uint8_t)pow( pow(CHN(lr,1),2.2) + pow(CHN(ur,1),2.2) / 2, 1.0/2.2 ),
+		(uint8_t)pow( pow(CHN(lr,2),2.2) + pow(CHN(ur,2),2.2) / 2, 1.0/2.2 ),
 	};
-
-	PAL(R,pal,pal_size);
+	R[0] = (R[0] + xxx_offs ) / xxx_step;
+	R[1] = (R[1] + xxx_offs ) / xxx_step;
+	R[2] = (R[2] + xxx_offs ) / xxx_step;
+	xxx_slot = xxx[ R[0] + R[1]*xxx_size + R[2]*xxx_size*xxx_size ];
+	xxx_slot = (xxx_slot >> 16) & 0xFF;
+	R[0] = pal[xxx_slot][0];
+	R[1] = pal[xxx_slot][1];
+	R[2] = pal[xxx_slot][2];	
 
 	uint8_t B[3] =
 	{
-		(uint8_t)( (CHN(ll,0) + CHN(lr,0) + 1) / 2 ),
-		(uint8_t)( (CHN(ll,1) + CHN(lr,1) + 1) / 2 ),
-		(uint8_t)( (CHN(ll,2) + CHN(lr,2) + 1) / 2 ),
+		(uint8_t)pow( (pow(CHN(ll,0),2.2) + pow(CHN(lr,0),2.2)) / 2, 1.0/2.2 ),
+		(uint8_t)pow( (pow(CHN(ll,1),2.2) + pow(CHN(lr,1),2.2)) / 2, 1.0/2.2 ),
+		(uint8_t)pow( (pow(CHN(ll,2),2.2) + pow(CHN(lr,2),2.2)) / 2, 1.0/2.2 ),
 	};
-
-	PAL(B,pal,pal_size);
+	B[0] = (B[0] + xxx_offs ) / xxx_step;
+	B[1] = (B[1] + xxx_offs ) / xxx_step;
+	B[2] = (B[2] + xxx_offs ) / xxx_step;
+	xxx_slot = xxx[ B[0] + B[1]*xxx_size + B[2]*xxx_size*xxx_size ];
+	xxx_slot = (xxx_slot >> 16) & 0xFF;
+	B[0] = pal[xxx_slot][0];
+	B[1] = pal[xxx_slot][1];
+	B[2] = pal[xxx_slot][2];	
 
 	uint8_t T[3] =
 	{ 
-		(uint8_t)( (CHN(ul,0) + CHN(ur,0) + 1) / 2 ),
-		(uint8_t)( (CHN(ul,1) + CHN(ur,1) + 1) / 2 ),
-		(uint8_t)( (CHN(ul,2) + CHN(ur,2) + 1) / 2 ),
+		(uint8_t)pow( (pow(CHN(ul,0),2.2) + pow(CHN(ur,0),2.2)) / 2, 1.0/2.2 ),
+		(uint8_t)pow( (pow(CHN(ul,1),2.2) + pow(CHN(ur,1),2.2)) / 2, 1.0/2.2 ),
+		(uint8_t)pow( (pow(CHN(ul,2),2.2) + pow(CHN(ur,2),2.2)) / 2, 1.0/2.2 ),
 	};
-
-	PAL(T,pal,pal_size);
+	T[0] = (T[0] + xxx_offs ) / xxx_step;
+	T[1] = (T[1] + xxx_offs ) / xxx_step;
+	T[2] = (T[2] + xxx_offs ) / xxx_step;
+	xxx_slot = xxx[ T[0] + T[1]*xxx_size + T[2]*xxx_size*xxx_size ];
+	xxx_slot = (xxx_slot >> 16) & 0xFF;
+	T[0] = pal[xxx_slot][0];
+	T[1] = pal[xxx_slot][1];
+	T[2] = pal[xxx_slot][2];	
 
 
 	int v_err = DIF(L,ll) + DIF(L,ul) + DIF(R,lr) + DIF(R,ur);
 	int h_err = DIF(B,ll) + DIF(B,lr) + DIF(T,ul) + DIF(T,ur);
 
 	XPCell cell;
+	int err = -1;
 
 	if (d_err < v_err && d_err < h_err)
 	{
+		err = d_err;
+		
 		cell.bk[0]=pal[d_c0][0];
 		cell.bk[1]=pal[d_c0][1];
 		cell.bk[2]=pal[d_c0][2];
@@ -398,10 +337,12 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 		dev[0]+=d_dev[0];
 		dev[1]+=d_dev[1];
 		dev[2]+=d_dev[2];
-	}
+	} 
 	else
 	if (v_err < h_err)
 	{
+		err = v_err;
+
 		cell.bk[0]=R[0];
 		cell.bk[1]=R[1];
 		cell.bk[2]=R[2];
@@ -419,6 +360,8 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 	}
 	else
 	{
+		err = h_err;
+
 		cell.bk[0]=B[0];
 		cell.bk[1]=B[1];
 		cell.bk[2]=B[2];
@@ -442,6 +385,7 @@ void Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size
 	}
 
 	*(ptr++) = cell;
+	return err;
 }
 
 int main(int argc, char* argv[])
@@ -450,35 +394,121 @@ int main(int argc, char* argv[])
 
     if (argc<2)
     {
-        printf("usage: png2xp <file.png> [<file.xp>]\n");
+        printf("usage: \nTEACH:   png2xp <step(1-17)> <out_file.plt> \nCONVERT: png2xp <in_file.plt> <in_file.png> <out_file.xp>\n");
         return 1;
     }
 
+	/*
+	const int pal_size = 16; // ANSI
+	uint8_t pal[pal_size][3] = 
+	{
+		{0x00,0x00,0x00},{0x55,0x55,0x55},{0x00,0x00,0xAA},{0x55,0x55,0xFF},
+		{0x00,0xAA,0x00},{0x55,0xFF,0x55},{0x00,0xAA,0xAA},{0x55,0xFF,0xFF},
+		{0xAA,0x00,0x00},{0xFF,0x55,0x55},{0xAA,0x00,0xAA},{0xFF,0x55,0xFF},
+		{0xAA,0x55,0x00},{0xFF,0xFF,0x55},{0xAA,0xAA,0xAA},{0xFF,0xFF,0xFF},
+	};
+	*/
+
+	const int pal_size = 216; // ASCIICKER TERM
+	uint8_t pal[pal_size][3];
+	for (int i=0; i<pal_size; i++)
+	{
+		int j = i;
+		pal[i][0] = j%6*51; j /= 6;
+		pal[i][1] = j%6*51; j /= 6;
+		pal[i][2] = j%6*51; j /= 6;
+	}
+
+	INIT_HACK(pal,pal_size);
+
+	if (argc==3)
+	{
+		int step = atoi(argv[1]);
+		if (step<1 || step>17)
+		{
+			printf("step = %d is invalid, keep in range 1-17\n", step);
+			return -1;
+		}
+
+		// make palette file
+
+		FILE* plt = fopen(argv[2], "w");
+		if (!pal)
+		{
+			printf("can't write to: %s\n", argv[2]);
+			return -3;
+		}
+
+		// write step size
+		fwrite(&step,4,1,plt);
+
+		// write reverse lookup table
+		for (int B=0; B<256; B+=step)
+		for (int G=0; G<256; G+=step)
+		for (int R=0; R<256; R+=step)
+		{
+			uint32_t p = R | (G<<8) | (B<<16);
+
+			if ((p&0xFFFF) == 0)
+				printf("%d/%d\n",(p>>16)+1,256);
+
+			XPCell cell;
+			uint32_t w = Make(p, &cell, pal, pal_size);
+
+			fwrite(&w,4,1,plt);
+		}
+
+		fclose(plt);
+		return 0;
+	}
+
+	// load plt file
+	FILE* plt = fopen(argv[1],"r");
+	if (!plt)
+	{
+		printf("Can't read plt file: %s", argv[1]);
+		return -1;
+	}
+
+	int ok=0;
+	int32_t xxx_step;
+	ok = fread(&xxx_step,4,1,plt);
+	if (!ok)
+		return -7;
+	int xxx_steps = 256 / xxx_step;
+	uint32_t* xxx = (uint32_t*)malloc(xxx_steps*xxx_steps*xxx_steps * sizeof(uint32_t));
+	ok = fread(xxx,xxx_steps*xxx_steps*xxx_steps,1,plt);
+	if (!ok)
+		return -7;
+	fclose(plt);
+
     int w,h;
-    uint32_t* pix = LoadImg(argv[1],&w,&h);
+    uint32_t* pix = LoadImg(argv[2],&w,&h);
 
     if (!pix)
     {
+		free(xxx);
         printf("can't load: %s\n", argv[1]);
         return -1;
     }
 
     if ((w|h)&1)
     {
+		free(xxx);
         printf("png's width & height must be even but it is: %dx%d\n", w,h);
         return -2;
     }
 
 	const char* xp_name;
 	char xp_buff[4096];
-	if (argc>=3)
+	if (argc>=4)
 	{
-		xp_name = argv[2];
+		xp_name = argv[3];
 	}
 	else
     {
 		xp_name = xp_buff;
-		sprintf(xp_buff,"%s.xp",argv[1]);
+		sprintf(xp_buff,"%s.xp",argv[2]);
     }
 
 	int dither_blocks[2] = {0};
@@ -492,41 +522,17 @@ int main(int argc, char* argv[])
 	FILE* xp = fopen(xp_name, "w");
 	if (!xp)
     {
+		free(xxx);
         printf("can't write to: %s\n", argv[2]);
         return -3;
     }
 
 	int32_t hdr[] = {-1, 1/*layers*/, w/2, h/2};
 
-	fwrite(hdr, sizeof(hdr), 1, xp);
-
 	XPCell* buf = (XPCell*)malloc(sizeof(XPCell) * (w/2) * (h/2));
 	XPCell* ptr = buf;
 
-
-    uint32_t* org = (uint32_t*)malloc(sizeof(uint32_t)*w*h);
-	memcpy(org,pix,sizeof(uint32_t)*w*h); // for error check
-
-	const int pal_size = 216; // ASCIICKER TERM
-	uint8_t pal[pal_size][3];
-	for (int i=0; i<pal_size; i++)
-	{
-		int j = i;
-		pal[i][0] = j%6*51; j /= 6;
-		pal[i][1] = j%6*51; j /= 6;
-		pal[i][2] = j%6*51; j /= 6;
-	}
-
-	/*
-	const int pal_size = 16; // ANSI
-	uint8_t pal[pal_size][3] = 
-	{
-		{0x00,0x00,0x00},{0x55,0x55,0x55},{0x00,0x00,0xAA},{0x55,0x55,0xFF},
-		{0x00,0xAA,0x00},{0x55,0xFF,0x55},{0x00,0xAA,0xAA},{0x55,0xFF,0xFF},
-		{0xAA,0x00,0x00},{0xFF,0x55,0x55},{0xAA,0x00,0xAA},{0xFF,0x55,0xFF},
-		{0xAA,0x55,0x00},{0xFF,0xFF,0x55},{0xAA,0xAA,0xAA},{0xFF,0xFF,0xFF},
-	};
-	*/
+	uint64_t err = 0;
 
     for (int x=0; x<w; x+=2)
     {
@@ -543,7 +549,7 @@ int main(int argc, char* argv[])
 			};
 
 			int dev[3] = {0,0,0};
-			Do(src,ptr,dev, pal, pal_size);
+			err += Do(src,ptr,dev, pal, pal_size, xxx, xxx_step);
 
 			switch (ptr->glyph)
 			{
@@ -567,6 +573,15 @@ int main(int argc, char* argv[])
 			{
 				hist[f>>3] |= (1<<(f&7));
 				used++;
+			}
+
+			switch (ptr->glyph)
+			{
+				case 219: solids++; break;
+				case 220: half_blocks[0]++; break;
+				case 221: half_blocks[1]++; break;
+				case 176: dither_blocks[0]++; break;
+				case 177: dither_blocks[1]++; break;
 			}
 
 			ptr++;
@@ -602,6 +617,7 @@ int main(int argc, char* argv[])
         }
     } 
 
+	fwrite(hdr,4,4,xp);
 	fwrite(buf,sizeof(XPCell),(w/2)*(h/2),xp);
 
 	fclose(xp);
@@ -609,81 +625,8 @@ int main(int argc, char* argv[])
     free(pix);
 	free(hist);
 
-	ptr = buf;
-	uint64_t err = 0;
-    for (int x=0; x<w; x+=2)
-    {
-	    for (int y=0; y<h; y+=2)
-        {
-			uint32_t src[4] = 
-			{
-				org[x + w*y],
-				org[x + 1 + w*y],
-				org[x + w*y + w],
-				org[x + 1 + w*y + w]
-			};
-
-			// calc err
-			switch (ptr->glyph)
-			{
-				case 219: solids++; break;
-					err += DIF(ptr->bk, src[0]);
-					err += DIF(ptr->bk, src[1]);
-					err += DIF(ptr->bk, src[2]);
-					err += DIF(ptr->bk, src[3]);
-					break;
-
-				case 220: 
-					err += DIF(ptr->bk, src[0]);
-					err += DIF(ptr->bk, src[1]);
-					err += DIF(ptr->fg, src[2]);
-					err += DIF(ptr->fg, src[3]);
-					break;
-
-				case 221: half_blocks[1]++; break;
-					err += DIF(ptr->bk, src[1]);
-					err += DIF(ptr->bk, src[3]);
-					err += DIF(ptr->fg, src[0]);
-					err += DIF(ptr->fg, src[2]);
-					break;
-
-				case 176: 
-				{	
-					uint8_t mix[3] = 
-					{
-						(uint8_t)sqrt((3*ptr->bk[0]*ptr->bk[0] + 1*ptr->fg[0]*ptr->fg[0])/4),
-						(uint8_t)sqrt((3*ptr->bk[1]*ptr->bk[1] + 1*ptr->fg[1]*ptr->fg[1])/4),
-						(uint8_t)sqrt((3*ptr->bk[2]*ptr->bk[2] + 1*ptr->fg[2]*ptr->fg[2])/4),
-					};
-					err += DIF(mix, src[0]);
-					err += DIF(mix, src[1]);
-					err += DIF(mix, src[2]);
-					err += DIF(mix, src[3]);
-					break;
-				}
-
-				case 177:
-				{
-					uint8_t mix[3] = 
-					{
-						(uint8_t)sqrt((2*ptr->bk[0]*ptr->bk[0] + 2*ptr->fg[0]*ptr->fg[0])/4),
-						(uint8_t)sqrt((2*ptr->bk[1]*ptr->bk[1] + 2*ptr->fg[1]*ptr->fg[1])/4),
-						(uint8_t)sqrt((2*ptr->bk[2]*ptr->bk[2] + 2*ptr->fg[2]*ptr->fg[2])/4),
-					};
-					err += DIF(mix, src[0]);
-					err += DIF(mix, src[1]);
-					err += DIF(mix, src[2]);
-					err += DIF(mix, src[3]);
-					break;
-				}
-			}
-
-			ptr++;
-        }
-    } 
-
-	free(org);
 	free(buf);
+	free(xxx);	
 
 	uint64_t t1 = GetTime();
 
@@ -745,6 +688,8 @@ int MakePal(const uint32_t* pix, int wh, uint32_t pal[], int pal_size)
 	{
 		int n;
 		uint8_t c[3];
+		int centroid;
+		int distance;
 	};
 
 	Point* data = (Point*)malloc(sizeof(Point) * size);
@@ -770,7 +715,6 @@ int MakePal(const uint32_t* pix, int wh, uint32_t pal[], int pal_size)
 	}
 
 	free(hist);
-	
 
 	struct Centroid
 	{
@@ -789,7 +733,8 @@ int MakePal(const uint32_t* pix, int wh, uint32_t pal[], int pal_size)
 
 	for (int i = 1; i<size; i++)
 	{
-		// find minimum distance to closest 
+		// find minimum distance to closest
+		
 	}	
 
 
