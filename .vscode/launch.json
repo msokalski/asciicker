@@ -12,8 +12,9 @@
 
         //    /*
             "program": "${workspaceFolder}/png2xp/png2xp",
-            "args": ["~/Pictures/mainmenu_background_320x180.png", 
-                     "~/REXPaint-v1.60/images/work/converted.xp"],
+            "args": ["5.plt",
+                     "~/Pictures/cave-small.png", 
+                     "~/REXPaint-v1.60/images/work/cave-small-5.xp"],
             "externalConsole": false,
         //    */            
 

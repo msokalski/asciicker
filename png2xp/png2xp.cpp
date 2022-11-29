@@ -229,8 +229,8 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 		(uint8_t)pow( (pow(CHN(ll,2),2.2) + pow(CHN(ul,2),2.2) + pow(CHN(lr,2),2.2) + pow(CHN(ur,2),2.2)) / 4, 1.0/2.2 ),
 	};	
 
-	int xxx_offs = xxx_step / 2;
-	int xxx_size = 256 / xxx_step;
+	int xxx_offs = 0; //xxx_step / 2;
+	int xxx_size = 255 / xxx_step + 1;
 	G[0] = (G[0] + xxx_offs ) / xxx_step;
 	G[1] = (G[1] + xxx_offs ) / xxx_step;
 	G[2] = (G[2] + xxx_offs ) / xxx_step;
@@ -244,7 +244,7 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 	// reconstructed rgb
 	HACK(G, d_gl,d_c0,d_c1);
 
-	int g_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
+	d_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
 
 
 	// find best 2 color indices C0, C1
@@ -477,7 +477,7 @@ int main(int argc, char* argv[])
 		return -7;
 	int xxx_steps = 256 / xxx_step;
 	uint32_t* xxx = (uint32_t*)malloc(xxx_steps*xxx_steps*xxx_steps * sizeof(uint32_t));
-	ok = fread(xxx,xxx_steps*xxx_steps*xxx_steps,1,plt);
+	ok = fread(xxx,xxx_steps*xxx_steps*xxx_steps * sizeof(uint32_t),1,plt);
 	if (!ok)
 		return -7;
 	fclose(plt);
@@ -549,7 +549,7 @@ int main(int argc, char* argv[])
 			};
 
 			int dev[3] = {0,0,0};
-			err += Do(src,ptr,dev, pal, pal_size, xxx, xxx_step);
+			err += Do(src,ptr,dev, pal, pal_size, xxx + 1/*skip_step*/, xxx_step);
 
 			switch (ptr->glyph)
 			{
