@@ -547,8 +547,8 @@ int main(int argc, char* argv[])
 					{
 						uint32_t p = R | (G << 8) | (B << 16);
 
-						if ((p & 0xFFFF) == 0)
-							printf("%d/%d\n", (p >> 16) + 1, 256);
+						if ((R & 0xFF) == 0)
+							printf("%d: %d/%d\n", B, G, 256);
 
 						uint32_t w = Make(p, pal, pal_size);
 
