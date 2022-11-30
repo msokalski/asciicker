@@ -8,8 +8,6 @@
 #include "../upng.h"
 #include "../rgba8.h"
 
-#define GAMMA 2.2
-
 uint64_t GetTime()
 {
 	#ifdef _WIN32
@@ -95,21 +93,63 @@ int32_t ABS(int32_t v)
 	return v<0 ? -v : v;
 }
 
-uint32_t DIF(uint8_t c[3], uint32_t r) 
+double DEC(uint8_t e)
 {
-	uint32_t chr =  
-	    2*ABS((int32_t)(c[0])-(int32_t)(CHN(r,0))) +
-    	3*ABS((int32_t)(c[1])-(int32_t)(CHN(r,1))) +
-    	1*ABS((int32_t)(c[2])-(int32_t)(CHN(r,2)));
-
-	int lum_c = 2*c[0] + 3*c[1] + c[2];
-	int lum_r = 2*CHN(r,0) + 3*CHN(r,1) + CHN(r,2);
-
-	return chr;// + ABS(lum_c-lum_r);
+	double t = e / 255.0;
+	return t >= 0.04045 ? pow((t+0.055)/1.055, 2.4) : t/12.92;
 }
 
-uint32_t DIF(uint8_t c[3], uint8_t r[3]) 
+uint8_t ENC(double d)
 {
+	if (d<0)
+		d=0;
+	if (d>1)
+		d=1;
+	return round(255.0 * (d > 0.0031308 ? 1.055*pow(d, 1.0/2.4) - 0.055 : 12.92*d));
+}
+
+double DIF(uint8_t c[3], uint8_t r[3]) 
+{
+	// let's try CIE76
+
+	struct LAB
+	{
+		static double f(double t)
+		{
+			const double d = 6.0/29;
+			return t > d*d*d ? pow(t,1.0/3.0) : t / (3*d*d + 4.0/29.0);
+		}
+
+		LAB(uint8_t c[3])
+		{
+			double R = DEC(c[0]);
+			double G = DEC(c[1]);
+			double B = DEC(c[2]);
+
+			double X = 0.4124564 * R + 0.3575761 * G + 0.1804375 * B;
+			double Y = 0.2126729 * R + 0.7151522 * G + 0.0721750 * B;
+			double Z = 0.0193339 * R + 0.1191920 * G + 0.9503041 * B;
+
+			const double Xn =  96.4214;			
+			const double Yn = 100.0000;
+			const double Zn = 108.8840;
+
+			L = 116 * f(Y/Yn) - 16;
+			a = 500 * (f(X/Xn) - f(Y/Yn));
+			b = 200 * (f(Y/Yn) - f(Z/Zn));
+		}
+
+		double L,a,b;
+	};
+
+	LAB q1{c},q2{r};
+
+	double da = q1.a-q2.a;
+	double db = q1.b-q2.b;
+	double dL = q1.L-q2.L;
+	double err = sqrt(dL*dL + da*da + db*db);
+
+	/*
 	uint32_t chr =  
 	    2*ABS((int32_t)(c[0])-(int32_t)(r[0])) +
     	3*ABS((int32_t)(c[1])-(int32_t)(r[1])) +
@@ -119,13 +159,22 @@ uint32_t DIF(uint8_t c[3], uint8_t r[3])
 	int lum_r = 2*r[0] + 3*r[1] + r[2];
 
 	return chr;// + ABS(lum_c-lum_r);
+	*/
+
+	return err;
 }
 
-void DEV(uint8_t c[3], uint32_t r, int d[3])
+double DIF(uint8_t c[3], uint32_t r) 
 {
-	d[0] += (int32_t)(pow(c[0],GAMMA) - pow(CHN(r,0),GAMMA));
-	d[1] += (int32_t)(pow(c[1],GAMMA) - pow(CHN(r,1),GAMMA));
-	d[2] += (int32_t)(pow(c[2],GAMMA) - pow(CHN(r,2),GAMMA));
+	uint8_t d[3] = {CHN(r,0),CHN(r,1),CHN(r,2)};
+	return DIF(c,d);
+}
+
+void DEV(uint8_t c[3], uint32_t r, double d[3])
+{
+	d[0] += DEC(c[0]) - DEC(CHN(r,0));
+	d[1] += DEC(c[1]) - DEC(CHN(r,1));
+	d[2] += DEC(c[2]) - DEC(CHN(r,2));
 }
 
 int MIN(int a, int b)
@@ -138,20 +187,20 @@ int MAX(int a, int b)
 	return a > b ? a : b;
 }
 
-int CL8(int v)
+uint8_t CL8(double v)
 {
-	return MIN(255,MAX(0,v));
+	return (uint8_t)MIN(255,MAX(0,(int)round(v)));
 }
 
-void ADD(uint32_t* p, int d[3])
+void ADD(uint32_t* p, double d[3])
 {
 	uint32_t v = *p;
 
-	int c[3] =
+	uint8_t c[3] =
 	{
-		(int)CL8(pow(pow(CHN(v,0),GAMMA) + d[0], 1.0/GAMMA)),
-		(int)CL8(pow(pow(CHN(v,1),GAMMA) + d[1], 1.0/GAMMA)),
-		(int)CL8(pow(pow(CHN(v,2),GAMMA) + d[2], 1.0/GAMMA)),
+		ENC(DEC(CHN(v,0) + d[0])),
+		ENC(DEC(CHN(v,1) + d[1])),
+		ENC(DEC(CHN(v,2) + d[2])),
 	};
 
 	*p = c[0] | (c[1]<<8) | (c[2]<<16);
@@ -171,7 +220,7 @@ void INIT_HACK(uint8_t pal[][3], int pal_size)
 			{
 				for (int c=0; c<3; c++)
 				{
-					hack[g][c0][c1][c] = (uint8_t)CL8(pow( (c0_w * pow(pal[c0][c], GAMMA) + c1_w * pow(pal[c1][c], GAMMA)) / 4, 1.0/GAMMA ) + 0.499);
+					hack[g][c0][c1][c] = ENC( (c0_w * DEC(pal[c0][c]) + c1_w * DEC(pal[c1][c])) / 4 );
 				}
 			}
 		}
@@ -188,7 +237,7 @@ void HACK(uint8_t* G, int gl, uint8_t c0, uint8_t c1)
 
 uint32_t Make(uint32_t src, XPCell* ptr, uint8_t pal[][3], int pal_size)
 {
-	int d_err;
+	double d_err;
 	int d_gl=0, d_c0, d_c1;
 
 	// find best 2 color indices C0, C1
@@ -205,7 +254,7 @@ uint32_t Make(uint32_t src, XPCell* ptr, uint8_t pal[][3], int pal_size)
 				HACK(G, gl,c0,c1);
 
 				// calc err
-				int g_err = 4 * DIF(G,src);
+				double g_err = 4 * DIF(G,src);
 
 				if (!d_gl || g_err < d_err)
 				{
@@ -218,12 +267,12 @@ uint32_t Make(uint32_t src, XPCell* ptr, uint8_t pal[][3], int pal_size)
 		}
 	}
 
-	int e = -1;
+	double e = -1;
 	int p;
 	uint8_t c[3] = { CHN(src,0), CHN(src,1), CHN(src,2) };
 	for (int i=0; i<pal_size; i++)
 	{
-		int ie = DIF(c, pal[i]);
+		double ie = DIF(c, pal[i]);
 		if (e<0 || ie<e)
 		{
 			e = ie;
@@ -235,25 +284,25 @@ uint32_t Make(uint32_t src, XPCell* ptr, uint8_t pal[][3], int pal_size)
 }
 
 // return err
-int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size, uint32_t* xxx, int xxx_step)
+double Do(uint32_t src[4], XPCell* ptr, double dev[3], uint8_t pal[][3], int pal_size, uint32_t* xxx, int xxx_step)
 {
 	uint32_t ll = src[0];
 	uint32_t lr = src[1];
 	uint32_t ul = src[2];
 	uint32_t ur = src[3];
 
-	int d_err;
+	double d_err;
 	int d_gl=0, d_c0, d_c1;
 
 	// target rgb
 	uint8_t G[3] = 
 	{
-		(uint8_t)CL8(pow( (pow(CHN(ll,0),GAMMA) + pow(CHN(ul,0),GAMMA) + pow(CHN(lr,0),GAMMA) + pow(CHN(ur,0),GAMMA)) / 4, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( (pow(CHN(ll,1),GAMMA) + pow(CHN(ul,1),GAMMA) + pow(CHN(lr,1),GAMMA) + pow(CHN(ur,1),GAMMA)) / 4, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( (pow(CHN(ll,2),GAMMA) + pow(CHN(ul,2),GAMMA) + pow(CHN(lr,2),GAMMA) + pow(CHN(ur,2),GAMMA)) / 4, 1.0/GAMMA )),
+		ENC( (DEC(CHN(ll,0)) + DEC(CHN(ul,0)) + DEC(CHN(lr,0)) + DEC(CHN(ur,0))) / 4 ),
+		ENC( (DEC(CHN(ll,1)) + DEC(CHN(ul,1)) + DEC(CHN(lr,1)) + DEC(CHN(ur,1))) / 4 ),
+		ENC( (DEC(CHN(ll,2)) + DEC(CHN(ul,2)) + DEC(CHN(lr,2)) + DEC(CHN(ur,2))) / 4 ),
 	};	
 
-	int xxx_offs = 0; //xxx_step / 2;
+	int xxx_offs = xxx_step / 2;
 	int xxx_size = 255 / xxx_step + 1;
 	G[0] = (G[0] + xxx_offs ) / xxx_step;
 	G[1] = (G[1] + xxx_offs ) / xxx_step;
@@ -277,9 +326,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t L[3] = 
 	{
-		(uint8_t)CL8(pow( (pow(CHN(ll,0),GAMMA) + pow(CHN(ul,0),GAMMA)) / 2 , 1.0/GAMMA)),
-		(uint8_t)CL8(pow( (pow(CHN(ll,1),GAMMA) + pow(CHN(ul,1),GAMMA)) / 2 , 1.0/GAMMA)),
-		(uint8_t)CL8(pow( (pow(CHN(ll,2),GAMMA) + pow(CHN(ul,2),GAMMA)) / 2 , 1.0/GAMMA)),
+		ENC( (DEC(CHN(ll,0)) + DEC(CHN(ul,0))) / 2),
+		ENC( (DEC(CHN(ll,1)) + DEC(CHN(ul,1))) / 2),
+		ENC( (DEC(CHN(ll,2)) + DEC(CHN(ul,2))) / 2),
 	};
 
 	L[0] = (L[0] + xxx_offs ) / xxx_step;
@@ -293,9 +342,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t R[3] = 
 	{
-		(uint8_t)CL8(pow( pow(CHN(lr,0),GAMMA) + pow(CHN(ur,0),GAMMA) / 2, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( pow(CHN(lr,1),GAMMA) + pow(CHN(ur,1),GAMMA) / 2, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( pow(CHN(lr,2),GAMMA) + pow(CHN(ur,2),GAMMA) / 2, 1.0/GAMMA )),
+		ENC( (DEC(CHN(lr,0)) + DEC(CHN(ur,0))) / 2),
+		ENC( (DEC(CHN(lr,1)) + DEC(CHN(ur,1))) / 2),
+		ENC( (DEC(CHN(lr,2)) + DEC(CHN(ur,2))) / 2),
 	};
 	R[0] = (R[0] + xxx_offs ) / xxx_step;
 	R[1] = (R[1] + xxx_offs ) / xxx_step;
@@ -308,9 +357,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t B[3] =
 	{
-		(uint8_t)CL8(pow( (pow(CHN(ll,0),GAMMA) + pow(CHN(lr,0),GAMMA)) / 2, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( (pow(CHN(ll,1),GAMMA) + pow(CHN(lr,1),GAMMA)) / 2, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( (pow(CHN(ll,2),GAMMA) + pow(CHN(lr,2),GAMMA)) / 2, 1.0/GAMMA )),
+		ENC( (DEC(CHN(ll,0)) + DEC(CHN(lr,0))) / 2),
+		ENC( (DEC(CHN(ll,1)) + DEC(CHN(lr,1))) / 2),
+		ENC( (DEC(CHN(ll,2)) + DEC(CHN(lr,2))) / 2),
 	};
 	B[0] = (B[0] + xxx_offs ) / xxx_step;
 	B[1] = (B[1] + xxx_offs ) / xxx_step;
@@ -323,9 +372,9 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 
 	uint8_t T[3] =
 	{ 
-		(uint8_t)CL8(pow( (pow(CHN(ul,0),GAMMA) + pow(CHN(ur,0),GAMMA)) / 2, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( (pow(CHN(ul,1),GAMMA) + pow(CHN(ur,1),GAMMA)) / 2, 1.0/GAMMA )),
-		(uint8_t)CL8(pow( (pow(CHN(ul,2),GAMMA) + pow(CHN(ur,2),GAMMA)) / 2, 1.0/GAMMA )),
+		ENC( (DEC(CHN(ul,0)) + DEC(CHN(ur,0))) / 2),
+		ENC( (DEC(CHN(ul,1)) + DEC(CHN(ur,1))) / 2),
+		ENC( (DEC(CHN(ul,2)) + DEC(CHN(ur,2))) / 2),
 	};
 	T[0] = (T[0] + xxx_offs ) / xxx_step;
 	T[1] = (T[1] + xxx_offs ) / xxx_step;
@@ -337,11 +386,11 @@ int Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size,
 	T[2] = pal[xxx_slot][2];	
 
 
-	int v_err = DIF(L,ll) + DIF(L,ul) + DIF(R,lr) + DIF(R,ur);
-	int h_err = DIF(B,ll) + DIF(B,lr) + DIF(T,ul) + DIF(T,ur);
+	double v_err = DIF(L,ll) + DIF(L,ul) + DIF(R,lr) + DIF(R,ur);
+	double h_err = DIF(B,ll) + DIF(B,lr) + DIF(T,ul) + DIF(T,ur);
 
 	XPCell cell;
-	int err = -1;
+	double err = -1;
 
 	if (d_err < v_err && d_err < h_err)
 	{
@@ -448,9 +497,9 @@ int main(int argc, char* argv[])
 	if (argc==3)
 	{
 		int step = atoi(argv[1]);
-		if (step<1 || step>17)
+		if (step<1 || step>255)
 		{
-			printf("step = %d is invalid, keep in range 1-17\n", step);
+			printf("step = %d is invalid, keep in range 1-255\n", step);
 			return -1;
 		}
 
@@ -512,7 +561,7 @@ int main(int argc, char* argv[])
     if (!pix)
     {
 		free(xxx);
-        printf("can't load: %s\n", argv[1]);
+        printf("can't load: %s\n", argv[2]);
         return -1;
     }
 
@@ -532,7 +581,7 @@ int main(int argc, char* argv[])
 	else
     {
 		xp_name = xp_buff;
-		sprintf(xp_buff,"%s.xp",argv[2]);
+		sprintf(xp_buff,"%s.xp",argv[3]);
     }
 
 	int dither_blocks[2] = {0};
@@ -556,12 +605,18 @@ int main(int argc, char* argv[])
 	XPCell* buf = (XPCell*)malloc(sizeof(XPCell) * (w/2) * (h/2));
 	XPCell* ptr = buf;
 
-	uint64_t err = 0;
+	double err = 0;
 
     for (int x=0; x<w; x+=2)
     {
 	    for (int y=0; y<h; y+=2)
         {
+
+			if ((x==38*2 || x==39*2) && y==8*2)
+			{
+				printf(".\n");
+			}
+
 			int* stat = 0;
 
 			uint32_t src[4] = 
@@ -572,7 +627,7 @@ int main(int argc, char* argv[])
 				pix[x + 1 + w*y + w]
 			};
 
-			int dev[3] = {0,0,0};
+			double dev[3] = {0,0,0};
 			err += Do(src,ptr,dev, pal, pal_size, xxx, xxx_step);
 
 			switch (ptr->glyph)
@@ -613,15 +668,11 @@ int main(int argc, char* argv[])
 			// if no dithering
 			//continue;
 
-			// -4 is 100% , -8 is 50%, ... -1024 should be 0%
-			dev[0]/=-4;
-			dev[1]/=-4;
-			dev[2]/=-4;
-
-			int hlf[3] = {dev[0]/2,dev[1]/2,dev[2]/2};
-			dev[0] -= hlf[0];
-			dev[1] -= hlf[1];
-			dev[2] -= hlf[2];
+			// -4 is 100%
+			// (atkinson dither: 6x 1/8)
+			dev[0] /= -4 * 8;
+			dev[1] /= -4 * 8;
+			dev[2] /= -4 * 8;
 
 			if (x<w-2)
 			{
@@ -629,14 +680,46 @@ int main(int argc, char* argv[])
 				ADD(pix + x+2 + 1 + w*y, dev);
 				ADD(pix + x+2 + w*y + w, dev);
 				ADD(pix + x+2 + 1 + w*y + w, dev);
+
+				if (x<w-4)
+				{
+					ADD(pix + x+4 + w*y, dev);
+					ADD(pix + x+4 + 1 + w*y, dev);
+					ADD(pix + x+4 + w*y + w, dev);
+					ADD(pix + x+4 + 1 + w*y + w, dev);
+				}
 			}
 
 			if (y<h-2)
 			{
-				ADD(pix + x+2*w + w*y, hlf);
-				ADD(pix + x+2*w + 1 + w*y, hlf);
-				ADD(pix + x+2*w + w*y + w, hlf);
-				ADD(pix + x+2*w + 1 + w*y + w, hlf);
+				if (x>=2)
+				{
+					ADD(pix + x+2*w + -2 + w*y, dev);
+					ADD(pix + x+2*w + -1 + w*y, dev);
+					ADD(pix + x+2*w + -2 + w*y + w, dev);
+					ADD(pix + x+2*w + -1 + w*y + w, dev);
+				}
+
+				ADD(pix + x+2*w + w*y, dev);
+				ADD(pix + x+2*w + 1 + w*y, dev);
+				ADD(pix + x+2*w + w*y + w, dev);
+				ADD(pix + x+2*w + 1 + w*y + w, dev);
+
+				if (x<w-2)
+				{
+					ADD(pix + x+2*w + 2 + w*y, dev);
+					ADD(pix + x+2*w + 3 + w*y, dev);
+					ADD(pix + x+2*w + 2 + w*y + w, dev);
+					ADD(pix + x+2*w + 3 + w*y + w, dev);
+				}
+
+				if (y<h-4)
+				{
+					ADD(pix + x+4*w + w*y, dev);
+					ADD(pix + x+4*w + 1 + w*y, dev);
+					ADD(pix + x+4*w + w*y + w, dev);
+					ADD(pix + x+4*w + 1 + w*y + w, dev);
+				}
 			}
         }
     } 
@@ -668,7 +751,7 @@ int main(int argc, char* argv[])
 			half_blocks[1] );
  
 	printf(	"colors: %5d\n", used);
-	printf(	"avrerr: %5.2f\n", (double)err / (w*h*3));
+	printf(	"avrerr: %5.2f\n", err / (w*h*3));
 
     return 0;
 } 
