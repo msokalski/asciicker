@@ -511,7 +511,7 @@ int main(int argc, char* argv[])
 
 		// make palette file
 
-		FILE* plt = fopen(argv[2], "w");
+		FILE* plt = fopen(argv[2], "wb");
 		if (!pal)
 		{
 			printf("can't write to: %s\n", argv[2]);
@@ -587,7 +587,7 @@ int main(int argc, char* argv[])
 	}
 
 	// load plt file
-	FILE* plt = fopen(argv[1],"r");
+	FILE* plt = fopen(argv[1],"rb");
 	if (!plt)
 	{
 		printf("Can't read plt file: %s", argv[1]);
@@ -643,7 +643,7 @@ int main(int argc, char* argv[])
 	int used = 0;
 	memset(hist, 0, 256*256*256/8);
 
-	FILE* xp = fopen(xp_name, "w");
+	FILE* xp = fopen(xp_name, "wb");
 	if (!xp)
     {
 		free(xxx);

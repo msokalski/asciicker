@@ -2939,6 +2939,8 @@ void LoadSprites()
 	LoadFont1();
 	LoadGamePad();
 
+	LoadMainMenuSprites(base_path);
+
 	// main buts
 	character_button = LoadSpriteBP("character.xp", 0, false);
 	inventory_sprite = LoadSpriteBP("inventory.xp", 0, false);
@@ -3298,6 +3300,8 @@ void FreeSprites()
 	// handles double refs but not sprite prefs!
 	while (Sprite* s = GetFirstSprite())
 		FreeSprite(s);
+
+	FreeMainMenuSprites();		
 }
 
 // TODO:

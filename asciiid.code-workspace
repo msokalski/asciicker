@@ -41,7 +41,8 @@
 			"charconv": "cpp",
 			"__node_handle": "cpp",
 			"queue": "cpp",
-			"stack": "cpp"
+			"stack": "cpp",
+			"ios": "cpp"
 		}
 	}
 }

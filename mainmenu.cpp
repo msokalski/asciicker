@@ -132,10 +132,117 @@ static Manifest manifest[]=
     {0} // terminator
 };
 
-void LoadMainMenuSprites()
+extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_buf_len, size_t *pOut_len, int flags);
+
+int LoadMainMenuSprites(const char* base_path)
 {
+    // load inverse palettizer
+
+	char path[1024];
+	sprintf(path,"%spalettes/palette.gz", base_path);
+
+	FILE* f = fopen(path, "rb");
+	if (!f)
+		return 0;
+
+	/////////////////////////////////
+	// GZ INTRO:
+
+	struct GZ
+	{
+		uint8_t id1, id2, cm, flg;
+		uint8_t mtime[4];
+		uint8_t xfl, os;
+	};
+
+	GZ gz;
+	int r;
+	r=(int)fread(&gz, 10, 1, f);
+
+	/*
+	assert(gz.id1 == 31 && gz.id2 == 139 && "gz identity");
+	assert(gz.cm == 8 && "deflate method");
+	*/
+
+	if (gz.id1 != 31 || gz.id2 != 139 || gz.cm != 8)
+	{
+		fclose(f);
+		return 0;
+	}
+
+	if (gz.flg & (1 << 2/*FEXTRA*/))
+	{
+		int hi, lo;
+		r=(int)fread(&hi, 1, 1, f);
+		r=(int)fread(&lo, 1, 1, f);
+
+		int len = (hi << 8) | lo;
+		fseek(f, len, SEEK_CUR);
+	}
+
+	if (gz.flg & (1 << 3/*FNAME*/))
+	{
+		uint8_t ch;
+		do
+		{
+			ch = 0;
+			r=(int)fread(&ch, 1, 1, f);
+		} while (ch);
+	}
+
+	if (gz.flg & (1 << 4/*FCOMMENT*/))
+	{
+		uint8_t ch;
+		do
+		{
+			ch = 0;
+			r=(int)fread(&ch, 1, 1, f);
+		} while (ch);
+	}
+
+	if (gz.flg & (1 << 1/*FFHCRC*/))
+	{
+		uint16_t crc;
+		r=(int)fread(&crc, 2, 1, f);
+	}
+
+	// deflated data blocks ...
+	// read everything till end of file, trim tail by 8 bytes (crc32,isize)
+
+	long now = ftell(f);
+	fseek(f, 0, SEEK_END);
+
+	unsigned long insize = ftell(f) - now - 8;
+	unsigned char* in = (unsigned char*)malloc(insize);
+	fseek(f, now, SEEK_SET);
+
+	r=(int)fread(in, 1, insize, f);
+
+
+	size_t out_size=0;
+	void* out = tinfl_decompress_mem_to_heap(in, insize, &out_size, 0);
+	// void* out = u_inflate(in, insize);
+	free(in);
+
+	/////////////////////////////////
+	// GZ OUTRO:
+
+	uint32_t crc32, isize;
+	r=(int)fread(&crc32, 4, 1, f);
+	r=(int)fread(&isize, 4, 1, f);
+	fclose(f);
+
+	// assert(out && isize == *(uint32_t*)out);
+	assert(out && isize == out_size);
+
+    // no use yet, was just testing
+    free(out);
+
+
     // parse manifest, load sprites (oridinary sync)
     // and store cookies (ad cookies require copying original value into the actual cookie)
+
+    return 0;
 }
 
 void FreeMainMenuSprites()

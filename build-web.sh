@@ -37,9 +37,10 @@ A3DMAPS=`ls a3d/game_map_y8.a3d`
 MESHES=`ls meshes/*.akm`
 SPRITES=`ls sprites/*.xp`
 SAMPLES=`ls samples/*.ogg`
+PALETTE="palettes/palette.gz"
 
 #requires bash or zsh
-ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"
+ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"$'\n'"$PALETTE"
 
 echo ""
 echo "MAKING audio worklet ..."
