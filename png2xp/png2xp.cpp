@@ -118,7 +118,7 @@ uint8_t ENC(double d)
 double DIF(uint8_t c[3], uint8_t r[3]) 
 {
 	// let's try CIE76
-
+	/*
 	struct LAB
 	{
 		static double f(double t)
@@ -156,7 +156,9 @@ double DIF(uint8_t c[3], uint8_t r[3])
 	double dL = q1.L-q2.L;
 	double err = sqrt(dL*dL + da*da + db*db);
 
-	/*
+	return err;
+	*/
+
 	uint32_t chr =  
 	    2*ABS((int32_t)(c[0])-(int32_t)(r[0])) +
     	3*ABS((int32_t)(c[1])-(int32_t)(r[1])) +
@@ -166,9 +168,6 @@ double DIF(uint8_t c[3], uint8_t r[3])
 	int lum_r = 2*r[0] + 3*r[1] + r[2];
 
 	return chr;// + ABS(lum_c-lum_r);
-	*/
-
-	return err;
 }
 
 double DIF(uint8_t c[3], uint32_t r) 
@@ -718,7 +717,7 @@ int main(int argc, char* argv[])
 			ptr++;
 
 			// if no dithering
-			//continue;
+			continue;
 
 			// -4 is 100%
 			// (atkinson dither: 6x 1/8)
