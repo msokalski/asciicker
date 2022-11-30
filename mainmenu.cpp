@@ -242,6 +242,8 @@ int LoadMainMenuSprites(const char* base_path)
     // parse manifest, load sprites (oridinary sync)
     // and store cookies (ad cookies require copying original value into the actual cookie)
 
+    printf("MAIN MENU OK\n");
+
     return 0;
 }
 
