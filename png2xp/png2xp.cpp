@@ -1,9 +1,16 @@
 
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <math.h>
+
+#include <thread>
 
 #include "../upng.h"
 #include "../rgba8.h"
@@ -105,7 +112,7 @@ uint8_t ENC(double d)
 		d=0;
 	if (d>1)
 		d=1;
-	return round(255.0 * (d > 0.0031308 ? 1.055*pow(d, 1.0/2.4) - 0.055 : 12.92*d));
+	return (uint8_t)round(255.0 * (d > 0.0031308 ? 1.055*pow(d, 1.0/2.4) - 0.055 : 12.92*d));
 }
 
 double DIF(uint8_t c[3], uint8_t r[3]) 
@@ -198,9 +205,9 @@ void ADD(uint32_t* p, double d[3])
 
 	uint8_t c[3] =
 	{
-		ENC(DEC(CHN(v,0) + d[0])),
-		ENC(DEC(CHN(v,1) + d[1])),
-		ENC(DEC(CHN(v,2) + d[2])),
+		ENC(DEC(CHN(v,0)) + d[0]),
+		ENC(DEC(CHN(v,1)) + d[1]),
+		ENC(DEC(CHN(v,2)) + d[2]),
 	};
 
 	*p = c[0] | (c[1]<<8) | (c[2]<<16);
@@ -235,10 +242,10 @@ void HACK(uint8_t* G, int gl, uint8_t c0, uint8_t c1)
 	G[2] = hack[g][c0][c1][2];
 }
 
-uint32_t Make(uint32_t src, XPCell* ptr, uint8_t pal[][3], int pal_size)
+uint32_t Make(uint32_t src, uint8_t pal[][3], int pal_size)
 {
 	double d_err;
-	int d_gl=0, d_c0, d_c1;
+	int d_gl=0, d_c0=0, d_c1=0;
 
 	// find best 2 color indices C0, C1
 	// and mixing factor  3/4 C0 + 1/4 C1 or 2/4 C0 + 2/4 C1
@@ -515,22 +522,67 @@ int main(int argc, char* argv[])
 		// write step size
 		fwrite(&step,4,1,plt);
 
+		int steps = 255 / step + 1;
+		uint32_t* xxx = (uint32_t*)malloc(sizeof(uint32_t) * steps * steps * steps);
+
+		struct Task
+		{
+			int B;
+			uint32_t* ptr;
+			uint8_t (*pal)[3];
+			int pal_size;
+			int step;
+			std::thread* thr;
+
+			static void Run(Task* t)
+			{
+				int B = t->B;
+				uint32_t* ptr = t->ptr;
+				int step = t->step;
+				int pal_size = t->pal_size;
+				uint8_t (*pal)[3] = t->pal;
+
+				for (int G = 0; G < 256; G += step)
+				{
+					for (int R = 0; R < 256; R += step)
+					{
+						uint32_t p = R | (G << 8) | (B << 16);
+
+						if ((p & 0xFFFF) == 0)
+							printf("%d/%d\n", (p >> 16) + 1, 256);
+
+						uint32_t w = Make(p, pal, pal_size);
+
+						*ptr = w;
+						ptr++;
+
+						//fwrite(&w,4,1,plt);
+					}
+				}
+			}
+		};
+
+		Task task[256];
+
 		// write reverse lookup table
 		for (int B=0; B<256; B+=step)
-		for (int G=0; G<256; G+=step)
-		for (int R=0; R<256; R+=step)
 		{
-			uint32_t p = R | (G<<8) | (B<<16);
-
-			if ((p&0xFFFF) == 0)
-				printf("%d/%d\n",(p>>16)+1,256);
-
-			XPCell cell;
-			uint32_t w = Make(p, &cell, pal, pal_size);
-
-			fwrite(&w,4,1,plt);
+			task[B].B = B;
+			task[B].ptr = xxx + steps * steps * (B / step);
+			task[B].pal = pal;
+			task[B].pal_size = pal_size;
+			task[B].step = step;
+			task[B].thr = new std::thread(Task::Run, task + B);
 		}
 
+		for (int B = 0; B < 256; B += step)
+		{
+			task[B].thr->join();
+			delete task[B].thr;
+		}
+
+		fwrite(xxx, sizeof(uint32_t)* steps* steps* steps, 1, plt);
+		free(xxx);
 		fclose(plt);
 		return 0;
 	}
@@ -543,7 +595,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	int ok=0;
+	size_t ok=0;
 	int32_t xxx_step;
 	ok = fread(&xxx_step,4,1,plt);
 	if (!ok)
