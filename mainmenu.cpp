@@ -267,11 +267,11 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
         int cx1 = sx;
 
         uint8_t ry1 = cy1 & 0xFF;
-        const uint16_t* row1 = src + src_pitch * (cy1 >> 8);
+        const uint16_t* lwr = src + src_pitch * (cy1 >> 8);
 
         int cy2 = cy1+dy;
         uint8_t ry2 = cy2 & 0xFF;
-        const uint16_t* row2 = src + src_pitch * (cy2 >> 8);
+        const uint16_t* upr = src + src_pitch * (cy2 >> 8);
 
         AnsiCell* ptr = dst + y * dst_pitch;
 
@@ -302,10 +302,10 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             }
 
             uint16_t LL[3], LR[3], UL[3], UR[3];
-            Bilinear(row1 + (cx1 >> 8)*3, src_pitch, rx1,ry1, LL); 
-            Bilinear(row1 + (cx2 >> 8)*3, src_pitch, rx2,ry1, LR);
-            Bilinear(row2 + (cx1 >> 8)*3, src_pitch, rx1,ry2, UL);
-            Bilinear(row2 + (cx2 >> 8)*3, src_pitch, rx2,ry2, UR);
+            Bilinear(lwr + (cx1 >> 8)*3, src_pitch, rx1,ry1, LL); 
+            Bilinear(lwr + (cx2 >> 8)*3, src_pitch, rx2,ry1, LR);
+            Bilinear(upr + (cx1 >> 8)*3, src_pitch, rx1,ry2, UL);
+            Bilinear(upr + (cx2 >> 8)*3, src_pitch, rx2,ry2, UR);
 
             // we have 4 filtered samples, let's ANSIfy them into the single cell
 
