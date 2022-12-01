@@ -1,5 +1,5 @@
 
-g++ -O3 -pthread \
+g++ -g -pthread \
     png2xp.cpp \
     ../rgba8.cpp \
     ../tinfl.c \

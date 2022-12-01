@@ -100,6 +100,32 @@ int32_t ABS(int32_t v)
 	return v<0 ? -v : v;
 }
 
+struct Gamma
+{
+    int16_t  dec[256];  // 0..8192 incl
+    uint8_t  enc[8193]; // 0..255 incl
+
+    Gamma()
+    {
+        for (int i=0; i<256; i++)
+        {
+            double t = i / 255.0;
+            t = t >= 0.04045 ? pow((t+0.055)/1.055, 2.4) : t/12.92;
+            dec[i] = (int16_t)round(t * 8192.0);
+        } 
+        
+        for (int i=0; i<=8192; i++)
+        {
+            double t = i / 8192.0;
+            t = t > 0.0031308 ? 1.055*pow(t, 1.0/2.4) - 0.055 : 12.92*t;
+            enc[i] = (uint8_t)round(255.0 * t);
+        }
+    }
+};
+
+static Gamma gamma_tables;
+
+/*
 double DEC(uint8_t e)
 {
 	double t = e / 255.0;
@@ -114,8 +140,23 @@ uint8_t ENC(double d)
 		d=1;
 	return (uint8_t)round(255.0 * (d > 0.0031308 ? 1.055*pow(d, 1.0/2.4) - 0.055 : 12.92*d));
 }
+*/
 
-double DIF(uint8_t c[3], uint8_t r[3]) 
+int16_t DEC(uint8_t e)
+{
+	return gamma_tables.dec[e];
+}
+
+uint8_t ENC(int16_t d)
+{
+	if (d<0)
+		return 0;
+	if (d>8192)
+		return 255;
+	return gamma_tables.enc[d];
+}
+
+uint32_t ERR(uint8_t c[3], uint8_t r[3]) 
 {
 	// let's try CIE76
 	/*
@@ -170,35 +211,20 @@ double DIF(uint8_t c[3], uint8_t r[3])
 	return chr;// + ABS(lum_c-lum_r);
 }
 
-double DIF(uint8_t c[3], uint32_t r) 
+uint32_t ERR(uint8_t c[3], uint32_t r) 
 {
 	uint8_t d[3] = {CHN(r,0),CHN(r,1),CHN(r,2)};
-	return DIF(c,d);
+	return ERR(c,d);
 }
 
-void DEV(uint8_t c[3], uint32_t r, double d[3])
+void DEV(uint8_t c[3], uint32_t r, int d[3])
 {
-	d[0] += DEC(c[0]) - DEC(CHN(r,0));
-	d[1] += DEC(c[1]) - DEC(CHN(r,1));
-	d[2] += DEC(c[2]) - DEC(CHN(r,2));
+	d[0] += (int)DEC(c[0]) - DEC(CHN(r,0));
+	d[1] += (int)DEC(c[1]) - DEC(CHN(r,1));
+	d[2] += (int)DEC(c[2]) - DEC(CHN(r,2));
 }
 
-int MIN(int a, int b)
-{
-	return a < b ? a : b;
-}
-
-int MAX(int a, int b)
-{
-	return a > b ? a : b;
-}
-
-uint8_t CL8(double v)
-{
-	return (uint8_t)MIN(255,MAX(0,(int)round(v)));
-}
-
-void ADD(uint32_t* p, double d[3])
+void ADD(uint32_t* p, int d[3])
 {
 	uint32_t v = *p;
 
@@ -243,7 +269,7 @@ void HACK(uint8_t* G, int gl, uint8_t c0, uint8_t c1)
 
 uint32_t Make(uint32_t src, uint8_t pal[][3], int pal_size)
 {
-	double d_err;
+	uint32_t d_err;
 	int d_gl=0, d_c0=0, d_c1=0;
 
 	// find best 2 color indices C0, C1
@@ -260,7 +286,7 @@ uint32_t Make(uint32_t src, uint8_t pal[][3], int pal_size)
 				HACK(G, gl,c0,c1);
 
 				// calc err
-				double g_err = 4 * DIF(G,src);
+				uint32_t g_err = 4 * ERR(G,src);
 
 				if (!d_gl || g_err < d_err)
 				{
@@ -273,13 +299,13 @@ uint32_t Make(uint32_t src, uint8_t pal[][3], int pal_size)
 		}
 	}
 
-	double e = -1;
-	int p;
+	uint32_t e = 0;
+	int p = -1;
 	uint8_t c[3] = { CHN(src,0), CHN(src,1), CHN(src,2) };
 	for (int i=0; i<pal_size; i++)
 	{
-		double ie = DIF(c, pal[i]);
-		if (e<0 || ie<e)
+		uint32_t ie = ERR(c, pal[i]);
+		if (p<0 || ie<e)
 		{
 			e = ie;
 			p = i;
@@ -290,14 +316,14 @@ uint32_t Make(uint32_t src, uint8_t pal[][3], int pal_size)
 }
 
 // return err
-double Do(uint32_t src[4], XPCell* ptr, double dev[3], uint8_t pal[][3], int pal_size, uint32_t* xxx, int xxx_step)
+uint32_t Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_size, uint32_t* xxx, int xxx_step)
 {
 	uint32_t ll = src[0];
 	uint32_t lr = src[1];
 	uint32_t ul = src[2];
 	uint32_t ur = src[3];
 
-	double d_err;
+	uint32_t d_err;
 	int d_gl=0, d_c0, d_c1;
 
 	// target rgb
@@ -323,7 +349,7 @@ double Do(uint32_t src[4], XPCell* ptr, double dev[3], uint8_t pal[][3], int pal
 	// reconstructed rgb
 	HACK(G, d_gl,d_c0,d_c1);
 
-	d_err = DIF(G,ll) + DIF(G,lr) + DIF(G,ul) + DIF(G,ur);
+	d_err = ERR(G,ll) + ERR(G,lr) + ERR(G,ul) + ERR(G,ur);
 
 	// find best 2 color indices C0, C1
 	// and mixing factor  3/4 C0 + 1/4 C1 or 2/4 C0 + 2/4 C1
@@ -392,11 +418,11 @@ double Do(uint32_t src[4], XPCell* ptr, double dev[3], uint8_t pal[][3], int pal
 	T[2] = pal[xxx_slot][2];	
 
 
-	double v_err = DIF(L,ll) + DIF(L,ul) + DIF(R,lr) + DIF(R,ur);
-	double h_err = DIF(B,ll) + DIF(B,lr) + DIF(T,ul) + DIF(T,ur);
+	uint32_t v_err = ERR(L,ll) + ERR(L,ul) + ERR(R,lr) + ERR(R,ur);
+	uint32_t h_err = ERR(B,ll) + ERR(B,lr) + ERR(T,ul) + ERR(T,ur);
 
 	XPCell cell;
-	double err = -1;
+	uint32_t err = 0;
 
 	if (d_err < v_err && d_err < h_err)
 	{
@@ -656,7 +682,7 @@ int main(int argc, char* argv[])
 	XPCell* buf = (XPCell*)malloc(sizeof(XPCell) * (w/2) * (h/2));
 	XPCell* ptr = buf;
 
-	double err = 0;
+	uint64_t err = 0;
 
     for (int x=0; x<w; x+=2)
     {
@@ -678,7 +704,7 @@ int main(int argc, char* argv[])
 				pix[x + 1 + w*y + w]
 			};
 
-			double dev[3] = {0,0,0};
+			int dev[3] = {0,0,0};
 			err += Do(src,ptr,dev, pal, pal_size, xxx, xxx_step);
 
 			switch (ptr->glyph)
@@ -802,7 +828,7 @@ int main(int argc, char* argv[])
 			half_blocks[1] );
  
 	printf(	"colors: %5d\n", used);
-	printf(	"avrerr: %5.2f\n", err / (w*h*3));
+	printf(	"avrerr: %5.2f\n", (double)err / (w*h*3));
 
     return 0;
 } 
