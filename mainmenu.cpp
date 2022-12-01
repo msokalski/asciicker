@@ -1,3 +1,5 @@
+#include <math.h>
+
 #include "mainmenu.h"
 #include "enemygen.h"
 #include "fast_rand.h"
@@ -132,6 +134,60 @@ static Manifest manifest[]=
     {0} // terminator
 };
 
+struct Gamma
+{
+    uint16_t dec[256];  // 0..8192 incl
+    uint8_t  enc[8193]; // 0..255 incl
+
+    Gamma()
+    {
+        for (int i=0; i<256; i++)
+        {
+            double t = i / 255.0;
+            t = t >= 0.04045 ? pow((t+0.055)/1.055, 2.4) : t/12.92;
+            dec[i] = (uint16_t)round(t * 8192.0);
+        } 
+        
+        for (int i=0; i<=8192; i++)
+        {
+            double t = i / 8192.0;
+            t = t > 0.0031308 ? 1.055*pow(t, 1.0/2.4) - 0.055 : 12.92*t;
+            enc[i] = (uint8_t)round(255.0 * t);
+        }
+    }
+};
+
+static Gamma gamma_tables;
+
+static void Bilinear(const uint16_t src[3], int pitch, uint8_t x, uint8_t y, uint16_t dst[3])
+{
+    // +---------+---------+
+    // |   src   |  src+3  |
+    // |  R,G,B  |  R,G,B  | < y=0
+    // |         |         |
+    // +---------+---------+ < y=128
+    // |  src+p  | src+3+p |
+    // |  R,G,B  |  R,G,B  | < y=256
+    // |         |         |
+    // +---------+---------+
+    //      ^    ^    ^
+    //     x=0 x=128 x=256
+
+    // src must be (dst will be) normalized to (0..8192 incl)
+
+    const uint16_t* lwr = src;
+    const uint16_t* upr = src + pitch;
+    const uint32_t qx = x;
+    const uint32_t qy = y;
+    const uint32_t px = 128-qx;
+    const uint32_t py = 128-qy;
+    const uint32_t r_ofs = 1<<17;
+
+    dst[0] = (py * (px * lwr[0] + qx * lwr[3]) + qy * (px * upr[0] + qx * upr[3]) + r_ofs) >> 18; 
+    dst[1] = (py * (px * lwr[1] + qx * lwr[4]) + qy * (px * upr[1] + qx * upr[4]) + r_ofs) >> 18; 
+    dst[2] = (py * (px * lwr[2] + qx * lwr[5]) + qy * (px * upr[2] + qx * upr[5]) + r_ofs) >> 18; 
+}
+
 extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_buf_len, size_t *pOut_len, int flags);
 
 int LoadMainMenuSprites(const char* base_path)
@@ -237,6 +293,21 @@ int LoadMainMenuSprites(const char* base_path)
 
     // no use yet, was just testing
     free(out);
+
+    // prepare GAMMA decoder and encoder
+    // linear space will be in range (0..32768 incl)
+
+
+    // load background png into linear rgb space (0..32768 incl)
+
+    // DEC(1):   1/3302.25    * 32768 =  9,922931335 (delta = ~10)
+    // DEC(2):   2/3302.25    * 32768 = 19,845862669
+    // DEC(254): 0,991102097  * 32768 = 32476,43
+    // DEC(255): 1.000000000  * 32768 = 32768,00     (delta = ~292)
+
+    // t = 1/255
+    // l = 1/(255*12.95) = 1/3302.25
+
 
 
     // parse manifest, load sprites (oridinary sync)

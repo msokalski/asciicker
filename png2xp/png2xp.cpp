@@ -717,7 +717,7 @@ int main(int argc, char* argv[])
 			ptr++;
 
 			// if no dithering
-			continue;
+			//continue;
 
 			// -4 is 100%
 			// (atkinson dither: 6x 1/8)
