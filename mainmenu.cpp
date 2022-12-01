@@ -5,6 +5,9 @@
 #include "fast_rand.h"
 #include "font1.h"
 
+#include "upng.h"
+#include "rgba8.h"
+
 extern Game* game;
 extern Terrain* terrain;
 extern World* world;
@@ -15,6 +18,22 @@ static int  game_loading = 0; // 0-not_loaded, 1-load requested, 2-loading, 3-lo
 static bool show_continue = false;
 
 static uint64_t mainmenu_stamp = 0;
+
+////////////////////////////////////////
+static uint32_t* xxx_table = 0;
+static uint32_t  xxx_step = 0;
+static uint32_t  xxx_offs = 0;
+static uint32_t  xxx_size = 0;
+static uint32_t  xxx_size2 = 0;
+
+static uint16_t* menu_bk_img=0;
+static int menu_bk_width=0;
+static int menu_bk_height=0;
+
+static const int pal_size = 216;
+static uint8_t pal[pal_size][3] = {{0}};
+static uint8_t half_tone[2][216][216][3] = {{{{0}}}};
+
 
 struct Manifest
 {
@@ -159,8 +178,16 @@ struct Gamma
 
 static Gamma gamma_tables;
 
-static void Bilinear(const uint16_t src[3], int pitch, uint8_t x, uint8_t y, uint16_t dst[3])
+static void Bilinear(const uint16_t* src, int pitch, uint8_t x, uint8_t y, uint16_t* dst)
 {
+    /*
+    // NEAREST TEST
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    return;
+    */
+
     // +---------+---------+
     // |   src   |  src+3  |
     // |  R,G,B  |  R,G,B  | < y=0
@@ -179,19 +206,292 @@ static void Bilinear(const uint16_t src[3], int pitch, uint8_t x, uint8_t y, uin
     const uint16_t* upr = src + pitch;
     const uint32_t qx = x;
     const uint32_t qy = y;
-    const uint32_t px = 128-qx;
-    const uint32_t py = 128-qy;
-    const uint32_t r_ofs = 1<<17;
+    const uint32_t px = 256-qx;
+    const uint32_t py = 256-qy;
+    const uint32_t r_ofs = 1<<15;
 
-    dst[0] = (py * (px * lwr[0] + qx * lwr[3]) + qy * (px * upr[0] + qx * upr[3]) + r_ofs) >> 18; 
-    dst[1] = (py * (px * lwr[1] + qx * lwr[4]) + qy * (px * upr[1] + qx * upr[4]) + r_ofs) >> 18; 
-    dst[2] = (py * (px * lwr[2] + qx * lwr[5]) + qy * (px * upr[2] + qx * upr[5]) + r_ofs) >> 18; 
+    const uint32_t pypx = py * px;
+    const uint32_t pyqx = py * qx;
+    const uint32_t qypx = qy * px;
+    const uint32_t qyqx = qy * qx;
+
+    dst[0] = (pypx * lwr[0] + pyqx * lwr[3] + qypx * upr[0] + qyqx * upr[3] + r_ofs) >> 16; 
+    dst[1] = (pypx * lwr[1] + pyqx * lwr[4] + qypx * upr[1] + qyqx * upr[4] + r_ofs) >> 16; 
+    dst[2] = (pypx * lwr[2] + pyqx * lwr[5] + qypx * upr[2] + qyqx * upr[5] + r_ofs) >> 16; 
+}
+
+static uint32_t Extract4(const uint16_t* c1, const uint16_t* c2, const uint16_t* c3, const uint16_t* c4)
+{
+    const int xxx_3 = 3;
+    int i = 
+        (gamma_tables.enc[(c1[0] + c2[0] + c3[0] + c4[0]/* + 2*/) >> 2] + xxx_offs) / xxx_3 +
+        (gamma_tables.enc[(c1[1] + c2[1] + c3[1] + c4[1]/* + 2*/) >> 2] + xxx_offs) / xxx_3 * xxx_size +
+        (gamma_tables.enc[(c1[2] + c2[2] + c3[2] + c4[2]/* + 2*/) >> 2] + xxx_offs) / xxx_3 * xxx_size2;
+
+    return xxx_table[ i ];    
+}
+
+static uint32_t Extract2(const uint16_t* c1, const uint16_t* c2)
+{
+    const int xxx_3 = 3;
+    int i = 
+        (gamma_tables.enc[(c1[0] + c2[0]) >> 1] + xxx_offs) / xxx_3 +
+        (gamma_tables.enc[(c1[1] + c2[1]) >> 1] + xxx_offs) / xxx_3 * xxx_size +
+        (gamma_tables.enc[(c1[2] + c2[2]) >> 1] + xxx_offs) / xxx_3 * xxx_size2;
+
+    return xxx_table[ i ];    
+}
+
+static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_xywh[4], 
+                     AnsiCell* dst, int dst_w, int dst_h, int dst_pitch=0)
+{
+    const int src_pitch = src_w * 3;
+
+    if (dst_pitch<=0)
+        dst_pitch = dst_w;
+
+    // offset start pos by +half dst px and -half src px
+    const int sx = (int)round(256.0 * src_xywh[0] + 128.0 * src_xywh[2] / (2*dst_w) - 128);
+    const int sy = (int)round(256.0 * src_xywh[1] + 128.0 * src_xywh[3] / (2*dst_h) - 128);
+    const int dx = (int)round(256.0 * src_xywh[2] / (2*dst_w));
+    const int dy = (int)round(256.0 * src_xywh[3] / (2*dst_h));
+
+    // for enlarging near src edges, or arbitrary src_rect (partially outside src image)
+    // we'd need also to handle sampling outside src img !!!
+    // that's the reason to keep src_w, src_h for clamping
+
+    int cy1 = sy;
+
+    for (int y=0; y<dst_h; y++)
+    {
+        int cx1 = sx;
+
+        uint8_t ry1 = cy1 & 0xFF;
+        const uint16_t* row1 = src + src_pitch * (cy1 >> 8);
+
+        int cy2 = cy1+dy;
+        uint8_t ry2 = cy2 & 0xFF;
+        const uint16_t* row2 = src + src_pitch * (cy2 >> 8);
+
+        AnsiCell* ptr = dst + y * dst_pitch;
+
+        for (int x=0; x<dst_w; x++)
+        {
+            int cx2 = cx1+dx;
+            uint8_t rx1 = cx1 & 0xFF;
+            uint8_t rx2 = cx2 & 0xFF;
+
+            if (!((cx1>>8)>=0 && (cx1>>8)<src_w &&
+                  (cx2>>8)>=0 && (cx2>>8)<src_w &&
+                  (cy1>>8)>=0 && (cy1>>8)<src_h &&
+                  (cy2>>8)>=0 && (cy2>>8)<src_h))
+            {
+                printf("PROBLEM AT X=%d, Y=%d, (%d,%d)\n", x,y,2*x,2*y);
+                printf("DST W=%d, H=%d, (%d,%d)\n", dst_w,dst_h,2*dst_w,2*dst_h);
+
+                printf("cx1: %d.%d , cx2: %d.%d , cy1: %d.%d , cy2: %d.%d\n",
+                    cx1>>8,cx1&0xff, cx2>>8,cx1&0xff, cy1>>8,cx1&0xff, cy2>>8,cx1&0xff);
+
+                printf("src_xywh: %f , %f , %f , %f\n", 
+                    src_xywh[0],src_xywh[1],src_xywh[2],src_xywh[3]);
+
+                printf("sx: %d , sy: %d , dx: %d , dy: %d\n", 
+                    sx,sy,dx,dy);
+
+                assert(0);
+            }
+
+            uint16_t LL[3], LR[3], UL[3], UR[3];
+            Bilinear(row1 + (cx1 >> 8)*3, src_pitch, rx1,ry1, LL); 
+            Bilinear(row1 + (cx2 >> 8)*3, src_pitch, rx2,ry1, LR);
+            Bilinear(row2 + (cx1 >> 8)*3, src_pitch, rx1,ry2, UL);
+            Bilinear(row2 + (cx2 >> 8)*3, src_pitch, rx2,ry2, UR);
+
+            // we have 4 filtered samples, let's ANSIfy them into the single cell
+
+            // calc 4 encoded reference colors (for calcing errors)
+            uint8_t ll[3] ={gamma_tables.enc[LL[0]],gamma_tables.enc[LL[1]],gamma_tables.enc[LL[2]]};
+            uint8_t lr[3] ={gamma_tables.enc[LR[0]],gamma_tables.enc[LR[1]],gamma_tables.enc[LR[2]]};
+            uint8_t ul[3] ={gamma_tables.enc[UL[0]],gamma_tables.enc[UL[1]],gamma_tables.enc[UL[2]]};
+            uint8_t ur[3] ={gamma_tables.enc[UR[0]],gamma_tables.enc[UR[1]],gamma_tables.enc[UR[2]]};
+
+            // now reconstruct rgb values from the palette
+            uint32_t l_slot = Extract2(LL,UL);
+            uint32_t r_slot = Extract2(LR,UR);
+            uint32_t b_slot = Extract2(LL,LR);
+            uint32_t t_slot = Extract2(UL,UR);
+            uint32_t d_slot = Extract4(LL,LR,UL,UR);
+
+            const uint8_t* l = pal[l_slot & 0xFF];
+            const uint8_t* r = pal[r_slot & 0xFF];
+            const uint8_t* b = pal[b_slot & 0xFF];
+            const uint8_t* t = pal[t_slot & 0xFF];
+            const uint8_t* d = half_tone[d_slot>>24][(d_slot>>16)&0xFF][(d_slot>>8)&0xFF];
+
+            // calc errors
+            int lr_err = 
+                2*(std::abs(l[0] - ll[0]) + std::abs(l[0] - ul[0]) + std::abs(r[0] - lr[0]) + std::abs(r[0] - ur[0])) +
+                3*(std::abs(l[1] - ll[1]) + std::abs(l[1] - ul[1]) + std::abs(r[1] - lr[1]) + std::abs(r[1] - ur[1])) +
+                1*(std::abs(l[2] - ll[2]) + std::abs(l[2] - ul[2]) + std::abs(r[2] - lr[2]) + std::abs(r[2] - ur[2]));
+
+            int bt_err = 
+                2*(std::abs(b[0] - ll[0]) + std::abs(b[0] - lr[0]) + std::abs(t[0] - ul[0]) + std::abs(t[0] - ur[0])) +
+                3*(std::abs(b[1] - ll[1]) + std::abs(b[1] - lr[1]) + std::abs(t[1] - ul[1]) + std::abs(t[1] - ur[1])) +
+                1*(std::abs(b[2] - ll[2]) + std::abs(b[2] - lr[2]) + std::abs(t[2] - ul[2]) + std::abs(t[2] - ur[2]));
+
+            int ht_err = 
+                2*(std::abs(d[0] - ll[0]) + std::abs(d[0] - lr[0]) + std::abs(d[0] - ul[0]) + std::abs(d[0] - ur[0])) +
+                3*(std::abs(d[1] - ll[1]) + std::abs(d[1] - lr[1]) + std::abs(d[1] - ul[1]) + std::abs(d[1] - ur[1])) +
+                1*(std::abs(d[2] - ll[2]) + std::abs(d[2] - lr[2]) + std::abs(d[2] - ul[2]) + std::abs(d[2] - ur[2]));
+
+            // pick best
+            if (ht_err < lr_err && ht_err < bt_err)
+            {
+                dst->fg = ((d_slot>>8) & 0xFF) + 16;
+                dst->bk = ((d_slot>>16) & 0xFF) + 16;
+                dst->gl = (d_slot>>24) + 176;
+                dst->spare = 0;
+            }
+            else
+            if (bt_err < lr_err)
+            {
+                dst->fg = (b_slot & 0xFF) + 16;
+                dst->bk = (t_slot & 0xFF) + 16;
+                dst->gl = 220;
+                dst->spare = 0;
+            }
+            else
+            {
+                dst->fg = (l_slot & 0xFF) + 16;
+                dst->bk = (r_slot & 0xFF) + 16;
+                dst->gl = 221;
+                dst->spare = 0;
+            }
+
+            // reverse palette order
+            // TODO: remove this hack but fix in png2xp !!!
+            
+            int fg = dst->fg - 16;
+            int bk = dst->bk - 16;
+
+            int fg_r = fg % 6; fg /= 6;
+            int fg_g = fg % 6; fg /= 6;
+            int fg_b = fg;
+            dst->fg = fg_r * 36 + fg_g * 6 + fg_b + 16;
+
+            int bk_r = bk % 6; bk /= 6;
+            int bk_g = bk % 6; bk /= 6;
+            int bk_b = bk;
+            dst->bk = bk_r * 36 + bk_g * 6 + bk_b + 16;
+
+            cx1 = cx2 + dx;
+            dst++;
+        }
+
+        cy1 = cy2 + dy;
+    }
+}
+
+static void FreeImg(uint16_t* img)
+{
+    free(img);
+}
+
+static uint16_t* LoadImg(const char* path, int* w, int* h)
+{
+	upng_t* upng = upng_new_from_file(path);
+
+	if (!upng)
+		return 0;
+
+	if (upng_get_error(upng) != UPNG_EOK)
+	{
+		upng_free(upng);
+		return 0;
+	}
+
+	if (upng_header(upng) != UPNG_EOK)
+	{
+		upng_free(upng);
+		return 0;
+	}    
+
+	int format, width, height, depth;
+	format = upng_get_format(upng);
+	width = upng_get_width(upng);
+	height = upng_get_height(upng);
+
+    if (format != UPNG_RGB8)
+    {
+		upng_free(upng);
+		return 0;
+    }
+
+	if (upng_decode(upng) != UPNG_EOK)
+	{
+		upng_free(upng);
+		return 0;
+	}
+
+	const uint8_t* buf = upng_get_buffer(upng);
+
+    // allocate extra row and 1 px so Bilinear sampler won't overflow
+    int wh3 = (width*(height+1) + 1)*3;
+	uint16_t* pix = (uint16_t*)malloc(wh3*sizeof(uint16_t));
+
+    // reflect vertically and decode gamma!
+    for (int i=0,y=0; y<height; y++)
+    {
+        int j = (height - y - 1) * width * 3;
+        for (int x=0; x<width; x++, i+=3, j+=3)
+        {
+            pix[j+0] = gamma_tables.dec[buf[i+0]];
+            pix[j+1] = gamma_tables.dec[buf[i+1]];
+            pix[j+2] = gamma_tables.dec[buf[i+2]];
+        }
+    }
+
+    *w = width;
+    *h = height;
+
+	upng_free(upng);
+    return pix;
 }
 
 extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_buf_len, size_t *pOut_len, int flags);
 
 int LoadMainMenuSprites(const char* base_path)
 {
+    // init palette entries
+	for (int i=0; i<pal_size; i++)
+	{
+		int j = i;
+		pal[i][0] = j%6*51; j /= 6;
+		pal[i][1] = j%6*51; j /= 6;
+		pal[i][2] = j%6*51; j /= 6;
+	}
+
+    // init half_tone mapper
+    for (int gl=1; gl<3; gl++)
+    {
+        int g = gl-1;
+        int c0_w = 4 - gl;
+        int c1_w = gl;
+        for (int c0=0; c0<216; c0++)
+        {
+            for (int c1=0; c1<216; c1++)
+            {
+                for (int c=0; c<3; c++)
+                {
+                    half_tone[g][c0][c1][c] = 
+                        gamma_tables.enc[( 
+                            c0_w * gamma_tables.dec[pal[c0][c]] + 
+                            c1_w * gamma_tables.dec[pal[c1][c]]/* + 2*/) / 4 ];
+                }
+            }
+        }
+    }
+
     // load inverse palettizer
 
 	char path[1024];
@@ -291,24 +591,23 @@ int LoadMainMenuSprites(const char* base_path)
 	// assert(out && isize == *(uint32_t*)out);
 	assert(out && isize == out_size);
 
-    // no use yet, was just testing
-    free(out);
+    xxx_step = (uint8_t)*(uint32_t*)out;
+    xxx_table = (uint32_t*)out + 1;
+	xxx_offs = xxx_step >> 1;
+	xxx_size = 255 / xxx_step + 1;
+    xxx_size2 = xxx_size * xxx_size;
+
+    assert(xxx_step == 3);
 
     // prepare GAMMA decoder and encoder
-    // linear space will be in range (0..32768 incl)
+    // linear space will be in range (0..8192 incl)
+    sprintf(path,"%simages/menu.png", base_path);
+    menu_bk_img = LoadImg(path, &menu_bk_width, &menu_bk_height);
 
+    if (!menu_bk_img)
+        return 0;
 
-    // load background png into linear rgb space (0..32768 incl)
-
-    // DEC(1):   1/3302.25    * 32768 =  9,922931335 (delta = ~10)
-    // DEC(2):   2/3302.25    * 32768 = 19,845862669
-    // DEC(254): 0,991102097  * 32768 = 32476,43
-    // DEC(255): 1.000000000  * 32768 = 32768,00     (delta = ~292)
-
-    // t = 1/255
-    // l = 1/(255*12.95) = 1/3302.25
-
-
+    // load background png into linear rgb space (0..8192 incl)
 
     // parse manifest, load sprites (oridinary sync)
     // and store cookies (ad cookies require copying original value into the actual cookie)
@@ -321,6 +620,12 @@ int LoadMainMenuSprites(const char* base_path)
 void FreeMainMenuSprites()
 {
     // undo LoadMainMenuSprites
+
+    if (xxx_table)
+        free(xxx_table-1);
+
+    if (menu_bk_img)
+        FreeImg(menu_bk_img);
 }
 
 void LoadGame()
@@ -449,9 +754,17 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         show_continue = true;
 
     mainmenu_stamp = _stamp;
+
+    /*
     int s = width*height;
     for (int i=0; i<s; i++)
         *((uint32_t*)ptr+i) = fast_rand() | (fast_rand()<<15);// | (fast_rand()<<30);
+    */
+
+    // let's scale and ANSIfy, DIRECTLY INTO FRAMEBUFFER !!!!
+    float marg = 0;
+    float src_xywh[] = { 0+marg,0+marg, (float)menu_bk_width-2*marg, (float)menu_bk_height-2*marg };
+    ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 
     int x = 5, y = height - 5;
     Font1Paint(ptr,width,height, x,y, "ASCIICKER", FONT1_GOLD_SKIN);

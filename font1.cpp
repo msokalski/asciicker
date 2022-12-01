@@ -39,9 +39,9 @@ void LoadFont1()
 	const char* name = "font-1.xp";
 	sprintf(path, "%ssprites/%s", base_path, name);
 	font1_sprite[0] = LoadSprite(path, name);
-	uint8_t recolor1[] = { 3, 85,85,85, 255,255,85, 170,170,170, 255,204,0, 255,255,255, 255,204,0 };
+	uint8_t recolor1[] = { 3, 85,85,85, 255,255,85, 170,170,170, 255,204,0, 255,255,255, 255,204,0, 0,0  };
 	font1_sprite[1] = LoadSprite(path, name, recolor1);
-	uint8_t recolor2[] = { 3, 85,85,85, 255,153,255, 170,170,170, 255,0,255, 255,255,255, 255,51,255 };
+	uint8_t recolor2[] = { 3, 85,85,85, 255,153,255, 170,170,170, 255,0,255, 255,255,255, 255,51,255, 0,0 };
 	font1_sprite[2] = LoadSprite(path, name, recolor2);
 }
 
