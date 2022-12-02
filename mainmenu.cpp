@@ -240,10 +240,25 @@ static uint32_t Extract2(const uint16_t* c1, const uint16_t* c2)
     return xxx_table[ i ];    
 }
 
+static void Accumulate(uint16_t a[3], const int16_t v[3])
+{
+    a[0] = std::max(0, std::min(8192, a[0]+v[0]));
+    a[1] = std::max(0, std::min(8192, a[1]+v[1]));
+    a[2] = std::max(0, std::min(8192, a[2]+v[2]));
+}
+
+
 static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_xywh[4], 
                      AnsiCell* dst, int dst_w, int dst_h, int dst_pitch=0)
 {
     const int src_pitch = src_w * 3;
+
+    int16_t e0[160][3] = {{0}};
+    int16_t e1[160][3] = {{0}};
+    int16_t e2[160][3] = {{0}};
+
+    // [0]-current line, [1]-next line, [2]-nextnext line
+    int16_t (*dither[3])[3] = {e0,e1,e2};
 
     if (dst_pitch<=0)
         dst_pitch = dst_w;
@@ -305,6 +320,17 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             Bilinear(upr + (cx1 >> 8)*3, src_pitch, rx1,ry2, UL);
             Bilinear(upr + (cx2 >> 8)*3, src_pitch, rx2,ry2, UR);
 
+            // read & apply errors with clamping, then clear
+            Accumulate(LL,dither[0][x]);
+            Accumulate(LR,dither[0][x]);
+            Accumulate(UL,dither[0][x]);
+            Accumulate(LR,dither[0][x]);
+
+            dither[0][x][0] = 0;
+            dither[0][x][1] = 0;
+            dither[0][x][2] = 0;
+
+
             // we have 4 filtered samples, let's ANSIfy them into the single cell
 
             // calc 4 encoded reference colors (for calcing errors)
@@ -342,9 +368,21 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
                 3*(std::abs(d[1] - ll[1]) + std::abs(d[1] - lr[1]) + std::abs(d[1] - ul[1]) + std::abs(d[1] - ur[1])) +
                 1*(std::abs(d[2] - ll[2]) + std::abs(d[2] - lr[2]) + std::abs(d[2] - ul[2]) + std::abs(d[2] - ur[2]));
 
-            // pick best
+
+            int32_t dev[3] =
+            {
+                LL[0]+LR[0]+UL[0]+UR[0],
+                LL[1]+LR[1]+UL[1]+UR[1],
+                LL[2]+LR[2]+UL[2]+UR[2]
+            };
+
+            // pick best and calculate deviations
             if (ht_err < lr_err && ht_err < bt_err)
             {
+                dev[0] -=  4 * gamma_tables.dec[d[0]];
+                dev[1] -=  4 * gamma_tables.dec[d[1]];
+                dev[2] -=  4 * gamma_tables.dec[d[2]];
+
                 dst->fg = ((d_slot>>8) & 0xFF) + 16;
                 dst->bk = (d_slot & 0xFF) + 16;
                 dst->gl = (d_slot>>24) + 176;
@@ -353,6 +391,10 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             else
             if (bt_err < lr_err)
             {
+                dev[0] -= 2 * (gamma_tables.dec[b[0]] + gamma_tables.dec[t[0]]);
+                dev[1] -= 2 * (gamma_tables.dec[b[1]] + gamma_tables.dec[t[1]]);
+                dev[2] -= 2 * (gamma_tables.dec[b[2]] + gamma_tables.dec[t[2]]);
+
                 dst->fg = ((b_slot>>16) & 0xFF) + 16;
                 dst->bk = ((t_slot>>16) & 0xFF) + 16;
                 dst->gl = 220;
@@ -360,10 +402,61 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             }
             else
             {
+                dev[0] -= 2 * (gamma_tables.dec[l[0]] + gamma_tables.dec[r[0]]);
+                dev[1] -= 2 * (gamma_tables.dec[l[1]] + gamma_tables.dec[r[1]]);
+                dev[2] -= 2 * (gamma_tables.dec[l[2]] + gamma_tables.dec[r[2]]);
+
                 dst->fg = ((l_slot>>16) & 0xFF) + 16;
                 dst->bk = ((r_slot>>16) & 0xFF) + 16;
                 dst->gl = 221;
                 dst->spare = 0;
+            }
+
+            // finaly distribute deviations
+            dev[0] /= 32;
+            dev[1] /= 32;
+            dev[2] /= 32;
+
+            if (x<dst_w-1)
+            {
+                dither[0][x+1][0] += dev[0];
+                dither[0][x+1][1] += dev[1];
+                dither[0][x+1][2] += dev[2];
+
+                if (x<dst_w-2)
+                {
+                    dither[0][x+2][0] += dev[0];
+                    dither[0][x+2][1] += dev[1];
+                    dither[0][x+2][2] += dev[2];
+                }
+            }
+
+            if (y<dst_h-1)
+            {
+                dither[1][x][0] += dev[0];
+                dither[1][x][1] += dev[1];
+                dither[1][x][2] += dev[2];
+
+                if (x>0)
+                {
+                    dither[1][x-1][0] += dev[0];
+                    dither[1][x-1][1] += dev[1];
+                    dither[1][x-1][2] += dev[2];
+                }
+
+                if (x<dst_w-1)
+                {
+                    dither[1][x+1][0] += dev[0];
+                    dither[1][x+1][1] += dev[1];
+                    dither[1][x+1][2] += dev[2];
+                }
+
+                if (y<dst_h-2)
+                {
+                    dither[2][x][0] += dev[0];
+                    dither[2][x][1] += dev[1];
+                    dither[2][x][2] += dev[2];
+                }
             }
 
             cx1 = cx2 + dx;
@@ -371,6 +464,11 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
         }
 
         cy1 = cy2 + dy;
+
+        int16_t (*roll)[3] = dither[0];
+        dither[0] = dither[1];
+        dither[1] = dither[2];
+        dither[2] = roll;
     }
 }
 
