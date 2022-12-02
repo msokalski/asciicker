@@ -34,6 +34,8 @@ static const int pal_size = 216;
 static uint8_t pal[pal_size][3] = {{0}};
 static uint8_t half_tone[2][216][216][3] = {{{{0}}}};
 
+static Sprite* menu_logo_sprite = 0;
+
 
 struct Manifest
 {
@@ -222,9 +224,9 @@ static uint32_t Extract4(const uint16_t* c1, const uint16_t* c2, const uint16_t*
 {
     const int xxx_3 = 3;
     int i = 
-        (gamma_tables.enc[(c1[0] + c2[0] + c3[0] + c4[0]/* + 2*/) >> 2] + xxx_offs) / xxx_3 +
-        (gamma_tables.enc[(c1[1] + c2[1] + c3[1] + c4[1]/* + 2*/) >> 2] + xxx_offs) / xxx_3 * xxx_size +
-        (gamma_tables.enc[(c1[2] + c2[2] + c3[2] + c4[2]/* + 2*/) >> 2] + xxx_offs) / xxx_3 * xxx_size2;
+        (gamma_tables.enc[(c1[0] + c2[0] + c3[0] + c4[0] + 2) >> 2] + xxx_offs) / xxx_3 +
+        (gamma_tables.enc[(c1[1] + c2[1] + c3[1] + c4[1] + 2) >> 2] + xxx_offs) / xxx_3 * xxx_size +
+        (gamma_tables.enc[(c1[2] + c2[2] + c3[2] + c4[2] + 2) >> 2] + xxx_offs) / xxx_3 * xxx_size2;
 
     return xxx_table[ i ];    
 }
@@ -242,9 +244,9 @@ static uint32_t Extract2(const uint16_t* c1, const uint16_t* c2)
 
 static void Accumulate(uint16_t a[3], const int16_t v[3])
 {
-    a[0] = std::max(0, std::min(8192, a[0]+v[0]));
-    a[1] = std::max(0, std::min(8192, a[1]+v[1]));
-    a[2] = std::max(0, std::min(8192, a[2]+v[2]));
+    a[0] = std::max(0, std::min(8192, a[0]+v[0] ));
+    a[1] = std::max(0, std::min(8192, a[1]+v[1] ));
+    a[2] = std::max(0, std::min(8192, a[2]+v[2] ));
 }
 
 
@@ -253,12 +255,15 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
 {
     const int src_pitch = src_w * 3;
 
+    /*
+    // DITHERING STUFF
     int16_t e0[160][3] = {{0}};
     int16_t e1[160][3] = {{0}};
     int16_t e2[160][3] = {{0}};
 
     // [0]-current line, [1]-next line, [2]-nextnext line
     int16_t (*dither[3])[3] = {e0,e1,e2};
+    */
 
     if (dst_pitch<=0)
         dst_pitch = dst_w;
@@ -278,11 +283,14 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
     for (int y=0; y<dst_h; y++)
     {
         int cx1 = sx;
+        int cy2 = cy1+dy;
+
+        cy1 = sy + (int)round(256.0 * src_xywh[3] * (2 * y + 0) / (2*dst_h));
+        cy2 = sy + (int)round(256.0 * src_xywh[3] * (2 * y + 1) / (2*dst_h));
 
         uint8_t ry1 = cy1 & 0xFF;
         const uint16_t* lwr = src + src_pitch * (cy1 >> 8);
 
-        int cy2 = cy1+dy;
         uint8_t ry2 = cy2 & 0xFF;
         const uint16_t* upr = src + src_pitch * (cy2 >> 8);
 
@@ -291,6 +299,10 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
         for (int x=0; x<dst_w; x++)
         {
             int cx2 = cx1+dx;
+
+            cx1 = sx + (int)round(256.0 * src_xywh[2] * (2 * x + 0) / (2*dst_w));
+            cx2 = sx + (int)round(256.0 * src_xywh[2] * (2 * x + 1) / (2*dst_w));
+
             uint8_t rx1 = cx1 & 0xFF;
             uint8_t rx2 = cx2 & 0xFF;
 
@@ -320,16 +332,18 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             Bilinear(upr + (cx1 >> 8)*3, src_pitch, rx1,ry2, UL);
             Bilinear(upr + (cx2 >> 8)*3, src_pitch, rx2,ry2, UR);
 
-            // read & apply errors with clamping, then clear
-            Accumulate(LL,dither[0][x]);
-            Accumulate(LR,dither[0][x]);
-            Accumulate(UL,dither[0][x]);
-            Accumulate(LR,dither[0][x]);
+            // read & apply errors with clamping 
+            /*
+            Accumulate(LL, dither[0][x]);
+            Accumulate(LR, dither[0][x]);
+            Accumulate(UL, dither[0][x]);
+            Accumulate(UR, dither[0][x]);
 
+            // reset
             dither[0][x][0] = 0;
             dither[0][x][1] = 0;
             dither[0][x][2] = 0;
-
+            */
 
             // we have 4 filtered samples, let's ANSIfy them into the single cell
 
@@ -369,19 +383,23 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
                 1*(std::abs(d[2] - ll[2]) + std::abs(d[2] - lr[2]) + std::abs(d[2] - ul[2]) + std::abs(d[2] - ur[2]));
 
 
+            /*
             int32_t dev[3] =
             {
                 LL[0]+LR[0]+UL[0]+UR[0],
                 LL[1]+LR[1]+UL[1]+UR[1],
                 LL[2]+LR[2]+UL[2]+UR[2]
             };
+            */
 
             // pick best and calculate deviations
             if (ht_err < lr_err && ht_err < bt_err)
             {
+                /*
                 dev[0] -=  4 * gamma_tables.dec[d[0]];
                 dev[1] -=  4 * gamma_tables.dec[d[1]];
                 dev[2] -=  4 * gamma_tables.dec[d[2]];
+                */
 
                 dst->fg = ((d_slot>>8) & 0xFF) + 16;
                 dst->bk = (d_slot & 0xFF) + 16;
@@ -391,9 +409,11 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             else
             if (bt_err < lr_err)
             {
+                /*
                 dev[0] -= 2 * (gamma_tables.dec[b[0]] + gamma_tables.dec[t[0]]);
                 dev[1] -= 2 * (gamma_tables.dec[b[1]] + gamma_tables.dec[t[1]]);
                 dev[2] -= 2 * (gamma_tables.dec[b[2]] + gamma_tables.dec[t[2]]);
+                */
 
                 dst->fg = ((b_slot>>16) & 0xFF) + 16;
                 dst->bk = ((t_slot>>16) & 0xFF) + 16;
@@ -402,9 +422,11 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             }
             else
             {
+                /*
                 dev[0] -= 2 * (gamma_tables.dec[l[0]] + gamma_tables.dec[r[0]]);
                 dev[1] -= 2 * (gamma_tables.dec[l[1]] + gamma_tables.dec[r[1]]);
                 dev[2] -= 2 * (gamma_tables.dec[l[2]] + gamma_tables.dec[r[2]]);
+                */
 
                 dst->fg = ((l_slot>>16) & 0xFF) + 16;
                 dst->bk = ((r_slot>>16) & 0xFF) + 16;
@@ -413,6 +435,7 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             }
 
             // finaly distribute deviations
+            /*
             dev[0] /= 32;
             dev[1] /= 32;
             dev[2] /= 32;
@@ -458,6 +481,7 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
                     dither[2][x][2] += dev[2];
                 }
             }
+            */
 
             cx1 = cx2 + dx;
             dst++;
@@ -465,10 +489,12 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
 
         cy1 = cy2 + dy;
 
+        /*
         int16_t (*roll)[3] = dither[0];
         dither[0] = dither[1];
         dither[1] = dither[2];
         dither[2] = roll;
+        */
     }
 }
 
@@ -576,7 +602,7 @@ int LoadMainMenuSprites(const char* base_path)
                     half_tone[g][c0][c1][c] = 
                         gamma_tables.enc[( 
                             c0_w * gamma_tables.dec[pal[c0][c]] + 
-                            c1_w * gamma_tables.dec[pal[c1][c]]/* + 2*/) / 4 ];
+                            c1_w * gamma_tables.dec[pal[c1][c]] + 2) >> 2 ];
                 }
             }
         }
@@ -697,7 +723,8 @@ int LoadMainMenuSprites(const char* base_path)
     if (!menu_bk_img)
         return 0;
 
-    // load background png into linear rgb space (0..8192 incl)
+    sprintf(path,"%ssprites/asciicker.xp", base_path);
+    menu_logo_sprite = LoadSprite(path,"asciicker");
 
     // parse manifest, load sprites (oridinary sync)
     // and store cookies (ad cookies require copying original value into the actual cookie)
@@ -716,6 +743,9 @@ void FreeMainMenuSprites()
 
     if (menu_bk_img)
         FreeImg(menu_bk_img);
+
+    if (menu_logo_sprite)
+        FreeSprite(menu_logo_sprite);
 }
 
 void LoadGame()
@@ -851,21 +881,41 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         *((uint32_t*)ptr+i) = fast_rand() | (fast_rand()<<15);// | (fast_rand()<<30);
     */
 
-    // let's scale and ANSIfy, DIRECTLY INTO FRAMEBUFFER !!!!
-    static int pulse = 0;
-    pulse++;
-    float marg = (sin(pulse*0.01)+1.1) * 20;
-    float src_xywh[] = { 0+marg,0+marg, (float)menu_bk_width-2*marg, (float)menu_bk_height-2*marg };
+    float dst_aspect = (float)width / height;
+    float img_aspect = (float)menu_bk_width / menu_bk_height;
+
+    float src_xywh[4];
+    if (dst_aspect > img_aspect)
+    {
+        src_xywh[2] = menu_bk_width;
+        src_xywh[0] = 0;
+        src_xywh[3] = menu_bk_width / dst_aspect;
+        src_xywh[1] = 0;//0.5f * (menu_bk_height - src_xywh[3]);
+    }
+    else
+    {
+        src_xywh[3] = menu_bk_height;
+        src_xywh[1] = 0;
+        src_xywh[2] = menu_bk_height * dst_aspect;
+        src_xywh[0] = 0.5f * (menu_bk_width - src_xywh[2]);
+    }
+
+
     ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 
+
     int x = 5, y = height - 5;
-    Font1Paint(ptr,width,height, x,y, "ASCIICKER", FONT1_GOLD_SKIN);
+    // Font1Paint(ptr,width,height, x,y, "ASCIICKER", FONT1_GOLD_SKIN);
+    int logo_x = (width - menu_logo_sprite->atlas->width + 1) / 2 + 1;
+    // int logo_y = (height - menu_logo_sprite->atlas->height) / 2;
+    BlitSprite(ptr,width,height,menu_logo_sprite->atlas, logo_x,y-menu_logo_sprite->atlas->height/2);
+
+    y -= menu_logo_sprite->atlas->height;
 
     int w,h;
-    Font1Size("ASCIICKER",&w,&h);
-    y -= h;
+    Font1Size("MAIN MENU",&w,&h);
 
-    Font1Paint(ptr,width,height, x,y, "MAIN MENU", FONT1_PINK_SKIN);
+    Font1Paint(ptr,width,height, (width-w) / 2, y, "MAIN MENU", FONT1_PINK_SKIN);
     y-= 2*h;
 
     if (show_continue)
