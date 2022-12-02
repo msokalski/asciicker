@@ -310,10 +310,10 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             // we have 4 filtered samples, let's ANSIfy them into the single cell
 
             // calc 4 encoded reference colors (for calcing errors)
-            uint8_t ll[3] ={gamma_tables.enc[LL[0]],gamma_tables.enc[LL[1]],gamma_tables.enc[LL[2]]};
-            uint8_t lr[3] ={gamma_tables.enc[LR[0]],gamma_tables.enc[LR[1]],gamma_tables.enc[LR[2]]};
-            uint8_t ul[3] ={gamma_tables.enc[UL[0]],gamma_tables.enc[UL[1]],gamma_tables.enc[UL[2]]};
-            uint8_t ur[3] ={gamma_tables.enc[UR[0]],gamma_tables.enc[UR[1]],gamma_tables.enc[UR[2]]};
+            int ll[3] ={gamma_tables.enc[LL[0]],gamma_tables.enc[LL[1]],gamma_tables.enc[LL[2]]};
+            int lr[3] ={gamma_tables.enc[LR[0]],gamma_tables.enc[LR[1]],gamma_tables.enc[LR[2]]};
+            int ul[3] ={gamma_tables.enc[UL[0]],gamma_tables.enc[UL[1]],gamma_tables.enc[UL[2]]};
+            int ur[3] ={gamma_tables.enc[UR[0]],gamma_tables.enc[UR[1]],gamma_tables.enc[UR[2]]};
 
             // now reconstruct rgb values from the palette
             uint32_t l_slot = Extract2(LL,UL);
@@ -322,11 +322,11 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             uint32_t t_slot = Extract2(UL,UR);
             uint32_t d_slot = Extract4(LL,LR,UL,UR);
 
-            const uint8_t* l = pal[l_slot & 0xFF];
-            const uint8_t* r = pal[r_slot & 0xFF];
-            const uint8_t* b = pal[b_slot & 0xFF];
-            const uint8_t* t = pal[t_slot & 0xFF];
-            const uint8_t* d = half_tone[d_slot>>24][(d_slot>>16)&0xFF][(d_slot>>8)&0xFF];
+            const uint8_t* l = pal[(l_slot>>16) & 0xFF];
+            const uint8_t* r = pal[(r_slot>>16) & 0xFF];
+            const uint8_t* b = pal[(b_slot>>16) & 0xFF];
+            const uint8_t* t = pal[(t_slot>>16) & 0xFF];
+            const uint8_t* d = half_tone[d_slot>>24][d_slot&0xFF][(d_slot>>8)&0xFF];
 
             // calc errors
             int lr_err = 
@@ -348,22 +348,22 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             if (ht_err < lr_err && ht_err < bt_err)
             {
                 dst->fg = ((d_slot>>8) & 0xFF) + 16;
-                dst->bk = ((d_slot>>16) & 0xFF) + 16;
+                dst->bk = (d_slot & 0xFF) + 16;
                 dst->gl = (d_slot>>24) + 176;
                 dst->spare = 0;
             }
             else
             if (bt_err < lr_err)
             {
-                dst->fg = (b_slot & 0xFF) + 16;
-                dst->bk = (t_slot & 0xFF) + 16;
+                dst->fg = ((b_slot>>16) & 0xFF) + 16;
+                dst->bk = ((t_slot>>16) & 0xFF) + 16;
                 dst->gl = 220;
                 dst->spare = 0;
             }
             else
             {
-                dst->fg = (l_slot & 0xFF) + 16;
-                dst->bk = (r_slot & 0xFF) + 16;
+                dst->fg = ((l_slot>>16) & 0xFF) + 16;
+                dst->bk = ((r_slot>>16) & 0xFF) + 16;
                 dst->gl = 221;
                 dst->spare = 0;
             }
