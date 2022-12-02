@@ -180,13 +180,11 @@ static Gamma gamma_tables;
 
 static void Bilinear(const uint16_t* src, int pitch, uint8_t x, uint8_t y, uint16_t* dst)
 {
-    /*
     // NEAREST TEST
     dst[0] = src[0];
     dst[1] = src[1];
     dst[2] = src[2];
     return;
-    */
 
     // +---------+---------+
     // |   src   |  src+3  |
@@ -368,22 +366,6 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
                 dst->spare = 0;
             }
 
-            // reverse palette order
-            // TODO: remove this hack but fix in png2xp !!!
-            
-            int fg = dst->fg - 16;
-            int bk = dst->bk - 16;
-
-            int fg_r = fg % 6; fg /= 6;
-            int fg_g = fg % 6; fg /= 6;
-            int fg_b = fg;
-            dst->fg = fg_r * 36 + fg_g * 6 + fg_b + 16;
-
-            int bk_r = bk % 6; bk /= 6;
-            int bk_g = bk % 6; bk /= 6;
-            int bk_b = bk;
-            dst->bk = bk_r * 36 + bk_g * 6 + bk_b + 16;
-
             cx1 = cx2 + dx;
             dst++;
         }
@@ -463,13 +445,23 @@ extern "C" void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_b
 int LoadMainMenuSprites(const char* base_path)
 {
     // init palette entries
+    /*
+    FILE* ppp = fopen("666.gpl","wb");
+    fprintf(ppp,"GIMP Palette\n");
+    fprintf(ppp,"Name: 666\n");
+    fprintf(ppp,"\n");
+    fprintf(ppp,"#");
+    */
 	for (int i=0; i<pal_size; i++)
 	{
 		int j = i;
-		pal[i][0] = j%6*51; j /= 6;
-		pal[i][1] = j%6*51; j /= 6;
 		pal[i][2] = j%6*51; j /= 6;
+		pal[i][1] = j%6*51; j /= 6;
+		pal[i][0] = j%6*51; j /= 6;
+
+        //fprintf(ppp,"%3d %3d %3d    mycolor %d\n",pal[i][0],pal[i][1],pal[i][2],i);
 	}
+    //fclose(ppp);
 
     // init half_tone mapper
     for (int gl=1; gl<3; gl++)
@@ -762,7 +754,9 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     */
 
     // let's scale and ANSIfy, DIRECTLY INTO FRAMEBUFFER !!!!
-    float marg = 0;
+    static int pulse = 0;
+    pulse++;
+    float marg = (sin(pulse*0.01)+1.1) * 20;
     float src_xywh[] = { 0+marg,0+marg, (float)menu_bk_width-2*marg, (float)menu_bk_height-2*marg };
     ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 

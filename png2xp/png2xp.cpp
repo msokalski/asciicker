@@ -198,6 +198,17 @@ uint32_t ERR(uint8_t c[3], uint8_t r[3])
 	double err = sqrt(dL*dL + da*da + db*db);
 
 	return err;
+	*/ 
+
+	// lets try euclidean
+	/*
+	int dr = (int32_t)(c[0])-(int32_t)(r[0]);
+	int dg = (int32_t)(c[1])-(int32_t)(r[1]);
+	int db = (int32_t)(c[2])-(int32_t)(r[2]);
+
+	// fast sqrt table[MAX_SUM], MAX_SUM = 2*255*255+3*255*255+255*255 = 6*255*255
+	return //(int)sqrt
+		(2*dr*dr+3*dg*dg+db*db);
 	*/
 
 	uint32_t chr =  
@@ -280,8 +291,34 @@ uint32_t Make(uint32_t src, uint8_t pal[][3], int pal_size)
 		int c1_w = gl;
 		for (int c0 = 0; c0<pal_size; c0++)
 		{
+			int t = c0;
+			int r0 = t%6; t/=6;
+			int g0 = t%6; t/=6;
+			int b0 = t;
+
 			for (int c1 = 0; c1<pal_size; c1++)
 			{
+				t = c1;
+				int r1 = t%6; t/=6;
+				int g1 = t%6; t/=6;
+				int b1 = t;
+
+				// TODO:
+				// reimplement max dither steps limit into palette lookup. 
+				// if there exist a solid color in the palette such
+				// difference from current (reconstructed) half-tone to 
+				// that solid color is smaller than to the next or prev
+				// half-tone shade (gl +/- 1) we should invalidate this
+				// half-tone (solid color will be used instead)
+
+				// MAX DITHER STEPS LIMIT = 1
+				//if (std::abs(r0-r1)>1 || std::abs(g0-g1)>1 || std::abs(b0-b1)>1)
+				//	continue;
+
+				// MAX DITHER STEPS LIMIT = 2 
+				if (std::abs(r0-r1)>2 || std::abs(g0-g1)>2 || std::abs(b0-b1)>2)
+					continue;
+
 				uint8_t G[3];
 				HACK(G, gl,c0,c1);
 
@@ -519,9 +556,9 @@ int main(int argc, char* argv[])
 	for (int i=0; i<pal_size; i++)
 	{
 		int j = i;
-		pal[i][0] = j%6*51; j /= 6;
-		pal[i][1] = j%6*51; j /= 6;
 		pal[i][2] = j%6*51; j /= 6;
+		pal[i][1] = j%6*51; j /= 6;
+		pal[i][0] = j%6*51; j /= 6;
 	}
 
 	INIT_HACK(pal,pal_size);
@@ -743,7 +780,7 @@ int main(int argc, char* argv[])
 			ptr++;
 
 			// if no dithering
-			//continue;
+			continue;
 
 			// -4 is 100%
 			// (atkinson dither: 6x 1/8)
