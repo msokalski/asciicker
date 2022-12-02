@@ -249,13 +249,13 @@ static void Accumulate(uint16_t a[3], const int16_t v[3])
     a[2] = std::max(0, std::min(8192, a[2]+v[2] ));
 }
 
-
+#define DITHERING
 static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_xywh[4], 
                      AnsiCell* dst, int dst_w, int dst_h, int dst_pitch=0)
 {
     const int src_pitch = src_w * 3;
 
-    /*
+    #ifdef DITHERING
     // DITHERING STUFF
     int16_t e0[160][3] = {{0}};
     int16_t e1[160][3] = {{0}};
@@ -263,7 +263,7 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
 
     // [0]-current line, [1]-next line, [2]-nextnext line
     int16_t (*dither[3])[3] = {e0,e1,e2};
-    */
+    #endif
 
     if (dst_pitch<=0)
         dst_pitch = dst_w;
@@ -333,7 +333,7 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             Bilinear(upr + (cx2 >> 8)*3, src_pitch, rx2,ry2, UR);
 
             // read & apply errors with clamping 
-            /*
+            #ifdef DITHERING
             Accumulate(LL, dither[0][x]);
             Accumulate(LR, dither[0][x]);
             Accumulate(UL, dither[0][x]);
@@ -343,7 +343,7 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             dither[0][x][0] = 0;
             dither[0][x][1] = 0;
             dither[0][x][2] = 0;
-            */
+            #endif
 
             // we have 4 filtered samples, let's ANSIfy them into the single cell
 
@@ -383,23 +383,23 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
                 1*(std::abs(d[2] - ll[2]) + std::abs(d[2] - lr[2]) + std::abs(d[2] - ul[2]) + std::abs(d[2] - ur[2]));
 
 
-            /*
+            #ifdef DITHERING
             int32_t dev[3] =
             {
                 LL[0]+LR[0]+UL[0]+UR[0],
                 LL[1]+LR[1]+UL[1]+UR[1],
                 LL[2]+LR[2]+UL[2]+UR[2]
             };
-            */
+            #endif
 
             // pick best and calculate deviations
             if (ht_err < lr_err && ht_err < bt_err)
             {
-                /*
+                #ifdef DITHERING
                 dev[0] -=  4 * gamma_tables.dec[d[0]];
                 dev[1] -=  4 * gamma_tables.dec[d[1]];
                 dev[2] -=  4 * gamma_tables.dec[d[2]];
-                */
+                #endif
 
                 dst->fg = ((d_slot>>8) & 0xFF) + 16;
                 dst->bk = (d_slot & 0xFF) + 16;
@@ -409,11 +409,11 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             else
             if (bt_err < lr_err)
             {
-                /*
+                #ifdef DITHERING
                 dev[0] -= 2 * (gamma_tables.dec[b[0]] + gamma_tables.dec[t[0]]);
                 dev[1] -= 2 * (gamma_tables.dec[b[1]] + gamma_tables.dec[t[1]]);
                 dev[2] -= 2 * (gamma_tables.dec[b[2]] + gamma_tables.dec[t[2]]);
-                */
+                #endif
 
                 dst->fg = ((b_slot>>16) & 0xFF) + 16;
                 dst->bk = ((t_slot>>16) & 0xFF) + 16;
@@ -422,11 +422,11 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             }
             else
             {
-                /*
+                #ifdef DITHERING
                 dev[0] -= 2 * (gamma_tables.dec[l[0]] + gamma_tables.dec[r[0]]);
                 dev[1] -= 2 * (gamma_tables.dec[l[1]] + gamma_tables.dec[r[1]]);
                 dev[2] -= 2 * (gamma_tables.dec[l[2]] + gamma_tables.dec[r[2]]);
-                */
+                #endif
 
                 dst->fg = ((l_slot>>16) & 0xFF) + 16;
                 dst->bk = ((r_slot>>16) & 0xFF) + 16;
@@ -435,7 +435,7 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             }
 
             // finaly distribute deviations
-            /*
+            #ifdef DITHERING
             dev[0] /= 32;
             dev[1] /= 32;
             dev[2] /= 32;
@@ -481,7 +481,7 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
                     dither[2][x][2] += dev[2];
                 }
             }
-            */
+            #endif
 
             cx1 = cx2 + dx;
             dst++;
@@ -489,12 +489,12 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
 
         cy1 = cy2 + dy;
 
-        /*
+        #ifdef DITHERING
         int16_t (*roll)[3] = dither[0];
         dither[0] = dither[1];
         dither[1] = dither[2];
         dither[2] = roll;
-        */
+        #endif
     }
 }
 

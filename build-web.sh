@@ -38,9 +38,10 @@ MESHES=`ls meshes/*.akm`
 SPRITES=`ls sprites/*.xp`
 SAMPLES=`ls samples/*.ogg`
 PALETTE="palettes/palette.gz"
+MENUIMG="images/menu.png"
 
 #requires bash or zsh
-ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"$'\n'"$PALETTE"
+ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"$'\n'"$PALETTE"$'\n'"$MENUIMG"
 
 echo ""
 echo "MAKING audio worklet ..."
