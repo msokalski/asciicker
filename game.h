@@ -284,6 +284,7 @@ struct Game
 	int font_size[2];
 	int render_size[2];
 
+	bool mute;
 	bool perspective;
 	bool blood;
 
@@ -487,6 +488,9 @@ struct Game
 
 Game* CreateGame();
 void DeleteGame(Game* g);
+
+void WriteConf(Game* g);
+void ReadConf(Game* g);
 
 void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4], uint64_t stamp);
 void FreeGame(Game* g);

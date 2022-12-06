@@ -522,9 +522,10 @@ Game* TermOpen(A3D_WND* share, float yaw, float pos[3], void(*close)())
 
 	gd.flags = (GraphicsDesc::FLAGS) (GraphicsDesc::DEBUG_CONTEXT | GraphicsDesc::DOUBLE_BUFFER);
 
-	int rc[] = { 0,0,1920 * 2,1080 + 2 * 1080 };
+	// TODO SAVE IN SETTINGS ON CLEAN EXIT
+	int rc[] = { 1920+800,300,800,600 };
 	gd.wnd_mode = A3D_WND_NORMAL;
-	gd.wnd_xywh = 0;
+	gd.wnd_xywh = rc;
 
 	A3D_WND* wnd = a3dOpen(&pi, &gd, share);
 

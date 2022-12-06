@@ -116,6 +116,7 @@ void Font1Paint(AnsiCell* ptr, int width, int height, int dx, int dy, const char
 				int up_row = font1_rows - 1 - row;
 
 				int clip[] = { col * font1_cell_w, up_row * font1_cell_h, (col+1) * font1_cell_w, (up_row+1) * font1_cell_h };
+
 				BlitSprite(ptr, width, height, sf, x, y, clip);
 
 				x += font1_xadv[chr];

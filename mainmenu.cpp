@@ -1,12 +1,14 @@
 #include <math.h>
+#include <string.h>
 
 #include "mainmenu.h"
 #include "enemygen.h"
 #include "fast_rand.h"
 #include "font1.h"
+#include "gamepad.h"
 
+#include "platform.h"
 #include "upng.h"
-#include "rgba8.h"
 
 extern Game* game;
 extern Terrain* terrain;
@@ -16,8 +18,10 @@ extern char base_path[1024];
 
 static int  game_loading = 0; // 0-not_loaded, 1-load requested, 2-loading, 3-loaded
 static bool show_continue = false;
+static bool show_gamepad = false;
 
 static uint64_t mainmenu_stamp = 0;
+static bool mainmenu_shot = false;
 
 ////////////////////////////////////////
 static uint32_t* xxx_table = 0;
@@ -36,6 +40,195 @@ static uint8_t half_tone[2][216][216][3] = {{{{0}}}};
 
 static Sprite* menu_logo_sprite = 0;
 
+struct MainMenuContext;
+struct MainMenu
+{
+	const char* str; // if 0 this is terminator
+	const MainMenu* sub; // for terminator this is back menu
+	void (*action)(MainMenuContext* mmc);
+	bool (*getter)(MainMenuContext* mmc);
+    void* cookie;
+};
+
+static void ResetGame();
+static void start_new_game(MainMenuContext* m)
+{
+    if (game_loading)
+        ResetGame();
+    game_loading = 1;
+}
+
+static const MainMenu dummy[] =
+{
+    {"Y9", 0, start_new_game, 0, /*cookie*/0},
+    {0}
+};
+
+// here put parsed entries from the manifest
+// it is referenced by some parent MainMenu element
+// MainMenu { "title", 0, start_new_game, 0, manifest_cookie}
+// static void main_menu_continue(MainMenu* m) { /* get cookie, load files, start new game */ } 
+static const MainMenu* main_menu_new_game = /*0*/ dummy;
+static const MainMenu* MainMenuGetRoot();
+
+
+struct MainMenuContext
+{
+    int font_size[2];   // from OnSize
+    int input_size[2];  // from OnSize
+    int render_size[2]; // from Render
+    
+	// menu context
+	int menu_stack[4]; // menu_stack[menu_depth] contains current item (hilight)
+	int menu_depth; // -1 when closed, 0 just after OpenMenu
+
+	// menu mouse / touch state
+	int menu_down; // 0: released, 1:mouse_captured, 2:touch_captured
+	int menu_down_x;
+	int menu_down_y;
+
+	// when mouse/touch is taking over, store current hilight here
+	// so we can revert hilight when pad/keyb is back
+	int menu_temp; 
+
+    void Init()
+    {
+        memset(this,0,sizeof(MainMenuContext));
+    }
+
+	//void Open(int method);
+	//void Close();
+	//void Toggle(int method);
+
+	bool Paint(AnsiCell* ptr, int width, int height)
+    {
+        if (menu_depth<0)
+        {
+            // indicate we didn't take over logo space
+            return true;
+        }
+
+        const MainMenu* m = MainMenuGetRoot();
+        const char* title = "";
+        for (int d=0; d<menu_depth; d++)
+        {
+            title = m[ menu_stack[d] ].str;
+            m = m[ menu_stack[d] ].sub;
+        }
+
+        // right align
+        int x = width-5;
+        int y = height-15;
+
+        // paint title
+        if (title[0])
+        {
+            int w = 0, h = 0;
+            Font1Size(title,&w,&h);
+            Font1Paint(ptr,width,height,3+x-w,y,title,FONT1_PINK_SKIN);
+            y -= h+2;
+        }
+
+        int i=0;
+        while(m[i].str)
+        {
+            int w = 0, h = 0;
+            Font1Size(m[i].str,&w,&h);
+
+            int skin = i == menu_stack[menu_depth] ? FONT1_GOLD_SKIN : FONT1_GREY_SKIN;
+            Font1Paint(ptr,width,height,x-w,y,m[i].str,skin);
+
+            const char* str = 0;
+            if (m[i].sub)
+                str = "\x03";
+            else
+            if (m[i].getter)
+                str = m[i].getter(this) ? "\x02" : "\x01";
+
+            if (str)
+                Font1Paint(ptr,width,height,x,y,str,FONT1_PINK_SKIN);
+
+            y -= h+1;
+            i++;
+        }
+
+        // indicate we didn't take over logo space
+        return true; 
+    }
+
+    void ScreenToCell(int p[2]) const
+    {
+        p[0] = (2*p[0] - input_size[0] + render_size[0] * font_size[0]) / (2 * font_size[0]);
+        p[1] = (input_size[1]-1 - 2*p[1] + render_size[1] * font_size[1]) / (2 * font_size[1]);
+    }
+
+	int  HitMenu(int hx, int hy)
+    {
+        if (menu_depth<0)
+            return -3;
+
+        int cp[2] = { hx, hy };
+        ScreenToCell(cp);
+        hx=cp[0];
+        hy=cp[1];
+
+        const MainMenu* m = MainMenuGetRoot();
+        const char* title = "";
+        for (int d=0; d<menu_depth; d++)
+        {
+            title = m[ menu_stack[d] ].str;
+            m = m[ menu_stack[d] ].sub;
+        }
+
+        // right align
+        int x = render_size[0]-5;
+        int y = render_size[1]-15;
+
+        if (title[0])
+        {
+            int w = 0, h = 0;
+            Font1Size(title,&w,&h);
+
+            if (hx >= 3+x-w /*&& hx<3+x*/ && hy >=y && hy<y+h)
+            {
+                // title hit
+                return -1;
+            }
+
+            y -= h+2;
+        }
+
+        int i=0;
+        while(m[i].str)
+        {
+            int w = 0, h = 0;
+            Font1Size(m[i].str,&w,&h);
+
+            if (hx >= x-w /*&& hx < x*/ && hy>=y && hy<y+h)
+            {
+                // item hit
+                return i;
+            }
+
+            y -= h+1;
+            i++;
+        }
+
+        return -2;
+    }
+
+    // these things should call things above
+    void OnFocus(bool set);
+    void OnSize(int w, int h, int fw, int fh);
+	void OnKeyb(GAME_KEYB keyb, int key);
+	void OnMouse(GAME_MOUSE mouse, int x, int y);
+	void OnTouch(GAME_TOUCH touch, int id, int x, int y);
+	void OnPadMount(bool connected);
+	void OnPadButton(int b, bool down);
+	void OnPadAxis(int a, int16_t pos);
+};
+
+static MainMenuContext mainmenu_context = {0};
 
 struct Manifest
 {
@@ -740,12 +933,15 @@ void FreeMainMenuSprites()
 
     if (xxx_table)
         free(xxx_table-1);
+    xxx_table = 0;
 
     if (menu_bk_img)
         FreeImg(menu_bk_img);
+    menu_bk_img = 0;
 
     if (menu_logo_sprite)
         FreeSprite(menu_logo_sprite);
+    menu_logo_sprite = 0;
 }
 
 void LoadGame()
@@ -868,6 +1064,9 @@ static void ResetGame()
 
 void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
+    mainmenu_context.render_size[0] = width;
+    mainmenu_context.render_size[1] = height;
+
     if (game_loading == 0)
         show_continue = false;
     if (game_loading == 3)
@@ -903,13 +1102,37 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
     ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 
+    // DETERMINE IF WE SHOULD GO FOR SINGLE OR DUAL COLUMN LAYOUT
 
-    int x = 5, y = height - 5;
-    // Font1Paint(ptr,width,height, x,y, "ASCIICKER", FONT1_GOLD_SKIN);
-    int logo_x = (width - menu_logo_sprite->atlas->width + 1) / 2 + 1;
-    // int logo_y = (height - menu_logo_sprite->atlas->height) / 2;
-    BlitSprite(ptr,width,height,menu_logo_sprite->atlas, logo_x,y-menu_logo_sprite->atlas->height/2);
+    // AT THE CURRENT LEVEL DETERMINE LONGEST STRING WITH EXTRA SPACING
+     
 
+    bool logo_space = true;
+
+    if (show_gamepad)
+    {
+        // TODO:
+        // determine somehow if we can keep logo or not!!!!
+
+        // TODO:
+        // also add x,y arguments to PaintGamePad for better centering when 
+        // we have enough space for both the logo and the gamepad
+
+        PaintGamePad(ptr, width,height, mainmenu_stamp);
+    }
+    else
+        logo_space = mainmenu_context.Paint(ptr,width,height);
+
+    if (logo_space)
+    {
+        int x = 5, y = height - 5;
+        // Font1Paint(ptr,width,height, x,y, "ASCIICKER", FONT1_GOLD_SKIN);
+        int logo_x = (width - menu_logo_sprite->atlas->width) / 2;
+        // int logo_y = (height - menu_logo_sprite->atlas->height) / 2;
+        BlitSprite(ptr,width,height,menu_logo_sprite->atlas, logo_x,y-menu_logo_sprite->atlas->height/2);
+    }
+
+    #if 0
     y -= menu_logo_sprite->atlas->height;
 
     int w,h;
@@ -934,14 +1157,16 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         Font1Paint(ptr,width,height, x+7,y, "START NEW GAME", FONT1_GREY_SKIN);
         y -= h;
     }
+    #endif
 
     if (game_loading == 1)
     {
+        #if 0
         if (y > 5)
             y = 5;
-
         Font1Size("LOADING",&w,&h);
         Font1Paint(ptr,width,height, (width-w)/2,y, "LOADING", FONT1_PINK_SKIN);
+        #endif
 
         game_loading = 2;
     }
@@ -951,15 +1176,114 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         LoadGame(); // here we should provide manifest index
         game_loading = 3;
         game->main_menu = false;
+
+        // prepare in advance for getting back to the main menu
+        mainmenu_context.Init();
+    }
+
+    if (mainmenu_shot)
+    {
+        mainmenu_shot = false;
+        FILE* f = fopen("./shot.xp", "wb");
+        if (f)
+        {
+            uint32_t hdr[4] = { (uint32_t)-1, (uint32_t)1, (uint32_t)width, (uint32_t)height };
+            fwrite(hdr, sizeof(uint32_t), 4, f);
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = height - 1; y >= 0; y--)
+                {
+                    AnsiCell* c = ptr + y * width + x;
+                    int fg = c->fg - 16;
+                    int f_r = (fg % 6) * 51; fg /= 6;
+                    int f_g = (fg % 6) * 51; fg /= 6;
+                    int f_b = (fg % 6) * 51; fg /= 6;
+
+                    int bk = c->bk - 16;
+                    int b_r = (bk % 6) * 51; bk /= 6;
+                    int b_g = (bk % 6) * 51; bk /= 6;
+                    int b_b = (bk % 6) * 51; bk /= 6;
+
+                    uint8_t f_rgb[3] = { (uint8_t)f_b,(uint8_t)f_g,(uint8_t)f_r };
+                    uint8_t b_rgb[3] = { (uint8_t)b_b,(uint8_t)b_g,(uint8_t)b_r };
+                    uint32_t chr = c->gl;
+
+                    fwrite(&chr, sizeof(uint32_t), 1, f);
+                    fwrite(f_rgb, 1, 3, f);
+                    fwrite(b_rgb, 1, 3, f);
+                }
+            }
+
+            fclose(f);
+        }
     }
 }
 
 void MainMenu_OnSize(int w, int h, int fw, int fh)
 {
+    if (game_loading==0 || game_loading==3)    
+        mainmenu_context.OnSize(w,h,fw,fh);
 }
 
 void MainMenu_OnKeyb(GAME_KEYB keyb, int key)
 {
+    if (keyb == GAME_KEYB::KEYB_DOWN)
+    {
+        if (key == A3D_F10)
+        {
+            mainmenu_shot = true;
+        }
+    }
+
+    if (show_gamepad)
+    {
+		int k = -1;
+		switch (keyb)
+		{
+			case GAME_KEYB::KEYB_CHAR:
+			{
+				switch (key)
+				{
+					case ' ': k = 0; break;
+					case '\n': k = 1; break;
+					case 8:
+					case '\\':
+					case 27: k = 2; break;
+
+					default:
+						if (key>32 && key<127)
+							k = key;
+				}
+				break;
+			}
+
+			case GAME_KEYB::KEYB_PRESS:
+			case GAME_KEYB::KEYB_DOWN:
+			{
+				switch (key)
+				{
+					case A3D_ENTER: k = 1; break;
+					case A3D_ESCAPE: k = 2; break;
+					case A3D_UP: k = 3; break;
+					case A3D_DOWN: k = 4; break;
+					case A3D_LEFT: k = 5; break;
+					case A3D_RIGHT: k = 6; break;
+				}
+				break;
+			}
+
+			default:
+				break;
+		}
+
+		if (k>=0)
+			GamePadKeyb(k, mainmenu_stamp);
+    }
+    else
+    if (game_loading==0 || game_loading==3)
+        mainmenu_context.OnKeyb(keyb,key);
+
+    /*
     if (keyb == GAME_KEYB::KEYB_CHAR)
     {
         if (game_loading==3)
@@ -979,10 +1303,36 @@ void MainMenu_OnKeyb(GAME_KEYB keyb, int key)
                 game_loading = 1;
         }
     }
+    */
 }
 
 void MainMenu_OnMouse(GAME_MOUSE mouse, int x, int y)
 {
+    if (show_gamepad)
+    {
+		int ev = -1;
+		switch (mouse)
+		{
+			case GAME_MOUSE::MOUSE_LEFT_BUT_DOWN: ev = 0; break;
+			case GAME_MOUSE::MOUSE_MOVE: ev = 1; break;
+			case GAME_MOUSE::MOUSE_LEFT_BUT_UP: ev = 2; break;
+
+			default:
+				break;
+		}
+
+		if (ev>=0)
+		{
+			int p[2] = {x,y};
+			mainmenu_context.ScreenToCell(p);
+			GamePadContact(0,ev,p[0],p[1], mainmenu_stamp);
+		}
+    }
+    else
+    if (game_loading==0 || game_loading==3)    
+        mainmenu_context.OnMouse(mouse,x,y);
+
+    /*
     if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_DOWN ||
         mouse == GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN ||
         mouse == GAME_MOUSE::MOUSE_MIDDLE_BUT_DOWN)
@@ -993,10 +1343,34 @@ void MainMenu_OnMouse(GAME_MOUSE mouse, int x, int y)
         if (game_loading==0)
             game_loading = 1;
     }
+    */
 }
 
 void MainMenu_OnTouch(GAME_TOUCH touch, int id, int x, int y)
 {
+    if (show_gamepad)
+    {
+		int ev = -1;
+		switch (touch)
+		{
+			case GAME_TOUCH::TOUCH_BEGIN: ev = 0; break;
+			case GAME_TOUCH::TOUCH_MOVE: ev = 1; break;
+			case GAME_TOUCH::TOUCH_END: ev = 2; break;
+			case GAME_TOUCH::TOUCH_CANCEL: ev = 3; break;
+		}
+
+		if (ev>=0)
+		{
+			int p[2] = {x,y};
+			mainmenu_context.ScreenToCell(p);
+			GamePadContact(id,ev,p[0],p[1], mainmenu_stamp);
+		}
+    }
+    else
+    if (game_loading==0 || game_loading==3)
+        mainmenu_context.OnTouch(touch,id,x,y);
+
+    /*
     if (touch == GAME_TOUCH::TOUCH_BEGIN)
     {
         if (game_loading==3)
@@ -1005,25 +1379,653 @@ void MainMenu_OnTouch(GAME_TOUCH touch, int id, int x, int y)
         if (game_loading==0)
             game_loading = 1;
     }
+    */
 }
 
 void MainMenu_OnFocus(bool set)
 {
+    if (game_loading==0 || game_loading==3)
+        mainmenu_context.OnFocus(set);
 }
 
 void MainMenu_OnPadMount(bool connect)
 {
+    if (game_loading==0 || game_loading==3)    
+        mainmenu_context.OnPadMount(connect);
 }
 
 void MainMenu_OnPadButton(int b, bool down)
 {
+    if (game_loading==0 || game_loading==3)    
+        mainmenu_context.OnPadButton(b,down);
+
+    /*
     if (game_loading==3)
         game->main_menu = false;
     else
     if (game_loading==0)
         game_loading = 1;
+    */
 }
 
 void MainMenu_OnPadAxis(int a, int16_t pos)
 {
+    if (game_loading==0 || game_loading==3)    
+        mainmenu_context.OnPadAxis(a,pos);
 }
+
+
+/////////////////////////
+
+#ifndef SERVER
+bool NextGLFont();
+bool PrevGLFont();
+void ToggleFullscreen(Game* g);
+bool IsFullscreen(Game* g);
+#endif
+
+static void main_menu_zoomin(MainMenuContext* m)
+{
+	#ifndef SERVER
+	NextGLFont();
+	#endif
+}
+
+static void main_menu_zoomout(MainMenuContext* m)
+{
+	#ifndef SERVER
+	PrevGLFont();
+	#endif
+}
+
+static void main_menu_fullscreen(MainMenuContext* m)
+{
+	#ifndef SERVER
+	ToggleFullscreen(game);
+	#endif
+}
+
+static bool main_menu_fullscreen_getter(MainMenuContext* m)
+{
+	#ifndef SERVER
+	return IsFullscreen(game);
+	#endif
+	return false;
+}
+
+static void main_menu_perspective(MainMenuContext* m)
+{
+	game->perspective = !game->perspective;
+	WriteConf(game);
+}
+
+static bool main_menu_perspective_getter(MainMenuContext* m)
+{
+	return game->perspective;
+}
+
+static void main_menu_blood(MainMenuContext* m)
+{
+	game->blood = !game->blood;
+	WriteConf(game);
+}
+
+static bool main_menu_blood_getter(MainMenuContext* m)
+{
+	return game->blood;
+}
+
+static const MainMenu main_menu_video[]=
+{
+	{"ZOOM IN", 0, main_menu_zoomin, 0, /*cookie*/0},
+	{"ZOOM OUT", 0, main_menu_zoomout, 0, /*cookie*/0},
+	{"FULL SCREEN", 0, main_menu_fullscreen, main_menu_fullscreen_getter, /*cookie*/0},
+	{"PERSPECTIVE", 0, main_menu_perspective, main_menu_perspective_getter, /*cookie*/0},
+	{"SHOW BLOOD", 0, main_menu_blood, main_menu_blood_getter, /*cookie*/0},
+	{0}
+};
+
+static void main_menu_gamepad_close(void* cookie)
+{
+    // hide gamepad, unhide mainmenu
+    show_gamepad = false;
+}
+
+static void main_menu_gamepad(MainMenuContext* m)
+{
+	//game->CloseMenu();
+	//g->show_gamepad = true;
+	//g->show_buts = false;
+    show_gamepad = true;
+	GamePadOpen(main_menu_gamepad_close,0);
+}
+
+static const MainMenu main_menu_controls[]=
+{
+	{"KEYBOARD", 0, 0, 0, /*cookie*/0},
+	{"MOUSE", 0, 0, 0, /*cookie*/0},
+	{"TOUCH", 0, 0, 0, /*cookie*/0},
+	{"GAMEPAD", 0, main_menu_gamepad, 0, /*cookie*/0},
+	{0}
+};
+
+static void main_menu_no_exit(MainMenuContext* m)
+{
+	m->menu_depth--;
+	m->menu_temp = mainmenu_context.menu_stack[game->menu_depth];
+}
+
+void exit_handler(int signum);
+static void main_menu_yes_exit(MainMenuContext* m)
+{
+	#ifdef USE_SDL
+	exit(0);
+	#else
+	exit_handler(0);
+	#endif
+}
+
+static const MainMenu main_menu_exit[]=
+{
+	{"NO", 0, main_menu_no_exit, 0, /*cookie*/0},
+	{"YES", 0, main_menu_yes_exit, 0, /*cookie*/0},
+	{0}
+};
+
+static void main_menu_continue(MainMenuContext* m)
+{
+    /* get back to the game (without loading) !!!*/
+    if (game_loading==3)
+        game->main_menu = false;
+    
+    // prepare in advance for getting back to the main menu
+    m->Init();
+}
+
+static void main_menu_profile(MainMenuContext* m)
+{
+    // new shit
+}
+
+static void main_menu_credits(MainMenuContext* m)
+{
+    // new shit
+}
+
+static void main_menu_mute(MainMenuContext* m)
+{
+	game->mute = !game->mute;
+}
+
+static bool main_menu_mute_getter(MainMenuContext* m)
+{
+    return game->mute;
+}
+
+static const MainMenu mainmenu_root[]=
+{
+    // this is optional (must be first entry!)
+    // MainMenuGetRoot() will skip it if !show_continue
+	{"CONTINUE", 0, main_menu_continue, 0, /*cookie*/0},
+
+	{"NEW GAME", main_menu_new_game, 0, 0, /*cookie*/0},
+	{"PROFILE", 0, main_menu_profile, 0, /*cookie*/0},
+	{"CREDITS", 0, main_menu_credits, 0, /*cookie*/0},
+	{"VIDEO SETTINGS", main_menu_video, 0, 0, /*cookie*/0},
+	{"CONTROLS", main_menu_controls, 0, 0, /*cookie*/0},
+	{"MUTE SOUND", 0, main_menu_mute, main_menu_mute_getter, /*cookie*/0},
+	{"EXIT?", main_menu_exit, 0, 0, /*cookie*/0},
+	{0}
+};
+
+static const MainMenu* MainMenuGetRoot()
+{
+    return mainmenu_root + (show_continue ? 0 : /*skip*/1);
+}
+
+//////////////////////////////////////////////////////////////
+
+void MainMenuContext::OnFocus(bool set)
+{
+}
+
+void MainMenuContext::OnSize(int w, int h, int fw, int fh)
+{
+    printf("ONSiZE: %d %d %d %d\n",w,h,fw,fh);
+
+    input_size[0] = w;
+    input_size[1] = h;
+    font_size[0] = fw;
+    font_size[1] = fh;
+}
+
+void MainMenuContext::OnKeyb(GAME_KEYB keyb, int key)
+{
+	if (menu_down)
+		return; // captured by mouse/touch
+
+	if (keyb==KEYB_DOWN && (key==A3D_ENTER || key==A3D_NUMPAD_ENTER))
+	{
+		// handle only char->press!
+		return;
+	}
+
+	if (keyb==KEYB_CHAR && (key=='\\' || key=='|') ||
+		(keyb==KEYB_DOWN || keyb==KEYB_PRESS) && key==A3D_ESCAPE)
+	{
+        // THERE'S NO CLOSING MAIN MENU
+		// CloseMenu();
+        mainmenu_context.Init();
+		return;
+	}
+
+	if (keyb==KEYB_CHAR && key==8)
+	{
+		keyb=KEYB_PRESS;
+		key=A3D_BACKSPACE;
+	}
+
+	if (keyb==KEYB_CHAR && (key=='\n' || key=='\r'))
+	{
+		keyb=KEYB_PRESS;
+		key=A3D_ENTER;
+	}
+
+	if (keyb==KEYB_DOWN || keyb==KEYB_PRESS)
+	{
+		const MainMenu* m = MainMenuGetRoot();
+		for (int d=0; d<menu_depth; d++)
+			m = m[ menu_stack[d] ].sub;
+
+		if (menu_stack[menu_depth]>=0)
+		{
+			if (key==A3D_RIGHT && m[ menu_stack[menu_depth] ].sub || key==A3D_ENTER)
+			{
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+				if (m[ menu_stack[menu_depth] ].action)
+				{
+					m[ menu_stack[menu_depth] ].action(this);
+				}
+				return;
+			}
+		}
+		else
+		if (key==A3D_RIGHT || key==A3D_ENTER)
+		{
+			menu_stack[menu_depth]=menu_temp;
+		}
+
+		if (key==A3D_LEFT || keyb==KEYB_PRESS && key==A3D_BACKSPACE)
+		{
+			if (menu_depth==0)
+			{
+                // THERE'S NO CLOSING MAIN MENU
+                // CloseMenu();
+				return;
+			}
+			menu_depth--;
+			menu_temp = menu_stack[menu_depth];
+			return;
+		}
+
+		if (key==A3D_DOWN)
+		{
+			if (menu_stack[menu_depth] < 0)
+				menu_stack[menu_depth] = menu_temp;
+			else
+			if (m[menu_stack[menu_depth]+1].str)
+			{
+				menu_stack[menu_depth]++;
+				menu_temp = menu_stack[menu_depth];
+			}
+			return;
+		}
+
+		if (key==A3D_UP)
+		{
+			if (menu_stack[menu_depth] < 0)
+				menu_stack[menu_depth] = menu_temp;
+			else
+			if (menu_stack[menu_depth]>0)
+			{
+				menu_stack[menu_depth]--;
+				menu_temp = menu_stack[menu_depth];
+			}
+			return;
+		}
+	}
+}
+
+void MainMenuContext::OnMouse(GAME_MOUSE mouse, int x, int y)
+{
+	if (menu_down==2)
+		return; // captured by touch
+
+	if (mouse == GAME_MOUSE::MOUSE_MOVE)
+	{
+		if (menu_down)
+		{
+			// retest
+			int hit = HitMenu(x,y);
+			if (hit != menu_stack[menu_depth])
+				menu_stack[menu_depth] = -1;
+		}
+	}
+
+	if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_DOWN)
+	{
+		menu_down = 1;
+
+		int hit = HitMenu(x,y);
+		if (hit<-1)
+		{
+            // THERE'S NO CLOSING MAIN MENU
+            // CloseMenu();
+            mainmenu_context.Init();
+			return;						
+		}
+
+		if (hit>=0)
+		{
+			menu_stack[menu_depth]=hit;
+			menu_temp = menu_stack[menu_depth];
+		}
+		else
+			menu_stack[menu_depth]=-1;
+
+		return;
+	}
+
+	if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_UP)
+	{
+		if (menu_down)
+		{
+			// retest
+			int hit = HitMenu(x,y);
+			if (hit == menu_stack[menu_depth])
+			{
+				if (hit==-1)
+				{
+					// go back
+					if (menu_depth==0)
+					{
+                        // THERE'S NO CLOSING MAIN MENU
+                        // CloseMenu();
+						return;						
+					}
+					else
+					{
+						menu_depth--;
+						menu_temp = menu_stack[menu_depth];
+					}
+				}
+				else
+				if (hit>=0)
+				{
+					const MainMenu* m = MainMenuGetRoot();
+					for (int d=0; d<menu_depth; d++)
+						m = m[ menu_stack[d] ].sub;		
+
+					// action!
+					if (m[ menu_stack[menu_depth] ].sub)
+					{
+						menu_depth++;
+						menu_stack[menu_depth]=-1; // clear next hilight
+						menu_temp = 0;
+					}
+					else
+					if (m[ menu_stack[menu_depth] ].action)
+					{
+						m[ menu_stack[menu_depth] ].action(this);
+					}
+				}
+			}
+		}
+
+		menu_down = 0;
+		menu_stack[menu_depth]=-1;
+	}
+}
+
+void MainMenuContext::OnTouch(GAME_TOUCH touch, int id, int x, int y)
+{
+	if (menu_down==1)
+		return; // captured by mouse
+
+	if (id==1)
+	{
+		switch(touch)
+		{
+			case GAME_TOUCH::TOUCH_BEGIN:
+			{
+				menu_down = 2;
+				int hit = HitMenu(x,y);
+				if (hit<-1)
+				{
+                    // THERE'S NO CLOSING MAIN MENU
+                    // CloseMenu();
+                    mainmenu_context.Init();
+					return;						
+				}
+
+				if (hit>=0)
+				{
+					menu_stack[menu_depth]=hit;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+					menu_stack[menu_depth]=-1;
+
+				break;
+			}
+
+			case GAME_TOUCH::TOUCH_MOVE:
+				if (menu_down)
+				{
+					// retest
+					int hit = HitMenu(x,y);
+					if (hit != menu_stack[menu_depth])
+						menu_stack[menu_depth] = -1;
+				}
+				break;
+
+			case GAME_TOUCH::TOUCH_END:
+			{
+				if (menu_down)
+				{
+					// retest
+					int hit = HitMenu(x,y);
+					if (hit == menu_stack[menu_depth])
+					{
+						if (hit==-1)
+						{
+							// go back
+							if (menu_depth==0)
+							{
+                                // THERE'S NO CLOSING MAIN MENU
+                                // CloseMenu();
+								return;						
+							}
+							else
+							{
+								menu_depth--;
+								menu_temp = menu_stack[menu_depth];
+							}
+						}
+						else
+						if (hit>=0)
+						{
+							const MainMenu* m = MainMenuGetRoot();
+							for (int d=0; d<menu_depth; d++)
+								m = m[ menu_stack[d] ].sub;		
+
+							// action!
+							if (m[ menu_stack[menu_depth] ].sub)
+							{
+								menu_depth++;
+								menu_stack[menu_depth]=-1; // clear next hilight
+								menu_temp = 0;
+							}
+							else
+							if (m[ menu_stack[menu_depth] ].action)
+							{
+								m[ menu_stack[menu_depth] ].action(this);
+							}
+						}
+					}
+				}
+
+				menu_down = 0;
+				menu_stack[menu_depth]=-1;				
+				break;
+			}
+
+			case GAME_TOUCH::TOUCH_CANCEL:
+				menu_down = 0;
+				menu_stack[menu_depth]=-1;
+				break;
+		}
+	}
+}
+
+void MainMenuContext::OnPadMount(bool connected)
+{
+
+}
+
+void MainMenuContext::OnPadButton(int b, bool down)
+{
+	if (menu_down)
+		return; // captured by mouse/touch
+
+	if (!down)
+		return;
+
+	const MainMenu* m = MainMenuGetRoot();
+	for (int d=0; d<menu_depth; d++)
+		m = m[ menu_stack[d] ].sub;		
+
+	switch (b)
+	{
+		case 0:
+		{
+			if (menu_stack[menu_depth]>=0)
+			{
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+				else
+				if (m[ menu_stack[menu_depth] ].action)
+				{
+					m[ menu_stack[menu_depth] ].action(this);
+				}
+			}
+			else
+				menu_stack[menu_depth]=menu_temp;
+			break;
+		}
+
+		case 1: 
+		{
+			// jump
+			break;
+		}
+
+		case 5:
+		{
+			break;
+		}
+
+		case 6:
+		{
+            // THERE'S NO CLOSING MAIN MENU
+            // CloseMenu();
+            mainmenu_context.Init();
+			break;
+		}
+
+		case 9:
+		{
+			// left shoulder
+			break;
+		}
+
+		case 10:
+		{
+			// right shoulder
+			break;
+		}
+
+		case 11:
+		{
+			// dir up
+			if (menu_stack[menu_depth]<0)
+				menu_stack[menu_depth]=menu_temp;
+			else
+			if (menu_stack[menu_depth]>0)
+			{
+				menu_stack[menu_depth]--;			
+				menu_temp = menu_stack[menu_depth];
+			}
+			break;
+		}
+		case 12:
+		{
+			// dir down
+			if (menu_stack[menu_depth]<0)
+				menu_stack[menu_depth]=menu_temp;
+			else
+			if (m[menu_stack[menu_depth]+1].str)
+			{
+				menu_stack[menu_depth]++;			
+				menu_temp = menu_stack[menu_depth];
+			}
+			break;
+		}
+		case 13:
+		{
+			// dir left
+			if (menu_depth==0)
+			{
+                // THERE'S NO CLOSING MAIN MENU
+                // CloseMenu();
+				return;
+			}
+			menu_depth--;
+			menu_temp = menu_stack[menu_depth];
+			break;
+		}
+		case 14:
+		{
+			if (menu_stack[menu_depth]>=0)
+			{
+				// dir right
+				// only sub, with dir_right
+				// action requires main button
+				if (m[ menu_stack[menu_depth] ].sub)
+				{
+					menu_depth++;
+					menu_stack[menu_depth]=0;
+					menu_temp = menu_stack[menu_depth];
+				}
+			}
+			else
+				menu_stack[menu_depth]=menu_temp;
+			break;
+		}
+	}
+}
+
+void MainMenuContext::OnPadAxis(int a, int16_t pos)
+{
+}
+

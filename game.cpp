@@ -3297,11 +3297,11 @@ void FreeSprites()
 	FreeFont1();
 	FreeGamePad();
 
+	FreeMainMenuSprites();
+
 	// handles double refs but not sprite prefs!
 	while (Sprite* s = GetFirstSprite())
 		FreeSprite(s);
-
-	FreeMainMenuSprites();		
 }
 
 // TODO:
@@ -9855,6 +9855,17 @@ bool menu_fullscreen_getter(Game* g)
 	return false;
 }
 
+void menu_mute(Game* g)
+{
+	g->mute = !g->mute;
+}
+
+bool menu_mute_getter(Game* g)
+{
+	return g->mute;
+}
+
+
 void menu_zoomin(Game* g)
 {
 	#ifndef SERVER
@@ -9901,7 +9912,7 @@ void main_menu(Game* g)
 	#endif
 }
 
-static const Menu settings_menu[]=
+static const Menu video_menu[]=
 {
 	{"ZOOM IN", 0, menu_zoomin, 0},
 	{"ZOOM OUT", 0, menu_zoomout, 0},
@@ -9910,6 +9921,21 @@ static const Menu settings_menu[]=
 	{"SHOW BLOOD", 0, menu_blood, menu_blood_getter},
 	{0}
 };
+
+/*
+static const Menu audio_menu[]=
+{
+	{"MUTE", 0, menu_mute, menu_mute_getter},
+	{0}
+};
+
+static const Menu settings_menu[]=
+{
+	{"VIDEO", video_menu, 0, 0},
+	{"AUDIO", audio_menu, 0, 0},
+	{0}
+};
+*/
 
 static const Menu controls_menu[]=
 {
@@ -9930,7 +9956,10 @@ static const Menu exit_menu[]=
 
 static const Menu game_menu[]=
 {
-	{"SETTINGS", settings_menu, 0, 0},
+	//{"SETTINGS", settings_menu, 0, 0},
+	//{"AUDIO", audio_menu, 0, 0},
+	{"VIDEO SETTINGS", video_menu, 0, 0},
+	{"MUTE SOUND", 0, menu_mute, menu_mute_getter},
 	{"CONTROLS", controls_menu, 0, 0},
 	{"MAIN MENU", 0, main_menu, 0},
 	{"EXIT?", exit_menu, 0, 0},
