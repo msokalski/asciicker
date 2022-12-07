@@ -87,12 +87,21 @@ struct MainMenuContext
 	int menu_down_x;
 	int menu_down_y;
 
+    // re-calc on every menu jump
+    int menu_scroll;
+    int menu_smooth_scroll;
+    int menu_max_scroll; 
+    bool menu_rescroll; // flag it right after keyb/gamepad up/down navigation
+
 	// when mouse/touch is taking over, store current hilight here
 	// so we can revert hilight when pad/keyb is back
 	int menu_temp; 
 
     void Init()
     {
+        menu_max_scroll = 0;
+        menu_smooth_scroll = 0;
+        menu_scroll = 0;
         menu_depth = 0;
         menu_down = 0;
         menu_down_x = 0;
@@ -105,13 +114,10 @@ struct MainMenuContext
 	//void Close();
 	//void Toggle(int method);
 
-	bool Paint(AnsiCell* ptr, int width, int height)
+    int CalcMaxScroll(int height) const
     {
         if (menu_depth<0)
-        {
-            // indicate we didn't take over logo space
-            return true;
-        }
+            return 0;
 
         const MainMenu* m = MainMenuGetRoot();
         const char* title = "";
@@ -121,18 +127,75 @@ struct MainMenuContext
             m = m[ menu_stack[d] ].sub;
         }
 
+        if (!m[0].str)
+            return 0;
+
+        int y = height-15;
+
+        int w = 0, h = 0;
+        Font1Size(title,&w,&h);
+
+        if (title[0])
+            y -= h+2;
+
+        int i=1;
+        while(m[i].str)
+        {
+            y -= h+1;
+            i++;
+        }
+
+        return y < 0 ? -y : 0;
+    }
+
+	bool Paint(AnsiCell* ptr, int width, int height)
+    {
+        if (menu_depth<0)
+        {
+            // indicate we didn't take over logo space
+            return true;
+        }
+
+        menu_max_scroll = CalcMaxScroll(height);
+        if (menu_scroll > menu_max_scroll)
+            menu_scroll = menu_max_scroll;
+        if (menu_smooth_scroll > menu_max_scroll)
+            menu_smooth_scroll = menu_max_scroll;
+
+        if (menu_smooth_scroll < menu_scroll)
+            menu_smooth_scroll++;
+        if (menu_smooth_scroll > menu_scroll)
+            menu_smooth_scroll--;
+       
+        const MainMenu* m = MainMenuGetRoot();
+        char title[32]="";
+        for (int d=0; d<menu_depth; d++)
+        {
+            sprintf(title,"\x04%s",m[ menu_stack[d] ].str);
+            //title = m[ menu_stack[d] ].str;
+            m = m[ menu_stack[d] ].sub;
+        }
+
         // right align
         int x = width-5;
         int y = height-15;
+
+        const int font_clip_height = 5;
+        int scroll_clip_height = y + font_clip_height;
 
         // paint title
         if (title[0])
         {
             int w = 0, h = 0;
             Font1Size(title,&w,&h);
-            Font1Paint(ptr,width,height,3+x-w,y,title,FONT1_PINK_SKIN);
+            Font1Paint(ptr,width,scroll_clip_height,3+x-w,y,title,FONT1_PINK_SKIN);
+            Font1UnderLine(ptr,width,scroll_clip_height,3+x-w,y,w,FONT1_PINK_SKIN);
             y -= h+2;
+
+            scroll_clip_height = y + font_clip_height;
         }
+
+        y += menu_smooth_scroll;
 
         int i=0;
         while(m[i].str)
@@ -141,7 +204,19 @@ struct MainMenuContext
             Font1Size(m[i].str,&w,&h);
 
             int skin = i == menu_stack[menu_depth] ? FONT1_GOLD_SKIN : FONT1_GREY_SKIN;
-            Font1Paint(ptr,width,height,x-w,y,m[i].str,skin);
+            Font1Paint(ptr,width,scroll_clip_height,x-w,y,m[i].str,skin);
+
+            if (i == menu_stack[menu_depth] && menu_rescroll)
+            {
+                menu_rescroll = false;
+
+                // check if we should auto scroll
+                int sharp_y = y - menu_smooth_scroll + menu_scroll;
+                if (sharp_y<0)
+                    menu_scroll += -sharp_y;
+                if (sharp_y+font_clip_height > scroll_clip_height)
+                    menu_scroll -= sharp_y+font_clip_height - scroll_clip_height;
+            }
 
             const char* str = 0;
             if (m[i].sub)
@@ -151,7 +226,7 @@ struct MainMenuContext
                 str = m[i].getter(this) ? "\x02" : "\x01";
 
             if (str)
-                Font1Paint(ptr,width,height,x,y,str,FONT1_PINK_SKIN);
+                Font1Paint(ptr,width,scroll_clip_height,x,y,str,FONT1_PINK_SKIN);
 
             y -= h+1;
             i++;
@@ -178,10 +253,11 @@ struct MainMenuContext
         hy=cp[1];
 
         const MainMenu* m = MainMenuGetRoot();
-        const char* title = "";
+        char title[32]="";
         for (int d=0; d<menu_depth; d++)
         {
-            title = m[ menu_stack[d] ].str;
+            sprintf(title,"\x04%s",m[ menu_stack[d] ].str);
+            //title = m[ menu_stack[d] ].str;
             m = m[ menu_stack[d] ].sub;
         }
 
@@ -202,6 +278,8 @@ struct MainMenuContext
 
             y -= h+2;
         }
+
+        y += menu_smooth_scroll;
 
         int i=0;
         while(m[i].str)
@@ -1518,6 +1596,10 @@ static void main_menu_no_exit(MainMenuContext* m)
 {
 	m->menu_depth--;
 	m->menu_temp = mainmenu_context.menu_stack[game->menu_depth];
+
+    // TODO:
+    // update scroll and smooth scroll so menu_temp appears fully visible
+    // ...
 }
 
 void exit_handler(int signum);
@@ -1576,7 +1658,7 @@ static const MainMenu mainmenu_root[]=
 	{"NEW GAME", main_menu_new_game, 0, 0, /*cookie*/0},
 	{"PROFILE", 0, main_menu_profile, 0, /*cookie*/0},
 	{"CREDITS", 0, main_menu_credits, 0, /*cookie*/0},
-	{"VIDEO SETTINGS", main_menu_video, 0, 0, /*cookie*/0},
+	{"VIDEO", main_menu_video, 0, 0, /*cookie*/0},
 	{"CONTROLS", main_menu_controls, 0, 0, /*cookie*/0},
 	{"MUTE SOUND", 0, main_menu_mute, main_menu_mute_getter, /*cookie*/0},
 	{"EXIT?", main_menu_exit, 0, 0, /*cookie*/0},
@@ -1646,8 +1728,11 @@ void MainMenuContext::OnKeyb(GAME_KEYB keyb, int key)
 		{
 			if (key==A3D_RIGHT && m[ menu_stack[menu_depth] ].sub || key==A3D_ENTER)
 			{
+                menu_rescroll = true;
 				if (m[ menu_stack[menu_depth] ].sub)
 				{
+                    menu_scroll=0;
+                    menu_smooth_scroll=0;
 					menu_depth++;
 					menu_stack[menu_depth]=0;
 					menu_temp = menu_stack[menu_depth];
@@ -1676,11 +1761,16 @@ void MainMenuContext::OnKeyb(GAME_KEYB keyb, int key)
 			}
 			menu_depth--;
 			menu_temp = menu_stack[menu_depth];
+
+            // TODO:
+            // update scroll and smooth scroll so menu_temp appears fully visible
+            // ...
 			return;
 		}
 
 		if (key==A3D_DOWN)
 		{
+            menu_rescroll = true;
 			if (menu_stack[menu_depth] < 0)
 				menu_stack[menu_depth] = menu_temp;
 			else
@@ -1694,6 +1784,7 @@ void MainMenuContext::OnKeyb(GAME_KEYB keyb, int key)
 
 		if (key==A3D_UP)
 		{
+            menu_rescroll = true;
 			if (menu_stack[menu_depth] < 0)
 				menu_stack[menu_depth] = menu_temp;
 			else
@@ -1711,6 +1802,22 @@ void MainMenuContext::OnMouse(GAME_MOUSE mouse, int x, int y)
 {
 	if (menu_down==2)
 		return; // captured by touch
+
+    if (mouse == GAME_MOUSE::MOUSE_WHEEL_DOWN)
+    {
+        if (menu_scroll < menu_max_scroll - 5)
+            menu_scroll += 5;
+        else
+            menu_scroll = menu_max_scroll;
+    }
+
+    if (mouse == GAME_MOUSE::MOUSE_WHEEL_UP)
+    {
+        if (menu_scroll > 5)
+            menu_scroll -= 5;
+        else
+            menu_scroll = 0;
+    }
 
 	if (mouse == GAME_MOUSE::MOUSE_MOVE)
 	{
@@ -1768,6 +1875,10 @@ void MainMenuContext::OnMouse(GAME_MOUSE mouse, int x, int y)
 					{
 						menu_depth--;
 						menu_temp = menu_stack[menu_depth];
+
+                        // TODO:
+                        // update scroll and smooth scroll so menu_temp appears fully visible
+                        // ...
 					}
 				}
 				else
@@ -1778,8 +1889,12 @@ void MainMenuContext::OnMouse(GAME_MOUSE mouse, int x, int y)
 						m = m[ menu_stack[d] ].sub;		
 
 					// action!
+                    menu_rescroll = true;
+
 					if (m[ menu_stack[menu_depth] ].sub)
 					{
+                        menu_scroll=0;
+                        menu_smooth_scroll=0;
 						menu_depth++;
 						menu_stack[menu_depth]=-1; // clear next hilight
 						menu_temp = 0;
@@ -1861,6 +1976,10 @@ void MainMenuContext::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 							{
 								menu_depth--;
 								menu_temp = menu_stack[menu_depth];
+
+                                // TODO:
+                                // update scroll and smooth scroll so menu_temp appears fully visible
+                                // ...
 							}
 						}
 						else
@@ -1870,9 +1989,13 @@ void MainMenuContext::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 							for (int d=0; d<menu_depth; d++)
 								m = m[ menu_stack[d] ].sub;		
 
+                            menu_rescroll = true;
+
 							// action!
 							if (m[ menu_stack[menu_depth] ].sub)
 							{
+                                menu_scroll=0;
+                                menu_smooth_scroll=0;
 								menu_depth++;
 								menu_stack[menu_depth]=-1; // clear next hilight
 								menu_temp = 0;
@@ -1922,8 +2045,12 @@ void MainMenuContext::OnPadButton(int b, bool down)
 		{
 			if (menu_stack[menu_depth]>=0)
 			{
+                menu_rescroll = true;
+
 				if (m[ menu_stack[menu_depth] ].sub)
 				{
+                    menu_scroll=0;
+                    menu_smooth_scroll=0;
 					menu_depth++;
 					menu_stack[menu_depth]=0;
 					menu_temp = menu_stack[menu_depth];
@@ -1973,6 +2100,7 @@ void MainMenuContext::OnPadButton(int b, bool down)
 		case 11:
 		{
 			// dir up
+            menu_rescroll = true;
 			if (menu_stack[menu_depth]<0)
 				menu_stack[menu_depth]=menu_temp;
 			else
@@ -1986,6 +2114,7 @@ void MainMenuContext::OnPadButton(int b, bool down)
 		case 12:
 		{
 			// dir down
+            menu_rescroll = true;
 			if (menu_stack[menu_depth]<0)
 				menu_stack[menu_depth]=menu_temp;
 			else
@@ -1999,6 +2128,7 @@ void MainMenuContext::OnPadButton(int b, bool down)
 		case 13:
 		{
 			// dir left
+            menu_rescroll = true;
 			if (menu_depth==0)
 			{
                 // THERE'S NO CLOSING MAIN MENU
@@ -2007,6 +2137,11 @@ void MainMenuContext::OnPadButton(int b, bool down)
 			}
 			menu_depth--;
 			menu_temp = menu_stack[menu_depth];
+
+            // TODO:
+            // update scroll and smooth scroll so menu_temp appears fully visible
+            // ...
+
 			break;
 		}
 		case 14:
@@ -2018,6 +2153,8 @@ void MainMenuContext::OnPadButton(int b, bool down)
 				// action requires main button
 				if (m[ menu_stack[menu_depth] ].sub)
 				{
+                    menu_scroll=0;
+                    menu_smooth_scroll=0;
 					menu_depth++;
 					menu_stack[menu_depth]=0;
 					menu_temp = menu_stack[menu_depth];

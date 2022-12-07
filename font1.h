@@ -9,6 +9,7 @@ void FreeFont1();
 #define FONT1_PINK_SKIN 2
 
 void Font1Size(const char* str, int* w, int* h);
-void Font1Paint(AnsiCell* ptr, int width, int height, int x, int y, const char* str, int skin = 0);
+void Font1Paint(AnsiCell* ptr, int width, int height, int x, int y, const char* str, int skin = 0, bool underline = false);
+void Font1UnderLine(AnsiCell* ptr, int width, int height, int x, int y, int w, int skin = 0);
 
 #endif

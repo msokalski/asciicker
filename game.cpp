@@ -9964,7 +9964,7 @@ static const Menu game_menu[]=
 {
 	//{"SETTINGS", settings_menu, 0, 0},
 	//{"AUDIO", audio_menu, 0, 0},
-	{"VIDEO SETTINGS", video_menu, 0, 0},
+	{"VIDEO", video_menu, 0, 0},
 	{"MUTE SOUND", 0, menu_mute, menu_mute_getter},
 	{"CONTROLS", controls_menu, 0, 0},
 	{"MAIN MENU", 0, main_menu, 0},

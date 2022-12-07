@@ -641,6 +641,18 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 	j += font_zoom;
 	j = j < 0 ? 0 : j >= fonts_loaded ? fonts_loaded - 1 : j;
 
+    // FIX IF TOO SMALL (45x36)
+    while (j)
+    {
+        int cw = wnd_wh[0] / (font[j].width >> 4);
+        int ch = wnd_wh[1] / (font[j].height >> 4);
+
+        if (cw<45 || ch<36)
+            j--;
+        else
+            break;
+    }
+
 	MyFont* f = font + j;
 
 	if (wh)

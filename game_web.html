@@ -412,8 +412,10 @@
 
 				var rw = ak_ctx.canvas.width*0.001;
 				var rh = ak_ctx.canvas.height*0.001;
+        
 				var rs = 7.5*Math.sqrt(rw*rw+rh*rh) * ak_ratio;
 
+        // 1. find best font regarding window aspect
         ak_font = 0;
 				for (var i=1; i<ak_fonts.length; i++)
 				{
@@ -423,7 +425,23 @@
 					}
         }
 
+        // 2. apply user glasses
         ak_font += user_zoom;
+
+        // 3. fix resolutions smaller than 45x36
+        while (ak_font>=1)
+        {
+            let cw,ch;
+            var fw = ak_fonts[ak_font].width >> 4;
+            var fh = ak_fonts[ak_font].height >> 4;
+            cw = Math.floor(w/fw*ak_ratio);
+            ch = Math.floor(h/fh*ak_ratio);
+            if (cw<45 || ch<36)
+              ak_font--;
+            else
+              break;
+        }
+        
         if (ak_font < 0)
           ak_font = 0;
         if (ak_font >= ak_fonts.length)
@@ -447,7 +465,7 @@
 		
 				var render_w = Math.floor( display_w / (ak_fonts[ak_font].width >> 4) );
         var render_h = Math.floor( display_h / (ak_fonts[ak_font].height >> 4) );
-        
+
 				if (render_w > ak_max_width)
           render_w = ak_max_width;
 				if (render_h > ak_max_height)
