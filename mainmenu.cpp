@@ -93,7 +93,12 @@ struct MainMenuContext
 
     void Init()
     {
-        memset(this,0,sizeof(MainMenuContext));
+        menu_depth = 0;
+        menu_down = 0;
+        menu_down_x = 0;
+        menu_down_y = 0;
+        menu_temp = 0;
+        memset(menu_stack,0,sizeof(menu_stack));
     }
 
 	//void Open(int method);

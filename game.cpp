@@ -3798,6 +3798,9 @@ Game* CreateGame()
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
 
+	if (!prime_game)
+		prime_game = g;
+
 	#ifdef EDITOR
 	g->main_menu = false;
 	#else
@@ -3809,6 +3812,9 @@ Game* CreateGame()
 
 void DeleteGame(Game* g)
 {
+	if (prime_game == g)
+		prime_game = 0;
+
 	free(g);
 }
 
