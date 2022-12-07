@@ -427,6 +427,8 @@
 
         // 2. apply user glasses
         ak_font += user_zoom;
+        if (ak_font>=ak_fonts.length)
+          ak_font = ak_fonts.length-1;
 
         // 3. fix resolutions smaller than 45x36
         while (ak_font>=1)
