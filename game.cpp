@@ -6908,9 +6908,7 @@ void Game::OnSize(int w, int h, int fw, int fh)
 	font_size[0] = fw;
 	font_size[1] = fh;
 
-
-	if (main_menu)
-		MainMenu_OnSize(w,h,fw,fh);
+	MainMenu_OnSize(w,h,fw,fh);
 }
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)

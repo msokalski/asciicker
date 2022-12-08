@@ -103,24 +103,15 @@ void* GetMaterialArr()
     return mat;
 }
 
-int user_zoom = 0;
 bool PrevGLFont()
 {
-    user_zoom--;
-    if (user_zoom<-8)
-        user_zoom=-8;
-
-    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
+    EM_ASM({ZoomOut();});
     return true;
 }
 
 bool NextGLFont()
 {
-    user_zoom++;
-    if (user_zoom>8)
-        user_zoom=8;
-
-    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
+    EM_ASM({ZoomIn();});
     return true;
 }
 

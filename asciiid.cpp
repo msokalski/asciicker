@@ -915,7 +915,7 @@ int active_material = 0;
 int active_elev = 0;
 
 // used by Term
-int GetGLFont(int wh[2], const int wnd_wh[2])
+int GetGLFont(int wh[2], const int wnd_wh[2], int* id)
 {
 	MyFont* f = font + active_font;
 	if (wh)
@@ -924,6 +924,8 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 		wh[1] = f->height;
 	}
 
+	if (id)
+		*id = active_font;
 	return f->tex;
 }
 
@@ -4428,7 +4430,7 @@ void my_render(A3D_WND* wnd)
 					glUniform1i(rc->uni_ansi, 0);
 
 					int font_size[2];
-					int font_tex = GetGLFont(font_size, 0);
+					int font_tex = GetGLFont(font_size, 0, 0);
 
 					gl3BindTextureUnit2D(0, rc->ansi_tex);
 

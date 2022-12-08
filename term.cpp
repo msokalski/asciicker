@@ -57,7 +57,7 @@ struct TERM_LIST
 // HACK: get it from editor
 extern Terrain *terrain;
 extern World *world;
-int GetGLFont(int wh[2], const int wnd_wh[2]);
+int GetGLFont(int wh[2], const int wnd_wh[2], int* id = 0);
 bool NextGLFont();
 bool PrevGLFont();
 

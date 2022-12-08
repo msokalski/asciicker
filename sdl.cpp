@@ -223,6 +223,9 @@ void a3dClose(A3D_WND* wnd)
 
 WndMode a3dGetRect(A3D_WND* wnd, int* xywh, int* client_wh)
 {
+	if (!wnd)
+		wnd = wnd_tail;
+		
 	if (client_wh)
 		SDL_GL_GetDrawableSize(wnd->win, client_wh+0, client_wh+1);
 	if (xywh)

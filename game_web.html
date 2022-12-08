@@ -5,7 +5,7 @@
 
     <link rel="manifest" href="asciicker.json">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=600" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
     <title>ASCIICKER - Let's kick some ASCII</title>
     <style>
@@ -383,7 +383,7 @@
 
       var ak_ratio = 1;
 
-      function Resize(e)
+      function FindFont()
       {
         ak_ratio = 1;
 				
@@ -416,19 +416,56 @@
 				var rs = 7.5*Math.sqrt(rw*rw+rh*rh) * ak_ratio;
 
         // 1. find best font regarding window aspect
-        ak_font = 0;
+        let f = 0;
 				for (var i=1; i<ak_fonts.length; i++)
 				{
-					if (Math.abs(ak_fonts[ak_font].size - rs) > Math.abs(ak_fonts[i].size - rs))
+					if (Math.abs(ak_fonts[f].size - rs) > Math.abs(ak_fonts[i].size - rs))
 					{
-            ak_font = i;
+            f = i;
 					}
         }
 
+        return f;
+      }
+
+      function ZoomIn()
+      {
+        if (ak_font == ak_fonts.length-1)
+          return;
+        let f = ak_font;
+        let u = user_zoom;
+        user_zoom = ak_font - FindFont() + 1;
+        Resize(null);
+        if (ak_font == f) // clamped!
+          user_zoom = u;  // revert!
+      }
+
+      function ZoomOut()
+      {
+        if (ak_font == 0)
+          return;
+        let f = ak_font;
+        let u = user_zoom;          
+        user_zoom = ak_font - FindFont() - 1;
+        Resize(null);
+        if (ak_font == f) // clamped!
+          user_zoom = u;  // revert!
+      }
+
+      function Resize(e)
+      {
+        ak_font = FindFont();
+
         // 2. apply user glasses
         ak_font += user_zoom;
-        if (ak_font>=ak_fonts.length)
+
+        if (ak_font < 0)
+          ak_font = 0;
+        if (ak_font >= ak_fonts.length)
           ak_font = ak_fonts.length-1;
+
+        var w = window.innerWidth;
+        var h = window.innerHeight;
 
         // 3. fix resolutions smaller than 45x36
         while (ak_font>=1)
@@ -444,15 +481,10 @@
               break;
         }
         
-        if (ak_font < 0)
-          ak_font = 0;
-        if (ak_font >= ak_fonts.length)
-          ak_font = ak_fonts.length-1;
-
         console.log("FONT="+ak_font);
 
         var fw = ak_fonts[ak_font].width >> 4;
-        var fh = ak_fonts[ak_font].height >> 4;
+        var fh = ak_fonts[ak_font].height >> 4;      
 
         if (ak_ratio<1.0)
           Size(w,h, fw/ak_ratio,fh/ak_ratio);

@@ -23,6 +23,9 @@ static bool show_gamepad = false;
 static uint64_t mainmenu_stamp = 0;
 static bool mainmenu_shot = false;
 
+static bool resized = true;
+static float prev_pos = 0.0f;
+
 ////////////////////////////////////////
 static uint32_t* xxx_table = 0;
 static uint32_t  xxx_step = 0;
@@ -99,6 +102,7 @@ struct MainMenuContext
 
     void Init()
     {
+        resized = true;
         menu_max_scroll = 0;
         menu_smooth_scroll = 0;
         menu_scroll = 0;
@@ -1163,7 +1167,16 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         *((uint32_t*)ptr+i) = fast_rand() | (fast_rand()<<15);// | (fast_rand()<<30);
     */
 
-    float dst_aspect = (float)width / height;
+    // ensure there's enough horizontal source space
+    // for all menu depths
+
+    int max_depth = 1; // scan it!
+    int scroll_step = 4; // per depth
+    int scroll_width = scroll_step * max_depth;
+
+    // we want to scroll horizontally by scroll_cells of destination surface
+
+    float dst_aspect = (float)(width+scroll_width) / height;
     float img_aspect = (float)menu_bk_width / menu_bk_height;
 
     float src_xywh[4];
@@ -1182,6 +1195,42 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         src_xywh[0] = 0.5f * (menu_bk_width - src_xywh[2]);
     }
 
+    float scale = src_xywh[3] / height;
+    float src_scroll_step = scroll_step * scale;
+    float src_scroll_width = scroll_width * scale;
+
+    // shrink src width to match actual width (without scroll space)
+    src_xywh[2] -= src_scroll_width;
+    
+    // shift src horizontally by amount from the current depth
+    src_xywh[0] += src_scroll_step * mainmenu_context.menu_depth;
+
+    // now apply smoothing
+    if (!resized)
+    {
+        // float x = prev_pos + (src_xywh[0] - prev_pos)*0.1f;
+        if (src_xywh[0] > prev_pos)
+        {
+            prev_pos += scale * 0.25;
+            if (prev_pos > src_xywh[0])
+                prev_pos = src_xywh[0];
+        }
+
+        if (src_xywh[0] < prev_pos)
+        {
+            prev_pos -= scale * 0.25;
+            if (prev_pos < src_xywh[0])
+                prev_pos = src_xywh[0];
+        }
+
+        src_xywh[0] = prev_pos;
+    }
+    else
+    {
+        // force sync
+        prev_pos = src_xywh[0];
+        resized = false;
+    }
 
     ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 
@@ -1304,8 +1353,8 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 void MainMenu_OnSize(int w, int h, int fw, int fh)
 {
-    if (game_loading==0 || game_loading==3)    
-        mainmenu_context.OnSize(w,h,fw,fh);
+    resized = true;
+    mainmenu_context.OnSize(w,h,fw,fh);
 }
 
 void MainMenu_OnKeyb(GAME_KEYB keyb, int key)
@@ -1678,8 +1727,6 @@ void MainMenuContext::OnFocus(bool set)
 
 void MainMenuContext::OnSize(int w, int h, int fw, int fh)
 {
-    printf("ONSiZE: %d %d %d %d\n",w,h,fw,fh);
-
     input_size[0] = w;
     input_size[1] = h;
     font_size[0] = fw;

@@ -42,7 +42,9 @@
 			"__node_handle": "cpp",
 			"queue": "cpp",
 			"stack": "cpp",
-			"ios": "cpp"
+			"ios": "cpp",
+			"rope": "cpp",
+			"ostream": "cpp"
 		}
 	}
 }

@@ -618,7 +618,7 @@ Terrain* terrain=0;
 
 int font_zoom = 0;
 
-int GetGLFont(int wh[2], const int wnd_wh[2])
+static int FindFont(const int wnd_wh[2])
 {
     float err = 0;
 
@@ -637,6 +637,13 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
             err = e;
         }
     }
+
+    return j;
+}
+
+int GetGLFont(int wh[2], const int wnd_wh[2], int* id)
+{
+    int j = FindFont(wnd_wh);
 
 	j += font_zoom;
 	j = j < 0 ? 0 : j >= fonts_loaded ? fonts_loaded - 1 : j;
@@ -660,6 +667,9 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 		wh[0] = f->width;
 		wh[1] = f->height;
 	}
+
+    if (id)
+        *id = j;
 
 	return f->tex;
 }
@@ -716,13 +726,35 @@ bool PrevGLFont()
             int w = write(STDOUT_FILENO, "\033[9;0t",6);
     }
     #else
+    /*
 	font_zoom--;
 	if (font_zoom < -fonts_loaded / 2)
 	{
 		font_zoom = -fonts_loaded / 2;
 		return false;
 	}
-	TermResizeAll();
+    */
+
+    int wh[2], font_wh[2];
+    a3dGetRect(0, 0, wh);
+    int f;
+    GetGLFont(font_wh,wh,&f);
+    if (f==0)
+        return false;
+    int u = font_zoom;
+    font_zoom = f - FindFont(wh) - 1;
+    int f2;
+    GetGLFont(font_wh,wh,&f2);
+    if (f2 == f) // clamped!
+    {
+        font_zoom = u;  // revert!
+    }
+    else
+    {
+        font_zoom = f2 - FindFont(wh);
+    	TermResizeAll();
+    }
+
     #endif
 	return true;
 }
@@ -750,13 +782,35 @@ bool NextGLFont()
             int w = write(STDOUT_FILENO, "\033[9;0t",6);
     }
     #else
+    /*
 	font_zoom++;
 	if (font_zoom > fonts_loaded/2)
 	{
 		font_zoom = fonts_loaded/2;
 		return false;
 	}
-	TermResizeAll();
+    */
+
+    int wh[2], font_wh[2];
+    a3dGetRect(0, 0, wh);
+    int f;
+    GetGLFont(font_wh,wh,&f);
+    if (f==fonts_loaded-1)
+        return false;
+    int u = font_zoom;
+    font_zoom = f - FindFont(wh) + 1;
+    int f2;
+    GetGLFont(font_wh,wh,&f2);
+    if (f2 == f) // clamped!
+    {
+        font_zoom = u;  // revert!
+    }
+    else
+    {
+        font_zoom = f2 - FindFont(wh);
+    	TermResizeAll();
+    }
+
     #endif
 	return true;
 }
