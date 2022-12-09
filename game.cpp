@@ -395,7 +395,6 @@ bool WriteGamePadConf(const uint8_t* map, const char* name, int axes, int button
 	return n==w;
 }
 
-
 void ReadConf(Game* g)
 {
 	FILE* f = fopen(GetConfPath(), "rb");
@@ -406,6 +405,7 @@ void ReadConf(Game* g)
 
 		r = (int)fread(&g->perspective, 1, 1, f);
 		r = (int)fread(&g->blood, 1, 1, f);
+		r = (int)fread(&g->mute, 1, 1, f);
 
 		fclose(f);
 	}
@@ -426,6 +426,7 @@ void WriteConf(Game* g)
 
 		fwrite(&g->perspective, 1, 1, f);
 		fwrite(&g->blood, 1, 1, f);
+		fwrite(&g->mute, 1, 1, f);
 
 		fclose(f);
 	}
@@ -3313,6 +3314,20 @@ void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4
 	g->perspective = true;
 	g->blood = true;
 
+	g->consume_anims = 0;
+	memset(g->consume_anim,0,sizeof(Game::ConsumeAnim)*16);
+	memset(&g->inventory,0,sizeof(Inventory));
+	memset(&g->input,0,sizeof(Game::Input));
+	memset(&g->player,0,sizeof(Human));
+
+	g->items_inrange = 0;
+	g->items_count = 0;
+	g->items_ylo = 0;
+	g->items_yhi = 0;
+
+	g->prev_grounded = 0;
+	memset(g->keyb_key,0,32);
+
 	fast_srand((int)stamp);
 
 #ifndef EDITOR
@@ -3726,8 +3741,6 @@ void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4
 		server->lag_wait = false;
 	}
 
-	ReadConf(g); 
-
 	g->player.prev = 0;
 	g->player.next = player_head;
 	if (player_head)
@@ -3797,6 +3810,8 @@ Game* CreateGame()
 	// load defaults
 	Game* g = (Game*)malloc(sizeof(Game));
 	memset(g, 0, sizeof(Game));
+
+	ReadConf(g); 
 
 	if (!prime_game)
 		prime_game = g;
@@ -9913,6 +9928,13 @@ void main_menu(Game* g)
 	#ifndef EDITOR
 	g->CloseMenu();
 	g->main_menu = true;
+
+	MainMenu_OnSize(
+		g->input.size[0],
+		g->input.size[1],
+		g->font_size[0],
+		g->font_size[1]);
+
 	#endif
 }
 

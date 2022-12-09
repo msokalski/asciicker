@@ -1129,6 +1129,12 @@ void LoadGame()
 
     // if it sets onRead, and we have same saved progress, call it now.
     // ...
+
+    game->OnSize(
+        mainmenu_context.input_size[0],
+        mainmenu_context.input_size[1],
+        mainmenu_context.font_size[0],
+        mainmenu_context.font_size[1]);
 }
 
 static void ResetGame()
@@ -1293,12 +1299,10 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
     if (game_loading == 1)
     {
-        #if 0
-        if (y > 5)
-            y = 5;
+        int y = 5;
+        int w,h;
         Font1Size("LOADING",&w,&h);
         Font1Paint(ptr,width,height, (width-w)/2,y, "LOADING", FONT1_PINK_SKIN);
-        #endif
 
         game_loading = 2;
     }
