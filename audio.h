@@ -10,6 +10,7 @@ void FreeAudio();
 
 void CallAudio(const uint8_t* data, int size);
 void AudioWalk(int foot, int volume, const SpriteReq* req, int material);
+void AudioMute(bool mute);
 
 enum AUDIO_FILE
 {

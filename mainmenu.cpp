@@ -7,6 +7,7 @@
 #include "font1.h"
 #include "gamepad.h"
 
+#include "audio.h"
 #include "platform.h"
 #include "upng.h"
 
@@ -1695,6 +1696,8 @@ static void main_menu_credits(MainMenuContext* m)
 static void main_menu_mute(MainMenuContext* m)
 {
 	game->mute = !game->mute;
+	AudioMute(game->mute);
+	WriteConf(game);
 }
 
 static bool main_menu_mute_getter(MainMenuContext* m)

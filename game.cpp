@@ -408,6 +408,9 @@ void ReadConf(Game* g)
 		r = (int)fread(&g->mute, 1, 1, f);
 
 		fclose(f);
+
+		// things to apply immediately!
+		AudioMute(g->mute);
 	}
 	else
 	{
@@ -9876,7 +9879,11 @@ bool menu_fullscreen_getter(Game* g)
 
 void menu_mute(Game* g)
 {
+	#ifndef SERVER
 	g->mute = !g->mute;
+	AudioMute(g->mute);
+	WriteConf(g);
+	#endif
 }
 
 bool menu_mute_getter(Game* g)
