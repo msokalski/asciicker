@@ -53,15 +53,22 @@
 #endif
 
 #ifdef _WIN32
-#ifdef _WIN64
-#define V8_COMPRESS_POINTERS 1
-#define V8_ENABLE_SANDBOX 1
+ #ifdef _WIN64
+ #define V8_COMPRESS_POINTERS 1
+ #define V8_ENABLE_SANDBOX 1
+ #endif
 #endif
-#else
-// i'am lazy gumix
-// only x64 linux is supported
-#define V8_COMPRESS_POINTERS 1
-#define V8_ENABLE_SANDBOX 1
+
+#ifdef __APPLE__
+ #define V8_COMPRESS_POINTERS 1
+ //#define V8_ENABLE_SANDBOX 1
+#endif
+
+#ifdef __linux__
+ // i'am lazy gumix
+ // only x64 linux is supported
+ #define V8_COMPRESS_POINTERS 1
+ #define V8_ENABLE_SANDBOX 1
 #endif
 
 #include <libplatform/libplatform.h>

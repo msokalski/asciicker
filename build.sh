@@ -71,6 +71,9 @@
 # repeat above three steps also with x64.debug, x86.release and x86.debug
 # now you can batch build all asciicker configurations
 
+# on MAC, we will use precompiled SHARED libraries, note makefile differences!
+# > brew install v8
+
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	if [ -f "/usr/bin/time" ]; then
 		echo -e "BUILDING asciiid\n----------------------"
