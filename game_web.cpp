@@ -48,6 +48,8 @@ uint64_t GetTime()
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+uint64_t (*MakeStamp)() = GetTime;
+
 void SyncConf()
 {
     EM_ASM( FS.syncfs( function(e) {} ); );
@@ -105,14 +107,12 @@ void* GetMaterialArr()
 
 bool PrevGLFont()
 {
-    EM_ASM({ZoomOut();});
-    return true;
+    return EM_ASM_INT({return ZoomOut();}) != 0;
 }
 
 bool NextGLFont()
 {
-    EM_ASM({ZoomIn();});
-    return true;
+    return EM_ASM_INT({return ZoomIn();}) != 0;
 }
 
 void exit_handler(int signum)

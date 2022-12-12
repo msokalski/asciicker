@@ -916,8 +916,216 @@ void FillRect(AnsiCell* ptr, int width, int height, int x, int y, int w, int h, 
 	}
 }
 
+static const int sprite_dither_matrix[4][4]=
+{
+	{1,5,3,5},
+	{6,4,7,4},
+	{3,5,2,5},
+	{8,4,6,4}
+};
+
+static int sprite_dither = 0;
+
+void SetSpriteDither(int eighths)
+{
+	sprite_dither = eighths;
+}
+
+void DitherSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y, const int clip[4], bool src_clip, AnsiCell* bk)
+{
+	const int dither = sprite_dither;
+
+	int sx = 0, sy = 0, w = sf->width, h = sf->height;
+	if (clip)
+	{
+		if (src_clip)
+		{
+			if (clip[0] >= clip[2] || clip[0] >= sf->width || clip[2] < 0 ||
+				clip[1] >= clip[3] || clip[1] >= sf->height || clip[3] < 0)
+				return;
+
+			if (clip[0] < 0)
+				x += -clip[0];
+			else
+			{
+				sx = clip[0];
+				w -= clip[0];
+			}
+
+			if (clip[2] < sx + w)
+				w -= sx + w - clip[2];
+
+			if (clip[1] < 0)
+				y += -clip[1];
+			else
+			{
+				sy = clip[1];
+				h -= clip[1];
+			}
+
+			if (clip[3] < sy + h)
+				h -= sy + h - clip[3];
+		}
+		else
+		{
+			if (x < clip[0])
+			{
+				w -= clip[0] - x;
+				sx += clip[0] - x;
+				x = clip[0];
+			}
+			if (x + w > clip[2])
+				w = clip[2] - x;
+
+			if (y < clip[1])
+			{
+				h -= clip[1] - y;
+				sy += clip[1] - y;
+				y = clip[1];
+			}
+			if (y + h > clip[3])
+				h = clip[3] - y;
+		}
+	}
+
+	if (x < 0)
+	{
+		w -= -x;
+		sx += -x;
+		x = 0;
+	}
+	if (x + w > width)
+		w = width - x;
+
+	if (y < 0)
+	{
+		h -= -y;
+		sy += -y;
+		y = 0;
+	}
+	if (y + h > height)
+		h = height - y;
+
+	int x1 = x;
+	int x2 = x + w;
+
+	int y1 = y;
+	int y2 = y + h;
+
+	if (x2 <= x1)
+		return;
+
+	AnsiCell* dst = ptr + x1 + y1 * width;
+	const AnsiCell* src = sf->cell + sx + sy * sf->width;
+
+	if (bk)
+	{
+		AnsiCell* ptr = dst;
+		for (y = y1; y < y2; y++)
+		{
+			const int* my = sprite_dither_matrix[y&3];
+			for (int i = 0; i < w; i++)
+			{
+				if (my[(x1+i)&3] <= dither)
+					continue;
+				ptr[i] = *bk;
+			}
+			ptr += width;
+		}
+	}
+
+	for (y = y1; y < y2; y++)
+	{
+		const int* my = sprite_dither_matrix[y&3];
+		for (int i = 0; i < w; i++)
+		{
+			if (my[(x1+i)&3] <= dither)
+				continue;
+
+			if (src[i].bk == 255)
+			{
+				// if both bk and fg are transparent -> ignore
+				// if bk is transparent and gl is <space> -> ignore
+				if (src[i].fg == 255 || src[i].gl == 32)
+					continue;
+				
+				switch (src[i].gl)
+				{
+					case 220: // fg-lower
+						dst[i].bk = AverageGlyph(dst + i, 0xC);
+						break;
+
+					case 221: // fg-left
+						dst[i].bk = AverageGlyph(dst + i, 0xA);
+						break;
+
+					case 222: // fg-right
+						dst[i].bk = AverageGlyph(dst + i, 0x5);
+						break;
+
+					case 223: // fg-upper
+						dst[i].bk = AverageGlyph(dst + i, 0x3);
+						break;
+
+					default:
+						dst[i].bk = AverageGlyph(dst + i, 0xF);
+				}
+
+				dst[i].fg = src[i].fg;
+				dst[i].gl = src[i].gl;
+			}
+			else
+			{
+				if (src[i].fg == 255)
+				{
+					// if fg is transparent and gl is <full-blk> -> ignore
+					if (src[i].gl == 219)
+						continue;
+
+					switch (src[i].gl)
+					{
+						case 220: // fg-lower
+							dst[i].fg = AverageGlyph(dst + i, 0x3);
+							break;
+
+						case 221: // fg-left
+							dst[i].fg = AverageGlyph(dst + i, 0x5);
+							break;
+
+						case 222: // fg-right
+							dst[i].fg = AverageGlyph(dst + i, 0xA);
+							break;
+
+						case 223: // fg-upper
+							dst[i].fg = AverageGlyph(dst + i, 0xC);
+							break;
+
+						default:
+							dst[i].fg = AverageGlyph(dst + i, 0xF);
+					}
+
+					dst[i].bk = src[i].bk;
+					dst[i].gl = src[i].gl;
+				}
+				else // if none of fg and bk is transparent -> replace
+					dst[i] = src[i];
+			}
+		}
+		dst += width;
+		src += sf->width;
+	}
+}
+
 void BlitSprite(AnsiCell* ptr, int width, int height, const Sprite::Frame* sf, int x, int y, const int clip[4], bool src_clip, AnsiCell* bk)
 {
+	if (sprite_dither>0)
+	{
+		if (sprite_dither>8)
+			return;
+		DitherSprite(ptr, width, height, sf, x, y, clip, src_clip, bk);
+		return;
+	}
+	
 	int sx = 0, sy = 0, w = sf->width, h = sf->height;
 	if (clip)
 	{

@@ -506,3 +506,5 @@ void GamePadMount(const char* name, int axes, int buttons, const uint8_t map[]);
 void GamePadUnmount();
 void GamePadButton(int b, int16_t pos);
 void GamePadAxis(int a, int16_t pos);
+
+extern uint64_t (*MakeStamp)();

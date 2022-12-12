@@ -23,6 +23,8 @@ static bool show_gamepad = false;
 
 static uint64_t mainmenu_stamp = 0;
 static bool mainmenu_shot = false;
+static const int mainmenu_dither_hidden = 20;
+static int mainmenu_dither = mainmenu_dither_hidden * 2;
 
 static bool resized = true;
 static float prev_pos = 0.0f;
@@ -100,6 +102,16 @@ struct MainMenuContext
 	// when mouse/touch is taking over, store current hilight here
 	// so we can revert hilight when pad/keyb is back
 	int menu_temp; 
+
+    void Root()
+    {
+        mainmenu_dither = mainmenu_dither_hidden;
+        menu_scroll=0;
+        menu_smooth_scroll=0;
+        menu_depth=0;
+        menu_stack[menu_depth]=0;
+        menu_temp = menu_stack[menu_depth];
+    }
 
     void Init()
     {
@@ -1123,7 +1135,7 @@ void LoadGame()
         }
     }
 
-    InitGame(game, water, pos, yaw, dir, lt, mainmenu_stamp);
+    InitGame(game, water, pos, yaw, dir, lt, /*mainmenu_stamp*/ MakeStamp());
 
     // here we should also execute some .ajs
     // ...
@@ -1166,7 +1178,12 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     if (game_loading == 3)
         show_continue = true;
 
-    mainmenu_stamp = _stamp;
+    static uint64_t dither_stamp = _stamp;
+    uint64_t dt = _stamp - dither_stamp;
+    dither_stamp += dt / 16666 * 16666;
+    mainmenu_dither -= dt / 16666;
+    if (mainmenu_dither < 0)
+        mainmenu_dither = 0;
 
     /*
     int s = width*height;
@@ -1257,10 +1274,16 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         // also add x,y arguments to PaintGamePad for better centering when 
         // we have enough space for both the logo and the gamepad
 
+        SetSpriteDither(mainmenu_dither>>1);
         PaintGamePad(ptr, width,height, mainmenu_stamp);
+        SetSpriteDither(0);
     }
     else
+    {
+        SetSpriteDither(mainmenu_dither>>1);
         logo_space = mainmenu_context.Paint(ptr,width,height);
+        SetSpriteDither(0);
+    }
 
     if (logo_space)
     {
@@ -1563,6 +1586,8 @@ bool IsFullscreen(Game* g);
 
 static void main_menu_zoomin(MainMenuContext* m)
 {
+    mainmenu_dither = mainmenu_dither_hidden;
+
 	#ifndef SERVER
 	NextGLFont();
 	#endif
@@ -1571,14 +1596,20 @@ static void main_menu_zoomin(MainMenuContext* m)
 static void main_menu_zoomout(MainMenuContext* m)
 {
 	#ifndef SERVER
-	PrevGLFont();
+	if (PrevGLFont())
+        mainmenu_dither = mainmenu_dither_hidden;
 	#endif
 }
 
 static void main_menu_fullscreen(MainMenuContext* m)
 {
+    mainmenu_dither = mainmenu_dither_hidden;
+
 	#ifndef SERVER
+    bool was = IsFullscreen(game);
 	ToggleFullscreen(game);
+    if (was != IsFullscreen(game))
+        mainmenu_dither = mainmenu_dither_hidden * 2;
 	#endif
 }
 
@@ -1625,6 +1656,7 @@ static const MainMenu main_menu_video[]=
 static void main_menu_gamepad_close(void* cookie)
 {
     // hide gamepad, unhide mainmenu
+    mainmenu_dither = mainmenu_dither_hidden;
     show_gamepad = false;
 }
 
@@ -1633,6 +1665,8 @@ static void main_menu_gamepad(MainMenuContext* m)
 	//game->CloseMenu();
 	//g->show_gamepad = true;
 	//g->show_buts = false;
+
+    mainmenu_dither = mainmenu_dither_hidden;
     show_gamepad = true;
 	GamePadOpen(main_menu_gamepad_close,0);
 }
@@ -1648,6 +1682,7 @@ static const MainMenu main_menu_controls[]=
 
 static void main_menu_no_exit(MainMenuContext* m)
 {
+    mainmenu_dither = mainmenu_dither_hidden;
 	m->menu_depth--;
 	m->menu_temp = mainmenu_context.menu_stack[game->menu_depth];
 
@@ -1756,7 +1791,10 @@ void MainMenuContext::OnKeyb(GAME_KEYB keyb, int key)
 	{
         // THERE'S NO CLOSING MAIN MENU
 		// CloseMenu();
-        mainmenu_context.Init();
+        
+        // mainmenu_context.Init();
+        mainmenu_context.Root();
+        
 		return;
 	}
 
@@ -1785,6 +1823,7 @@ void MainMenuContext::OnKeyb(GAME_KEYB keyb, int key)
                 menu_rescroll = true;
 				if (m[ menu_stack[menu_depth] ].sub)
 				{
+                    mainmenu_dither = mainmenu_dither_hidden;
                     menu_scroll=0;
                     menu_smooth_scroll=0;
 					menu_depth++;
@@ -1813,6 +1852,8 @@ void MainMenuContext::OnKeyb(GAME_KEYB keyb, int key)
                 // CloseMenu();
 				return;
 			}
+
+            mainmenu_dither = mainmenu_dither_hidden;
 			menu_depth--;
 			menu_temp = menu_stack[menu_depth];
 
@@ -1893,7 +1934,9 @@ void MainMenuContext::OnMouse(GAME_MOUSE mouse, int x, int y)
 		{
             // THERE'S NO CLOSING MAIN MENU
             // CloseMenu();
-            mainmenu_context.Init();
+            
+            //mainmenu_context.Init();
+            mainmenu_context.Root();
 			return;						
 		}
 
@@ -1927,6 +1970,7 @@ void MainMenuContext::OnMouse(GAME_MOUSE mouse, int x, int y)
 					}
 					else
 					{
+                        mainmenu_dither = mainmenu_dither_hidden;
 						menu_depth--;
 						menu_temp = menu_stack[menu_depth];
 
@@ -1947,6 +1991,7 @@ void MainMenuContext::OnMouse(GAME_MOUSE mouse, int x, int y)
 
 					if (m[ menu_stack[menu_depth] ].sub)
 					{
+                        mainmenu_dither = mainmenu_dither_hidden;
                         menu_scroll=0;
                         menu_smooth_scroll=0;
 						menu_depth++;
@@ -1984,7 +2029,9 @@ void MainMenuContext::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 				{
                     // THERE'S NO CLOSING MAIN MENU
                     // CloseMenu();
-                    mainmenu_context.Init();
+
+                    //mainmenu_context.Init();
+                    mainmenu_context.Root();
 					return;						
 				}
 
@@ -2028,6 +2075,7 @@ void MainMenuContext::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 							}
 							else
 							{
+                                mainmenu_dither = mainmenu_dither_hidden;
 								menu_depth--;
 								menu_temp = menu_stack[menu_depth];
 
@@ -2048,6 +2096,7 @@ void MainMenuContext::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 							// action!
 							if (m[ menu_stack[menu_depth] ].sub)
 							{
+                                mainmenu_dither = mainmenu_dither_hidden;
                                 menu_scroll=0;
                                 menu_smooth_scroll=0;
 								menu_depth++;
@@ -2103,6 +2152,7 @@ void MainMenuContext::OnPadButton(int b, bool down)
 
 				if (m[ menu_stack[menu_depth] ].sub)
 				{
+                    mainmenu_dither = mainmenu_dither_hidden;
                     menu_scroll=0;
                     menu_smooth_scroll=0;
 					menu_depth++;
@@ -2135,7 +2185,9 @@ void MainMenuContext::OnPadButton(int b, bool down)
 		{
             // THERE'S NO CLOSING MAIN MENU
             // CloseMenu();
-            mainmenu_context.Init();
+            
+            // mainmenu_context.Init();
+            mainmenu_context.Root();
 			break;
 		}
 
@@ -2189,6 +2241,8 @@ void MainMenuContext::OnPadButton(int b, bool down)
                 // CloseMenu();
 				return;
 			}
+
+            mainmenu_dither = mainmenu_dither_hidden;
 			menu_depth--;
 			menu_temp = menu_stack[menu_depth];
 
@@ -2207,6 +2261,7 @@ void MainMenuContext::OnPadButton(int b, bool down)
 				// action requires main button
 				if (m[ menu_stack[menu_depth] ].sub)
 				{
+                    mainmenu_dither = mainmenu_dither_hidden;
                     menu_scroll=0;
                     menu_smooth_scroll=0;
 					menu_depth++;

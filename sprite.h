@@ -59,3 +59,4 @@ int AverageGlyph(const AnsiCell* ptr, int mask);
 int DarkenGlyph(const AnsiCell* ptr);
 
 int LightenColor(int c);
+void SetSpriteDither(int eighths);

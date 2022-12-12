@@ -755,6 +755,7 @@ bool PrevGLFont()
     if (f2 == f) // clamped!
     {
         font_zoom = u;  // revert!
+        return false;
     }
     else
     {
@@ -811,6 +812,7 @@ bool NextGLFont()
     if (f2 == f) // clamped!
     {
         font_zoom = u;  // revert!
+        return false;
     }
     else
     {
@@ -1391,6 +1393,9 @@ Game* game = 0;
 void init_v8();
 void free_v8();
 
+uint64_t (*MakeStamp)() = 0;
+
+
 #define CODE(...) #__VA_ARGS__
 
 int main(int argc, char* argv[])
@@ -1862,6 +1867,9 @@ int main(int argc, char* argv[])
         global_lt[3] = lt[3];
 
         game = TermOpen(0, yaw, pos, MyFont::Free);
+
+        MakeStamp = a3dGetTime;
+
         if (game)
         {
             char font_dirname[1024+10];
@@ -1899,6 +1907,8 @@ int main(int argc, char* argv[])
 #endif // #ifndef PURE_TERM
 
 #if defined(__linux__) || defined(__APPLE__)
+
+    MakeStamp = GetTime;
 
     // recursively check if we are on TTY console or 'vt'
     const char* term_env = getenv("TERM");

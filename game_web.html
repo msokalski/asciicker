@@ -432,25 +432,33 @@
       function ZoomIn()
       {
         if (ak_font == ak_fonts.length-1)
-          return;
+          return 0;
         let f = ak_font;
         let u = user_zoom;
         user_zoom = ak_font - FindFont() + 1;
         Resize(null);
         if (ak_font == f) // clamped!
+        {
           user_zoom = u;  // revert!
+          return 0;
+        }
+        return 1;
       }
 
       function ZoomOut()
       {
         if (ak_font == 0)
-          return;
+          return 0;
         let f = ak_font;
         let u = user_zoom;          
         user_zoom = ak_font - FindFont() - 1;
         Resize(null);
         if (ak_font == f) // clamped!
+        {
           user_zoom = u;  // revert!
+          return 0;
+        }
+        return 1;
       }
 
       function Resize(e)
