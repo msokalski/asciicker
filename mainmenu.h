@@ -8,6 +8,8 @@
 int LoadMainMenuSprites(const char* base_path);
 void FreeMainMenuSprites();
 
+void MainMenu_Show();
+
 void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height);
 void MainMenu_OnSize(int w, int h, int fw, int fh);
 void MainMenu_OnKeyb(GAME_KEYB keyb, int key);
@@ -18,6 +20,7 @@ void MainMenu_OnPadMount(bool connect);
 void MainMenu_OnPadButton(int b, bool down);
 void MainMenu_OnPadAxis(int a, int16_t pos);
 #else
+inline void MainMenu_Show() {}
 inline int LoadMainMenuSprites(const char* base_path) { return 0; }
 inline void FreeMainMenuSprites() {}
 inline void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height){}

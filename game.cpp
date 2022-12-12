@@ -3823,6 +3823,7 @@ Game* CreateGame()
 	g->main_menu = false;
 	#else
 	g->main_menu = true; // in this case we must not use World / Terrain etc ...
+	MainMenu_Show();
 	#endif
 
 	return g;
@@ -9935,6 +9936,8 @@ void main_menu(Game* g)
 	#ifndef EDITOR
 	g->CloseMenu();
 	g->main_menu = true;
+
+	MainMenu_Show();
 
 	MainMenu_OnSize(
 		g->input.size[0],
