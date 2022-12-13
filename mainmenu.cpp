@@ -17,7 +17,7 @@ extern World* world;
 extern Material mat[256];
 extern char base_path[1024];
 
-static int  game_loading = 0; // 0-not_loaded, 1-load requested, 2-loading, 3-loaded
+static int  game_loading = 0; // 0-not_loaded, 1-loading, 2-loaded
 static bool show_continue = false;
 static bool show_gamepad = false;
 
@@ -68,9 +68,28 @@ static void start_new_game(MainMenuContext* m)
     game_loading = 1;
 }
 
+static const MainMenu dummy_test2[] =
+{
+    {"TEST 2A", 0, start_new_game, 0, /*cookie*/0},
+    {"TEST 2B", 0, start_new_game, 0, /*cookie*/0},
+    {"TEST 2C", 0, start_new_game, 0, /*cookie*/0},
+    {0}
+};
+
+static const MainMenu dummy_test1[] =
+{
+    {"TEST 1A", dummy_test2, 0, 0, /*cookie*/0},
+    {"TEST 1B", dummy_test2, 0, 0, /*cookie*/0},
+    {"TEST 1C", dummy_test2, 0, 0, /*cookie*/0},
+    {"TEST 1D", dummy_test2, 0, 0, /*cookie*/0},
+    {"TEST 1E", dummy_test2, 0, 0, /*cookie*/0},
+    {0}
+};
+
 static const MainMenu dummy[] =
 {
-    {"Y9", 0, start_new_game, 0, /*cookie*/0},
+    {"PRE Y9", 0, start_new_game, 0, /*cookie*/0},
+    {"TEST", dummy_test1, 0, 0, /*cookie*/0},
     {0}
 };
 
@@ -84,6 +103,12 @@ static const MainMenu* MainMenuGetRoot();
 
 struct MainMenuContext
 {
+    int progress; // loading coarse progress in steps currently 0-3
+
+    PatchIndex* patch_index;
+    int patch_num;
+    int patch_iter;
+
     int font_size[2];   // from OnSize
     int input_size[2];  // from OnSize
     int render_size[2]; // from Render
@@ -94,7 +119,7 @@ struct MainMenuContext
 
 	// menu mouse / touch state
 	int menu_down; // 0: released, 1:mouse_captured, 2:touch_captured
-    bool down_back;
+    bool down_back; // true if mouse or touch is holding 'back' item
 	int menu_down_x;
 	int menu_down_y;
 
@@ -121,6 +146,8 @@ struct MainMenuContext
 
     void Init()
     {
+        progress = 0;
+        
         resized = true;
         menu_max_scroll = 0;
         menu_smooth_scroll = 0;
@@ -603,6 +630,8 @@ static void ScaleImg(const uint16_t* src, int src_w, int src_h, const float src_
             cx1 = sx + (int)round(256.0 * src_xywh[2] * (2 * x + 0) / (2*dst_w));
             cx2 = sx + (int)round(256.0 * src_xywh[2] * (2 * x + 1) / (2*dst_w));
 
+            
+
             uint8_t rx1 = cx1 & 0xFF;
             uint8_t rx2 = cx2 & 0xFF;
 
@@ -1051,20 +1080,16 @@ void FreeMainMenuSprites()
     menu_logo_sprite = 0;
 }
 
-void LoadGame()
+void LoadGame(MainMenuContext* mmc)
 {
-    // a little trouble here,
-    // this func needs to be async on web platform:
-    // (will fetch: a3d file, referenced meshes and .ajs script)
-    // we must run fetches and lock ui until promise resolves
-    // also adding cancel button would be a nice touch
-
     float water = 55;
     float dir = 0;
     float yaw = 45;
     float pos[3] = {0,15,0};
     float lt[4] = {1,0,1,.5};
 
+    // if this is first call
+    if (mmc->progress == 0)
     {
         // here the path should be taken from the module manifest
         // ...
@@ -1080,7 +1105,12 @@ void LoadGame()
 
         if (f)
         {
-            terrain = LoadTerrain(f);
+            PatchIndex* index = 0;
+            terrain = LoadTerrain(f, &index);
+
+            mmc->patch_num = GetTerrainPatches(terrain);
+            mmc->patch_index = index;
+            mmc->patch_iter = 0;
 
             if (terrain)
             {
@@ -1118,43 +1148,63 @@ void LoadGame()
             fclose(f);
         }
 
-        // if (!terrain || !world)
-        //    return -1;
-
-        // add meshes from library that aren't present in scene file
-        char mesh_dirname[4096];
-        sprintf(mesh_dirname, "%smeshes", base_path);
-        //a3dListDir(mesh_dirname, MeshScan, mesh_dirname);
-
-        // this is the only case when instances has no valid bboxes yet
-        // as meshes weren't present during their creation
-        // now meshes are loaded ...
-        // so we need to update instance boxes with (,true)
-
-        if (world)
-        {
-            RebuildWorld(world, true);
-            #ifdef DARK_TERRAIN
-            // TODO: add Patch Iterator holding stack of parents
-            // and single Patch dark updater
-            UpdateTerrainDark(terrain, world, lt, false);
-            #endif
-        }
+        mmc->progress = 1;
     }
+    else
+    if (mmc->progress == 1)
+    {
+        RebuildWorld(world, true);
+        mmc->progress = 2;
+    }
+    else
+    if (mmc->progress == 2)
+    {
+        #ifdef DARK_TERRAIN
 
-    InitGame(game, water, pos, yaw, dir, lt, /*mainmenu_stamp*/ MakeStamp());
+        for (int n=0; n<256; n++)
+        {
+            // make speed more linear by doing it in random order
+            int i = fast_rand() % (mmc->patch_num - mmc->patch_iter);
 
-    // here we should also execute some .ajs
-    // ...
+            //PatchIndex* pi = mmc->patch_index + mmc->patch_iter;
+            PatchIndex* pi = mmc->patch_index + i;
+            UpdateTerrainDark(terrain, pi, world, lt, false);
+            mmc->patch_iter++;
+            *pi = mmc->patch_index[mmc->patch_num-mmc->patch_iter];
 
-    // if it sets onRead, and we have same saved progress, call it now.
-    // ...
+            if (mmc->patch_iter == mmc->patch_num)
+            {
+                FreePatchIndex(mmc->patch_index);
+                mmc->patch_index = 0;
+                mmc->patch_num = 0;
+                mmc->patch_iter = 0;
+                mmc->progress = 3;
+                break;
+            }
+        }
+        // UpdateTerrainDark(terrain, world, lt, false);
+        #endif        
+    }
+    else
+    if (mmc->progress == 3)
+    {
+        // finalize loading ...
+        mmc->progress = 0;
 
-    game->OnSize(
-        mainmenu_context.input_size[0],
-        mainmenu_context.input_size[1],
-        mainmenu_context.font_size[0],
-        mainmenu_context.font_size[1]);
+        InitGame(game, water, pos, yaw, dir, lt, /*mainmenu_stamp*/ MakeStamp());
+
+        // here we should also execute some .ajs
+        // ...
+
+        // if it sets onRead, and we have same saved progress, call it now.
+        // ...
+
+        game->OnSize(
+            mainmenu_context.input_size[0],
+            mainmenu_context.input_size[1],
+            mainmenu_context.font_size[0],
+            mainmenu_context.font_size[1]);
+    }
 }
 
 static void ResetGame()
@@ -1184,7 +1234,7 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
     if (game_loading == 0)
         show_continue = false;
-    if (game_loading == 3)
+    if (game_loading == 2)
         show_continue = true;
 
     uint64_t dt = _stamp - dither_stamp;
@@ -1202,8 +1252,10 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     // ensure there's enough horizontal source space
     // for all menu depths
 
-    int max_depth = 1; // scan it!
-    int scroll_step = 4; // per depth
+    // note scrolling disabled (scroll_step=0)
+    // no need it, we have disolve transition
+    int max_depth = 3; // scan it!
+    int scroll_step = 0; // 4 per depth
     int scroll_width = scroll_step * max_depth;
 
     // we want to scroll horizontally by scroll_cells of destination surface
@@ -1310,6 +1362,7 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         SetSpriteDither(0);
     }
     else
+    if (game_loading != 1) // hide menu while 'loading'
     {
         SetSpriteDither(mainmenu_dither>>1);
         logo_space = mainmenu_context.Paint(ptr,width,height);
@@ -1325,51 +1378,57 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
         BlitSprite(ptr,width,height,menu_logo_sprite->atlas, logo_x,y-menu_logo_sprite->atlas->height/2);
     }
 
-    #if 0
-    y -= menu_logo_sprite->atlas->height;
-
-    int w,h;
-    Font1Size("MAIN MENU",&w,&h);
-
-    Font1Paint(ptr,width,height, (width-w) / 2, y, "MAIN MENU", FONT1_PINK_SKIN);
-    y-= 2*h;
-
-    if (show_continue)
-    {
-        Font1Paint(ptr,width,height, x,y, "1.", FONT1_GOLD_SKIN);
-        Font1Paint(ptr,width,height, x+7,y, "CONTINUE GAME", FONT1_GREY_SKIN);
-        y -= h;
-
-        Font1Paint(ptr,width,height, x,y, "2.", FONT1_GOLD_SKIN);
-        Font1Paint(ptr,width,height, x+7,y, "START NEW GAME", FONT1_GREY_SKIN);
-        y -= h;
-    }
-    else
-    {
-        Font1Paint(ptr,width,height, x,y, "1.", FONT1_GOLD_SKIN);
-        Font1Paint(ptr,width,height, x+7,y, "START NEW GAME", FONT1_GREY_SKIN);
-        y -= h;
-    }
-    #endif
-
     if (game_loading == 1)
     {
+        LoadGame(&mainmenu_context); // here we should provide manifest index
+
         int y = 5;
         int w,h;
         Font1Size("LOADING",&w,&h);
         Font1Paint(ptr,width,height, (width-w)/2,y, "LOADING", FONT1_PINK_SKIN);
+        y -= h;
 
-        game_loading = 2;
-    }
-    else
-    if (game_loading == 2)
-    {
-        LoadGame(); // here we should provide manifest index
-        game_loading = 3;
-        game->main_menu = false;
+        // assume we have fixed number of progress dots
+        char pro[]="..........";
+        Font1Size(pro,&w,&h);
+        if (mainmenu_context.progress == 3)
+        {
+            // fully loaded
+            Font1Paint(ptr,width,height, (width-w)/2, y, pro, FONT1_GOLD_SKIN);
+        }
+        else
+        if (mainmenu_context.progress == 2 && mainmenu_context.patch_num)
+        {
+            // loading in progress ...
+            int dots = strlen(pro);
+            int dot_w = w/dots;
+            int complete = (dots * mainmenu_context.patch_iter + mainmenu_context.patch_num / 2) / mainmenu_context.patch_num;
 
-        // prepare in advance for getting back to the main menu
-        mainmenu_context.Init();
+            if (complete < dots)
+            {
+                pro[complete] = 0;
+                Font1Paint(ptr,width,height, (width-w)/2,y, pro, FONT1_GOLD_SKIN);
+                pro[complete] = '.';
+                Font1Paint(ptr,width,height, (width-w)/2 + dot_w*complete,y, pro+complete, FONT1_GREY_SKIN);
+            }
+            else
+                Font1Paint(ptr,width,height, (width-w)/2,y, pro, FONT1_GOLD_SKIN);
+        }
+        else
+        {
+            // no progress yet
+            Font1Paint(ptr,width,height, (width-w)/2, y, pro, FONT1_GREY_SKIN);
+        }
+
+        if (mainmenu_context.progress == 0)
+        {
+            // fully loaded!!!
+            game_loading = 2;
+            game->main_menu = false;
+
+            // prepare in advance for getting back to the main menu
+            mainmenu_context.Init();
+        }
     }
 
     if (mainmenu_shot)
@@ -1478,30 +1537,8 @@ void MainMenu_OnKeyb(GAME_KEYB keyb, int key)
 			GamePadKeyb(k, mainmenu_stamp);
     }
     else
-    if (game_loading==0 || game_loading==3)
+    if (game_loading==0 || game_loading==2)
         mainmenu_context.OnKeyb(keyb,key);
-
-    /*
-    if (keyb == GAME_KEYB::KEYB_CHAR)
-    {
-        if (game_loading==3)
-        {
-            if (key == '1')
-                game->main_menu = false;
-            if (key == '2')
-            {
-                ResetGame();
-                game_loading = 1;
-            }
-        }
-        else
-        if (game_loading==0)
-        {
-            if (key == '1')
-                game_loading = 1;
-        }
-    }
-    */
 }
 
 void MainMenu_OnMouse(GAME_MOUSE mouse, int x, int y)
@@ -1527,21 +1564,8 @@ void MainMenu_OnMouse(GAME_MOUSE mouse, int x, int y)
 		}
     }
     else
-    if (game_loading==0 || game_loading==3)    
+    if (game_loading==0 || game_loading==2)    
         mainmenu_context.OnMouse(mouse,x,y);
-
-    /*
-    if (mouse == GAME_MOUSE::MOUSE_LEFT_BUT_DOWN ||
-        mouse == GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN ||
-        mouse == GAME_MOUSE::MOUSE_MIDDLE_BUT_DOWN)
-    {
-        if (game_loading==3)
-            game->main_menu = false;
-        else
-        if (game_loading==0)
-            game_loading = 1;
-    }
-    */
 }
 
 void MainMenu_OnTouch(GAME_TOUCH touch, int id, int x, int y)
@@ -1565,50 +1589,31 @@ void MainMenu_OnTouch(GAME_TOUCH touch, int id, int x, int y)
 		}
     }
     else
-    if (game_loading==0 || game_loading==3)
+    if (game_loading==0 || game_loading==2)
         mainmenu_context.OnTouch(touch,id,x,y);
-
-    /*
-    if (touch == GAME_TOUCH::TOUCH_BEGIN)
-    {
-        if (game_loading==3)
-            game->main_menu = false;
-        else
-        if (game_loading==0)
-            game_loading = 1;
-    }
-    */
 }
 
 void MainMenu_OnFocus(bool set)
 {
-    if (game_loading==0 || game_loading==3)
+    if (game_loading==0 || game_loading==2)
         mainmenu_context.OnFocus(set);
 }
 
 void MainMenu_OnPadMount(bool connect)
 {
-    if (game_loading==0 || game_loading==3)    
+    if (game_loading==0 || game_loading==2)    
         mainmenu_context.OnPadMount(connect);
 }
 
 void MainMenu_OnPadButton(int b, bool down)
 {
-    if (game_loading==0 || game_loading==3)    
+    if (game_loading==0 || game_loading==2)    
         mainmenu_context.OnPadButton(b,down);
-
-    /*
-    if (game_loading==3)
-        game->main_menu = false;
-    else
-    if (game_loading==0)
-        game_loading = 1;
-    */
 }
 
 void MainMenu_OnPadAxis(int a, int16_t pos)
 {
-    if (game_loading==0 || game_loading==3)    
+    if (game_loading==0 || game_loading==2)    
         mainmenu_context.OnPadAxis(a,pos);
 }
 
@@ -1761,7 +1766,7 @@ static const MainMenu main_menu_exit[]=
 static void main_menu_continue(MainMenuContext* m)
 {
     /* get back to the game (without loading) !!!*/
-    if (game_loading==3)
+    if (game_loading==2)
         game->main_menu = false;
     
     // prepare in advance for getting back to the main menu

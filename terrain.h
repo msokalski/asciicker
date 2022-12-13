@@ -22,9 +22,17 @@ void GetTerrainBase(Terrain* t, int b[2]);
 void SetTerrainBase(Terrain* t, const int b[2]);
 
 bool SaveTerrain(const Terrain* t, FILE* f);
-Terrain* LoadTerrain(FILE* f);
 
 struct Patch;
+
+struct PatchIndex
+{
+	int32_t x,y;
+	Patch* patch;
+};
+
+Terrain* LoadTerrain(FILE* f, PatchIndex** idx = 0);
+void FreePatchIndex(PatchIndex* idx);
 
 Patch* GetTerrainPatch(Terrain* t, int x, int y);
 void GetTerrainPatch(Terrain* t, Patch* p, int* x, int* y);
@@ -77,6 +85,7 @@ uint16_t GetTerrainHi(Patch* p, uint16_t* lo = 0);
 uint64_t GetTerrainDark(Patch* p);
 void SetTerrainDark(Patch* p, uint64_t dark);
 void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor);
+void UpdateTerrainDark(Terrain* t, PatchIndex* pi, World* w, float lightpos[3], bool editor);
 #endif
 
 void QueryTerrain(Terrain* t, double x, double y, double r, int view_flags, void(*cb)(Patch* p, int x, int y, int view_flags, void* cookie), void* cookie);

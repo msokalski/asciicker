@@ -1528,64 +1528,58 @@ void QueryTerrainSample(QuadItem* q, int x, int y, int range, void(*cb)(Patch* p
 }
 
 #ifdef DARK_TERRAIN
-void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor)
+
+struct DarkUpdater
 {
-	static int dark_samples;
-	dark_samples = 0;
-	
-	struct Updater
+	static void cb(Patch* p, int u, int v, double coords[3], void* cookie)
 	{
-		static void cb(Patch* p, int u, int v, double coords[3], void* cookie)
+		DarkUpdater* updater = (DarkUpdater*)cookie;
+
+		double hit[3] = { coords[0], coords[1], coords[2] };
+		Patch* q = HitTerrain(updater->t, coords, updater->lightdir, hit, 0);
+
+		uint64_t mask = ((uint64_t)1) << (u + VISUAL_CELLS * v);
+
+		if (q)
 		{
-			dark_samples++;
-			Updater* updater = (Updater*)cookie;
-
-			double hit[3] = { coords[0], coords[1], coords[2] };
-			Patch* q = HitTerrain(updater->t, coords, updater->lightdir, hit, 0);
-
-			uint64_t mask = ((uint64_t)1) << (u + VISUAL_CELLS * v);
-
-			if (q)
+			if (/*q != p || */ hit[2] > coords[2] + HEIGHT_SCALE/4)
 			{
-				if (/*q != p || */ hit[2] > coords[2] + HEIGHT_SCALE/4)
-				{
-					p->dark |= mask;
-					return;
-				}
+				p->dark |= mask;
+				return;
 			}
-
-			Inst* i = HitWorld(updater->w, coords, updater->lightdir, hit, 0, false, updater->editor);
-
-			if (i)
-			{
-				if (hit[2] > coords[2])
-				{
-					p->dark |= mask;
-					return;
-				}
-			}
-
-			p->dark &= ~mask;
 		}
 
-		bool editor;
-		Terrain* t;
-		World* w;
-		double lightdir[3];
-	};
+		Inst* i = HitWorld(updater->w, coords, updater->lightdir, hit, 0, false, updater->editor);
 
-	Updater updater = { editor, t, w, {-lightpos[0], -lightpos[1], -lightpos[2] * HEIGHT_SCALE} };
+		if (i)
+		{
+			if (hit[2] > coords[2])
+			{
+				p->dark |= mask;
+				return;
+			}
+		}
 
-//	double n = 1.0 / sqrt(lightpos[0]* lightpos[0]+ lightpos[1]* lightpos[1]+ lightpos[2]* lightpos[2]);
-//	updater.lightdir[0] *= n;
-//	updater.lightdir[1] *= n;
-//	updater.lightdir[2] *= n;
+		p->dark &= ~mask;
+	}
 
+	bool editor;
+	Terrain* t;
+	World* w;
+	double lightdir[3];
+};
+
+void UpdateTerrainDark(Terrain* t, PatchIndex* pi, World* w, float lightpos[3], bool editor)
+{
+	DarkUpdater updater = { editor, t, w, {-lightpos[0], -lightpos[1], -lightpos[2] * HEIGHT_SCALE} };
+	QueryTerrainSample(pi->patch, pi->x*VISUAL_CELLS, pi->y*VISUAL_CELLS, DarkUpdater::cb, &updater);
+}
+
+void UpdateTerrainDark(Terrain* t, World* w, float lightpos[3], bool editor)
+{
+	DarkUpdater updater = { editor, t, w, {-lightpos[0], -lightpos[1], -lightpos[2] * HEIGHT_SCALE} };
 	if (t->root)
-		QueryTerrainSample(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, Updater::cb, &updater);
-
-	printf("updated %d terrain samples\n", dark_samples);
-
+		QueryTerrainSample(t->root, -t->x*VISUAL_CELLS, -t->y*VISUAL_CELLS, VISUAL_CELLS << t->level, DarkUpdater::cb, &updater);
 }
 #endif
 
@@ -2897,7 +2891,7 @@ bool SaveTerrain(const Terrain* t, FILE* f)
 	return true;
 }
 
-Terrain* LoadTerrain(FILE* f)
+Terrain* LoadTerrain(FILE* f, PatchIndex** idx)
 {
 	if (!f)
 		return 0;
@@ -2914,6 +2908,8 @@ Terrain* LoadTerrain(FILE* f)
 		return 0;
 	}
 
+	PatchIndex* index = idx ? (PatchIndex*)malloc(sizeof(PatchIndex) * hdr.num_patches) : 0;
+
 	Terrain* t = CreateTerrain();
 	for (unsigned i = 0; i < hdr.num_patches; i++)
 	{
@@ -2921,10 +2917,20 @@ Terrain* LoadTerrain(FILE* f)
 		if (fread(&pch,1,sizeof(FilePatch),f)!=sizeof(FilePatch))
 		{
 			DeleteTerrain(t);
+			if (idx)
+				*idx = 0;
 			return 0;
 		}
 
 		Patch* p = AddTerrainPatch(t, pch.x, pch.y, 0);
+
+		if (index)
+		{
+			PatchIndex* pi = index+i;
+			pi->patch = p;
+			pi->x = pch.x;
+			pi->y = pch.y;
+		}
 
 		memcpy(p->visual,pch.visual,sizeof(uint16_t)*VISUAL_CELLS*VISUAL_CELLS);
 		memcpy(p->height,pch.height,sizeof(uint16_t)*(HEIGHT_CELLS+1)*(HEIGHT_CELLS+1));
@@ -2935,5 +2941,14 @@ Terrain* LoadTerrain(FILE* f)
 		p->diag = pch.diag;
 	}
 
+	if (idx)
+		*idx = index;
+
 	return t;
+}
+
+void FreePatchIndex(PatchIndex* idx)
+{
+	if (idx)
+		free(idx);
 }
