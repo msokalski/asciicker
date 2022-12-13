@@ -1228,6 +1228,14 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     }
 
     float scale = src_xywh[3] / height;
+
+    // ensure wolfie is visible
+    // (portrait with hi zoom can easily move it outside)
+    float wolfie_x = 112, wolfie_y = 156;
+    const float wolfie_margin = 4 * scale;
+    if (src_xywh[0] > wolfie_x - wolfie_margin)
+        src_xywh[0] = wolfie_x - wolfie_margin;
+
     float src_scroll_step = scroll_step * scale;
     float src_scroll_width = scroll_width * scale;
 
@@ -1274,7 +1282,6 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     // AT THE CURRENT LEVEL DETERMINE LONGEST STRING WITH EXTRA SPACING
 
     // xform src coords (115x150): 
-    float wolfie_x = 112, wolfie_y = 156;
     wolfie_y = menu_bk_height - wolfie_y;
 
     wolfie_x -= src_xywh[0];
