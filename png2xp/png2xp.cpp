@@ -532,8 +532,6 @@ uint32_t Do(uint32_t src[4], XPCell* ptr, int dev[3], uint8_t pal[][3], int pal_
 
 int main(int argc, char* argv[])
 {
-	uint64_t t0 = GetTime();
-
     if (argc<2)
     {
         printf("usage: \nTEACH:   png2xp <step(1-17)> <out_file.plt> \nCONVERT: png2xp <in_file.plt> <in_file.png> <out_file.xp>\n");
@@ -606,13 +604,15 @@ int main(int argc, char* argv[])
 
 				for (int G = 0; G < 256; G += step)
 				{
+					if (B==0)
+					{
+						printf("\r%3d/%d", G/step, 255/step+1);
+						fflush(stdout);
+					}
+
 					for (int R = 0; R < 256; R += step)
 					{
 						uint32_t p = R | (G << 8) | (B << 16);
-
-						if ((R & 0xFF) == 0)
-							printf("%d: %d/%d\n", B, G, 256);
-
 						uint32_t w = Make(p, pal, pal_size);
 
 						*ptr = w;
@@ -621,6 +621,9 @@ int main(int argc, char* argv[])
 						//fwrite(&w,4,1,plt);
 					}
 				}
+
+				if (B==0)
+					printf("\r%3d/%d\n", 255/step+1, 255/step+1);				
 			}
 		};
 
@@ -713,6 +716,8 @@ int main(int argc, char* argv[])
         printf("can't write to: %s\n", argv[2]);
         return -3;
     }
+
+	uint64_t t0 = GetTime();
 
 	int32_t hdr[] = {-1, 1/*layers*/, w/2, h/2};
 

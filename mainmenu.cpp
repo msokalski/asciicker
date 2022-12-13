@@ -27,7 +27,6 @@ static bool mainmenu_shot = false;
 static const int mainmenu_dither_hidden = 20;
 static int mainmenu_dither = mainmenu_dither_hidden * 2;
 
-static bool resized = true;
 static float prev_pos = 0.0f;
 
 extern Sprite* wolfie[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE];
@@ -148,7 +147,6 @@ struct MainMenuContext
     {
         progress = 0;
         
-        resized = true;
         menu_max_scroll = 0;
         menu_smooth_scroll = 0;
         menu_scroll = 0;
@@ -1297,33 +1295,7 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     // shift src horizontally by amount from the current depth
     src_xywh[0] += src_scroll_step * mainmenu_context.menu_depth;
 
-    // now apply smoothing
-    if (!resized)
-    {
-        // float x = prev_pos + (src_xywh[0] - prev_pos)*0.1f;
-        if (src_xywh[0] > prev_pos)
-        {
-            prev_pos += scale * 0.25;
-            if (prev_pos > src_xywh[0])
-                prev_pos = src_xywh[0];
-        }
-
-        if (src_xywh[0] < prev_pos)
-        {
-            prev_pos -= scale * 0.25;
-            if (prev_pos < src_xywh[0])
-                prev_pos = src_xywh[0];
-        }
-
-        src_xywh[0] = prev_pos;
-    }
-    else
-    {
-        // force sync
-        prev_pos = src_xywh[0];
-        resized = false;
-    }
-
+    assert(src_xywh[0]>=0 && src_xywh[0]+src_xywh[2]<360);
     ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 
     // scaleimg could also scale alpha channel into AnsiCell::spare ( 4 x 2bits / AnsiCell )
@@ -1478,7 +1450,6 @@ void MainMenu_Show()
 
 void MainMenu_OnSize(int w, int h, int fw, int fh)
 {
-    resized = true;
     mainmenu_context.OnSize(w,h,fw,fh);
 }
 
