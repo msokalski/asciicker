@@ -528,7 +528,7 @@ Game *TermOpen(A3D_WND *share, float yaw, float pos[3], void (*close)())
 	// TODO SAVE IN SETTINGS ON CLEAN EXIT
 	int rc[] = {1920 + 800, 300, 800, 600};
 	gd.wnd_mode = A3D_WND_NORMAL;
-	gd.wnd_xywh = rc;
+	gd.wnd_xywh = 0;// rc;
 
 	A3D_WND *wnd = a3dOpen(&pi, &gd, share);
 

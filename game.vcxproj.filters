@@ -170,6 +170,9 @@
     <ClCompile Include="game_api.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="mainmenu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="makefile_game" />

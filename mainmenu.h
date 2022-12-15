@@ -3,7 +3,7 @@
 
 #include "game.h"
 
-#if not defined EDITOR && not defined SERVER
+#if !defined EDITOR && !defined SERVER
 
 int LoadMainMenuSprites(const char* base_path);
 void FreeMainMenuSprites();
