@@ -27,8 +27,6 @@ static bool mainmenu_shot = false;
 static const int mainmenu_dither_hidden = 20;
 static int mainmenu_dither = mainmenu_dither_hidden * 2;
 
-static float prev_pos = 0.0f;
-
 extern Sprite* wolfie[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE];
 extern Sprite* player[2][ARMOR::SIZE][HELMET::SIZE][SHIELD::SIZE][WEAPON::SIZE];
 
@@ -1086,6 +1084,18 @@ void LoadGame(MainMenuContext* mmc)
     float pos[3] = {0,15,0};
     float lt[4] = {1,0,1,.5};
 
+    /*
+        NEW mmc->progress steps:
+        0: request to download a3d will be sent, mmc->progress is changed to 1
+        1: awaiting for a3d download complete -> 2 or error -> (0 with cleanup)
+            // todo: later
+            2: verify which meshes need to be downloaded, prepare the list and fetch all -> 3
+            3: awaiting for meshes, if all completed -> 4, if any error -> (0 with cleanup)
+        4: rebuild world -> 5
+        5: keeps updating terrain darks, when completed -> 6
+        6: init game -> 0
+    */
+
     // if this is first call
     if (mmc->progress == 0)
     {
@@ -1295,7 +1305,7 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     // shift src horizontally by amount from the current depth
     src_xywh[0] += src_scroll_step * mainmenu_context.menu_depth;
 
-    assert(src_xywh[0]>=0 && src_xywh[0]+src_xywh[2]<360);
+    assert(src_xywh[0]>=0 && src_xywh[0]+src_xywh[2]<=360);
     ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 
     // scaleimg could also scale alpha channel into AnsiCell::spare ( 4 x 2bits / AnsiCell )
@@ -1535,7 +1545,7 @@ void MainMenu_OnMouse(GAME_MOUSE mouse, int x, int y)
 		}
     }
     else
-    if (game_loading==0 || game_loading==2)    
+    if (game_loading==0 || game_loading==2)
         mainmenu_context.OnMouse(mouse,x,y);
 }
 
@@ -1572,19 +1582,19 @@ void MainMenu_OnFocus(bool set)
 
 void MainMenu_OnPadMount(bool connect)
 {
-    if (game_loading==0 || game_loading==2)    
+    if (!show_gamepad && (game_loading==0 || game_loading==2))
         mainmenu_context.OnPadMount(connect);
 }
 
 void MainMenu_OnPadButton(int b, bool down)
 {
-    if (game_loading==0 || game_loading==2)    
+    if (!show_gamepad && (game_loading==0 || game_loading==2))
         mainmenu_context.OnPadButton(b,down);
 }
 
 void MainMenu_OnPadAxis(int a, int16_t pos)
 {
-    if (game_loading==0 || game_loading==2)    
+    if (!show_gamepad && (game_loading==0 || game_loading==2))
         mainmenu_context.OnPadAxis(a,pos);
 }
 
