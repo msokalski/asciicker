@@ -1260,104 +1260,116 @@ void MainMenu_Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
     // ensure there's enough horizontal source space
     // for all menu depths
 
-    // note scrolling disabled (scroll_step=0)
-    // no need it, we have disolve transition
-    int max_depth = 3; // scan it!
-    int scroll_step = 0; // 4 per depth
-    int scroll_width = scroll_step * max_depth;
-
-    // we want to scroll horizontally by scroll_cells of destination surface
-
-    float dst_aspect = (float)(width+scroll_width) / height;
-    float img_aspect = (float)menu_bk_width / menu_bk_height;
-
-    float src_xywh[4];
-    if (dst_aspect > img_aspect)
+    if (width>0 && height>0)
     {
-        src_xywh[2] = menu_bk_width;
-        src_xywh[0] = 0;
-        src_xywh[3] = menu_bk_width / dst_aspect;
-        src_xywh[1] = 0;//0.5f * (menu_bk_height - src_xywh[3]);
-    }
-    else
-    {
-        src_xywh[3] = menu_bk_height;
-        src_xywh[1] = 0;
-        src_xywh[2] = menu_bk_height * dst_aspect;
-        src_xywh[0] = 0.5f * (menu_bk_width - src_xywh[2]);
-    }
+        // note scrolling disabled (scroll_step=0)
+        // no need it, we have disolve transition
+        int max_depth = 3; // scan it!
+        int scroll_step = 0; // 4 per depth
+        int scroll_width = scroll_step * max_depth;
 
-    float scale = src_xywh[3] / height;
+        // we want to scroll horizontally by scroll_cells of destination surface
 
-    // ensure wolfie is visible
-    // (portrait with hi zoom can easily move it outside)
-    float wolfie_x = 112, wolfie_y = 156;
-    const float wolfie_margin = 4 * scale;
-    if (src_xywh[0] > wolfie_x - wolfie_margin)
-        src_xywh[0] = wolfie_x - wolfie_margin;
+        float dst_aspect = (float)(width+scroll_width) / height;
+        float img_aspect = (float)(menu_bk_width-2) / (menu_bk_height-2);
 
-    float src_scroll_step = scroll_step * scale;
-    float src_scroll_width = scroll_width * scale;
+        float src_xywh[4];
+        if (dst_aspect > img_aspect)
+        {
+            src_xywh[2] = menu_bk_width-2;
+            src_xywh[0] = 1;
+            src_xywh[3] = (menu_bk_width-2) / dst_aspect;
+            src_xywh[1] = 1;//0.5f * (menu_bk_height - src_xywh[3]);
+        }
+        else
+        {
+            src_xywh[3] = menu_bk_height-2;
+            src_xywh[1] = 1;
+            src_xywh[2] = (menu_bk_height-2) * dst_aspect;
+            src_xywh[0] = 1 + 0.5f * ((menu_bk_width-2) - src_xywh[2]);
+        }
 
-    // shrink src width to match actual width (without scroll space)
-    src_xywh[2] -= src_scroll_width;
-    
-    // shift src horizontally by amount from the current depth
-    src_xywh[0] += src_scroll_step * mainmenu_context.menu_depth;
+        float scale = src_xywh[3] / height;
 
-    assert(src_xywh[0]>=0 && src_xywh[0]+src_xywh[2]<=360);
-    ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
+        // ensure wolfie is visible
+        // (portrait with hi zoom can easily move it outside)
+        float wolfie_x = 112, wolfie_y = 156;
+        const float wolfie_margin = 4 * scale;
+        if (src_xywh[0] > wolfie_x - wolfie_margin)
+            src_xywh[0] = wolfie_x - wolfie_margin;
 
-    // scaleimg could also scale alpha channel into AnsiCell::spare ( 4 x 2bits / AnsiCell )
-    // so BlitSprite could test it against sprite "distance" (limited to 4 layers)
+        float src_scroll_step = scroll_step * scale;
+        float src_scroll_width = scroll_width * scale;
 
-    // DETERMINE IF WE SHOULD GO FOR SINGLE OR DUAL COLUMN LAYOUT
+        // shrink src width to match actual width (without scroll space)
+        src_xywh[2] -= src_scroll_width;
+        
+        // shift src horizontally by amount from the current depth
+        src_xywh[0] += src_scroll_step * mainmenu_context.menu_depth;
 
-    // AT THE CURRENT LEVEL DETERMINE LONGEST STRING WITH EXTRA SPACING
+        if (src_xywh[0]<1 || src_xywh[0]+src_xywh[2]>menu_bk_width-1 ||
+            src_xywh[1]<1 || src_xywh[1]+src_xywh[3]>menu_bk_height-1)
+        {
+            printf("x1:%f y1:%f x2:%f y2:%f\n", 
+                src_xywh[0],
+                src_xywh[1],
+                src_xywh[0]+src_xywh[2],
+                src_xywh[1]+src_xywh[3]);
+        }
+        //else
+            ScaleImg(menu_bk_img, menu_bk_width, menu_bk_height, src_xywh, ptr, width, height);
 
-    // xform src coords (115x150): 
-    wolfie_y = menu_bk_height - wolfie_y;
+        // scaleimg could also scale alpha channel into AnsiCell::spare ( 4 x 2bits / AnsiCell )
+        // so BlitSprite could test it against sprite "distance" (limited to 4 layers)
 
-    wolfie_x -= src_xywh[0];
-    wolfie_y -= src_xywh[1];
+        // DETERMINE IF WE SHOULD GO FOR SINGLE OR DUAL COLUMN LAYOUT
 
-    wolfie_x /= scale;
-    wolfie_y /= scale;
+        // AT THE CURRENT LEVEL DETERMINE LONGEST STRING WITH EXTRA SPACING
 
-    BlitSprite(ptr, width, height, wolfie[0][1][1][1][0]->atlas + 18, wolfie_x,wolfie_y);
+        // xform src coords (115x150): 
+        wolfie_y = menu_bk_height - wolfie_y;
 
-    BlitSprite(ptr, width, height, player[1][0][0][0][0]->atlas + 18, wolfie_x+6,wolfie_y);     
-    
-    bool logo_space = true;
+        wolfie_x -= src_xywh[0];
+        wolfie_y -= src_xywh[1];
 
-    if (show_gamepad)
-    {
-        // TODO:
-        // determine somehow if we can keep logo or not!!!!
+        wolfie_x /= scale;
+        wolfie_y /= scale;
 
-        // TODO:
-        // also add x,y arguments to PaintGamePad for better centering when 
-        // we have enough space for both the logo and the gamepad
+        BlitSprite(ptr, width, height, wolfie[0][1][1][1][0]->atlas + 18, wolfie_x,wolfie_y);
 
-        SetSpriteDither(mainmenu_dither>>1);
-        PaintGamePad(ptr, width,height, mainmenu_stamp);
-        SetSpriteDither(0);
-    }
-    else
-    if (game_loading != 1) // hide menu while 'loading'
-    {
-        SetSpriteDither(mainmenu_dither>>1);
-        logo_space = mainmenu_context.Paint(ptr,width,height);
-        SetSpriteDither(0);
-    }
+        BlitSprite(ptr, width, height, player[1][0][0][0][0]->atlas + 18, wolfie_x+6,wolfie_y);     
+        
+        bool logo_space = true;
 
-    if (logo_space)
-    {
-        int x = 5, y = height - 5;
-        // Font1Paint(ptr,width,height, x,y, "ASCIICKER", FONT1_GOLD_SKIN);
-        int logo_x = (width - menu_logo_sprite->atlas->width) / 2;
-        // int logo_y = (height - menu_logo_sprite->atlas->height) / 2;
-        BlitSprite(ptr,width,height,menu_logo_sprite->atlas, logo_x,y-menu_logo_sprite->atlas->height/2);
+        if (show_gamepad)
+        {
+            // TODO:
+            // determine somehow if we can keep logo or not!!!!
+
+            // TODO:
+            // also add x,y arguments to PaintGamePad for better centering when 
+            // we have enough space for both the logo and the gamepad
+
+            SetSpriteDither(mainmenu_dither>>1);
+            PaintGamePad(ptr, width,height, mainmenu_stamp);
+            SetSpriteDither(0);
+        }
+        else
+        if (game_loading != 1) // hide menu while 'loading'
+        {
+            SetSpriteDither(mainmenu_dither>>1);
+            logo_space = mainmenu_context.Paint(ptr,width,height);
+            SetSpriteDither(0);
+        }
+
+        if (logo_space)
+        {
+            int x = 5, y = height - 5;
+            // Font1Paint(ptr,width,height, x,y, "ASCIICKER", FONT1_GOLD_SKIN);
+            int logo_x = (width - menu_logo_sprite->atlas->width) / 2;
+            // int logo_y = (height - menu_logo_sprite->atlas->height) / 2;
+            BlitSprite(ptr,width,height,menu_logo_sprite->atlas, logo_x,y-menu_logo_sprite->atlas->height/2);
+        }
     }
 
     if (game_loading == 1)
