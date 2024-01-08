@@ -37,9 +37,11 @@ A3DMAPS=`ls a3d/game_map_y8.a3d`
 MESHES=`ls meshes/*.akm`
 SPRITES=`ls sprites/*.xp`
 SAMPLES=`ls samples/*.ogg`
+PALETTE="palettes/palette.gz"
+MENUIMG="images/menu.png"
 
 #requires bash or zsh
-ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"
+ASSETS="$A3DMAPS"$'\n'"$SAMPLES"$'\n'"$MESHES"$'\n'"$SPRITES"$'\n'"$PALETTE"$'\n'"$MENUIMG"
 
 echo ""
 echo "MAKING audio worklet ..."
@@ -85,6 +87,8 @@ emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
     font1.cpp \
     gamepad.cpp \
     game.cpp \
+    mainmenu.cpp \
+    game_api.cpp \
     game_web.cpp \
     enemygen.cpp \
     world.cpp \
@@ -98,7 +102,7 @@ emcc $INDEX_OPTIMIZE $INDEX_SAFETY \
     tinfl.c \
     -o .web/index.html \
     --shell-file game_web.html \
-    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample","_XOgg"]' \
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_main","_Load","_Render","_Size","_Keyb","_Mouse","_Touch","_Focus","_GamePad","_Join","_Packet","_Audio","_Sample","_XOgg","_akAPI_Call"]' \
     -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
     -s ALLOW_MEMORY_GROWTH=1 \
     --no-heap-copy \
@@ -346,6 +350,4 @@ exit $?
     --preload-file meshes/old-tree-1.akm \
     --preload-file meshes/old-tree-2.akm \
     --preload-file meshes/brick-1.akm \
-    --preload-file meshes/tree-3.akm \
-    --preload-file samples/131660__bertrof__game-sound-correct.ogg \
-    --preload-file samples/13290__schademans__pipe9.ogg
+    --preload-file meshes/tree-3.akm

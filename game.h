@@ -9,10 +9,38 @@
 #include "inventory.h"
 #include "network.h"
 
+enum GAME_KEYB
+{
+	KEYB_DOWN,
+	KEYB_UP,
+	KEYB_CHAR,
+	KEYB_PRESS, // non-char terminal input with modifiers
+};
+
+enum GAME_MOUSE
+{
+	MOUSE_MOVE,
+	MOUSE_LEFT_BUT_DOWN,
+	MOUSE_LEFT_BUT_UP,
+	MOUSE_RIGHT_BUT_DOWN,
+	MOUSE_RIGHT_BUT_UP,
+	MOUSE_MIDDLE_BUT_DOWN,
+	MOUSE_MIDDLE_BUT_UP,
+	MOUSE_WHEEL_DOWN,
+	MOUSE_WHEEL_UP
+};
+
+enum GAME_TOUCH
+{
+	TOUCH_MOVE,
+	TOUCH_BEGIN,
+	TOUCH_END,
+	TOUCH_CANCEL
+};
 
 void Buzz();
 
-void ConvertToCP437(char* cp437, const char* utf8);
+void ConvertToCP437(char* cp437, const char* utf8, int maxlen=-1);
 
 extern char player_name[];
 extern char player_name_cp437[];
@@ -190,6 +218,8 @@ struct Human : Character
 	bool SetArmor(int a);
 	bool SetMount(int m);
 
+	void Say(const char* str, int len, uint64_t stamp);
+
 	TalkBox* talk_box;
 
 	struct Talk
@@ -245,6 +275,8 @@ struct Game
 
 	uint64_t stamp;
 
+	bool main_menu;
+
 	static const int fps_window_size = 100;
 	int fps_window_pos;
 	uint64_t fps_window[fps_window_size];
@@ -252,6 +284,7 @@ struct Game
 	int font_size[2];
 	int render_size[2];
 
+	bool mute;
 	bool perspective;
 	bool blood;
 
@@ -280,8 +313,11 @@ struct Game
 	uint8_t keyb_key[32]; // simulated key presses by touch/mouse
 
 	int water;
+	float light[4];
 	float prev_yaw;
 	float yaw_vel;
+
+	bool prev_grounded; // moved from static Render::prev_grounded
 
 	Renderer* renderer;
 	Physics* physics;
@@ -382,6 +418,11 @@ struct Game
 		int size[2]; // window size (in pixels)
 		bool jump;
 
+		float api_move[3]; // x,y,alpha 
+		// x,y is screen space (rotate it by yaw to set it in world space)
+		// alpha=0 : fully additive, 
+		// alpha=1 : replace
+
 		bool shoot;
 		int shoot_xy[2];
 
@@ -399,35 +440,6 @@ struct Game
 	};
 
 	Input input;
-
-	enum GAME_KEYB
-	{
-		KEYB_DOWN,
-		KEYB_UP,
-		KEYB_CHAR,
-		KEYB_PRESS, // non-char terminal input with modifiers
-	};
-
-	enum GAME_MOUSE
-	{
-		MOUSE_MOVE,
-		MOUSE_LEFT_BUT_DOWN,
-		MOUSE_LEFT_BUT_UP,
-		MOUSE_RIGHT_BUT_DOWN,
-		MOUSE_RIGHT_BUT_UP,
-		MOUSE_MIDDLE_BUT_DOWN,
-		MOUSE_MIDDLE_BUT_UP,
-		MOUSE_WHEEL_DOWN,
-		MOUSE_WHEEL_UP
-	};
-
-	enum GAME_TOUCH
-	{
-		TOUCH_MOVE,
-		TOUCH_BEGIN,
-		TOUCH_END,
-		TOUCH_CANCEL
-	};
 
 	// just accumulates input
 	void OnKeyb(GAME_KEYB keyb, int key);
@@ -474,8 +486,14 @@ struct Game
 	int menu_temp; 
 };
 
-Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp);
+Game* CreateGame();
 void DeleteGame(Game* g);
+
+void WriteConf(Game* g);
+void ReadConf(Game* g);
+
+void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4], uint64_t stamp);
+void FreeGame(Game* g);
 
 void LoadSprites();
 void FreeSprites();
@@ -488,3 +506,5 @@ void GamePadMount(const char* name, int axes, int buttons, const uint8_t map[]);
 void GamePadUnmount();
 void GamePadButton(int b, int16_t pos);
 void GamePadAxis(int a, int16_t pos);
+
+extern uint64_t (*MakeStamp)();

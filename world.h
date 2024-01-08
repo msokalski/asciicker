@@ -36,6 +36,9 @@ Inst* CreateInst(World* w, Sprite* s, int flags, float pos[3], float yaw, int an
 Inst* CreateInst(Mesh* m, int flags, const double tm[16], const char* name, int story_id);
 void DeleteInst(Inst* i);
 
+// for GAMEPLOT/EDITOR
+void SetInstStoryID(Inst* i, int id);
+
 World* GetInstWorld(Inst* i);
 
 Mesh* GetInstMesh(Inst* i);
@@ -95,3 +98,7 @@ void SoftInstAdd(Inst* i);
 void SoftInstDel(Inst* i);
 void HardInstDel(Inst* i);
 
+#ifdef EDITOR
+// used in editor for enemy gen hit testing
+bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float yaw, double p[3], double v[3], double ret[3], bool positive_only);
+#endif

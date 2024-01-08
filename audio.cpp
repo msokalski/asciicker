@@ -18,6 +18,12 @@
 
 #define PLY_TRACKS 16
 
+void AudioMute(bool mute)
+{
+    uint16_t vol = mute ? 0 : 32768;
+	CallAudio((const uint8_t*)&vol, 2);
+}
+
 void AudioWalk(int foot, int volume, const SpriteReq* req, int material)
 {
     // remember previous foot timestamp
@@ -203,7 +209,7 @@ static int FindSample(const char* name, uint32_t* h, int* l)
     if (h)
         *h = hash;
     if (l)
-        *l = n-name;
+        *l = (int)(n-name);
 
     SampleHash* buck = sample_hash[hash&HASH_MAKS];
     while (buck)
@@ -272,7 +278,7 @@ static int LoadSample(const char* name)
     fseek(f,0,SEEK_SET);
 
     uint8_t* data = (uint8_t*)malloc(size);
-    int r = fread(data,1,size,f);
+    int r = (int)fread(data,1,size,f);
     fclose(f);
 
     // decode ogg
@@ -333,6 +339,7 @@ struct PlyTrack
 static PlyTrack ply_track[PLY_TRACKS] = {-1};
 
 static int ply_forest_id = -1;
+static int32_t volume = 32768;
 
 void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
 {
@@ -344,6 +351,12 @@ void DriverAudioCmd(void* userdata, const uint8_t* data, int size)
         // very first command
         ply_forest_id = *(int32_t*)data;
         return;
+    }
+
+    if (size==2)
+    {
+        // set volume
+        volume = (int32_t)*(uint16_t*)data;
     }
 
     if (size>=12) // track, sample, vol
@@ -461,8 +474,8 @@ void DriverAudioCB(void* userdata, int16_t buffer[], int frames)
         int end = lib_sample_len[ply_forest_id];
         for (int i = 0; i < frames; i++) 
         {
-            buffer[2*i] = data[pos*2];
-            buffer[2*i+1] = data[pos*2+1];
+            buffer[2*i] = (data[pos*2] * volume) >> 15;
+            buffer[2*i+1] = (data[pos*2+1] * volume) >> 15;
 
             pos++;
             if (pos == end)
@@ -479,7 +492,7 @@ void DriverAudioCB(void* userdata, int16_t buffer[], int frames)
         const int16_t* data = lib_sample_data[tr->sample_id];
         int len = tr->sample_end; //lib_sample_len[tr->sample_id];
         int pos = tr->sample_pos;
-        int vol = tr->sample_vol;
+        int vol = (tr->sample_vol * volume) >> 15;
         for (int i = 0; i < frames; i++) 
         {
             if (pos==len)
@@ -955,6 +968,13 @@ void CallAudio(const uint8_t* data, int size)
             }
             else
             {
+                // last call to volume is super-importand
+                if ($1 == 2)
+                {
+                    let view = new Uint8Array(Module.HEAPU8.buffer, Module.HEAPU8.byteOffset + $0, $1);
+                    audio_vol_cache = new Uint8Array(view);
+                }
+
                 // very first audio call is essencial
                 // cache it
                 if (!audio_call_cache)
@@ -1036,11 +1056,18 @@ bool InitAudio()
 
                 audio_ctx.resume();
 
+                if (audio_vol_cache)
+                {
+                    audio_port.postMessage(audio_vol_cache);
+                    audio_vol_cache = null;
+                }
+
                 if (audio_call_cache)
                 {
                     audio_port.postMessage(audio_call_cache);
                     audio_call_cache = null;
-                }                
+                }         
+
             });
 
             return ~(audio_ctx.sampleRate | 0);

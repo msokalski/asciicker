@@ -186,13 +186,18 @@ void Inventory::SetFocus(int index)
 	focus = index;
 }
 
-bool Inventory::InsertItem(Item* item, int xy[2])
+bool Inventory::InsertItem(Item* item, int xy[2], const char* desc, const int* story_id)
 {
+	if (!desc)
+		desc = item->proto->desc;
+
 	animate_scroll = true;
 	smooth_scroll = scroll;
 
 	if (my_items >= max_items)
-		return true;
+	{
+		return false;
+	}
 
 	if (item->purpose == Item::OWNED)
 	{
@@ -208,6 +213,11 @@ bool Inventory::InsertItem(Item* item, int xy[2])
 		{
 			if (io->has[i].item == item)
 			{
+				// call api, player is about to take item out of the corspe!
+				// (story_id,x,y, proto->kind, proto->sub, proto->weight, proto->desc)
+				// expect return value to contain desc string, if not use proto->desc
+				// ...
+
 				if (io->has[i].in_use)
 				{
 					assert(h->req.kind == SpriteReq::HUMAN);
@@ -237,11 +247,12 @@ bool Inventory::InsertItem(Item* item, int xy[2])
 
 				item->inst = 0;
 
-				my_item[my_items].story_id = io->has[i].story_id;
+				my_item[my_items].story_id = story_id ? *story_id : io->has[i].story_id;
 				my_item[my_items].xy[0] = xy[0];
 				my_item[my_items].xy[1] = xy[1];
 				my_item[my_items].item = item;
 				my_item[my_items].in_use = false;
+				strncpy(my_item[my_items].desc, desc, 32);
 
 				// set bitmask
 				int x0 = my_item[my_items].xy[0];
@@ -279,11 +290,12 @@ bool Inventory::InsertItem(Item* item, int xy[2])
 	// and will remove it from there and from world
 	// it will also remember we own it
 
-	my_item[my_items].story_id = GetInstStoryID(item->inst);
+	my_item[my_items].story_id = story_id ? *story_id : GetInstStoryID(item->inst);
 	my_item[my_items].xy[0] = xy[0];
 	my_item[my_items].xy[1] = xy[1];
 	my_item[my_items].item = item;
 	my_item[my_items].in_use = false;
+	strncpy(my_item[my_items].desc, desc, 32);
 
 	DeleteInst(item->inst);
 

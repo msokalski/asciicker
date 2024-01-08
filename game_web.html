@@ -5,7 +5,7 @@
 
     <link rel="manifest" href="asciicker.json">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=600" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
     <title>ASCIICKER - Let's kick some ASCII</title>
     <style>
@@ -70,6 +70,7 @@
     </style>
 
     <script type='text/javascript'>
+      "use strict";
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker.register('asciicker.js').then(function (registration) {
@@ -158,12 +159,13 @@
 
 
     <script type='text/javascript'>
-
+      "use strict";
       var audio_ctx = null;
       var audio_cb = null;
       var audio_node = null;
       var audio_port = null;
       var audio_call_cache = null;
+      var audio_vol_cache = null;
 
       function audioResume()
       {
@@ -342,6 +344,7 @@
     </script>
 
     <script type='text/javascript'>
+      "use strict";
 
       var Render = null;
       var Size = null;
@@ -381,7 +384,7 @@
 
       var ak_ratio = 1;
 
-      function Resize(e)
+      function FindFont()
       {
         ak_ratio = 1;
 				
@@ -410,27 +413,87 @@
 
 				var rw = ak_ctx.canvas.width*0.001;
 				var rh = ak_ctx.canvas.height*0.001;
+        
 				var rs = 7.5*Math.sqrt(rw*rw+rh*rh) * ak_ratio;
 
-        ak_font = 0;
+        // 1. find best font regarding window aspect
+        let f = 0;
 				for (var i=1; i<ak_fonts.length; i++)
 				{
-					if (Math.abs(ak_fonts[ak_font].size - rs) > Math.abs(ak_fonts[i].size - rs))
+					if (Math.abs(ak_fonts[f].size - rs) > Math.abs(ak_fonts[i].size - rs))
 					{
-            ak_font = i;
+            f = i;
 					}
         }
 
+        return f;
+      }
+
+      function ZoomIn()
+      {
+        if (ak_font == ak_fonts.length-1)
+          return 0;
+        let f = ak_font;
+        let u = user_zoom;
+        user_zoom = ak_font - FindFont() + 1;
+        Resize(null);
+        if (ak_font == f) // clamped!
+        {
+          user_zoom = u;  // revert!
+          return 0;
+        }
+        return 1;
+      }
+
+      function ZoomOut()
+      {
+        if (ak_font == 0)
+          return 0;
+        let f = ak_font;
+        let u = user_zoom;          
+        user_zoom = ak_font - FindFont() - 1;
+        Resize(null);
+        if (ak_font == f) // clamped!
+        {
+          user_zoom = u;  // revert!
+          return 0;
+        }
+        return 1;
+      }
+
+      function Resize(e)
+      {
+        ak_font = FindFont();
+
+        // 2. apply user glasses
         ak_font += user_zoom;
+
         if (ak_font < 0)
           ak_font = 0;
         if (ak_font >= ak_fonts.length)
           ak_font = ak_fonts.length-1;
 
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+
+        // 3. fix resolutions smaller than 45x36
+        while (ak_font>=1)
+        {
+            let cw,ch;
+            var fw = ak_fonts[ak_font].width >> 4;
+            var fh = ak_fonts[ak_font].height >> 4;
+            cw = Math.floor(w/fw*ak_ratio);
+            ch = Math.floor(h/fh*ak_ratio);
+            if (cw<45 || ch<36)
+              ak_font--;
+            else
+              break;
+        }
+        
         console.log("FONT="+ak_font);
 
         var fw = ak_fonts[ak_font].width >> 4;
-        var fh = ak_fonts[ak_font].height >> 4;
+        var fh = ak_fonts[ak_font].height >> 4;      
 
         if (ak_ratio<1.0)
           Size(w,h, fw/ak_ratio,fh/ak_ratio);
@@ -445,7 +508,7 @@
 		
 				var render_w = Math.floor( display_w / (ak_fonts[ak_font].width >> 4) );
         var render_h = Math.floor( display_h / (ak_fonts[ak_font].height >> 4) );
-        
+
 				if (render_w > ak_max_width)
           render_w = ak_max_width;
 				if (render_h > ak_max_height)
@@ -1340,6 +1403,7 @@
     </div-->
     <!--textarea class="asciicker" id="output" rows="8"></textarea-->
     <script type='text/javascript'>
+      "use strict";
 
       var statusElement = document.getElementById('status');
       var progressElement = document.getElementById('progress');

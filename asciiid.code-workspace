@@ -24,7 +24,27 @@
 			"initializer_list": "cpp",
 			"utility": "cpp",
 			"typeinfo": "cpp",
-			"map": "cpp"
+			"map": "cpp",
+			"__config": "cpp",
+			"typeindex": "cpp",
+			"functional": "cpp",
+			"*.inc": "cpp",
+			"exception": "cpp",
+			"system_error": "cpp",
+			"sstream": "cpp",
+			"numbers": "cpp",
+			"__locale": "cpp",
+			"regex": "cpp",
+			"strstream": "cpp",
+			"atomic": "cpp",
+			"memory": "cpp",
+			"charconv": "cpp",
+			"__node_handle": "cpp",
+			"queue": "cpp",
+			"stack": "cpp",
+			"ios": "cpp",
+			"rope": "cpp",
+			"ostream": "cpp"
 		}
 	}
 }

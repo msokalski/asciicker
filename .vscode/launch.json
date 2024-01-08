@@ -9,11 +9,19 @@
             "type": "cppdbg",
             "request": "launch",
 
-        //   /*
+           /*
+            "program": "${workspaceFolder}/png2xp/png2xp",
+            "args": ["1.plt",
+                     "~/Pictures/Untitled-small.png", 
+                     "~/REXPaint-v1.04/images/gamma-small.xp"],
+            "externalConsole": false,
+           */            
+
+           /*
             "program": "${workspaceFolder}/.run/asciiid",
             "args": [],
             "externalConsole": true,
-        //   */
+           */
 
            /*
            "program": "${workspaceFolder}/.run/game_term",
@@ -27,11 +35,11 @@
             "externalConsole": true,
             */
 
-            /*
+        //    /*
             "program": "${workspaceFolder}/.run/game",
-            "args": ["-term"],
+        //    "args": ["-term"],
             "externalConsole": true,
-            */
+        //    */
 
             /*
             "program": "${workspaceFolder}/.run/game",

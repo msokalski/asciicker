@@ -13,6 +13,11 @@
 #include "gamepad.h"
 #include "audio.h"
 
+#include "game_api.h"
+#include "lexer.h"
+
+#include "mainmenu.h"
+
 uint8_t ConvertToCP437(uint32_t uc)
 {
 	static const uint8_t tab00A1[95]=
@@ -161,12 +166,12 @@ uint8_t ConvertToCP437(uint32_t uc)
 	return cp;
 }
 
-void ConvertToCP437(char* cp437, const char* _utf8)
+void ConvertToCP437(char* cp437, const char* _utf8, int maxlen)
 {
 	const uint8_t* utf8 = (const uint8_t*)_utf8;
 
 	int i=0,j=0;
-	while (1)
+	while (j!=maxlen)
 	{
 		uint32_t uc;
 
@@ -246,19 +251,41 @@ static const int stand_us_per_frame = 30000;
 static const int fall_us_per_frame = 30000;
 static const int attack_us_per_frame = 20000;
 
+// note: outside 16c pal !!!!
+static const uint8_t xd_bck = 16 + 1 * 1 + 1 * 6 + 1 * 36;
+static const uint8_t xd_err = 16 + 1 * 1 + 1 * 6 + 5 * 36;
+static const uint8_t xd_wsp = 16 + 5 * 1 + 5 * 6 + 5 * 36;
+static const uint8_t xd_key = 16 + 5 * 1 + 4 * 6 + 2 * 36;
+static const uint8_t xd_idn = 16 + 5 * 1 + 5 * 6 + 4 * 36;
+static const uint8_t xd_opr = 16 + 5 * 1 + 3 * 6 + 5 * 36;
+static const uint8_t xd_com = 16 + 3 * 1 + 3 * 6 + 3 * 36;
+static const uint8_t xd_str = 16 + 3 * 1 + 4 * 6 + 5 * 36;
+static const uint8_t xd_esc = 16 + 0 * 1 + 3 * 6 + 5 * 36;
+static const uint8_t xd_qmk = 16 + 2 * 1 + 3 * 6 + 5 * 36;
+static const uint8_t xd_rnd = 16 + 1 * 1 + 5 * 6 + 5 * 36;
+static const uint8_t xd_sqr = 16 + 2 * 1 + 5 * 6 + 2 * 36;
+static const uint8_t xd_crl = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t xd_num = 16 + 4 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t xd_tem = 16 + 4 * 1 + 2 * 6 + 4 * 36;
+static const uint8_t xd_fnc = 16 + 1 * 1 + 4 * 6 + 5 * 36;
+static const uint8_t xd_arr = 16 + 3 * 1 + 5 * 6 + 3 * 36;
+
 static const uint8_t black = 16;
 static const uint8_t white =   16 + 5 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t lt_grey = 16 + 3 * 1 + 3 * 6 + 3 * 36;
 static const uint8_t dk_grey = 16 + 2 * 1 + 2 * 6 + 2 * 36;
 static const uint8_t lt_red = 16 + 1 * 1 + 1 * 6 + 5 * 36;
 static const uint8_t dk_red = 16 + 0 * 1 + 0 * 6 + 3 * 36;
-static const uint8_t cyan = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t lt_cyan = 16 + 5 * 1 + 5 * 6 + 1 * 36;
+static const uint8_t dk_cyan = 16 + 3 * 1 + 3 * 6 + 0 * 36;
 static const uint8_t yellow = 16 + 1 * 1 + 5 * 6 + 5 * 36;
 static const uint8_t lt_blue = 16 + 5 * 1 + 1 * 6 + 1 * 36;
 static const uint8_t dk_blue = 16 + 3 * 1 + 0 * 6 + 0 * 36;
 static const uint8_t brown = 16 + 0 * 1 + 2 * 6 + 3 * 36;
 static const uint8_t lt_green = 16 + 1 * 1 + 5 * 6 + 1 * 36;
 static const uint8_t dk_green = 16 + 0 * 1 + 3 * 6 + 0 * 36;
+static const uint8_t dk_magenta = 16 + 3 * 1 + 0 * 6 + 3 * 36;
+static const uint8_t lt_magenta = 16 + 5 * 1 + 1 * 6 + 5 * 36;
 
 extern Terrain* terrain;
 extern World* world;
@@ -300,8 +327,8 @@ bool GetGamePadConfPath(char* path, const char* name, int axes, int buttons)
 	if (!filepart1)
 		filepart1 = filepart2;
 
-	int pos1 = filepart1 - cfg;
-	int pos2 = filepart2 - cfg;
+	int pos1 = (int)(filepart1 - cfg);
+	int pos2 = (int)(filepart2 - cfg);
 	int pos = pos1>pos2 ? pos1 : pos2;
 
 	memcpy(path,cfg,pos+1);
@@ -343,7 +370,7 @@ bool ReadGamePadConf(uint8_t map[256], const char* name, int axes, int buttons)
 		return false;
 
 	int n = 2*axes+buttons;
-	int r = fread(map,1,n,f);
+	int r = (int)fread(map,1,n,f);
 	fclose(f);
 
 	return n==r;
@@ -360,7 +387,7 @@ bool WriteGamePadConf(const uint8_t* map, const char* name, int axes, int button
 		return false;
 
 	int n = 2*axes+buttons;
-	int w = fwrite(map,1,n,f);
+	int w = (int)fwrite(map,1,n,f);
 	fclose(f);
 
 	SyncConf();
@@ -368,19 +395,22 @@ bool WriteGamePadConf(const uint8_t* map, const char* name, int axes, int button
 	return n==w;
 }
 
-
 void ReadConf(Game* g)
 {
 	FILE* f = fopen(GetConfPath(), "rb");
 	if (f)
 	{
 		//printf("ReadConf ok\n");
-		int r = fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
+		int r = (int)fread(g->talk_mem, sizeof(Game::TalkMem), 4, f);
 
-		r = fread(&g->perspective, 1, 1, f);
-		r = fread(&g->blood, 1, 1, f);
+		r = (int)fread(&g->perspective, 1, 1, f);
+		r = (int)fread(&g->blood, 1, 1, f);
+		r = (int)fread(&g->mute, 1, 1, f);
 
 		fclose(f);
+
+		// things to apply immediately!
+		AudioMute(g->mute);
 	}
 	else
 	{
@@ -399,6 +429,7 @@ void WriteConf(Game* g)
 
 		fwrite(&g->perspective, 1, 1, f);
 		fwrite(&g->blood, 1, 1, f);
+		fwrite(&g->mute, 1, 1, f);
 
 		fclose(f);
 	}
@@ -436,7 +467,7 @@ struct HPBar
 			right = 221;
 			lt = lt_blue;
 			dk = dk_blue;
-			ul = cyan;
+			ul = lt_cyan;
 			left_line = 191;
 			right_line = 218;
 		}
@@ -808,7 +839,13 @@ struct TalkBox
 			int width, height, x, y;
 			int span;
 			int rows;
-			static void Print(int dx, int dy, const char* str, int len, void* cookie)
+			bool script;
+			Lexer lex;
+
+			AnsiCell* back[256];
+			int back_pos;			
+
+			static void Print(int dx, int dy, const char* str, int len, void* cookie, bool synth)
 			{
 				Cookie* c = (Cookie*)cookie;
 				if (c->y - dy < 0 || c->y - dy >= c->height)
@@ -816,33 +853,122 @@ struct TalkBox
 
 				AnsiCell* ar = c->ptr + c->x + c->width * (c->y - dy);
 
+				uint8_t fg = white;
+				bool script = c->script;
+
+				static const uint8_t color[]=
+				{
+					xd_wsp,   // white_space,
+					xd_qmk,  // string_delimiter, '' "" ``
+					xd_esc,  // string_escape,
+					xd_err,  // string_error, // \n inside string
+					xd_str,  // string_char, 
+					xd_num,  // number_char,
+					xd_err,  // error_char, // \ outside of string!
+					xd_opr,   // operator_char,
+					xd_idn,   // identifier,
+					xd_key,  // keyword
+					xd_com,  // line_comment,
+					xd_com,  // block_comment,		
+					xd_rnd,  // parenthesis ()
+					xd_sqr,  // parenthesis []
+					xd_crl,  // parenthesis {}
+					xd_tem,  // ${ } in a backtick string (template)
+				};
+
 				for (int i=0; i<len; i++)
 				{
 					if (str[i] == '\n')
 					{
 						for (int x = dx + i; x < c->span; x++)
 						{
+							if (script && !synth)
+							{
+								int mode = c->lex.Get(str[i]);
+								fg = color[mode&0xFF];
+
+								int bk_len = mode>>8;
+								
+								uint8_t back_fg = fg;
+								bool all = true;
+								if ((mode&0xFF)==Lexer::bracket_rnd && bk_len)
+								{
+									all = false;
+									back_fg = xd_fnc;
+								}
+								if ((mode&0xFF)==Lexer::bracket_sqr && bk_len)
+								{
+									all = false;
+									back_fg = xd_arr;
+								}
+
+								for (int bk = 0; bk<bk_len; bk++)
+									if (c->back[(c->back_pos-bk)&0xFF])
+										if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_idn)
+											c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
+							}
+
 							if (x + c->x < 0 || x + c->x >= c->width)
+							{
+								if (script && !synth)
+									c->back[(++c->back_pos)&0xFF]=0;
 								continue;
+							}
 
 							AnsiCell* ac = ar + x;
-							ac->fg = white;							
-							ac->bk = dk_grey;
+							ac->fg = fg;							
+							ac->bk = xd_bck;
 							ac->gl = ' ';
 							ac->spare = 0;
+
+							if (script && !synth)
+								c->back[(++c->back_pos)&0xFF]=ac;
 						}
 						c->rows++;
 						break;
 					}
 
+					if (script && !synth)
+					{
+						int mode = c->lex.Get(str[i]);
+						fg = color[mode&0xFF];
+
+						int bk_len = mode>>8;
+						
+						uint8_t back_fg = fg;
+						bool all = true;
+						if ((mode&0xFF)==Lexer::bracket_rnd && bk_len)
+						{
+							all = false;
+							back_fg = xd_fnc;
+						}
+						if ((mode&0xFF)==Lexer::bracket_sqr && bk_len)
+						{
+							all = false;
+							back_fg = xd_arr;
+						}
+
+						for (int bk = 0; bk<bk_len; bk++)
+							if (c->back[(c->back_pos-bk)&0xFF])
+								if (all || c->back[(c->back_pos-bk)&0xFF]->fg == xd_idn)
+									c->back[(c->back_pos-bk)&0xFF]->fg = back_fg;
+					}
+
 					if (c->x + dx + i < 0 || c->x + dx + i >= c->width)
+					{
+						if (script && !synth)
+							c->back[(++c->back_pos)&0xFF]=0;
 						continue;
+					}
 
 					AnsiCell* ac = ar + i + dx;
-					ac->fg = white;
-					ac->bk = dk_grey;
+					ac->fg = fg;
+					ac->bk = xd_bck;
 					ac->gl = str[i];
 					ac->spare = 0;
+
+					if (script && !synth)
+						c->back[(++c->back_pos)&0xFF]=ac;
 				}
 			}
 		};
@@ -856,7 +982,18 @@ struct TalkBox
 		int lower = y + 1;
 		int upper = y + 4 + size[1];
 
-		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0 };
+
+		int escape = 0;
+		if (len>0 && buf[0]=='\\')
+		{
+			escape++;
+			x--;
+			if (len>1 && buf[1]=='\\')
+				escape++;
+		}
+
+		bool script = escape == 1;
+		Cookie cookie = { this, ptr, width, height, left+2, y + size[1]+2, size[0], 0, script, {/*lexer*/0}, {/*backbuf*/0}, /*backidx*/-1};
 		int bl = Reflow(0, 0, Cookie::Print, &cookie);
 		// assert(bl >= 0);
 
@@ -973,7 +1110,7 @@ struct TalkBox
 			{
 				if (i >= 0 && i < width)
 				{
-					row[i].bk = dk_grey;
+					row[i].bk = xd_bck;
 					row[i].fg = black;
 					row[i].gl = ' ';
 				}
@@ -994,7 +1131,7 @@ struct TalkBox
 
 				if (left + 1 >= 0 && left + 1 < width)
 				{
-					row[left + 1].bk = dk_grey;
+					row[left + 1].bk = xd_bck;
 					row[left + 1].fg = black;
 					row[left + 1].gl = ' ';
 				}
@@ -1016,10 +1153,22 @@ struct TalkBox
 			{
 				if (i >= 0 && i < width)
 				{
-					row[i].bk = dk_grey;
+					row[i].bk = xd_bck;
 					row[i].fg = black;
 					row[i].gl = ' ';
 				}
+			}
+		}
+
+		if (len>0 && buf[0]=='\\')
+		{
+			int qx = left+2 - 1;
+			int qy = y + size[1]+2;
+			if (qx>=0 && qx<width && qy>=0 && qy<height)
+			{
+				AnsiCell* ac = ptr + left+2 - 1 + width * (y + size[1]+2);
+				ac->fg = dk_red;
+				ac->gl = '\\';
 			}
 		}
 
@@ -1067,7 +1216,7 @@ struct TalkBox
 		int _pos[2];
 		int bl = Reflow(0, _pos);
 		assert(bl >= 0);
-		cursor_xy[0] = bl & 0xFF;
+		cursor_xy[0] = (int8_t)(bl & 0xFF);
 		cursor_pos = bl >> 8;
 	}
 
@@ -1077,7 +1226,7 @@ struct TalkBox
 		int _pos[2];
 		int bl = Reflow(0, _pos);
 		assert(bl >= 0);
-		cursor_xy[0] = bl & 0xFF;
+		cursor_xy[0] = (int8_t)(bl & 0xFF);
 		cursor_pos = bl >> 8;
 	}
 
@@ -1105,13 +1254,16 @@ struct TalkBox
 	{
 		if (dy < 0 && cursor_xy[1]>0 || dy > 0 && cursor_xy[1] < size[1] - 1)
 		{
+			if (cursor_xy[0]<0)
+				cursor_xy[0]=0;
+
 			cursor_xy[1] += dy;
 			assert(cursor_xy[1]>=0 && cursor_xy[1] < size[1]);
 
 			int bl = Reflow(0, 0);
 			assert(bl>=0);
 			cursor_pos = bl>>8;
-			cursor_xy[0] = bl&0xFF;
+			cursor_xy[0] = (int8_t)(bl&0xFF);
 		}
 	}
 	
@@ -1201,7 +1353,7 @@ struct TalkBox
 	// returns -1 on overflow, otherwise (b<<8) | l 
 	// where l = 'current line' length and b = buffer offset at 'current line' begining
 	// if _pos is null 'current line' is given directly by cursor_xy[1] otherwise indirectly by cursor_pos
-	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie)=0, void* cookie=0) const
+	int Reflow(int _size[2], int _pos[2], void (*print)(int x, int y, const char* str, int len, void* cookie, bool synth)=0, void* cookie=0) const
 	{
 		// ALWAYS cursor_pos -> _xy={x,y} and _pos={prevline_pos,nextline_pos}
 
@@ -1212,6 +1364,25 @@ struct TalkBox
 		int ret = -2; // reflow ok but cursor_xy[1] too big
 
 		int w = 2;
+
+		int escape = 0;
+		if (len>0 && buf[0]=='\\')
+		{
+			escape++;
+			{
+				// nasty hack
+				// for shifting initial '\' 
+				// over left margin
+				x--;
+				wordlen--;
+			}
+			if (len>1 && buf[1]=='\\')
+				escape++;
+		}
+
+		int c_xy[2] = {cursor_xy[0],cursor_xy[1]};
+		if (c_xy[0]<0 && !escape)
+			c_xy[0]=0;
 
 		// todo:
 		// actually we need to call print() only on y++ and last line!
@@ -1226,18 +1397,16 @@ struct TalkBox
 				cy = y;
 			}
 
-			if (y==cursor_xy[1])
+			if (y==c_xy[1])
 			{
-				if (x<=cursor_xy[0])
-					ret = (c << 8) | x;
+				if (x<=c_xy[0])
+					ret = (c << 8) | (x&0xFF);
 			}				
 
 			if (buf[c] == ' ')
 			{
 				if (print)
-				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // +1 to include space char
-				}
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, false); // +1 to include space char
 
 				wordlen = 0;
 				x++;
@@ -1248,9 +1417,8 @@ struct TalkBox
 				if (x == max_width)
 				{
 					if (print)
-					{
-						print(x, y, "\n", 1, cookie);
-					}
+						print(x, y, "\n", 1, cookie, true);
+
 					x = 0;
 					y++;
 
@@ -1262,9 +1430,7 @@ struct TalkBox
 			if (buf[c] == '\n')
 			{
 				if (print)
-				{
-					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie); // including '\n'
-				}
+					print(x - wordlen, y, buf + c - wordlen, wordlen+1, cookie, false); // including '\n'
 
 				if (x >= w) // moved
 					w = x+1;
@@ -1281,19 +1447,19 @@ struct TalkBox
 				{
 					if (x == wordlen) // break the word!
 					{
-						if (y==cursor_xy[1])
+						if (y==c_xy[1])
 						{
 							// overwrite possibly bigger ret!
-							if ((x-1)<=cursor_xy[0])
-								ret = ((c-1) << 8) | (x-1);
+							if ((x-1)<=c_xy[0])
+								ret = ((c-1) << 8) | ((x-1)&0xFF);
 						}
 
 						w = max_width;
 
 						if (print)
 						{
-							print(0, y, buf+c-wordlen, wordlen, cookie);
-							print(x, y, "\n", 1, cookie);
+							print(0, y, buf+c-wordlen, wordlen, cookie, false);
+							print(x, y, "\n", 1, cookie, true);
 						}
 
 						wordlen = 0;
@@ -1308,17 +1474,15 @@ struct TalkBox
 					}
 					else // try wrapping the word
 					{
-						if (y==cursor_xy[1])
+						if (y==c_xy[1])
 						{
 							// overwrite possibly bigger ret!
-							if ((x - wordlen - 1)<=cursor_xy[0])
-								ret = ((c-wordlen-1) << 8) | (x-wordlen-1);
+							if ((x - wordlen - 1)<=c_xy[0])
+								ret = ((c-wordlen-1) << 8) | ((x-wordlen-1)&0xFF);
 						}
 
 						if (print)
-						{
-							print(x - wordlen, y, "\n", 1, cookie);
-						}
+							print(x - wordlen, y, "\n", 1, cookie, true);
 
 						c -= wordlen+1;
 						wordlen = 0;
@@ -1337,16 +1501,16 @@ struct TalkBox
 			}
 		}
 
-		if (y==cursor_xy[1])
+		if (y==c_xy[1])
 		{
-			if (x<=cursor_xy[0])
-				ret = (len << 8) | x;		
+			if (x<=c_xy[0])
+				ret = (len << 8) | (x&0xFF);		
 		}
 
 		if (print)
 		{
-			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie);
-			print(x, y, "\n", 1, cookie);
+			print(x - wordlen, y, buf + len - wordlen, wordlen, cookie, false);
+			print(x, y, "\n", 1, cookie, true);
 		}
 
 		if (x >= w)
@@ -1362,10 +1526,10 @@ struct TalkBox
 				cy = y;
 			}
 
-			if (y==cursor_xy[1])
+			if (y==c_xy[1])
 			{
-				if (x<=cursor_xy[0])
-					ret = (len << 8) | x;
+				if (x<=c_xy[0])
+					ret = (len << 8) | (x&0xFF);
 			}			
 		}
 
@@ -1392,7 +1556,8 @@ struct TalkBox
 		// this is possible that when pressing backspace
 		// when x=0 and y>0 in last line, we will not reach current line (1)
 		// fix it so caller won't blame us.
-		assert(ret>=0 || y<cursor_xy[1]);
+
+		assert(ret>=0 || y<c_xy[1]);
 
 		return ret;
 	}
@@ -2492,7 +2657,7 @@ struct Keyb
 
 		// shift modifies appeariance of space->BS and enter->LF, (possibly caps az->AZ)
 		bool shift_on = key[A3D_LSHIFT >> 3] & (1 << (A3D_LSHIFT & 7));
-		shift_on |= key[A3D_RSHIFT >> 3] & (1 << (A3D_RSHIFT & 7));
+		shift_on |= (bool)(key[A3D_RSHIFT >> 3] & (1 << (A3D_RSHIFT & 7)));
 
 
 		int sprite_w = 2 * (width - 1) / 21 + 1;
@@ -2760,9 +2925,9 @@ Sprite* LoadSpriteBP(const char* name, const uint8_t* recolor, bool detached)
 	char path[1024];
 	sprintf(path,"%ssprites/%s", base_path, name);
 
-#ifdef EDITOR
-	recolor = 0;
-#endif
+//#ifdef EDITOR
+//	recolor = 0;
+//#endif
 	return LoadSprite(path,name,recolor,detached);
 }
 
@@ -2777,6 +2942,8 @@ void LoadSprites()
 	// load other sprtes...
 	LoadFont1();
 	LoadGamePad();
+
+	LoadMainMenuSprites(base_path);
 
 	// main buts
 	character_button = LoadSpriteBP("character.xp", 0, false);
@@ -3134,23 +3301,37 @@ void FreeSprites()
 	FreeFont1();
 	FreeGamePad();
 
+	FreeMainMenuSprites();
+
 	// handles double refs but not sprite prefs!
 	while (Sprite* s = GetFirstSprite())
 		FreeSprite(s);
 }
 
-Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
+// TODO:
+// CreateGame will be called before loading world !!!
+void InitGame(Game* g, int water, float pos[3], float yaw, float dir, float lt[4], uint64_t stamp)
 {
-	// load defaults
-	Game* g = (Game*)malloc(sizeof(Game));
-	memset(g, 0, sizeof(Game));
-
 	g->menu_depth = -1;
 
 	g->perspective = true;
 	g->blood = true;
 
-	fast_srand(stamp);
+	g->consume_anims = 0;
+	memset(g->consume_anim,0,sizeof(Game::ConsumeAnim)*16);
+	memset(&g->inventory,0,sizeof(Inventory));
+	memset(&g->input,0,sizeof(Game::Input));
+	memset(&g->player,0,sizeof(Human));
+
+	g->items_inrange = 0;
+	g->items_count = 0;
+	g->items_ylo = 0;
+	g->items_yhi = 0;
+
+	g->prev_grounded = 0;
+	memset(g->keyb_key,0,32);
+
+	fast_srand((int)stamp);
 
 #ifndef EDITOR
 	EnemyGen* eg = enemygen_head;
@@ -3563,8 +3744,6 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 		server->lag_wait = false;
 	}
 
-	ReadConf(g); 
-
 	g->player.prev = 0;
 	g->player.next = player_head;
 	if (player_head)
@@ -3612,6 +3791,9 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 	g->water = water;
 	g->prev_yaw = yaw;
 
+	for (int i=0; i<4; i++)
+		g->light[i]=lt[i];	
+
 	// fancy part
 	// create player sprite instance inside world but never paint
 	// this is to be used by other clients only!
@@ -3624,10 +3806,38 @@ Game* CreateGame(int water, float pos[3], float yaw, float dir, uint64_t stamp)
 
 	if (!prime_game)
 		prime_game = g;
+}
+
+Game* CreateGame()
+{
+	// load defaults
+	Game* g = (Game*)malloc(sizeof(Game));
+	memset(g, 0, sizeof(Game));
+
+	ReadConf(g); 
+
+	if (!prime_game)
+		prime_game = g;
+
+	#ifdef EDITOR
+	g->main_menu = false;
+	#else
+	g->main_menu = true; // in this case we must not use World / Terrain etc ...
+	MainMenu_Show();
+	#endif
+
 	return g;
 }
 
 void DeleteGame(Game* g)
+{
+	if (prime_game == g)
+		prime_game = 0;
+
+	free(g);
+}
+
+void FreeGame(Game* g)
 {
 	if (g)
 	{
@@ -3694,8 +3904,6 @@ void DeleteGame(Game* g)
 			h = n;
 		}
 		#endif
-
-		free(g);
 	}
 }
 
@@ -3713,7 +3921,29 @@ void Game::CancelItemContacts()
 
 void Game::ExecuteItem(int my_item)
 {
-	Item* item = inventory.my_item[my_item].item;
+	Inventory::MyItem* mi = inventory.my_item + my_item;
+	Item* item = mi->item;
+
+	bool allowed = false;
+	int story_id;
+	const char* desc;
+	bool called = akAPI_OnItem(
+		mi->in_use ? 'U'/*inuse->[U]nequip*/ : 'E',/*notused->[E]quip/consume*/
+		mi->story_id,
+		item->proto->kind,
+		item->proto->sub_kind,
+		item->proto->weight,
+		mi->desc,
+		&allowed,
+		&story_id,
+		&desc);
+
+	if (called)
+	{
+		if (!allowed)
+			return;
+	}
+
 	switch (item->proto->kind)
 	{
 		case 'F': // food
@@ -3746,6 +3976,7 @@ void Game::ExecuteItem(int my_item)
 
 		case 'R':
 		{
+			// invoke 
 			inventory.my_item[my_item].in_use = !inventory.my_item[my_item].in_use;
 			break;
 		}
@@ -4135,8 +4366,25 @@ bool Game::PickItem(Item* item)
 			if (!ok)
 				continue;
 
+			const char* desc = item->proto->desc;
+			int story_id = GetInstStoryID(item->inst);
+			bool allowed = false;
+			bool called = akAPI_OnItem(
+				'P', // PICK
+				story_id,
+				item->proto->kind,
+				item->proto->sub_kind,
+				item->proto->weight,
+				desc, &allowed, &story_id, &desc);
+
+			if (called)
+			{
+				if (!allowed)
+					return false;
+			}
+
 			int xy[2] = { x,y };
-			inventory.InsertItem(item, xy);
+			inventory.InsertItem(item, xy, desc, &story_id);
 
 			return true;
 		}
@@ -4149,7 +4397,7 @@ bool Game::DropItem(int index)
 	// automatically calculates pos[3]
 
 	assert(index >= 0 && index < inventory.my_items);
-	float ang = rand() % 360;
+	float ang = (float)(rand() % 360);
 
 	double ret[4];
 	double dpos[3] =
@@ -4188,6 +4436,26 @@ bool Game::DropItem(int index)
 			+(float)dpos[1],
 			+(float)z
 		};
+
+		Inventory::MyItem* mi = inventory.my_item + index;
+
+		bool allowed;
+		int story_id;
+		bool called = akAPI_OnItem(
+			'D', //DROP
+			mi->story_id,
+			mi->item->proto->kind,
+			mi->item->proto->sub_kind,
+			mi->item->proto->weight,
+			mi->desc,
+			&allowed,&story_id,0);
+
+		if (called)
+		{
+			// check if we can proceed
+			if (!allowed)
+				return false;
+		}
 
 		inventory.RemoveItem(index, _pos, prev_yaw);
 	}
@@ -4445,6 +4713,67 @@ bool Human::SetMount(int m)
 	return true;
 }
 
+void Human::Say(const char* str, int len, uint64_t stamp)
+{
+	Human& player = *this;
+
+	// immediate post
+	TalkBox* box = 0;
+	if (player.talks == 3)
+	{
+		box = player.talk[0].box;
+		player.talks--;
+		for (int i = 0; i < player.talks; i++)
+			player.talk[i] = player.talk[i + 1];
+	}
+	else
+		box = (TalkBox*)malloc(sizeof(TalkBox));
+
+	int lim = len < 256 ? len : 256;
+	memset(box, 0, sizeof(TalkBox));
+	memcpy(box->buf, str, lim);
+	box->len = lim;
+	box->cursor_pos = box->len;
+
+	box->max_width = 33;
+	box->max_height = 0; // 0: off!
+	int s[2], p[2];
+	int bl = box->Reflow(s, p);
+	box->size[0] = s[0];
+	box->size[1] = s[1] < 7 ? s[1] : 7;
+	box->cursor_xy[0] = p[0];
+	box->cursor_xy[1] = p[1];
+
+	if (box->len>1 &&
+		box->buf[0]=='\\' && 
+		box->buf[1]!='\\')
+	{
+		// hacker mode
+		akAPI_Exec(box->buf+1, box->len-1);
+	}
+	else
+	{
+		int idx = player.talks;
+		player.talk[idx].pos[0] = player.pos[0];
+		player.talk[idx].pos[1] = player.pos[1];
+		player.talk[idx].pos[2] = player.pos[2];
+		player.talk[idx].box = box;
+		player.talk[idx].stamp = stamp;
+
+		if (server)
+		{
+			STRUCT_REQ_TALK req_talk = { 0 };
+			req_talk.token = 'T';
+			req_talk.len = player.talk[idx].box->len;
+			memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+			server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+		}				
+
+		ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+		player.talks++;
+	}
+}
+
 void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 {
 	if (server)
@@ -4483,7 +4812,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		KeybAutoRepChar = ch;		
 	}
 
-	int f120 = 1 + (_stamp - stamp) / 8264;
+	int f120 = (int)(1 + (_stamp - stamp) / 8264);
 	TalkBox_blink += f120;
 
 	if (KeybAutoRepChar)
@@ -4508,7 +4837,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	render_size[0] = width;
 	render_size[1] = height;
 
-	float lt[4] = { 1,0,1,0.5 };
+	if (main_menu)
+	{
+		MainMenu_Render(_stamp, ptr, width, height);
+		return;
+	}
+
+	float lt[4] = {light[0],light[1],light[2],light[3]};
 	float n = lt[0] * lt[0] + lt[1] * lt[1] + lt[2] * lt[2];
 	if (n > 0.001)
 	{
@@ -4524,7 +4859,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	io.x_force = 0;
 	io.y_force = 0;
 	io.torque = 0;
-	io.water = water;
+	io.water = (float)water;
 	io.jump = false;
 
 	bool force_handled = false;
@@ -4536,6 +4871,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		switch (input.contact[i].action)
 		{
 			case Input::Contact::FORCE:
+			{
 				assert(!force_handled);
 				force_handled = true;
 				if (i==0)
@@ -4550,8 +4886,17 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					io.x_force = 4 * (input.contact[i].pos[0] - input.contact[i].drag_from[0]) / (float)input.size[0];
 					io.y_force = 4 * (input.contact[i].drag_from[1] - input.contact[i].pos[1]) / (float)input.size[0];
 				}
+
+				float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
+				if (len > 1)
+				{
+					io.x_force /= len;
+					io.y_force /= len;
+				}
+
 				break;
-			
+			}
+
 			case Input::Contact::TORQUE:
 				if (i==0)
 				{
@@ -4569,7 +4914,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					else
 					if (dt > 1)
 						dt = 1;
-					yaw = prev_yaw + yaw_vel*dt;
+					yaw = (float)(prev_yaw + yaw_vel*dt);
 					SetPhysicsYaw(physics, yaw, 0);
 
 					/*
@@ -4593,7 +4938,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		}
 	}
 
-	io.torque = torque_sign < 0 ? -1 : torque_sign > 0 ? +1 : 0;
+	io.torque = (float)(torque_sign < 0 ? -1 : torque_sign > 0 ? +1 : 0);
 
 	if (!player.talk_box) // force & torque with keyboard
 	{
@@ -4605,13 +4950,13 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 			if (show_inventory)
 			{
-				io.x_force = (int)input.IsKeyDown(A3D_D) - (int)input.IsKeyDown(A3D_A);
-				io.y_force = (int)input.IsKeyDown(A3D_W) - (int)input.IsKeyDown(A3D_S);
+				io.x_force = (float)((int)input.IsKeyDown(A3D_D) - (int)input.IsKeyDown(A3D_A));
+				io.y_force = (float)((int)input.IsKeyDown(A3D_W) - (int)input.IsKeyDown(A3D_S));
 			}
 			else
 			{
-				io.x_force = (int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A));
-				io.y_force = (int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S));
+				io.x_force = (float)((int)(input.IsKeyDown(A3D_RIGHT) || input.IsKeyDown(A3D_D)) - (int)(input.IsKeyDown(A3D_LEFT) || input.IsKeyDown(A3D_A)));
+				io.y_force = (float)((int)(input.IsKeyDown(A3D_UP) || input.IsKeyDown(A3D_W)) - (int)(input.IsKeyDown(A3D_DOWN) || input.IsKeyDown(A3D_S)));
 			}
 
 			float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
@@ -4632,8 +4977,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		if (!torque_handled)
 		{
-			io.torque = (int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
-				(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E));
+			io.torque = (float)((int)(input.IsKeyDown(A3D_DELETE) || input.IsKeyDown(A3D_PAGEUP) || input.IsKeyDown(A3D_F1) || input.IsKeyDown(A3D_Q)) -
+				(int)(input.IsKeyDown(A3D_INSERT) || input.IsKeyDown(A3D_PAGEDOWN) || input.IsKeyDown(A3D_F2) || input.IsKeyDown(A3D_E)));
 
 			//io.torque = 1;
 			//io.y_force = 1;
@@ -4644,6 +4989,9 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		io.torque += (input.pad_axis[4] - input.pad_axis[5]) / 1024 / 32.0f;
 
 	io.jump = input.jump;
+
+	io.x_force = io.x_force * (1-input.api_move[2]) + input.api_move[0];
+	io.y_force = io.y_force * (1-input.api_move[2]) + input.api_move[1];	
 
 	if (player.req.action == ACTION::FALL || 
 		player.req.action == ACTION::STAND ||
@@ -4665,14 +5013,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	// blocked by enemies? (closest one)
 	// ...
 
-	static bool prev_grounded = false;
-
 	if (prev_grounded && player.req.mount == MOUNT::BEE)
 	{
 		float len = sqrtf(io.x_force*io.x_force + io.y_force*io.y_force);
 		if (len > 0.5f)
 		{
-			float mul = 0.5 / len;
+			float mul = 0.5f / len;
 			io.x_force *= mul;
 			io.y_force *= mul;
 		}
@@ -4710,7 +5056,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				pio.x_force = 0;
 				pio.y_force = 0;
 				pio.torque = 0;
-				pio.water = water;
+				pio.water = (float)water;
 				pio.jump = false;
 
 				if (h->target)
@@ -4758,7 +5104,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									stamp >  500000 + h->shoot_by_stamp &&
 									stamp < 5000000 + h->shoot_by_stamp)
 								{
-									d *= 0.2;
+									d *= 0.2f;
 								}
 
 								if (!enemy_ch || d * (h2->followers + 4) < enemy_cd*(enemy_cf + 4))
@@ -4830,8 +5176,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 						if (d < 10)
 						{
-							dx *= 0.7;
-							dy *= 0.7;
+							dx *= 0.7f;
+							dy *= 0.7f;
 						}
 
 						distance = d;
@@ -4880,8 +5226,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 										x1[0] *= d / len;
 										x1[1] *= d / len;
 
-										pio.x_force = 0.1*x1[0];
-										pio.y_force = 0.1*x1[1];
+										pio.x_force = 0.1f*x1[0];
+										pio.y_force = 0.1f*x1[1];
 									}
 								}
 							}
@@ -5048,7 +5394,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 								// SWOOSH:                                                    <--------->
 								static const int frames[] = { 7,7,7,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,5,5,5, 5,5,5,5,5,5,5,5,5,5,5,5, 6,6,6,6,6,6,6 };
-								int frame_index = (_stamp - h->action_stamp) / attack_us_per_frame;
+								int frame_index = (int)((_stamp - h->action_stamp) / attack_us_per_frame);
 
 								if (frame_index > 21 && !h->hit_tested)
 								{
@@ -5069,7 +5415,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 											{
 												h->target->leak += (hp - h->target->HP) / 5;
 
-												float r = fast_rand() % 20 * 0.1f + 0.6;
+												float r = fast_rand() % 20 * 0.1f + 0.6f;
 												if (hp > 0 && h->target->HP <= 0)
 													r = fmaxf(r,2.5f);
 
@@ -5094,7 +5440,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 												}
 												else
 												{
-													h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+													h->target->dir = (float)(atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90);
 													Physics* p = (Physics*)h->target->data;
 													SetPhysicsDir(p, h->target->dir);
 
@@ -5122,7 +5468,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 							{
 								// just delay
 								//static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-								int frame_index = (_stamp - h->action_stamp) / attack_us_per_frame;
+								int frame_index = (int)((_stamp - h->action_stamp) / attack_us_per_frame);
 
 								// if frameindex jumps from first half to second half of frames
 								// sample scene at hit location, if theres something emit particles in color(s) of hit object
@@ -5148,7 +5494,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					case ACTION::FALL:
 					{
 						// animate, check if finished -> stay at last frame
-						int frame = (_stamp - h->action_stamp) / stand_us_per_frame;
+						int frame = (int)((_stamp - h->action_stamp) / stand_us_per_frame);
 						assert(frame >= 0);
 						if (frame >= h->sprite->anim[h->anim].length)
 							h->SetActionDead(_stamp);
@@ -5160,7 +5506,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					case ACTION::STAND:
 					{
 						// animate, check if finished -> switch to NONE
-						int frame = (_stamp - h->action_stamp) / stand_us_per_frame;
+						int frame = (int)((_stamp - h->action_stamp) / stand_us_per_frame);
 						assert(frame >= 0);
 						if (frame >= h->sprite->anim[h->anim].length)
 							h->SetActionNone(_stamp);
@@ -5199,7 +5545,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 					// force direction
 					float dx = h->target->pos[0] - pio.pos[0];
 					float dy = h->target->pos[1] - pio.pos[1];
-					pio.player_dir = atan2(dy, dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+					pio.player_dir = (float)(atan2(dy, dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90);
 				}
 
 				h->pos[0] = pio.pos[0];
@@ -5234,7 +5580,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 					// SWOOSH:                                                    <--------->
 					static const int frames[] = { 7,7,7,1,1,1,0,0,0,0,0,0,0,0, 0,1,2,3,4,4,4,5,5,5, 5,5,5,5,5,5,5,5,5,5,5,5, 6,6,6,6,6,6,6 };
-					int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
+					int frame_index = (int)((_stamp - player.action_stamp) / attack_us_per_frame);
 
 					Character* h = &player;
 					if (frame_index > 21 && !h->hit_tested)
@@ -5259,7 +5605,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									if (dd < /*3 * 3*/ 4*4) // player's sword a bit longer
 									{
 										// check if direction is in +/-22.5deg
-										float dif = atan2(dy, dx) * 180 / M_PI + 90 - h->dir;
+										float dif = (float)(atan2(dy, dx) * 180 / M_PI + 90 - h->dir);
 										dif = fmodf(dif, 360);
 										if (dif < -180)
 											dif += 360;
@@ -5299,7 +5645,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 								{
 									h->target->leak += (hp - h->target->HP) / 5;
 
-									float r = fast_rand() % 20 * 0.1f + 0.6;
+									float r = fast_rand() % 20 * 0.1f + 0.6f;
 									if (hp > 0 && h->target->HP <= 0)
 										r = fmaxf(r, 2.5f);
 
@@ -5324,7 +5670,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 									}
 									else
 									{
-										h->target->dir = atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90;
+										h->target->dir = (float)(atan2(-dy, -dx) * 180 / M_PI /* + phys->yaw == ZERO*/ + 90);
 										Physics* p = (Physics*)h->target->data;
 										SetPhysicsDir(p, h->target->dir);
 
@@ -5347,7 +5693,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				{
 					// just delay
 					//static const int frames[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-					int frame_index = (_stamp - player.action_stamp) / attack_us_per_frame;
+					int frame_index = (int)((_stamp - player.action_stamp) / attack_us_per_frame);
 
 					// if frameindex jumps from first half to second half of frames
 					// sample scene at hit location, if theres something emit particles in color(s) of hit object
@@ -5376,7 +5722,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		case ACTION::FALL:
 		{
 			// animate, check if finished -> stay at last frame
-			int frame = (_stamp - player.action_stamp) / stand_us_per_frame;
+			int frame = (int)((_stamp - player.action_stamp) / stand_us_per_frame);
 			assert(frame >= 0);
 			if (frame >= player.sprite->anim[player.anim].length)
 				player.SetActionDead(_stamp);
@@ -5388,7 +5734,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		case ACTION::STAND:
 		{
 			// animate, check if finished -> switch to NONE
-			int frame = (_stamp - player.action_stamp) / stand_us_per_frame;
+			int frame = (int)((_stamp - player.action_stamp) / stand_us_per_frame);
 			assert(frame >= 0);
 			if (frame >= player.sprite->anim[player.anim].length)
 				player.SetActionNone(_stamp);
@@ -5447,7 +5793,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 	int ss[2] = { scene_shift/2 , 0 };
 
-	::Render(renderer, _stamp, terrain, world, water, 1.0, io.yaw, io.pos, lt,
+	::Render(renderer, _stamp, terrain, world, (float)water, 1.0f, io.yaw, io.pos, lt,
 		width, height, ptr, player_inst, ss, perspective);
 
 	if (input.shoot /*&& !player.shooting*/ && 
@@ -5478,7 +5824,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				// check min dist, max dist and max slope
 				if (d >= 2*2 + 2*2 && d < 30*30 + 30*30 && dz*dz < d*8*8 )
 				{
-					float a = atan2(dy, dx) * 180 / M_PI + 90;
+					float a = (float)(atan2(dy, dx) * 180 / M_PI + 90);
 					float da = a - player.dir;
 					
 					da = fmodf(da, 360);
@@ -5531,8 +5877,8 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				}
 				else
 				{
-					player.shoot_to[0] = player.pos[0] * HEIGHT_CELLS + 1000 * cos((player.dir - 90) * M_PI / 180);
-					player.shoot_to[1] = player.pos[1] * HEIGHT_CELLS + 1000 * sin((player.dir - 90) * M_PI / 180);
+					player.shoot_to[0] = (float)(player.pos[0] * HEIGHT_CELLS + 1000 * cos((player.dir - 90) * M_PI / 180));
+					player.shoot_to[1] = (float)(player.pos[1] * HEIGHT_CELLS + 1000 * sin((player.dir - 90) * M_PI / 180));
 					player.shoot_to[2] = player.pos[2] + 40;
 				}
 
@@ -5578,15 +5924,15 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 				if (inst || ground)
 				{
-					float dx = r1[0] * HEIGHT_CELLS - player.shoot_from[0];
-					float dy = r1[1] * HEIGHT_CELLS - player.shoot_from[1];
+					float dx = (float)(r1[0] * HEIGHT_CELLS - player.shoot_from[0]);
+					float dy = (float)(r1[1] * HEIGHT_CELLS - player.shoot_from[1]);
 					
 					if (dx*dx + dy * dy < _dist * HEIGHT_CELLS * HEIGHT_CELLS)
 					{
 						hit = false;
-						player.shoot_to[0] = r1[0] * HEIGHT_CELLS;
-						player.shoot_to[1] = r1[1] * HEIGHT_CELLS;
-						player.shoot_to[2] = r1[2];
+						player.shoot_to[0] = (float)(r1[0] * HEIGHT_CELLS);
+						player.shoot_to[1] = (float)(r1[1] * HEIGHT_CELLS);
+						player.shoot_to[2] = (float)(r1[2]);
 					}
 				}
 
@@ -5714,7 +6060,16 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 	if (input.shoot)
 		input.shoot = false;
 
+
+	bool called = akAPI_OnFrame();
+
 	Item** inrange = GetNearbyItems(renderer);
+
+	// TODO: 
+	// add GetNearbyStoryThings (that are not items and have story_id>=0)
+	// for every story thing in range, ask story teller for interact sprite
+	// being displayed in the pick-up list (if returned not null)
+	// if selected, notify story teller about it!
 
 	{
 		AnsiCell status;
@@ -5803,7 +6158,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			for (int i = 0; i < human->talks; i++)
 			{
 				int speed = 100000 + human->talk[i].box->len*400000/255; // 100000 for len=0 , 500000 for len=255
-				int elaps = stamp - human->talk[i].stamp;
+				int elaps = (int)(stamp - human->talk[i].stamp);
 				int dy = elaps / speed; // 10 dy per sec (len=0)
 			
 				if (dy <= 30)
@@ -5936,7 +6291,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 		for (int i = 0; i < consume_anims; i++)
 		{
 			ConsumeAnim* a = consume_anim + i;
-			int elaps = (_stamp - a->stamp) / 50000; // 20 frames a sec (0.25 sec duration for 5x5 sprite)
+			int elaps = (int)((_stamp - a->stamp) / 50000); // 20 frames a sec (0.25 sec duration for 5x5 sprite)
 			int max_elaps = a->sprite->atlas->height;
 			if (elaps >= max_elaps)
 			{
@@ -5989,6 +6344,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 
 		int focus_rect[4];
 		Item* focus_item = 0;
+		const char* item_desc = 0;
 		for (int i = 0; i < inventory.my_items; i++)
 		{
 			int ix = inventory.layout_x + inventory.my_item[i].xy[0]*4 + 4;
@@ -6042,6 +6398,7 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 				focus_rect[2] = isf->width + 2;
 				focus_rect[3] = isf->height + 2;
 				focus_item = inventory.my_item[i].item;
+				item_desc = inventory.my_item[i].desc;
 			}
 			else
 				PaintFrame(ptr, width, height, ix - 1, iy - 1, isf->width + 2, isf->height + 2, frm_clip, black/*fg*/, 255/*bk*/, true/*dbl-line*/,true/*combine*/);
@@ -6053,13 +6410,12 @@ void Game::Render(uint64_t _stamp, AnsiCell* ptr, int width, int height)
 			if (inventory.layout_y + 6 >= 0)
 			{
 				Item* item = focus_item;
-				const char* str = item->proto->desc;
-				for (int s = 0; str[s]; s++)
+				for (int s = 0; s<32 && item_desc[s]; s++)
 				{
 					if (inventory.layout_x + 4 + s >= 0 && inventory.layout_x + 4 + s < width)
 					{
 						AnsiCell* ac = ptr + inventory.layout_x + 4 + s + (inventory.layout_y + 6)*width;
-						ac->gl = str[s];
+						ac->gl = item_desc[s];
 					}
 				}
 			}
@@ -6570,6 +6926,8 @@ void Game::OnSize(int w, int h, int fw, int fh)
 	input.size[1] = h;
 	font_size[0] = fw;
 	font_size[1] = fh;
+
+	MainMenu_OnSize(w,h,fw,fh);
 }
 
 void Game::OnKeyb(GAME_KEYB keyb, int key)
@@ -6592,6 +6950,12 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	}
 
 	// handle layers first ...
+	if (main_menu)
+	{
+		MainMenu_OnKeyb(keyb,key);
+		return;
+	}
+
 	if (menu_depth>=0)
 	{
 		MenuKeyb(keyb,key);
@@ -6700,39 +7064,55 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 							player.talk[i] = player.talk[i + 1];
 					}
 
-					int idx = player.talks;
-					player.talk[idx].box = player.talk_box;
-					player.talk[idx].pos[0] = player.pos[0];
-					player.talk[idx].pos[1] = player.pos[1];
-					player.talk[idx].pos[2] = player.pos[2];
-					player.talk[idx].stamp = stamp;
-
-					if (server)
+					if (player.talk_box->len>1 &&
+						player.talk_box->buf[0]=='\\' && 
+						player.talk_box->buf[1]!='\\')
 					{
-						STRUCT_REQ_TALK req_talk = { 0 };
-						req_talk.token = 'T';
-						req_talk.len = player.talk[idx].box->len;
-						memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-						server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+						// hacker mode
+						akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
 					}
+					else
+					{
+						//ConvertToUTF8((char*)akAPI_Buff,player.talk_box->buf,player.talk_box->len);
+						bool allowed=false;
+						if (!akAPI_OnSay(player.talk_box->buf, player.talk_box->len,&allowed) || allowed)
+						{
+							int idx = player.talks;
+							player.talk[idx].box = player.talk_box;
+							player.talk[idx].pos[0] = player.pos[0];
+							player.talk[idx].pos[1] = player.pos[1];
+							player.talk[idx].pos[2] = player.pos[2];
+							player.talk[idx].stamp = stamp;
 
-					ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-					player.talks++;
+							if (server)
+							{
+								STRUCT_REQ_TALK req_talk = { 0 };
+								req_talk.token = 'T';
+								req_talk.len = player.talk[idx].box->len;
+								memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+								server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+							}
 
-					// alloc new
-					player.talk_box = 0;
+							ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+							player.talks++;
 
-					TalkBox_blink = 32;
-					player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
-					memset(player.talk_box, 0, sizeof(TalkBox));
-					player.talk_box->max_width = 33;
-					player.talk_box->max_height = 7; // 0: off
-					int s[2], p[2];
-					player.talk_box->Reflow(s, p);
-					player.talk_box->size[0] = s[0];
-					player.talk_box->size[1] = s[1];
-					player.talk_box->cursor_xy[0] = p[0];
-					player.talk_box->cursor_xy[1] = p[1];
+							// alloc new
+							player.talk_box = 0;
+
+							TalkBox_blink = 32;
+							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+						}
+						
+						memset(player.talk_box, 0, sizeof(TalkBox));
+						player.talk_box->max_width = 33;
+						player.talk_box->max_height = 7; // 0: off
+						int s[2], p[2];
+						player.talk_box->Reflow(s, p);
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
 				}
 				else
 				{
@@ -6819,10 +7199,33 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0)
 			{
-				// store, even if empty
-				memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
-				talk_mem[mem_idx].len = player.talk_box->len;
-				WriteConf(this);
+				// if +shift then restore!
+				bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
+				if (left_shift || right_shift)
+				{
+					memset(player.talk_box, 0, sizeof(TalkBox));
+					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);
+					player.talk_box->len = talk_mem[mem_idx].len;
+					
+					player.talk_box->max_width = 33;
+					player.talk_box->max_height = 7; // 0: off!
+					int s[2], p[2];
+					if (player.talk_box->Reflow(s, p) >= 0)
+					{
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
+				}
+				else
+				{
+					// store, even if empty
+					memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
+					talk_mem[mem_idx].len = player.talk_box->len;
+					WriteConf(this);
+				}
 			}				
 		}
 		else
@@ -6838,50 +7241,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0 && talk_mem[mem_idx].len > 0)
 			{
-				// immediate post
-				TalkBox* box = 0;
-				if (player.talks == 3)
-				{
-					box = player.talk[0].box;
-					player.talks--;
-					for (int i = 0; i < player.talks; i++)
-						player.talk[i] = player.talk[i + 1];
-				}
-				else
-					box = (TalkBox*)malloc(sizeof(TalkBox));
-
-				memset(box, 0, sizeof(TalkBox));
-				memcpy(box->buf, talk_mem[mem_idx].buf, 256);
-				box->len = talk_mem[mem_idx].len;
-				box->cursor_pos = box->len;
-
-				box->max_width = 33;
-				box->max_height = 7; // 0: off
-				int s[2], p[2];
-				box->Reflow(s, p);
-				box->size[0] = s[0];
-				box->size[1] = s[1];
-				box->cursor_xy[0] = p[0];
-				box->cursor_xy[1] = p[1];
-
-				player.talk[player.talks].pos[0] = player.pos[0];
-				player.talk[player.talks].pos[1] = player.pos[1];
-				player.talk[player.talks].pos[2] = player.pos[2];
-				player.talk[player.talks].box = box;
-				player.talk[player.talks].stamp = stamp;
-
-				if (server)
-				{
-					int idx = player.talks;
-					STRUCT_REQ_TALK req_talk = { 0 };
-					req_talk.token = 'T';
-					req_talk.len = player.talk[idx].box->len;
-					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-				}				
-
-				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-				player.talks++;
+				player.Say(talk_mem[mem_idx].buf, talk_mem[mem_idx].len, stamp);
 			}
 
 			if (show_inventory)
@@ -7090,6 +7450,18 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 	else
 	if (keyb == GAME_KEYB::KEYB_PRESS)
 	{
+		int mods = (key>>8) & 0xFF;
+		key = key & 0xFF;
+
+		if (key == A3D_ESCAPE)
+		{
+			// cancel all contacts
+			for (int i = 0; i < 4; i++)
+			{
+				input.contact[i].action = Input::Contact::NONE;
+			}
+		}
+
 		// it is like a KEYB_CHAR (not producing releases) but for non-printable keys
 		// main input from terminals 
 		// ....
@@ -7125,10 +7497,35 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0)
 			{
-				// store, even if empty
-				memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
-				talk_mem[mem_idx].len = player.talk_box->len;
-				WriteConf(this);
+				// mix of GUI/TERM mods, dirty but works!
+				bool left_shift = ((input.key[A3D_LSHIFT >> 3] | keyb_key[A3D_LSHIFT >> 3]) & (1 << (A3D_LSHIFT & 7))) != 0;
+				bool right_shift = ((input.key[A3D_RSHIFT >> 3] | keyb_key[A3D_RSHIFT >> 3]) & (1 << (A3D_RSHIFT & 7))) != 0;
+
+				// if +shift then restore!
+				if ((mods & 1) || left_shift || right_shift)
+				{
+					memset(player.talk_box, 0, sizeof(TalkBox));
+					memcpy(player.talk_box->buf, talk_mem[mem_idx].buf, 256);
+					player.talk_box->len = talk_mem[mem_idx].len;
+					
+					player.talk_box->max_width = 33;
+					player.talk_box->max_height = 7; // 0: off!
+					int s[2], p[2];
+					if (player.talk_box->Reflow(s, p) >= 0)
+					{
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
+				}
+				else
+				{
+					// store, even if empty
+					memcpy(talk_mem[mem_idx].buf, player.talk_box->buf, 256);
+					talk_mem[mem_idx].len = player.talk_box->len;
+					WriteConf(this);
+				}
 			}
 		}
 		else
@@ -7144,52 +7541,8 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 
 			if (mem_idx >= 0 && talk_mem[mem_idx].len > 0)
 			{
-				// immediate post
-				TalkBox* box = 0;
-				if (player.talks == 3)
-				{
-					box = player.talk[0].box;
-					player.talks--;
-					for (int i = 0; i < player.talks; i++)
-						player.talk[i] = player.talk[i + 1];
-				}
-				else
-					box = (TalkBox*)malloc(sizeof(TalkBox));
-
-				memset(box, 0, sizeof(TalkBox));
-				memcpy(box->buf, talk_mem[mem_idx].buf, 256);
-				box->len = talk_mem[mem_idx].len;
-				box->cursor_pos = box->len;
-
-				box->max_width = 33;
-				box->max_height = 7; // 0: off
-				int s[2], p[2];
-				box->Reflow(s, p);
-				box->size[0] = s[0];
-				box->size[1] = s[1];
-				box->cursor_xy[0] = p[0];
-				box->cursor_xy[1] = p[1];
-
-				player.talk[player.talks].pos[0] = player.pos[0];
-				player.talk[player.talks].pos[1] = player.pos[1];
-				player.talk[player.talks].pos[2] = player.pos[2];
-				player.talk[player.talks].box = box;
-				player.talk[player.talks].stamp = stamp;
-
-				if (server)
-				{
-					int idx = player.talks;
-					STRUCT_REQ_TALK req_talk = { 0 };
-					req_talk.token = 'T';
-					req_talk.len = player.talk[idx].box->len;
-					memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-					server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
-				}				
-
-				ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-				player.talks++;
+				player.Say(talk_mem[mem_idx].buf, talk_mem[mem_idx].len, stamp);
 			}
-
 
 			// simulate key down / up based on a time relaxation
 			// for: QWEASD and cursor keys
@@ -7223,10 +7576,11 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			}
 		}
 
-		if (key == A3D_TAB)
+		//if (key == A3D_TAB)
+		if ((key == A3D_TAB || key == A3D_ESCAPE) /*&& !auto_rep*/)
 		{
 			// HANDLED BY EMULATION!
-			if (!player.talk_box/* && show_buts*/)
+			if (!player.talk_box && key == A3D_TAB/* && show_buts*/)
 			{
 				CancelItemContacts();
 				//show_buts = false;
@@ -7245,6 +7599,86 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 			else
 			{
 				//show_buts = true;
+
+				if (player.talk_box->len > 0 && key == A3D_TAB)
+				{
+					if (player.talks == 3)
+					{
+						free(player.talk[0].box);
+						player.talks--;
+						for (int i = 0; i < player.talks; i++)
+							player.talk[i] = player.talk[i + 1];
+					}
+
+					if (player.talk_box->len>1 &&
+						player.talk_box->buf[0]=='\\' && 
+						player.talk_box->buf[1]!='\\')
+					{
+						// hacker mode
+						akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
+					}
+					else
+					{
+						//ConvertToUTF8((char*)akAPI_Buff,player.talk_box->buf,player.talk_box->len);
+						bool allowed=false;
+						if (!akAPI_OnSay(player.talk_box->buf, player.talk_box->len,&allowed) || allowed)
+						{
+							int idx = player.talks;
+							player.talk[idx].box = player.talk_box;
+							player.talk[idx].pos[0] = player.pos[0];
+							player.talk[idx].pos[1] = player.pos[1];
+							player.talk[idx].pos[2] = player.pos[2];
+							player.talk[idx].stamp = stamp;
+
+							if (server)
+							{
+								STRUCT_REQ_TALK req_talk = { 0 };
+								req_talk.token = 'T';
+								req_talk.len = player.talk[idx].box->len;
+								memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+								server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+							}
+
+							ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+							player.talks++;
+
+							// alloc new
+							player.talk_box = 0;
+
+							TalkBox_blink = 32;
+							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+						}
+						
+						memset(player.talk_box, 0, sizeof(TalkBox));
+						player.talk_box->max_width = 33;
+						player.talk_box->max_height = 7; // 0: off
+						int s[2], p[2];
+						player.talk_box->Reflow(s, p);
+						player.talk_box->size[0] = s[0];
+						player.talk_box->size[1] = s[1];
+						player.talk_box->cursor_xy[0] = p[0];
+						player.talk_box->cursor_xy[1] = p[1];
+					}
+				}
+				else
+				{
+					free(player.talk_box);
+					player.talk_box = 0;
+				}
+
+				if (show_keyb)
+					memset(keyb_key, 0, 32);
+				show_keyb = false;
+				KeybAutoRepChar = 0;
+				KeybAutoRepCap = 0;
+				for (int i=0; i<4; i++)
+				{
+					if (input.contact[i].action == Input::Contact::KEYBCAP)
+						input.contact[i].action = Input::Contact::NONE;
+				}
+
+				#if 0
+				//show_buts = true;
 				free(player.talk_box);
 				player.talk_box = 0;
 				if (show_keyb)
@@ -7257,6 +7691,7 @@ void Game::OnKeyb(GAME_KEYB keyb, int key)
 					if (input.contact[i].action == Input::Contact::KEYBCAP)
 						input.contact[i].action = Input::Contact::NONE;
 				}
+				#endif
 			}
 		}		
 	}
@@ -7689,39 +8124,50 @@ void Game::StartContact(int id, int x, int y, int b)
 										player.talk[i] = player.talk[i + 1];
 								}
 
-								int idx = player.talks;
-								player.talk[idx].box = player.talk_box;
-								player.talk[idx].pos[0] = player.pos[0];
-								player.talk[idx].pos[1] = player.pos[1];
-								player.talk[idx].pos[2] = player.pos[2];
-								player.talk[idx].stamp = stamp;
-
-								if (server)
+								if (player.talk_box->len>1 &&
+									player.talk_box->buf[0]=='\\' && 
+									player.talk_box->buf[1]!='\\')
 								{
-									STRUCT_REQ_TALK req_talk = { 0 };
-									req_talk.token = 'T';
-									req_talk.len = player.talk[idx].box->len;
-									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+									// hacker mode
+									akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
 								}
+								else
+								{
 
-								ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-								player.talks++;
+									int idx = player.talks;
+									player.talk[idx].box = player.talk_box;
+									player.talk[idx].pos[0] = player.pos[0];
+									player.talk[idx].pos[1] = player.pos[1];
+									player.talk[idx].pos[2] = player.pos[2];
+									player.talk[idx].stamp = stamp;
 
-								// alloc new
-								player.talk_box = 0;
+									if (server)
+									{
+										STRUCT_REQ_TALK req_talk = { 0 };
+										req_talk.token = 'T';
+										req_talk.len = player.talk[idx].box->len;
+										memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+										server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+									}
 
-								TalkBox_blink = 32;
-								player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
-								memset(player.talk_box, 0, sizeof(TalkBox));
-								player.talk_box->max_width = 33;
-								player.talk_box->max_height = 7; // 0: off
-								int s[2], p[2];
-								player.talk_box->Reflow(s, p);
-								player.talk_box->size[0] = s[0];
-								player.talk_box->size[1] = s[1];
-								player.talk_box->cursor_xy[0] = p[0];
-								player.talk_box->cursor_xy[1] = p[1];
+									ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+									player.talks++;
+
+									// alloc new
+									player.talk_box = 0;
+
+									TalkBox_blink = 32;
+									player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+									memset(player.talk_box, 0, sizeof(TalkBox));
+									player.talk_box->max_width = 33;
+									player.talk_box->max_height = 7; // 0: off
+									int s[2], p[2];
+									player.talk_box->Reflow(s, p);
+									player.talk_box->size[0] = s[0];
+									player.talk_box->size[1] = s[1];
+									player.talk_box->cursor_xy[0] = p[0];
+									player.talk_box->cursor_xy[1] = p[1];
+								}
 							}
 
 							ch = 0;
@@ -8123,7 +8569,26 @@ void Game::EndContact(int id, int x, int y)
 						int drop_at[2];
 						if (CheckDrop(id, drop_at, 0, render_size[0], render_size[1]))
 						{
-							inventory.InsertItem(items_inrange[i], drop_at);
+							Item* item = items_inrange[i];
+							const char* desc = item->proto->desc;
+							int story_id = GetInstStoryID(item->inst); 
+							bool allowed = false;
+							bool called = akAPI_OnItem(
+								'P', // PICK
+								story_id,
+								item->proto->kind,
+								item->proto->sub_kind,
+								item->proto->weight,
+								desc,
+								&allowed,&story_id,&desc);
+
+							if (called)
+							{
+								if (!allowed)
+									break;
+							}
+
+							inventory.InsertItem(items_inrange[i], drop_at, desc, &story_id);
 						}
 					}
 
@@ -8252,6 +8717,13 @@ void Game::OnMouse(GAME_MOUSE mouse, int x, int y)
 	*/
 
 	// handle layers first ...
+
+	if (main_menu)
+	{
+		MainMenu_OnMouse(mouse,x,y);
+		return;
+	}
+
 	if (menu_depth>=0)
 	{
 		MenuMouse(mouse,x,y);
@@ -8480,6 +8952,13 @@ void Game::OnTouch(GAME_TOUCH touch, int id, int x, int y)
 
 
 	// handle layers first ...
+
+	if (main_menu)
+	{
+		MainMenu_OnTouch(touch,id,x,y);
+		return;
+	}
+
 	if (menu_depth>=0)
 	{
 		MenuTouch(touch,id,x,y);
@@ -8562,6 +9041,11 @@ void Game::OnFocus(bool set)
 		input.size[0] = w;
 		input.size[1] = h;
 	}
+
+	if (main_menu)
+	{
+		MainMenu_OnFocus(set);
+	}
 }
 
 void Game::OnMessage(const uint8_t* msg, int len)
@@ -8585,10 +9069,22 @@ void Game::OnPadMount(bool connect)
 	{
 		MenuPadMount(connect);
 	}
+
+	if (main_menu)
+	{
+		MainMenu_OnPadMount(connect);
+		return;
+	}	
 }
 
 void Game::OnPadButton(int b, bool down)
 {
+	if (main_menu)
+	{
+		MainMenu_OnPadButton(b,down);
+		return;
+	}	
+
 	if (show_gamepad)
 	{
 		return;
@@ -8936,39 +9432,50 @@ void Game::OnPadButton(int b, bool down)
 									player.talk[i] = player.talk[i + 1];
 							}
 
-							int idx = player.talks;
-							player.talk[idx].box = player.talk_box;
-							player.talk[idx].pos[0] = player.pos[0];
-							player.talk[idx].pos[1] = player.pos[1];
-							player.talk[idx].pos[2] = player.pos[2];
-							player.talk[idx].stamp = stamp;
-
-							if (server)
+							if (player.talk_box->len>1 &&
+								player.talk_box->buf[0]=='\\' && 
+								player.talk_box->buf[1]!='\\')
 							{
-								STRUCT_REQ_TALK req_talk = { 0 };
-								req_talk.token = 'T';
-								req_talk.len = player.talk[idx].box->len;
-								memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
-								server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+								// hacker mode
+								akAPI_Exec(player.talk_box->buf+1, player.talk_box->len-1);
 							}
+							else
+							{
+								int idx = player.talks;
+								player.talk[idx].box = player.talk_box;
+								player.talk[idx].pos[0] = player.pos[0];
+								player.talk[idx].pos[1] = player.pos[1];
+								player.talk[idx].pos[2] = player.pos[2];
+								player.talk[idx].stamp = stamp;
 
-							ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
-							player.talks++;
 
-							// alloc new
-							player.talk_box = 0;
+								if (server)
+								{
+									STRUCT_REQ_TALK req_talk = { 0 };
+									req_talk.token = 'T';
+									req_talk.len = player.talk[idx].box->len;
+									memcpy(req_talk.str, player.talk[idx].box->buf, player.talk[idx].box->len);
+									server->Send((const uint8_t*)&req_talk, 4 + req_talk.len);
+								}
 
-							TalkBox_blink = 32;
-							player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
-							memset(player.talk_box, 0, sizeof(TalkBox));
-							player.talk_box->max_width = 33;
-							player.talk_box->max_height = 7; // 0: off
-							int s[2], p[2];
-							player.talk_box->Reflow(s, p);
-							player.talk_box->size[0] = s[0];
-							player.talk_box->size[1] = s[1];
-							player.talk_box->cursor_xy[0] = p[0];
-							player.talk_box->cursor_xy[1] = p[1];
+								ChatLog("%s : %.*s\n", player.name, player.talk[player.talks].box->len, player.talk[player.talks].box->buf);
+								player.talks++;
+
+								// alloc new
+								player.talk_box = 0;
+
+								TalkBox_blink = 32;
+								player.talk_box = (TalkBox*)malloc(sizeof(TalkBox));
+								memset(player.talk_box, 0, sizeof(TalkBox));
+								player.talk_box->max_width = 33;
+								player.talk_box->max_height = 7; // 0: off
+								int s[2], p[2];
+								player.talk_box->Reflow(s, p);
+								player.talk_box->size[0] = s[0];
+								player.talk_box->size[1] = s[1];
+								player.talk_box->cursor_xy[0] = p[0];
+								player.talk_box->cursor_xy[1] = p[1];
+							}
 						}
 						break;
 					}	
@@ -9025,6 +9532,12 @@ void Game::OnPadButton(int b, bool down)
 
 void Game::OnPadAxis(int a, int16_t pos)
 {
+	if (main_menu)
+	{
+		MainMenu_OnPadAxis(a,pos);
+		return;
+	}	
+
 	if (show_gamepad)
 	{
 		return;
@@ -9365,6 +9878,21 @@ bool menu_fullscreen_getter(Game* g)
 	return false;
 }
 
+void menu_mute(Game* g)
+{
+	#ifndef SERVER
+	g->mute = !g->mute;
+	AudioMute(g->mute);
+	WriteConf(g);
+	#endif
+}
+
+bool menu_mute_getter(Game* g)
+{
+	return g->mute;
+}
+
+
 void menu_zoomin(Game* g)
 {
 	#ifndef SERVER
@@ -9403,7 +9931,24 @@ void menu_gamepad(Game* g)
 	GamePadOpen(gamepad_close,(void*)g);
 }
 
-static const Menu settings_menu[]=
+void main_menu(Game* g)
+{
+	#ifndef EDITOR
+	g->CloseMenu();
+	g->main_menu = true;
+
+	MainMenu_Show();
+
+	MainMenu_OnSize(
+		g->input.size[0],
+		g->input.size[1],
+		g->font_size[0],
+		g->font_size[1]);
+
+	#endif
+}
+
+static const Menu video_menu[]=
 {
 	{"ZOOM IN", 0, menu_zoomin, 0},
 	{"ZOOM OUT", 0, menu_zoomout, 0},
@@ -9412,6 +9957,21 @@ static const Menu settings_menu[]=
 	{"SHOW BLOOD", 0, menu_blood, menu_blood_getter},
 	{0}
 };
+
+/*
+static const Menu audio_menu[]=
+{
+	{"MUTE", 0, menu_mute, menu_mute_getter},
+	{0}
+};
+
+static const Menu settings_menu[]=
+{
+	{"VIDEO", video_menu, 0, 0},
+	{"AUDIO", audio_menu, 0, 0},
+	{0}
+};
+*/
 
 static const Menu controls_menu[]=
 {
@@ -9432,8 +9992,12 @@ static const Menu exit_menu[]=
 
 static const Menu game_menu[]=
 {
-	{"SETTINGS", settings_menu, 0, 0},
+	//{"SETTINGS", settings_menu, 0, 0},
+	//{"AUDIO", audio_menu, 0, 0},
+	{"VIDEO", video_menu, 0, 0},
+	{"MUTE SOUND", 0, menu_mute, menu_mute_getter},
 	{"CONTROLS", controls_menu, 0, 0},
+	{"MAIN MENU", 0, main_menu, 0},
 	{"EXIT?", exit_menu, 0, 0},
 	{0}
 };
@@ -9617,7 +10181,7 @@ void Game::MenuKeyb(GAME_KEYB keyb, int key)
 	}
 
 	if (keyb==KEYB_CHAR && (key=='\\' || key=='|') ||
-		keyb==KEYB_DOWN && key==A3D_ESCAPE)
+		(keyb==KEYB_DOWN || keyb==KEYB_PRESS) && key==A3D_ESCAPE)
 	{
 		CloseMenu();
 		return;

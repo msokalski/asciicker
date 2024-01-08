@@ -735,7 +735,7 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, int* type)
 				uint8_t ping[125];
 				if (payload)
 				{
-					int r = TCP_READ(s, ping, payload);
+					int r = TCP_READ(s, ping, (int)payload);
 					if (r <= 0)
 						return r;
 					if (mask)
@@ -744,7 +744,7 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, int* type)
 							ping[i] ^= mask[i & 3];
 					}
 				}
-				WS_WRITE(s, ping, payload, 0, 0xA);
+				WS_WRITE(s, ping, (int)payload, 0, 0xA);
 				continue;
 			}
 			case 0xA: // pong
@@ -752,7 +752,7 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, int* type)
 				uint8_t ping[125];
 				if (payload)
 				{
-					int r = TCP_READ(s, ping, payload);
+					int r = TCP_READ(s, ping, (int)payload);
 					if (r <= 0)
 						return r;
 				}
@@ -763,7 +763,7 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, int* type)
 				return -1;
 		}		
 
-		int r = TCP_READ(s, buf, payload);
+		int r = TCP_READ(s, buf, (int)payload);
 		if (r <= 0)
 			return r;
 
@@ -774,8 +774,8 @@ int WS_READ(TCP_SOCKET s, uint8_t* buf, int size, int* type)
 		}
 
 		buf += payload;
-		size -= payload;
-		tot_data += payload;
+		size -= (int)payload;
+		tot_data += (int)payload;
 
 	} while (!(frame[0] & 0x80)); //(FIN bit is not set)
 

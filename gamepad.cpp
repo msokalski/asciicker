@@ -1955,13 +1955,13 @@ void GamePadKeyb(int key, uint64_t stamp)
 								uint8_t out = 0x00;
 								if (*list == gamepad_button_name)
 								{
-									int index = arr - gamepad_button_name;
+									int index = (int)(arr - gamepad_button_name);
 									out |= 0x80;
 									out |= index;
 								}
 								else
 								{
-									int index = arr - gamepad_half_axis_name;
+									int index = (int)(arr - gamepad_half_axis_name);
 									if ((index & 1) == 0)
 										out |= 0x40; // neg
 									out |= (index>>1);

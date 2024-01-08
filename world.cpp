@@ -290,10 +290,10 @@ inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float y
 	Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
 
 	// transform intersection to cell coords
-	float zoom = 2.0 / 3.0;
-	float cos30 = cosf(30 * M_PI / 180);
-	float dwx = zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180);
-	float dwy = zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180);
+	float zoom = 2.0f / 3.0f;
+	float cos30 = (float)cos(30 * M_PI / 180);
+	float dwx = (float)(zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180));
+	float dwy = (float)(zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180));
 	float dlz = zoom * -f->ref[1] * 0.5f / cos30 * HEIGHT_SCALE;
 	float dhz = zoom * (f->height - f->ref[1] * 0.5f) / cos30 * HEIGHT_SCALE;
 
@@ -323,7 +323,7 @@ inline bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float y
 			// we could do raster check using current font if either fg or bk is transparant
 			// ...
 
-			float h = HEIGHT_SCALE / 4 + pos[2] + (2.0*ac->spare + f->ref[2]) * 0.5 * dz_dy;
+			float h = (float)(HEIGHT_SCALE / 4 + pos[2] + (2.0*ac->spare + f->ref[2]) * 0.5 * dz_dy);
 			if (ret[2] < h)
 			{
 				// printf("%d,%d\n", x, y);
@@ -358,6 +358,23 @@ struct SpriteInst : Inst
 		return false;
 	}
 };
+
+#ifdef EDITOR
+bool HitSprite(Sprite* sprite, int anim, int frame, float pos[3], float yaw, double p[3], double v[3], double ret[3], bool positive_only)
+{
+	double ray[10] = 
+	{
+		p[1] * v[2] - p[2] * v[1],
+		p[2] * v[0] - p[0] * v[2],
+		p[0] * v[1] - p[1] * v[0],
+		v[0], v[1], v[2],
+		p[0], p[1], p[2],
+		FLT_MAX
+	};
+
+	return HitSprite(sprite, anim, frame, pos, yaw, ray, ret, positive_only);
+}
+#endif
 
 struct ItemInst : Inst
 {
@@ -4676,12 +4693,12 @@ World* LoadWorld(FILE* f, bool editor)
 			int flags;
 
 			int r;
-			r = fread(pos, 1, sizeof(float[3]), f);
-			r = fread(&yaw, 1, sizeof(float), f);
-			r = fread(&anim, 1, sizeof(int), f);
-			r = fread(&frame, 1, sizeof(int), f);
-			r = fread(reps, 1, sizeof(int[4]), f);
-			r = fread(&flags, 1, 4, f);
+			r = (int)fread(pos, 1, sizeof(float[3]), f);
+			r = (int)fread(&yaw, 1, sizeof(float), f);
+			r = (int)fread(&anim, 1, sizeof(int), f);
+			r = (int)fread(&frame, 1, sizeof(int), f);
+			r = (int)fread(reps, 1, sizeof(int[4]), f);
+			r = (int)fread(&flags, 1, 4, f);
 
 			if (!editor)
 				flags |= INST_FLAGS::INST_VOLATILE;
@@ -4714,19 +4731,19 @@ World* LoadWorld(FILE* f, bool editor)
 			int r;
 
 			int item_proto_index = -1;
-			r = fread(&item_proto_index, 1, 4, f);
+			r = (int)fread(&item_proto_index, 1, 4, f);
 
 			int count = 0;
-			r = fread(&count, 1, sizeof(int), f);
+			r = (int)fread(&count, 1, sizeof(int), f);
 
 			float pos[3] = { 0,0,0 };
 			float yaw = 0;
 
-			r = fread(pos, 1, sizeof(float[3]), f);
-			r = fread(&yaw, 1, sizeof(float), f);
+			r = (int)fread(pos, 1, sizeof(float[3]), f);
+			r = (int)fread(&yaw, 1, sizeof(float), f);
 
 			int flags;
-			r = fread(&flags, 1, 4, f);
+			r = (int)fread(&flags, 1, 4, f);
 
 			int story_id = -1;
 			if (format_version > 0)
@@ -4783,6 +4800,13 @@ int GetInstFlags(Inst* i)
 int GetInstStoryID(Inst* i)
 {
 	return i->story_id;
+}
+
+// for GAMEPLOT/EDITOR
+void SetInstStoryID(Inst* i, int id) 
+{
+	if (i)
+		i->story_id = id;
 }
 
 bool GetInstTM(Inst* i, double tm[16])

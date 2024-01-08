@@ -14,6 +14,9 @@
 
 #include <time.h>
 
+#include "game_api.h"
+
+
 char base_path[1024] = "./"; // (const)
 
 
@@ -44,6 +47,8 @@ uint64_t GetTime()
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
+
+uint64_t (*MakeStamp)() = GetTime;
 
 void SyncConf()
 {
@@ -100,25 +105,14 @@ void* GetMaterialArr()
     return mat;
 }
 
-int user_zoom = 0;
 bool PrevGLFont()
 {
-    user_zoom--;
-    if (user_zoom<-8)
-        user_zoom=-8;
-
-    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
-    return true;
+    return EM_ASM_INT({return ZoomOut();}) != 0;
 }
 
 bool NextGLFont()
 {
-    user_zoom++;
-    if (user_zoom>8)
-        user_zoom=8;
-
-    EM_ASM({user_zoom=$0;Resize(null);},user_zoom);
-    return true;
+    return EM_ASM_INT({return ZoomIn();}) != 0;
 }
 
 void exit_handler(int signum)
@@ -189,18 +183,118 @@ int main(int argc, char* argv[])
     return 0;
 }
 
+void akAPI_Exec(const char* str, int len, bool root)
+{
+    uint64_t t0 = GetTime();
+
+    if (root)
+    {
+        EM_ASM(
+        {
+            try 
+            {
+                let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
+                Function("'use strict';\n" + str).apply(window);
+            }
+            catch(e)
+            {
+                console.log("Exception: "+e.name+" "+e.message+" "+$2);
+            }
+        }, str, len, root);
+    }
+    else
+    {
+        EM_ASM(
+        {
+            globalThis=window.akAPI_This;
+            try 
+            {
+                let str = $1 < 0 ? UTF8ToString($0) : UTF8ToString($0,$1);
+                window.akAPI_Prot[akAPI_Prot.length-1] = "'use strict';\n" + str;
+                Function.apply(this,akAPI_Prot).apply(window.akAPI_This,[ak]); 
+            }
+            catch(e)
+            {
+                console.log("Exception: "+e.name+" "+e.message+" "+$2);
+            }
+            globalThis=window;
+        }, str, len, root);       
+    }
+
+    uint64_t t1 = GetTime();
+    printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
+}
+
+void akAPI_CB(int id)
+{
+    EM_ASM(
+    {
+        akAPI_CB.apply(window,[$0]);
+    },id);
+}
+
+
 int Main()
 {
+    akAPI_Buff = malloc(AKAPI_BUF_SIZE);
+    memset(akAPI_Buff,0,AKAPI_BUF_SIZE);
+    EM_ASM(
+    {
+        window.akAPI_Buff=$0;
+        window.akAPI_Call = Module.cwrap('akAPI_Call', null, ['number']);
+        window.akAPI_This = {};
+        window.akPrint = function()
+        {
+            console.log.apply(this,arguments);
+        };
+    },akAPI_Buff);
+
+    akAPI_Init();
+
+    EM_ASM(
+    {
+        // prepare protection array
+        window.akAPI_Prot = ["ak"];
+        let all = Object.getOwnPropertyNames(window);
+        let pub = new Array(
+            "console","akPrint",
+            "Object","Function","Array","Number","Boolean","String","Symbol","Date","Promise","RegExp",
+            "ArrayBuffer","Uint8Array","Int8Array","Uint16Array","Int16Array","Uint32Array","Int32Array",
+            "Float32Array","Float64Array","Uint8ClampedArray","BigUint64Array","BigInt64Array",
+            "DataView","Map","BigInt","Set","WeakMap","WeakSet","Proxy","Reflect","FinalizationRegistry","WeakRef",
+            "Error","AggregateError","EvalError","RangeError","ReferenceError","SyntaxError","TypeError","URIError",
+            "JSON","Math","Intl",
+            "decodeURI","decodeURIComponent","encodeURI","encodeURIComponent","escape","unescape",
+            "eval","isFinite","isNaN",
+            "parseFloat","parseInt",
+            "Infinity","NaN","undefined",
+            "globalThis"
+        );
+
+        for (const e of all)
+        {
+            if (e!='ak' && !pub.includes(e))
+                akAPI_Prot.push(e);
+        }
+
+        // user source code place holder
+        akAPI_Prot.push("");
+    });
+
+
     InitAudio();
-    // here we must already know if serer on not server
+
+    LoadSprites();
+
+    #if 0  // HANDLED BY MAIN MENU
+
+    // here we must already know if serer or not server
 
     float water = 55.0f;
     float yaw = 45;
     float dir = 0;
     float pos[3] = {0,15,0};
     uint64_t stamp;
-
-    LoadSprites();
 
     {
         FILE* f = fopen("a3d/game_map_y8.a3d","rb");
@@ -285,6 +379,9 @@ int Main()
         }
     }
 
+    stamp = GetTime();
+    #endif // post
+
     render_buf = (AnsiCell*)malloc(sizeof(AnsiCell) * 160 * 160);
     if (!render_buf)
     {
@@ -292,8 +389,7 @@ int Main()
         return -7;
     }
 
-    stamp = GetTime();
-    game = CreateGame(water,pos,yaw,dir,stamp);
+    game = CreateGame();
 
     printf("all ok\n");
     return 0;
@@ -332,19 +428,19 @@ extern "C"
     void Keyb(int type, int val)
     {
         if (game)
-            game->OnKeyb((Game::GAME_KEYB)type,val);
+            game->OnKeyb((GAME_KEYB)type,val);
     }
 
     void Mouse(int type, int x, int y)
     {
         if (game)
-            game->OnMouse((Game::GAME_MOUSE)type, x, y);
+            game->OnMouse((GAME_MOUSE)type, x, y);
     }
 
     void Touch(int type, int id, int x, int y)
     {
         if (game)
-            game->OnTouch((Game::GAME_TOUCH)type, id, x, y);
+            game->OnTouch((GAME_TOUCH)type, id, x, y);
     }
 
     void GamePad(int ev, int idx, float val)

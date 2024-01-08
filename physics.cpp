@@ -698,8 +698,8 @@ struct Physics
 				if (mat != 2) // else 2->2 (dirt)
 					mat = 3+elv; // [hi]grass
 
-				float x0 = (x + hx * sxy) * phys->collect_mul_xy, x1 = x0 + sxy * phys->collect_mul_xy;
-				float y0 = (y + hy * sxy) * phys->collect_mul_xy, y1 = y0 + sxy * phys->collect_mul_xy;
+				float x0 = (float)((x + hx * sxy) * phys->collect_mul_xy), x1 = (float)(x0 + sxy * phys->collect_mul_xy);
+				float y0 = (float)((y + hy * sxy) * phys->collect_mul_xy), y1 = (float)(y0 + sxy * phys->collect_mul_xy);
 
 				float v[4][3] =
 				{
@@ -849,19 +849,19 @@ struct Physics
 
 int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, bool me)
 {
-	float xy_speed = 0.13;
-	float radius_cells = req->mount ? 3 : 2; // in full x-cells
-	float patch_cells = 3.0 * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
+	float xy_speed = 0.13f;
+	float radius_cells = req->mount ? 3.0f : 2.0f; // in full x-cells
+	float patch_cells = 3.0f * HEIGHT_CELLS; // patch size in screen cells (zoom is 3.0)
 	float world_patch = VISUAL_CELLS; // patch size in world coords
 	float world_radius = radius_cells / patch_cells * world_patch;
-	float height_cells = req->mount ? 9.0 : 7.0; // 7.5; decreased (hair are soft)
+	float height_cells = req->mount ? 9.0f : 7.0f; // 7.5; decreased (hair are soft)
 
 	// 2/3 = 1/(zoom*sin30)
 	static const float world_height = height_cells * 2 / 3 / (float)cos(30 * M_PI / 180) * HEIGHT_SCALE;
 
 	static const int interval = 15000; // update physics step in [us]
 
-	io->dt = stamp - phys->stamp;
+	io->dt = (int)(stamp - phys->stamp);
 	if (io->dt > 500000)
 	{
 		// stall
@@ -968,16 +968,16 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 
 				// normalize current angle to +/-180
-				float cur_ang = phys->player_dir*M_PI/180;
+				float cur_ang = (float)(phys->player_dir*M_PI/180);
 				float tmp_dx = cosf(cur_ang);
 				float tmp_dy = sinf(cur_ang);
-				cur_ang = atan2(tmp_dy,tmp_dx) * 180 / M_PI;
+				cur_ang = (float)(atan2(tmp_dy,tmp_dx) * 180 / M_PI);
 
 				// calc new angle normalized to +/-180
-				float new_ang = (atan2(dy, dx) * 180 / M_PI + phys->yaw + 90) * M_PI / 180;
+				float new_ang = (float)((atan2(dy, dx) * 180 / M_PI + phys->yaw + 90) * M_PI / 180);
 				tmp_dx = cosf(new_ang);
 				tmp_dy = sinf(new_ang);
-				new_ang = atan2(tmp_dy,tmp_dx) * 180 / M_PI;				
+				new_ang = (float)(atan2(tmp_dy,tmp_dx) * 180 / M_PI);				
 
 				// now we can interpolate in shorter direction
 				float delta = new_ang - cur_ang; // +/-360
@@ -1037,7 +1037,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 				if (sqr_vel_xy > xy_limit)
 				{
-					float n = sqrt(xy_limit / sqr_vel_xy);
+					float n = sqrtf(xy_limit / sqr_vel_xy);
 					sqr_vel_xy = xy_limit;
 					phys->vel[0] *= n;
 					phys->vel[1] *= n;
@@ -1050,7 +1050,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 				prev_step = (phys->player_stp + step_offs) & step_mask;
 
-				xy_vel = sqrt(sqr_vel_xy);
+				xy_vel = sqrtf(sqr_vel_xy);
 
 				if (req->mount>1) // slower for flying mounts
 					phys->player_stp = (~(1 << 31))&(phys->player_stp + (int)(24 * xy_vel));
@@ -1064,11 +1064,11 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 			// newton vs archimedes 
 			float wave = 2 * (int)((phys->stamp >> 10) & 0x7FF) * (float)M_PI / 0x800;
-			float ampl = 0.05;
+			float ampl = 0.05f;
 			if (ix || iy)
-				ampl = 0.1;
+				ampl = 0.1f;
 
-			float cnt = 0.78 + ampl * sinf(wave);
+			float cnt = 0.78f + ampl * sinf(wave);
 			float acc = (phys->water - (phys->pos[2] + cnt * world_height)) / (2 * cnt*world_height);
 			if (acc < 0 - cnt)
 				acc = 0 - cnt;
@@ -1089,11 +1089,11 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 			in_water = res;
 
-			float xy_res = powf(1.0 - 0.5 * res, dt);
-			float z_res = powf(1.0 - 0.1 * res, dt);
+			float xy_res = powf(1.0f - 0.5f * res, dt);
+			float z_res = powf(1.0f - 0.1f * res, dt);
 
 			if (req->mount>1 && phys->vel[2] < 0)
-				z_res = powf(1.0 - 0.1, dt);
+				z_res = (float)pow(1.0f - 0.1f, dt);
 
 			phys->vel[0] *= xy_res;
 			phys->vel[1] *= xy_res;
@@ -1138,8 +1138,8 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 			// create triangle soup of (SoupItem):
 			phys->soup_items = 0;
-			phys->collect_mul_xy = 1.0 / world_radius;
-			phys->collect_mul_z = 2.0 / world_height;
+			phys->collect_mul_xy = 1.0f / world_radius;
+			phys->collect_mul_z = 2.0f / world_height;
 
 			phys->max_height = io->water;
 
@@ -1245,10 +1245,10 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 				material_votes[collision_item->material]++;
 
-				float full_len = sqrt(full_step[0] * full_step[0] + full_step[1] * full_step[1] + full_step[2] * full_step[2]);
-				float ratio = 0.0;
-				if (full_len > 0.01)
-					ratio = (full_len - 0.01) / full_len;
+				float full_len = sqrtf(full_step[0] * full_step[0] + full_step[1] * full_step[1] + full_step[2] * full_step[2]);
+				float ratio = 0.0f;
+				if (full_len > 0.01f)
+					ratio = (full_len - 0.01f) / full_len;
 
 				sphere_pos[0] += full_step[0] * ratio;
 				sphere_pos[1] += full_step[1] * ratio;
@@ -1382,16 +1382,16 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 
 			float adz = fmaxf(0, phys->vel[2]) / HEIGHT_SCALE * 4;
 			float adxy = xy_speed * sqrtf(phys->vel[0] * phys->vel[0] + phys->vel[1] * phys->vel[1]);
-			phys->slope = atan2(adz, adxy);
+			phys->slope = atan2f(adz, adxy);
 
 			// printf("iters_left:%d, in: %f,%f out: %f,%f\n", iters_left, org_vel[0], org_vel[1], phys->vel[0], phys->vel[1]);
 
 			// slippery threshold?
 			// use org (no-slippery) use new (full slippery)
 
-			phys->vel[0] = 1.0 * phys->vel[0] + org_vel[0] * 0.0;
-			phys->vel[1] = 1.0 * phys->vel[1] + org_vel[1] * 0.0;
-			phys->vel[2] = 1.0 * phys->vel[2] + org_vel[2] * 0.0;
+			phys->vel[0] = 1.0f * phys->vel[0] + org_vel[0] * 0.0f;
+			phys->vel[1] = 1.0f * phys->vel[1] + org_vel[1] * 0.0f;
+			phys->vel[2] = 1.0f * phys->vel[2] + org_vel[2] * 0.0f;
 
 			// printf("contact_normal_z:%f, vel[0]: %f, vel[1]:%f, vel[2]:%f\n", contact_normal_z,fabsf(phys->vel[0]),fabsf(phys->vel[1]),fabsf(phys->vel[2]));
 
@@ -1445,7 +1445,7 @@ int Animate(Physics* phys, uint64_t stamp, PhysicsIO* io, const SpriteReq* req, 
 		else
 		if (me && (in_water>0.5 || phys->accum_contact >= 1.0) && phys->player_stp>=0)
 		{
-			int volume = (int)(65535 * 1.0f*log10f(xy_vel + 1.0));
+			int volume = (int)(65535 * 1.0f*log10f(xy_vel + 1.0f));
 			if (volume > 65535)
 				volume = 65535;
 			int next_step = (phys->player_stp + step_offs) & step_mask;

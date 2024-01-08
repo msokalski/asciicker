@@ -12,6 +12,9 @@ struct EnemyGen
 	int shield; // 0-10
 	int sword; // 0-10
 	int crossbow; // 0-10
+
+	// maybe add story_id
+	// for generated enemies?
 };
 
 extern EnemyGen* enemygen_head;
@@ -20,3 +23,8 @@ extern EnemyGen* enemygen_tail;
 void FreeEnemyGens();
 void LoadEnemyGens(FILE* f);
 void SaveEnemyGens(FILE* f);
+
+#ifdef EDITOR
+EnemyGen* HitEnemyGen(double* p, double* v);
+void DeleteEnemyGen(EnemyGen* eg);
+#endif

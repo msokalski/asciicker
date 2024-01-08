@@ -43,6 +43,37 @@
 
 #include "network.h"
 
+#include "game_api.h"
+
+
+#ifdef _WIN32
+#pragma comment(lib,"v8_monolith.lib")
+#pragma comment(lib,"Dbghelp.lib")
+#pragma comment(lib,"Winmm.lib")
+#endif
+
+#ifdef _WIN32
+ #ifdef _WIN64
+ #define V8_COMPRESS_POINTERS 1
+ #define V8_ENABLE_SANDBOX 1
+ #endif
+#endif
+
+#ifdef __APPLE__
+ #define V8_COMPRESS_POINTERS 1
+ //#define V8_ENABLE_SANDBOX 1
+#endif
+
+#ifdef __linux__
+ // i'am lazy gumix
+ // only x64 linux is supported
+ #define V8_COMPRESS_POINTERS 1
+ #define V8_ENABLE_SANDBOX 1
+#endif
+
+#include <libplatform/libplatform.h>
+#include <v8.h>
+
 // FOR GL 
 #include "term.h"
 #include "gl.h"
@@ -594,7 +625,7 @@ Terrain* terrain=0;
 
 int font_zoom = 0;
 
-int GetGLFont(int wh[2], const int wnd_wh[2])
+static int FindFont(const int wnd_wh[2])
 {
     float err = 0;
 
@@ -614,8 +645,27 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
         }
     }
 
+    return j;
+}
+
+int GetGLFont(int wh[2], const int wnd_wh[2], int* id)
+{
+    int j = FindFont(wnd_wh);
+
 	j += font_zoom;
 	j = j < 0 ? 0 : j >= fonts_loaded ? fonts_loaded - 1 : j;
+
+    // FIX IF TOO SMALL (45x36)
+    while (j)
+    {
+        int cw = wnd_wh[0] / (font[j].width >> 4);
+        int ch = wnd_wh[1] / (font[j].height >> 4);
+
+        if (cw<45 || ch<36)
+            j--;
+        else
+            break;
+    }
 
 	MyFont* f = font + j;
 
@@ -624,6 +674,9 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 		wh[0] = f->width;
 		wh[1] = f->height;
 	}
+
+    if (id)
+        *id = j;
 
 	return f->tex;
 }
@@ -680,13 +733,36 @@ bool PrevGLFont()
             int w = write(STDOUT_FILENO, "\033[9;0t",6);
     }
     #else
+    /*
 	font_zoom--;
 	if (font_zoom < -fonts_loaded / 2)
 	{
 		font_zoom = -fonts_loaded / 2;
 		return false;
 	}
-	TermResizeAll();
+    */
+
+    int wh[2], font_wh[2];
+    a3dGetRect(0, 0, wh);
+    int f;
+    GetGLFont(font_wh,wh,&f);
+    if (f==0)
+        return false;
+    int u = font_zoom;
+    font_zoom = f - FindFont(wh) - 1;
+    int f2;
+    GetGLFont(font_wh,wh,&f2);
+    if (f2 == f) // clamped!
+    {
+        font_zoom = u;  // revert!
+        return false;
+    }
+    else
+    {
+        font_zoom = f2 - FindFont(wh);
+    	TermResizeAll();
+    }
+
     #endif
 	return true;
 }
@@ -714,13 +790,36 @@ bool NextGLFont()
             int w = write(STDOUT_FILENO, "\033[9;0t",6);
     }
     #else
+    /*
 	font_zoom++;
 	if (font_zoom > fonts_loaded/2)
 	{
 		font_zoom = fonts_loaded/2;
 		return false;
 	}
-	TermResizeAll();
+    */
+
+    int wh[2], font_wh[2];
+    a3dGetRect(0, 0, wh);
+    int f;
+    GetGLFont(font_wh,wh,&f);
+    if (f==fonts_loaded-1)
+        return false;
+    int u = font_zoom;
+    font_zoom = f - FindFont(wh) + 1;
+    int f2;
+    GetGLFont(font_wh,wh,&f2);
+    if (f2 == f) // clamped!
+    {
+        font_zoom = u;  // revert!
+        return false;
+    }
+    else
+    {
+        font_zoom = f2 - FindFont(wh);
+    	TermResizeAll();
+    }
+
     #endif
 	return true;
 }
@@ -1289,9 +1388,137 @@ bool read_js(int fd)
     return false;
 }
 
+Game* game = 0;
+
+void init_v8();
+void free_v8();
+
+uint64_t (*MakeStamp)() = 0;
+
+
+#define CODE(...) #__VA_ARGS__
+
 int main(int argc, char* argv[])
 {
-	/*
+    init_v8();
+    
+    akAPI_Exec(CODE(
+    {
+        // emulate emscripten heap view
+        this.akAPI_Buff = 0;
+        this.akAPI_This = {};
+        
+        this.Module = 
+        {
+            HEAPF64 : new Float64Array(akAPI_V8AB),
+            HEAPF32 : new Float32Array(akAPI_V8AB),
+            HEAPU32 : new Uint32Array(akAPI_V8AB),
+            HEAP32  : new Int32Array(akAPI_V8AB),
+            HEAPU16 : new Uint16Array(akAPI_V8AB),
+            HEAP16  : new Int16Array(akAPI_V8AB),
+            HEAPU8  : new Uint8Array(akAPI_V8AB),
+            HEAP8   : new Int8Array(akAPI_V8AB),
+        };
+        
+        this.UTF8ToString = function(ptr,len)
+        {
+            let arr = Module.HEAPU8;
+            let endIdx = ptr+len;
+            let idx = ptr;
+            let str = '';
+            while (!(idx >= endIdx)) 
+            {
+                let u0 = arr[idx++];
+                if (!u0) 
+                    return str;
+                if (!(u0 & 0x80)) 
+                { 
+                    str += String.fromCharCode(u0); 
+                    continue; 
+                }
+                let u1 = arr[idx++] & 63;
+                if ((u0 & 0xE0) == 0xC0) 
+                { 
+                    str += String.fromCharCode(((u0 & 31) << 6) | u1); 
+                    continue; 
+                }
+                let u2 = arr[idx++] & 63;
+                if ((u0 & 0xF0) == 0xE0) 
+                    u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
+                else 
+                    u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (arr[idx++] & 63);
+
+                if (u0 < 0x10000) 
+                    str += String.fromCharCode(u0);
+                else 
+                {
+                    let ch = u0 - 0x10000;
+                    str += String.fromCharCode(0xD800 | (ch >> 10), 0xDC00 | (ch & 0x3FF));
+                }
+            }
+            return str;
+        };
+
+        this.stringToUTF8 = function(str,ptr,len)
+        {
+            if (!(len > 0))
+                return 0;
+            
+            let arr = Module.HEAPU8;
+            let startIdx = ptr;
+            let endIdx = ptr + len -1;
+            let idx = ptr;
+            for (let i = 0; i < str.length; ++i) 
+            {
+                let u = str.charCodeAt(i); // possibly a lead surrogate
+                if (u >= 0xD800 && u <= 0xDFFF) 
+                {
+                    let u1 = str.charCodeAt(++i);
+                    u = 0x10000 + ((u & 0x3FF) << 10) | (u1 & 0x3FF);
+                }
+                if (u <= 0x7F) 
+                {
+                    if (idx >= endIdx) 
+                        break;
+                    arr[idx++] = u;
+                } 
+                else 
+                if (u <= 0x7FF) 
+                {
+                    if (idx + 1 >= endIdx) 
+                        break;
+                    arr[idx++] = 0xC0 | (u >> 6);
+                    arr[idx++] = 0x80 | (u & 63);
+                }
+                else 
+                if (u <= 0xFFFF) 
+                {
+                    if (idx + 2 >= endIdx) 
+                        break;
+                    arr[idx++] = 0xE0 | (u >> 12);
+                    arr[idx++] = 0x80 | ((u >> 6) & 63);
+                    arr[idx++] = 0x80 | (u & 63);
+                } 
+                else 
+                {
+                    if (idx + 3 >= endIdx) 
+                        break;
+
+                    arr[idx++] = 0xF0 | (u >> 18);
+                    arr[idx++] = 0x80 | ((u >> 12) & 63);
+                    arr[idx++] = 0x80 | ((u >> 6) & 63);
+                    arr[idx++] = 0x80 | (u & 63);
+                }
+            }
+
+            arr[idx] = 0;
+            return idx - startIdx;
+        };
+    }),-1,true);
+
+    akAPI_Init();
+
+    /*
 	FILE* fpal = fopen("d:\\ascii-work\\asciicker.act", "wb");
 	for (int i = 0; i < 16; i++)
 	{
@@ -1358,7 +1585,7 @@ int main(int argc, char* argv[])
 			{
 				if (dotrun[i])
 				{
-					int pos = dotrun[i] - base_path;
+					int pos = (int)(dotrun[i] - base_path);
 					if (dotpos < 0 || pos < dotpos)
 						dotpos = pos;
 				}
@@ -1373,6 +1600,11 @@ int main(int argc, char* argv[])
     printf("BASE PATH: %s\n", base_path);
 
 	InitAudio();
+
+    // TODO:
+    // REFACTOR ME SUCH TERM IS INITIALIZED BEFORE
+    // CONNECTING TO SERVER AND LOADING SPRITES & WORLD!
+    // this is really needed for driving intro / main manu
 
     /*
     int c16 = 13;
@@ -1533,6 +1765,7 @@ int main(int argc, char* argv[])
 
 	LoadSprites();
 
+    #if 0 // HANDLED BY MAIN MENU
 	{
         char a3d_path[1024 + 20];
         sprintf(a3d_path,"%sa3d/game_map_y8.a3d", base_path);
@@ -1604,6 +1837,7 @@ int main(int argc, char* argv[])
             #endif
         }
 	}
+    #endif
 
 	if (gs)
 	{
@@ -1632,7 +1866,11 @@ int main(int argc, char* argv[])
         global_lt[2] = lt[2];
         global_lt[3] = lt[3];
 
-        if (TermOpen(0, yaw, pos, MyFont::Free))
+        game = TermOpen(0, yaw, pos, MyFont::Free);
+
+        MakeStamp = a3dGetTime;
+
+        if (game)
         {
             char font_dirname[1024+10];
             sprintf(font_dirname, "%sfonts", base_path); // = "./fonts";
@@ -1669,6 +1907,8 @@ int main(int argc, char* argv[])
 #endif // #ifndef PURE_TERM
 
 #if defined(__linux__) || defined(__APPLE__)
+
+    MakeStamp = GetTime;
 
     // recursively check if we are on TTY console or 'vt'
     const char* term_env = getenv("TERM");
@@ -1821,8 +2061,6 @@ int main(int argc, char* argv[])
     //terrain = 0;
     //world = 0;
 
-    Game* game = 0;
-
     AnsiCell* buf = 0;
     int wh[2] = {-1,-1};    
 
@@ -1887,7 +2125,7 @@ int main(int argc, char* argv[])
     begin = GetTime();
     stamp = begin;
 
-    game = CreateGame(water,pos,yaw,dir,stamp);
+    game = CreateGame();
     
     if (jsfd>=0)
     {
@@ -1995,13 +2233,13 @@ int main(int argc, char* argv[])
                     if (event->wdy>0)
                     {  
                         xy_processed = true;
-                        game->OnMouse(Game::MOUSE_WHEEL_UP, mouse_x, mouse_y);
+                        game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_UP, mouse_x, mouse_y);
                     }
                     else
                     if (event->wdy<0)
                     {
                         xy_processed = true;
-                        game->OnMouse(Game::MOUSE_WHEEL_DOWN, mouse_x, mouse_y);
+                        game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_DOWN, mouse_x, mouse_y);
                     }
 
                     if (event->type & GPM_DOWN)
@@ -2010,19 +2248,19 @@ int main(int argc, char* argv[])
                         {
                             xy_processed = true;
                             mouse_down|=GPM_B_LEFT;
-                            game->OnMouse(Game::MOUSE_LEFT_BUT_DOWN, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_DOWN, mouse_x, mouse_y);
                         }
                         if (!(mouse_down&GPM_B_MIDDLE) && (event->buttons & GPM_B_MIDDLE))
                         {
                             xy_processed = true;
                             mouse_down|=GPM_B_MIDDLE;
-                            game->OnMouse(Game::MOUSE_MIDDLE_BUT_DOWN, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_MIDDLE_BUT_DOWN, mouse_x, mouse_y);
                         }
                         if (!(mouse_down&GPM_B_RIGHT) && (event->buttons & GPM_B_RIGHT))
                         {
                             xy_processed = true;
                             mouse_down|=GPM_B_RIGHT;
-                            game->OnMouse(Game::MOUSE_RIGHT_BUT_DOWN, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN, mouse_x, mouse_y);
                         }
                     }
 
@@ -2032,26 +2270,26 @@ int main(int argc, char* argv[])
                         {
                             xy_processed = true;
                             mouse_down&=~GPM_B_LEFT;
-                            game->OnMouse(Game::MOUSE_LEFT_BUT_UP, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_UP, mouse_x, mouse_y);
                         }
                         if ((mouse_down&GPM_B_MIDDLE) && (event->buttons & GPM_B_MIDDLE))
                         {
                             xy_processed = true;
                             mouse_down&=~GPM_B_MIDDLE;
-                            game->OnMouse(Game::MOUSE_MIDDLE_BUT_UP, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_MIDDLE_BUT_UP, mouse_x, mouse_y);
                         }
                         if ((mouse_down&GPM_B_RIGHT) && (event->buttons & GPM_B_RIGHT))
                         {
                             xy_processed = true;
                             mouse_down&=~GPM_B_RIGHT;
-                            game->OnMouse(Game::MOUSE_RIGHT_BUT_UP, mouse_x, mouse_y);
+                            game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_UP, mouse_x, mouse_y);
                         }
                     }                
 
                     if (!xy_processed && (event->type & (GPM_MOVE|GPM_DRAG)))
                     {
                         xy_processed = true;
-                        game->OnMouse(Game::MOUSE_MOVE, mouse_x, mouse_y);
+                        game->OnMouse(GAME_MOUSE::MOUSE_MOVE, mouse_x, mouse_y);
                     }
                 }
 
@@ -2113,13 +2351,11 @@ int main(int argc, char* argv[])
 
             int bytes = stream_bytes + fresh_bytes;
 
-            /*
             FILE* kl = fopen("keylog.txt","a");
             for (int i=0; i<bytes; i++)
                 fprintf(kl,"0x%02X, ",stream[i]);
             fprintf(kl,"\n");
             fclose(kl);
-            */
 
             int i = 0;
             while (i<bytes)
@@ -2128,23 +2364,31 @@ int main(int argc, char* argv[])
 
                 int type = 0, mods = 0;
 
+
+                if (stream[i] == 27 && i == bytes-1)
+                {
+                    // there are still chances this would be followed by esc sequence
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_ESCAPE);
+                    break;
+                }
+
                 if (stream[i]>=' ' && stream[i]<=127 || 
                     stream[i]==8 || stream[i]=='\r' || stream[i]=='\n' || stream[i]=='\t')
                 {
                     if (stream[i] == ' ')
                     {
                         // we need it both as char for TalkBox and as press for Jump
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, ' ');
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_SPACE);
+                        game->OnKeyb(GAME_KEYB::KEYB_CHAR, ' ');
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_SPACE);
                     }
                     else
                     if (stream[i] == '\t')
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_TAB);
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_TAB);
                     else
                     if (stream[i] == 127) // backspace (8) is encoded as del (127)
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, 8);
+                        game->OnKeyb(GAME_KEYB::KEYB_CHAR, 8);
                     else
-                        game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, stream[i]);
+                        game->OnKeyb(GAME_KEYB::KEYB_CHAR, stream[i]);
                     i++;
                     continue;
                 }
@@ -2154,78 +2398,151 @@ int main(int argc, char* argv[])
                 // F1,F2,DEL,INS,PGUP,PGDN
                 // ...
 
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    (stream[i+3] == 0x35 || stream[i+3] == 0x37 || stream[i+3] == 0x38 || stream[i+3] == 0x39))
+                {
+                    int a3d_mods = 0;
+                    int a3d_fkey = stream[i+3] == 0x35 ? A3D_F5 : stream[i+3] - 0x37 + A3D_F6;
+
+                    if (stream[i+4] == 0x7E)
+                    {
+                        // no mods
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, a3d_fkey);
+                        i+=5;
+                        continue;
+                    }
+
+                    if (bytes-i >= 7 && stream[i+4] == 0x3B && stream[i+6] == 0x7E)
+                    {
+                        int mods = stream[i+5] - 0x31;
+                        if (mods&1)
+                        {
+                            // shift
+                            a3d_mods |= 0x1<<8;
+                        }
+                        if (mods&2)
+                        {
+                            // alt
+                            a3d_mods |= 0x2<<8;
+                        }
+                        if (mods&4)
+                        {
+                            // ctrl ???
+                            a3d_mods |= 0x4<<8;
+                        }                            
+
+                        game->OnKeyb(GAME_KEYB::KEYB_PRESS, a3d_fkey | a3d_mods);
+                        i+=7;
+                        continue;
+                    }
+                }
+
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x35 && stream[i+4] == 0x7E)
+                {
+                    // F5
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F5);
+                    i+=5;
+                    continue;
+                }
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x37 && stream[i+4] == 0x7E)
+                {
+                    // F6
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F6);
+                    i+=5;
+                    continue;
+                }
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x38 && stream[i+4] == 0x7E)
+                {
+                    // F7
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F7);
+                    i+=5;
+                    continue;
+                }
+                if (bytes-i >=5 && stream[i] == 0x1B && stream[i+1] == 0x5B && stream[i+2] == 0x31 &&
+                    stream[i+3] == 0x39 && stream[i+4] == 0x7E)
+                {
+                    // F8
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F8);
+                    i+=5;
+                    continue;
+                }
+
+
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'P')
                 {
                     // F1
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F1);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F1);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == 'O' && stream[i+2] == 'Q')
                 {
                     // F2
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F2);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F2);
                     i+=3;
                 }
 
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '3' && stream[i+3] == '~')
                 {
                     // DEL
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_CHAR, 127);
+                    game->OnKeyb(GAME_KEYB::KEYB_CHAR, 127);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '2' && stream[i+3] == '~')
                 {
                     // INS
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_INSERT);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_INSERT);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '5' && stream[i+3] == '~')
                 {
                     // PGUP
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEUP);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEUP);
                     i+=4;
                 }
                 if (bytes-i >=4 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == '6' && stream[i+3] == '~')
                 {
                     // PGDN
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN);
                     i+=4;
                 }
 
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'D')
                 {
                     // left
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_LEFT);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_LEFT);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'C')
                 {
                     // right
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_RIGHT);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_RIGHT);
                     i+=3;
                 }                
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'A')
                 {
                     // up
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_UP);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_UP);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'B')
                 {
                     // down
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DOWN);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_DOWN);
                     i+=3;
                 }    
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'H')
                 {
                     // home
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_HOME);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_HOME);
                     i+=3;
                 }
                 if (bytes-i >=3 && stream[i] == 0x1B && stream[i+1] == '[' && stream[i+2] == 'F')
                 {
                     // end
-                    game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_END);
+                    game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_END);
                     i+=3;
                 }    
 
@@ -2257,35 +2574,36 @@ int main(int argc, char* argv[])
                     switch (stream[i+5])
                     {
                         case 'P': // f1
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F1 | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F1 | a3d_mods);
                             break;
                         case 'Q': // f2
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_F2 | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_F2 | a3d_mods);
                             break;
+
                         case '3': // del
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DELETE | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_DELETE | a3d_mods);
                             break;
                         case '2': // ins
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_INSERT | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_INSERT | a3d_mods);
                             break;
                         case '5': // pgup
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEUP | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEUP | a3d_mods);
                             break;
                         case '6': // pgdn
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_PAGEDOWN | a3d_mods);
                             break;
 
                         case 'A': // up
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_UP | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_UP | a3d_mods);
                             break;
                         case 'B': // down
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_DOWN | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_DOWN | a3d_mods);
                             break;
                         case 'C': // right
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_RIGHT | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_RIGHT | a3d_mods);
                             break;
                         case 'D': // left
-                            game->OnKeyb(Game::GAME_KEYB::KEYB_PRESS, A3D_LEFT | a3d_mods);
+                            game->OnKeyb(GAME_KEYB::KEYB_PRESS, A3D_LEFT | a3d_mods);
                             break;
                     }
 
@@ -2327,17 +2645,17 @@ int main(int argc, char* argv[])
 										{
 											// wheel
 											if (but == 0)
-												game->OnMouse(Game::MOUSE_WHEEL_UP, val[1] - 1, val[2] - 1);
+												game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_UP, val[1] - 1, val[2] - 1);
 											else
 											if (but == 1)
-												game->OnMouse(Game::MOUSE_WHEEL_DOWN, val[1] - 1, val[2] - 1);
+												game->OnMouse(GAME_MOUSE::MOUSE_WHEEL_DOWN, val[1] - 1, val[2] - 1);
 										}
 										else
                                         if (val[0] >= 32)
                                         {
                                             // motion
                                             int a=0;
-                                            game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                            game->OnMouse(GAME_MOUSE::MOUSE_MOVE,val[1]-1,val[2]-1);
                                         }
                                         else
                                         if (c=='M')
@@ -2345,14 +2663,14 @@ int main(int argc, char* argv[])
                                             switch(but)
                                             {
                                                 case 0:
-                                                    game->OnMouse(Game::MOUSE_LEFT_BUT_DOWN,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_DOWN,val[1]-1,val[2]-1);
                                                     break;
                                                 case 2:
-                                                    game->OnMouse(Game::MOUSE_RIGHT_BUT_DOWN,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_DOWN,val[1]-1,val[2]-1);
                                                     break;
 
                                                 default:
-                                                    game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_MOVE,val[1]-1,val[2]-1);
                                             }
                                         }
                                         else
@@ -2361,13 +2679,13 @@ int main(int argc, char* argv[])
                                             switch(but)
                                             {
                                                 case 0:
-                                                    game->OnMouse(Game::MOUSE_LEFT_BUT_UP,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_LEFT_BUT_UP,val[1]-1,val[2]-1);
                                                     break;
                                                 case 2:
-                                                    game->OnMouse(Game::MOUSE_RIGHT_BUT_UP,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_RIGHT_BUT_UP,val[1]-1,val[2]-1);
                                                     break;
                                                 default:
-                                                    game->OnMouse(Game::MOUSE_MOVE,val[1]-1,val[2]-1);
+                                                    game->OnMouse(GAME_MOUSE::MOUSE_MOVE,val[1]-1,val[2]-1);
                                             }
                                         }
                                     }
@@ -2668,6 +2986,9 @@ int main(int argc, char* argv[])
         frames++;
     }
 
+    free_v8();
+    akAPI_Free();
+
     if (jsfd>=0)
     {
         GamePadUnmount();
@@ -2699,7 +3020,10 @@ int main(int argc, char* argv[])
         free(buf);
 
     if (game)
+    {
+        FreeGame(game);
         DeleteGame(game);
+    }
 
     SetScreen(false);
 
@@ -2720,5 +3044,247 @@ int main(int argc, char* argv[])
 #endif
 
     FreeAudio();
+
 	return 0;
+}
+
+//////////////////////////////////////////////////
+
+v8::Isolate* isolate = 0;
+std::unique_ptr<v8::Platform> platform = 0;
+v8::ArrayBuffer::Allocator* array_buffer_allocator = 0;
+
+// Extracts a C string from a V8 Utf8Value.
+const char* ToCString(const v8::String::Utf8Value& value) {
+    return *value ? *value : "<string conversion failed>";
+}
+
+void akAPI_CallV8(const v8::FunctionCallbackInfo<v8::Value>& args/*id*/) 
+{
+    if (args.Length() != 1 || !args[0]->IsInt32())
+    {
+        printf("%s problem\n", __FUNCTION__);
+        return;
+    }
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    akAPI_Call(args[0]->Int32Value(context).ToChecked());
+}
+
+void akPrint(const v8::FunctionCallbackInfo<v8::Value>& args) 
+{
+    bool first = true;
+    for (int i = 0; i < args.Length(); i++) 
+    {
+        v8::HandleScope handle_scope(args.GetIsolate());
+        if (first) 
+        {
+            first = false;
+        }
+        else 
+        {
+            printf(" ");
+        }
+        v8::String::Utf8Value str(args.GetIsolate(), args[i]);
+        const char* cstr = ToCString(str);
+        printf("%s", cstr);
+    }
+    printf("\n");
+    fflush(stdout);
+}
+
+void akAPI_CB(int id)
+{
+    uint64_t t0 = GetTime();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    // defined by akAPI_Init 
+    v8::Local<v8::String> cb_key = v8::String::NewFromUtf8Literal(isolate, "akAPI_CB");
+
+    v8::Local<v8::Value> cb_val;
+    bool ok = context->Global()->Get(context, cb_key).ToLocal(&cb_val);
+    v8::Local<v8::Function> cb_fnc = cb_val.As<v8::Function>();
+
+    v8::Local<v8::Value> id_val = v8::Int32::New(isolate,id);
+
+    // invoke
+    v8::Local<v8::Value> recv;
+    v8::TryCatch trycatch(isolate);
+    v8::MaybeLocal<v8::Value> result = cb_fnc->Call(context, context->Global(), 1, &id_val);
+    if (result.IsEmpty())
+    {
+        v8::Local<v8::Value> exception = trycatch.Exception();
+        v8::String::Utf8Value exception_str(isolate,exception);
+        printf("Exception: %s\n", *exception_str);          
+    }
+
+    uint64_t t1 = GetTime();
+    //printf("CALLBACK in %d us\n", (int)(t1-t0));
+}
+
+void free_v8()
+{
+    {
+        v8::HandleScope handle_scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        context->Exit();
+    }
+    isolate->Exit();
+
+    akAPI_Buff = 0;
+
+    // Dispose the isolate and tear down V8.
+    isolate->Dispose();
+    v8::V8::Dispose();
+
+    v8::V8::DisposePlatform();
+
+    if (array_buffer_allocator)
+        delete array_buffer_allocator;
+    array_buffer_allocator = 0;
+
+    printf("V8 DISPOSED.\n");
+}
+
+void init_v8()
+{
+
+#ifdef V8_INTL_SUPPORT
+    assert(!"V8_INTL_SUPPORT")
+#endif
+
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
+        assert(!"V8_USE_EXTERNAL_STARTUP_DATA")
+#endif
+
+        // our own v8_monolith build should be compiled 
+        // w/o i18n and esd
+        // v8::V8::InitializeICUDefaultLocation(argv[0]);
+        // v8::V8::InitializeExternalStartupData(argv[0]);
+
+        platform = v8::platform::NewDefaultPlatform();
+    v8::V8::InitializePlatform(platform.get());
+    v8::V8::Initialize();
+
+    printf("INITIALIZED V8 %s\n", v8::V8::GetVersion());
+
+    // Create a new Isolate and make it the current one.
+    array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+    v8::Isolate::CreateParams create_params;
+    create_params.array_buffer_allocator = array_buffer_allocator;
+
+    isolate = v8::Isolate::New(create_params);
+    isolate->Enter(); // v8::Isolate::Scope isolate_scope(isolate);
+
+    v8::HandleScope handle_scope(isolate);
+
+    v8::Local<v8::ObjectTemplate> global_templ = v8::ObjectTemplate::New(isolate);
+    
+    global_templ->Set(isolate, "akPrint", v8::FunctionTemplate::New(isolate, akPrint));
+    global_templ->Set(isolate, "akAPI_Call", v8::FunctionTemplate::New(isolate, akAPI_CallV8));
+
+    v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global_templ);
+    context->Enter(); // v8::Context::Scope context_scope(context);
+
+    v8::Local<v8::ArrayBuffer> arrbuf = v8::ArrayBuffer::New(isolate, AKAPI_BUF_SIZE);
+    akAPI_Buff = arrbuf->Data();
+    memset(akAPI_Buff,0,AKAPI_BUF_SIZE);
+
+    v8::Local<v8::String> key = v8::String::NewFromUtf8Literal(isolate,"akAPI_V8AB");
+    v8::Maybe<bool> ok = context->Global()->Set(context, key, arrbuf);
+    assert(ok.ToChecked());
+}
+
+void akAPI_Exec(const char* str, int len, bool root)
+{
+    uint64_t t0 = GetTime();
+    char* buf = 0;
+    if (!root)
+    {
+        // lets isolate custom code from polluting with vars and lets
+        // they should declare variables using this.variable=something;
+
+        // (function(){...}())
+        // ^-extra parenthesis makes expression
+        //   instead of a statement (which would require a function name)
+
+        // we should also hide all things except "ak" and "akPrint"
+
+        static const char* prefix = 
+        "(function("
+            "ak,akPrint," // pass only these 2
+            /*
+            "akAPI_Back,"
+            "akAPI_Buff,"
+            "akAPI_This,"
+            "akAPI_CB,"
+            "Module,"
+            "UTF8ToString,"
+            "stringToUTF8,"
+            "akGetF32,"
+            "akSetF32,"
+            "akReadF32,"
+            "akWriteF32,"
+            "akGetI32,"
+            "akSetI32,"
+            "akReadI32,"
+            "akWriteI32,"
+            "akGetStr,"
+            "akSetStr"
+            */
+        "){";
+        static const char* suffix = "}.apply(akAPI_This,[ak,akPrint]))";
+        static const int prefix_len = strlen(prefix);
+        static const int suffix_len = strlen(suffix);
+        buf = (char*)malloc(prefix_len+len+suffix_len+1);
+        memcpy(buf,prefix,prefix_len);
+        memcpy(buf+prefix_len,str,len);
+        memcpy(buf+prefix_len+len,suffix,suffix_len+1);
+        len += prefix_len + suffix_len;
+        str = buf;
+    }
+
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    // Create a string containing the JavaScript source code.
+    v8::MaybeLocal<v8::String> source = v8::String::NewFromUtf8(isolate, str, v8::NewStringType::kNormal, len);
+
+    // Compile the source code.
+    v8::TryCatch trycatch(isolate);
+    v8::MaybeLocal<v8::Script> script = v8::Script::Compile(context, source.ToLocalChecked());
+
+    if (!script.IsEmpty())
+    {
+        // Run the script to get the result.
+        v8::MaybeLocal<v8::Value> result = script.ToLocalChecked()->Run(context);
+
+        if (result.IsEmpty())
+        {
+            v8::Local<v8::Value> exception = trycatch.Exception();
+            v8::String::Utf8Value exception_str(isolate,exception);
+            printf("Exception: %s\n", *exception_str);            
+        }
+        else
+        {
+            /*
+            v8::String::Utf8Value utf8(isolate, result.ToLocalChecked()->ToString(context).ToLocalChecked());
+            printf("string %s\n", *utf8);
+            */
+        }
+    }
+    else
+    {
+        v8::Local<v8::Value> exception = trycatch.Exception();
+        v8::String::Utf8Value exception_str(isolate,exception);
+        printf("Exception: %s\n", *exception_str);
+    }
+
+    if (buf)
+        free(buf);
+
+    uint64_t t1 = GetTime();
+    //printf("COMPILE+EXECUTE IN %dus\n",(int)(t1-t0));
 }

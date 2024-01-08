@@ -55,6 +55,10 @@
 char base_path[1024] = "./";
 Sprite* enemygen_sprite = 0;
 
+void akAPI_Exec(const char* str, int len, bool root)
+{
+}
+
 void Buzz()
 {
 }
@@ -115,6 +119,9 @@ Mesh* active_mesh = 0;
 Sprite* active_sprite = 0;
 Sprite* item_preview_sprite = 0; 
 int active_item = 0;
+
+bool hover_story_hover = false;
+int  hover_story_value = -1;
 
 struct SpritePrefs
 {
@@ -908,7 +915,7 @@ int active_material = 0;
 int active_elev = 0;
 
 // used by Term
-int GetGLFont(int wh[2], const int wnd_wh[2])
+int GetGLFont(int wh[2], const int wnd_wh[2], int* id)
 {
 	MyFont* f = font + active_font;
 	if (wh)
@@ -917,6 +924,8 @@ int GetGLFont(int wh[2], const int wnd_wh[2])
 		wh[1] = f->height;
 	}
 
+	if (id)
+		*id = active_font;
 	return f->tex;
 }
 
@@ -1012,6 +1021,7 @@ int eg_crossbow = 0;
 bool diag_flipped = false;
 bool br_limit = false;
 int probe_z = 0;
+int story_id = -1;
 
 uint64_t g_Time; // in microsecs
 
@@ -2433,10 +2443,10 @@ struct RenderContext
 	{
 		RenderContext* rc = (RenderContext*)cookie;
 
-		float zoom = 2.0 / 3.0;
-		float cos30 = cosf(30 * M_PI / 180);
-		float dwx = zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180);
-		float dwy = zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180);
+		float zoom = 2.0f/ 3.0f;
+		float cos30 = (float)cos(30 * M_PI / 180);
+		float dwx = (float)(zoom * f->width * 0.5f * cos(rot_yaw*M_PI / 180));
+		float dwy = (float)(zoom * f->width * 0.5f * sin(rot_yaw*M_PI / 180));
 		float dlz = zoom * -f->ref[1] * 0.5f / cos30 * HEIGHT_SCALE;
 		float dhz = zoom * (f->height - f->ref[1] * 0.5f) / cos30 * HEIGHT_SCALE;
 
@@ -2495,7 +2505,7 @@ struct RenderContext
 
 		glUniform2i(rc->mesh_sprite_wh_loc, f->width, f->height);
 		glUniform2i(rc->mesh_ansi_wh_loc, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
-		glUniform2i(rc->mesh_ansi_depth_ofs_loc, (int)floorf(pos[2] + 0.5), f->ref[2]);
+		glUniform2i(rc->mesh_ansi_depth_ofs_loc, (int)floorf(pos[2] + 0.5f), f->ref[2]);
 
 		for (int face = 0; face < 2; face++)
 		{
@@ -4304,161 +4314,169 @@ void my_render(A3D_WND* wnd)
 
 
 				SpritePrefs* sp = (SpritePrefs*)GetSpriteCookie(s);
+				SpritePrefs defs = {0};
 
-				int anim = sp->anim;
-				if (anim < 0 || anim >= s->anims)
-					anim = 0;
+				if (!sp)
+					sp = &defs;
 
-				int time = 0;
-
-				int len = sp->t[0] + sp->t[1] * s->anim[anim].length + sp->t[2] + sp->t[3] * s->anim[anim].length;
-
-				int frame = 0;
-
-				if (len <= 0)
-					frame = sp->frame % s->anim[anim].length;
-				else
 				{
-					time = (a3dGetTime() >> 14) /*61.035 FPS*/ % len;
 
-					if (time < sp->t[0])
-						frame = 0;
+					int anim = sp->anim;
+					if (anim < 0 || anim >= s->anims)
+						anim = 0;
+
+					int time = 0;
+
+					int len = sp->t[0] + sp->t[1] * s->anim[anim].length + sp->t[2] + sp->t[3] * s->anim[anim].length;
+
+					int frame = 0;
+
+					if (len <= 0)
+						frame = sp->frame % s->anim[anim].length;
 					else
-					if (time < sp->t[0] + sp->t[1] * s->anim[anim].length)
-						frame = (time - sp->t[0]) / sp->t[1];
-					else
-					if (time < sp->t[0] + sp->t[1] * s->anim[anim].length + sp->t[2])
-						frame = s->anim[anim].length - 1;
-					else
-						frame = s->anim[anim].length - 1 - (time - sp->t[0] - sp->t[1] * s->anim[anim].length - sp->t[2]) / sp->t[3];
-
-					time++;
-				}
-
-				assert(frame >= 0 && frame < s->anim[anim].length);
-
-				int proj = 0;
-
-				float angle = sp->yaw;
-				int ang = (int)floor( (angle - rot_yaw) * s->angles / 360.0f + 0.5f);
-				ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
-
-				int i = frame + ang * s->anim[anim].length;
-				if (proj && s->projs>1)
-					i += s->anim[anim].length * s->angles;
-				Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
-
-				int view_size[2] = { 16,16 };
-				if (view_size[0] > rc->ansi_buf_size[0])
-					view_size[0] = rc->ansi_buf_size[0];
-				if (view_size[1] > rc->ansi_buf_size[1])
-					view_size[1] = rc->ansi_buf_size[1];
-
-				int n = view_size[0] * view_size[1];
-				for (int i = 0; i < n; i++)
-				{
-					AnsiCell* c = rc->ansi_buf + i;
-					c->bk = 0xFF;//fast_rand() & 0xFF;
-					c->fg = 0xFF;//fast_rand() & 0xFF;
-					c->gl = 0xFF;//fast_rand() & 0xFF;
-					c->spare = 0xFF;
-				}
-
-				int cpy_w = f->width < view_size[0] ? f->width : view_size[0];
-				int cpy_h = f->height < view_size[1] ? f->height : view_size[1];
-
-				int dst_x = (view_size[0] - f->width) / 2;
-				int dst_y = (view_size[1] - f->height) / 2;
-
-				if (dst_x < 0)
-					dst_x = 0;
-				if (dst_y < 0)
-					dst_y = 0;
-
-				int src_x = (f->width - view_size[0]) / 2;
-				int src_y = (f->height - view_size[1]) / 2;
-
-				if (src_x < 0)
-					src_x = 0;
-				if (src_y < 0)
-					src_y = 0;
-
-				for (int y = 0; y < cpy_h; y++)
-				{
-					for (int x = 0; x < cpy_w; x++)
 					{
-						AnsiCell* dst = rc->ansi_buf + (x + dst_x) + (y + dst_y) * view_size[0];
-						AnsiCell* src = f->cell + (x + src_x) + (y + src_y) * f->width;
-						*dst = *src;
+						time = (a3dGetTime() >> 14) /*61.035 FPS*/ % len;
+
+						if (time < sp->t[0])
+							frame = 0;
+						else
+						if (time < sp->t[0] + sp->t[1] * s->anim[anim].length)
+							frame = (time - sp->t[0]) / sp->t[1];
+						else
+						if (time < sp->t[0] + sp->t[1] * s->anim[anim].length + sp->t[2])
+							frame = s->anim[anim].length - 1;
+						else
+							frame = s->anim[anim].length - 1 - (time - sp->t[0] - sp->t[1] * s->anim[anim].length - sp->t[2]) / sp->t[3];
+
+						time++;
 					}
+
+					assert(frame >= 0 && frame < s->anim[anim].length);
+
+					int proj = 0;
+
+					float angle = sp->yaw;
+					int ang = (int)floor( (angle - rot_yaw) * s->angles / 360.0f + 0.5f);
+					ang = ang >= 0 ? ang % s->angles : (ang % s->angles + s->angles) % s->angles;
+
+					int i = frame + ang * s->anim[anim].length;
+					if (proj && s->projs>1)
+						i += s->anim[anim].length * s->angles;
+					Sprite::Frame* f = s->atlas + s->anim[anim].frame_idx[i];
+
+					int view_size[2] = { 16,16 };
+
+					if (view_size[0] > rc->ansi_buf_size[0])
+						view_size[0] = rc->ansi_buf_size[0];
+					if (view_size[1] > rc->ansi_buf_size[1])
+						view_size[1] = rc->ansi_buf_size[1];
+
+					int n = view_size[0] * view_size[1];
+					for (int i = 0; i < n; i++)
+					{
+						AnsiCell* c = rc->ansi_buf + i;
+						c->bk = 0xFF;//fast_rand() & 0xFF;
+						c->fg = 0xFF;//fast_rand() & 0xFF;
+						c->gl = 0xFF;//fast_rand() & 0xFF;
+						c->spare = 0xFF;
+					}
+
+					int cpy_w = f->width < view_size[0] ? f->width : view_size[0];
+					int cpy_h = f->height < view_size[1] ? f->height : view_size[1];
+
+					int dst_x = (view_size[0] - f->width) / 2;
+					int dst_y = (view_size[1] - f->height) / 2;
+
+					if (dst_x < 0)
+						dst_x = 0;
+					if (dst_y < 0)
+						dst_y = 0;
+
+					int src_x = (f->width - view_size[0]) / 2;
+					int src_y = (f->height - view_size[1]) / 2;
+
+					if (src_x < 0)
+						src_x = 0;
+					if (src_y < 0)
+						src_y = 0;
+
+					for (int y = 0; y < cpy_h; y++)
+					{
+						for (int x = 0; x < cpy_w; x++)
+						{
+							AnsiCell* dst = rc->ansi_buf + (x + dst_x) + (y + dst_y) * view_size[0];
+							AnsiCell* src = f->cell + (x + src_x) + (y + src_y) * f->width;
+							*dst = *src;
+						}
+					}
+
+					gl3TextureSubImage2D(rc->ansi_tex, 0, 0, 0, view_size[0], view_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
+
+					glViewport(
+						(int)sw->rect.Min.x,
+						vp[3] - (int)sw->rect.Max.y,
+						(int)(sw->rect.Max.x - sw->rect.Min.x),
+						(int)(sw->rect.Max.y - sw->rect.Min.y));
+
+					glScissor(
+						(int)sw->rect.Min.x,
+						vp[3] - (int)sw->rect.Max.y,
+						(int)(sw->rect.Max.x - sw->rect.Min.x),
+						(int)(sw->rect.Max.y - sw->rect.Min.y));
+
+					glUseProgram(rc->ansi_prg);
+					glUniform2i(rc->uni_ansi_vp, view_size[0], view_size[1]);
+
+					glUniform1i(rc->uni_ansi, 0);
+
+					int font_size[2];
+					int font_tex = GetGLFont(font_size, 0, 0);
+
+					gl3BindTextureUnit2D(0, rc->ansi_tex);
+
+					glUniform1i(rc->uni_font, 1);
+					gl3BindTextureUnit2D(1, font_tex);
+
+					glUniform2i(rc->uni_ansi_wh, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
+
+					glBindVertexArray(rc->ansi_vao);
+					//glEnable(GL_BLEND);
+
+					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+					glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+					glUseProgram(0);
+					glBindVertexArray(0);
+
+					//glDisable(GL_BLEND);
+
+
+					gl3BindTextureUnit2D(0, 0);
+					gl3BindTextureUnit2D(1, 0);
+
+					// we should restore !!!!
+
+					glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+					gl3BindTextureUnit2D(2, 0);
+					gl3BindTextureUnit2D(3, 0);
+					gl3BindTextureUnit3D(4, 0);
+
+					glBindVertexArray(vao);
+					glUseProgram(prg);
+
+					glViewport(vp[0], vp[1], vp[2], vp[3]);
+					glScissor(sc[0], sc[1], sc[2], sc[3]);
+
+					//if (!cull_face)
+					//	glDisable(GL_CULL_FACE);
+					//glCullFace(cull_mode);
+
+					if (!depth_test)
+						glDisable(GL_DEPTH_TEST);
+
+					glDepthFunc(depth_func);
 				}
-
-				gl3TextureSubImage2D(rc->ansi_tex, 0, 0, 0, view_size[0], view_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rc->ansi_buf);
-
-				glViewport(
-					(int)sw->rect.Min.x,
-					vp[3] - (int)sw->rect.Max.y,
-					(int)(sw->rect.Max.x - sw->rect.Min.x),
-					(int)(sw->rect.Max.y - sw->rect.Min.y));
-
-				glScissor(
-					(int)sw->rect.Min.x,
-					vp[3] - (int)sw->rect.Max.y,
-					(int)(sw->rect.Max.x - sw->rect.Min.x),
-					(int)(sw->rect.Max.y - sw->rect.Min.y));
-
-				glUseProgram(rc->ansi_prg);
-				glUniform2i(rc->uni_ansi_vp, view_size[0], view_size[1]);
-
-				glUniform1i(rc->uni_ansi, 0);
-
-				int font_size[2];
-				int font_tex = GetGLFont(font_size, 0);
-
-				gl3BindTextureUnit2D(0, rc->ansi_tex);
-
-				glUniform1i(rc->uni_font, 1);
-				gl3BindTextureUnit2D(1, font_tex);
-
-				glUniform2i(rc->uni_ansi_wh, rc->ansi_buf_size[0], rc->ansi_buf_size[1]);
-
-				glBindVertexArray(rc->ansi_vao);
-				//glEnable(GL_BLEND);
-
-				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-				glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-				glUseProgram(0);
-				glBindVertexArray(0);
-
-				//glDisable(GL_BLEND);
-
-
-				gl3BindTextureUnit2D(0, 0);
-				gl3BindTextureUnit2D(1, 0);
-
-				// we should restore !!!!
-
-				glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-				gl3BindTextureUnit2D(2, 0);
-				gl3BindTextureUnit2D(3, 0);
-				gl3BindTextureUnit3D(4, 0);
-
-				glBindVertexArray(vao);
-				glUseProgram(prg);
-
-				glViewport(vp[0], vp[1], vp[2], vp[3]);
-				glScissor(sc[0], sc[1], sc[2], sc[3]);
-
-				//if (!cull_face)
-				//	glDisable(GL_CULL_FACE);
-				//glCullFace(cull_mode);
-
-				if (!depth_test)
-					glDisable(GL_DEPTH_TEST);
-
-				glDepthFunc(depth_func);
 			}
 
 			bool Widget(const char* label, const ImVec2& size)
@@ -4778,7 +4796,7 @@ void my_render(A3D_WND* wnd)
 			ImGui::PushButtonRepeat(true);
 			if (ImGui::ArrowButton("##sprite_prev", ImGuiDir_Left))
 			{
-				Sprite* prev = GetPrevSprite(active_sprite);
+				Sprite* prev = GetPrevSprite(active_sprite,false);
 				if (prev)
 					active_sprite = prev;
 			}
@@ -4787,7 +4805,7 @@ void my_render(A3D_WND* wnd)
 
 			if (ImGui::ArrowButton("##sprite_next", ImGuiDir_Right))
 			{
-				Sprite* next = GetNextSprite(active_sprite);
+				Sprite* next = GetNextSprite(active_sprite,false);
 				if (next)
 					active_sprite = next;
 			}
@@ -5841,6 +5859,36 @@ void my_render(A3D_WND* wnd)
 					ImGui::PopStyleVar();
 				}
 
+				if (edit_mode != 7)
+				{
+					pushed = true;
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
+					add_verts = false;
+					build_poly = false;
+
+					item_preview_sprite = 0;
+				}
+				if (ImGui::BeginTabItem("STORY"))
+				{
+					edit_mode = 7;
+					// here we track:
+					// meshes, sprites, items and enemy-gens
+					// on click we set new story-id
+
+					ImGui::InputInt("story_id", &story_id);
+					if (hover_story_hover)
+						ImGui::Text("current %d", hover_story_value);
+					else
+						ImGui::Text("current ?");
+					ImGui::EndTabItem();
+				}
+				if (pushed)
+				{
+					pushed = false;
+					ImGui::PopStyleVar();
+				}
+
 				/*
 				if (edit_mode != 2)
 				{
@@ -6118,7 +6166,7 @@ void my_render(A3D_WND* wnd)
 				{
 					for (int i = 0; i < 256; i++)
 					{
-						int r = fread(mat[i].shade, sizeof(MatCell), 4 * 16, f);
+						int r = (int)fread(mat[i].shade, sizeof(MatCell), 4 * 16, f);
 						mat[i].Update();
 					}
 					fclose(f);
@@ -6518,6 +6566,7 @@ void my_render(A3D_WND* wnd)
 	double inst_tm[16];
 	Mesh* inst_preview = 0;
 	Inst* hover_inst = 0;
+	EnemyGen* hover_eg = 0;
 
 	bool sprite_preview = false;
 	float sprite_preview_pos[3] = { 0,0,0 };
@@ -7294,9 +7343,9 @@ void my_render(A3D_WND* wnd)
 							{
 								// we'll need to paint active_mesh with inst_tm
 								sprite_preview = true;
-								sprite_preview_pos[0] = hit[0];
-								sprite_preview_pos[1] = hit[1];
-								sprite_preview_pos[2] = hit[2];
+								sprite_preview_pos[0] = (float)(hit[0]);
+								sprite_preview_pos[1] = (float)(hit[1]);
+								sprite_preview_pos[2] = (float)(hit[2]);
 							}
 						}
 					}
@@ -7372,9 +7421,9 @@ void my_render(A3D_WND* wnd)
 							{
 								// we'll need to paint active_mesh with inst_tm
 								sprite_preview = true;
-								sprite_preview_pos[0] = hit[0];
-								sprite_preview_pos[1] = hit[1];
-								sprite_preview_pos[2] = hit[2];
+								sprite_preview_pos[0] = (float)(hit[0]);
+								sprite_preview_pos[1] = (float)(hit[1]);
+								sprite_preview_pos[2] = (float)(hit[2]);
 							}
 						}
 					}
@@ -7388,21 +7437,29 @@ void my_render(A3D_WND* wnd)
 					{
 						// hit test against all enemygens
 						// pick closest one
-						/*
-						HitEnemyGen(ray_p, ray_v, hit);
 
-						if (io.MouseDown[0])
+						EnemyGen* eg = HitEnemyGen(ray_p, ray_v);
+
+						if (io.MouseDown[0] && !inst_added)
 						{
 							// delete it
+							hover_eg = 0;
+
+							if (eg)
+							{
+								inst_added = true;
+								DeleteEnemyGen(eg);
+							}
 						}
 						else
 						{
 							// hilight it
+							hover_eg = eg;
 						}
-						*/
 					}
 					else
 					{
+						hover_eg = 0;
 						if (!inst_added && io.MouseDown[0])
 						{
 							int flags = INST_USE_TREE | INST_VISIBLE;
@@ -7410,9 +7467,9 @@ void my_render(A3D_WND* wnd)
 
 							//AddEnemyGen(hit);
 							EnemyGen* eg = (EnemyGen*)malloc(sizeof(EnemyGen));
-							eg->pos[0] = hit[0];
-							eg->pos[1] = hit[1];
-							eg->pos[2] = hit[2];
+							eg->pos[0] = (float)(hit[0]);
+							eg->pos[1] = (float)(hit[1]);
+							eg->pos[2] = (float)(hit[2]);
 
 							eg->alive_max = eg_alive_max;
 							eg->revive_min = eg_revive_min;
@@ -7437,9 +7494,34 @@ void my_render(A3D_WND* wnd)
 						else
 						{
 							enemygen_preview = true;
-							enemygen_preview_pos[0] = hit[0];
-							enemygen_preview_pos[1] = hit[1];
-							enemygen_preview_pos[2] = hit[2];
+							enemygen_preview_pos[0] = (float)(hit[0]);
+							enemygen_preview_pos[1] = (float)(hit[1]);
+							enemygen_preview_pos[2] = (float)(hit[2]);
+						}
+					}
+				}
+				else
+				if (edit_mode == 7)
+				{
+					//if (!inst_added)
+					{
+						Inst* inst = HitWorld(world, ray_p, ray_v, hit, 0, false, true);
+						hover_inst = inst;
+
+						if (inst)
+						{
+							hover_story_hover = true;
+							hover_story_value = GetInstStoryID(inst);
+							if (io.MouseDown[0] && !inst_added)
+							{
+								SetInstStoryID(inst,story_id);
+								inst_added = true;
+								hover_inst = 0;
+							}
+						}
+						else
+						{
+							hover_story_hover = false;
 						}
 					}
 				}
@@ -7628,7 +7710,7 @@ void my_render(A3D_WND* wnd)
 		while (eg)
 		{
 			// draw something
-			RenderContext::RenderSprite(0, enemygen_sprite, eg->pos, 0, -1, Item::EDIT, 0, rc);
+			RenderContext::RenderSprite(0, enemygen_sprite, eg->pos, 0, 0, eg==hover_eg ? 1 : 0, 0, rc);
 			eg = eg->next;
 		}
 	}
@@ -7849,7 +7931,7 @@ void my_init(A3D_WND* wnd)
 	char sprite_dirname[1024+20];
 	sprintf(sprite_dirname, "%ssprites", base_path);
 	a3dListDir(sprite_dirname, SpriteScan, sprite_dirname);
-	active_sprite = GetFirstSprite(/*world*/);
+	active_sprite = GetFirstSprite(false/*world*/);
 
 	RebuildWorld(world);
 
@@ -8122,7 +8204,7 @@ int main(int argc, char *argv[])
 			{
 				if (dotrun[i])
 				{
-					int pos = dotrun[i] - base_path;
+					int pos = (int)(dotrun[i] - base_path);
 					if (dotpos < 0 || pos < dotpos)
 						dotpos = pos;
 				}
@@ -8139,6 +8221,8 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
 	//_CrtSetBreakAlloc(11952);
 #endif
+
+	
 	LoadSprites();
 
 	char enemygen_path[1024+20];
@@ -8178,7 +8262,7 @@ int main(int argc, char *argv[])
 	a3dOpen(&pi, &gd, 0);
 	a3dLoop();
 
-	Sprite* s = GetFirstSprite();
+	Sprite* s = GetFirstSprite(false);
 	while (s)
 	{
 		void* sp = GetSpriteCookie(s);

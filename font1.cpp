@@ -14,11 +14,10 @@ static const int font1_cell_h = 5;
 static uint8_t font1_yadv = 4;
 static uint8_t font1_xadv[] =
 {
-	// top to bottom
 	3,  3,  3,  3,  3,  3,  3,  3,  2,  3,  3,  3,  4,
 	3,  3,  3,  3,  3,  3,  3,  3,  3,  4,  3,  3,  3,
 	3,  3,  3,  3,  3,  3,  3,  3,  3,  4,  2,  3,  4,
-	3,  3,  3,  3,  3
+	3,  3,  4,  4,  3, 
 };
 
 static const int font1_cmap_size = 96; // size of cmap array
@@ -39,9 +38,9 @@ void LoadFont1()
 	const char* name = "font-1.xp";
 	sprintf(path, "%ssprites/%s", base_path, name);
 	font1_sprite[0] = LoadSprite(path, name);
-	uint8_t recolor1[] = { 3, 85,85,85, 255,255,85, 170,170,170, 255,204,0, 255,255,255, 255,204,0 };
+	uint8_t recolor1[] = { 3, 85,85,85, 255,255,85, 170,170,170, 255,204,0, 255,255,255, 255,204,0, 0,0  };
 	font1_sprite[1] = LoadSprite(path, name, recolor1);
-	uint8_t recolor2[] = { 3, 85,85,85, 255,153,255, 170,170,170, 255,0,255, 255,255,255, 255,51,255 };
+	uint8_t recolor2[] = { 3, 85,85,85, 255,153,255, 170,170,170, 255,0,255, 255,255,255, 255,51,255, 0,0 };
 	font1_sprite[2] = LoadSprite(path, name, recolor2);
 }
 
@@ -49,6 +48,7 @@ void FreeFont1()
 {
 	FreeSprite(font1_sprite[0]);
 	FreeSprite(font1_sprite[1]);
+	FreeSprite(font1_sprite[2]);
 }
 
 void Font1Size(const char* str, int* w, int* h)
@@ -82,7 +82,33 @@ void Font1Size(const char* str, int* w, int* h)
 		*h = y;
 }
 
-void Font1Paint(AnsiCell* ptr, int width, int height, int dx, int dy, const char* str, int skin)
+void Font1UnderLine(AnsiCell* ptr, int width, int height, int dx, int dy, int w, int skin)
+{
+	int y = dy;
+	int x = dx;
+
+	if (skin < 0 || skin >= font1_skins)
+		return;
+
+	Sprite::Frame* sf = font1_sprite[skin]->atlas;
+
+	int clip[] = 
+	{
+		(font1_cols-1)*font1_cell_w, 0,
+		font1_cols*font1_cell_w, 1
+	};
+
+	int x2 = x + w + 1;
+	while (x < x2)
+	{
+		if (x + font1_cell_w > x2)
+			clip[2] = clip[0] + x2 - x;
+		BlitSprite(ptr, width, height, sf, x, y-1, clip);
+		x += font1_cell_w;
+	}
+}
+
+void Font1Paint(AnsiCell* ptr, int width, int height, int dx, int dy, const char* str, int skin, bool underline)
 {
 	int y = dy;
 	int x = dx;
@@ -115,9 +141,22 @@ void Font1Paint(AnsiCell* ptr, int width, int height, int dx, int dy, const char
 				int up_row = font1_rows - 1 - row;
 
 				int clip[] = { col * font1_cell_w, up_row * font1_cell_h, (col+1) * font1_cell_w, (up_row+1) * font1_cell_h };
+
 				BlitSprite(ptr, width, height, sf, x, y, clip);
 
-				x += font1_xadv[chr];
+				int adv = font1_xadv[chr];
+
+				if (underline)
+				{
+					clip[0] = (font1_cols-1)*font1_cell_w;
+					clip[1] = 0;
+					clip[2] = clip[0] + adv + 1;
+					clip[3] = 1;
+
+					BlitSprite(ptr, width, height, sf, x, y-1, clip);
+				}
+
+				x += adv;
 			}
 		}
 
